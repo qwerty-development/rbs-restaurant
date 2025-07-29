@@ -31,7 +31,7 @@ import { Loader2, LogIn, AlertCircle } from "lucide-react"
 
 const formSchema = z.object({
   email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string().min(1, "Password must be at least 1 characters"),
 })
 
 type FormData = z.infer<typeof formSchema>
