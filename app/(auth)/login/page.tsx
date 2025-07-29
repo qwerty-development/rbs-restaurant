@@ -1,9 +1,8 @@
-// app/(auth)/login/page.tsx
 "use client"
 
 import { useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
@@ -26,20 +25,25 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "react-hot-toast"
-import { Loader2, LogIn } from "lucide-react"
+import { Loader2, LogIn, AlertCircle } from "lucide-react"
 
 const formSchema = z.object({
   email: z.string().email("Invalid email address"),
-  password: z.string().min(1, "Password must be at least 6 characters"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
 })
 
 type FormData = z.infer<typeof formSchema>
 
 export default function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
   const supabase = createClient()
+  
+  const redirectTo = searchParams.get('redirectTo') || '/dashboard'
+  const error = searchParams.get('error')
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -52,21 +56,21 @@ export default function LoginPage() {
   async function onSubmit(data: FormData) {
     try {
       setIsLoading(true)
-
-      // Check if user is restaurant staff
+  
+      // Sign in
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
       })
-
+  
       if (authError) {
         throw authError
       }
-
+  
       if (!authData.user) {
         throw new Error("Login failed")
       }
-
+  
       // Check if user has restaurant access
       const { data: staffData, error: staffError }:any = await supabase
         .from("restaurant_staff")
@@ -79,13 +83,13 @@ export default function LoginPage() {
         .eq("user_id", authData.user.id)
         .eq("is_active", true)
         .single()
-
+  
       if (staffError || !staffData) {
         await supabase.auth.signOut()
         throw new Error("You don't have access to any restaurant. Please contact your restaurant owner.")
       }
-
-      // Store restaurant info in session
+  
+      // Update user metadata
       await supabase.auth.updateUser({
         data: {
           restaurant_id: staffData.restaurant_id,
@@ -93,10 +97,13 @@ export default function LoginPage() {
           role: staffData.role,
         }
       })
-
+  
       toast.success(`Welcome back! Logging in to ${staffData.restaurant?.name}`)
-      router.refresh()
-      router.push("/dashboard")
+      
+      // IMPORTANT: Use window.location.href instead of router.push
+      // This forces a full page reload which ensures the session is properly set
+      window.location.href = "/dashboard"
+      
     } catch (error: any) {
       console.error("Login error:", error)
       toast.error(error.message || "Failed to login")
@@ -116,6 +123,14 @@ export default function LoginPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {error === 'no_access' && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              You don't have access to any restaurant. Please contact your restaurant owner.
+            </AlertDescription>
+          </Alert>
+        )}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
