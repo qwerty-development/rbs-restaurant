@@ -42,41 +42,45 @@ import {
   Save,
   ArrowLeft,
   Smartphone,
-  Volume2
+  Volume2,
+  Heart,
+  Users
 } from "lucide-react"
 
 const notificationSettingsSchema = z.object({
-  // Email notifications
-  email_new_booking: z.boolean(),
-  email_booking_cancelled: z.boolean(),
-  email_booking_modified: z.boolean(),
-  email_new_review: z.boolean(),
-  email_new_vip: z.boolean(),
-  email_daily_summary: z.boolean(),
-  email_weekly_report: z.boolean(),
+  // Core notification preferences (stored in profiles.notification_preferences JSONB)
+  email: z.boolean(),
+  sms: z.boolean(), 
+  push: z.boolean(),
   
-  // SMS notifications
-  sms_new_booking: z.boolean(),
-  sms_booking_cancelled: z.boolean(),
-  sms_no_show_alert: z.boolean(),
+  // Booking notifications
+  booking_confirmations: z.boolean(),
+  booking_reminders: z.boolean(),
+  booking_cancellations: z.boolean(),
+  booking_modifications: z.boolean(),
   
-  // Push notifications
-  push_new_booking: z.boolean(),
-  push_booking_reminder: z.boolean(),
-  push_table_ready: z.boolean(),
+  // Social notifications
+  friend_requests: z.boolean(),
+  friend_activity: z.boolean(),
+  group_invites: z.boolean(),
   
-  // In-app notifications
-  app_all_activities: z.boolean(),
-  app_mention_only: z.boolean(),
+  // Restaurant notifications
+  special_offers: z.boolean(),
+  new_restaurants: z.boolean(),
+  loyalty_updates: z.boolean(),
   
-  // Notification timing
+  // Marketing preferences (from user_privacy_settings table)
+  marketing_emails: z.boolean(),
+  promotional_sms: z.boolean(),
+  
+  // Timing preferences
   quiet_hours_enabled: z.boolean(),
   quiet_hours_start: z.string(),
   quiet_hours_end: z.string(),
   
   // Summary preferences
-  summary_frequency: z.enum(["daily", "weekly", "monthly", "never"]),
-  summary_time: z.string(),
+  weekly_summary: z.boolean(),
+  monthly_highlights: z.boolean(),
 })
 
 type NotificationSettingsData = z.infer<typeof notificationSettingsSchema>
@@ -84,89 +88,85 @@ type NotificationSettingsData = z.infer<typeof notificationSettingsSchema>
 const NOTIFICATION_CATEGORIES = [
   {
     id: "bookings",
-    title: "Bookings",
+    title: "Booking Updates",
     icon: Calendar,
+    description: "Stay informed about your restaurant reservations",
     notifications: [
       {
-        id: "email_new_booking",
-        label: "New booking received",
-        description: "Get notified when customers make new reservations",
+        id: "booking_confirmations",
+        label: "Booking confirmations",
+        description: "When your reservation is confirmed by the restaurant",
         channels: ["email", "sms", "push"],
       },
       {
-        id: "email_booking_cancelled",
-        label: "Booking cancelled",
-        description: "Alert when customers cancel their reservations",
-        channels: ["email", "sms"],
+        id: "booking_reminders", 
+        label: "Booking reminders",
+        description: "Reminders 2 hours before your reservation",
+        channels: ["push", "sms"],
       },
       {
-        id: "email_booking_modified",
-        label: "Booking modified",
-        description: "Notification when booking details are changed",
-        channels: ["email"],
+        id: "booking_cancellations",
+        label: "Cancellation alerts",
+        description: "If a restaurant cancels or needs to reschedule",
+        channels: ["email", "sms", "push"],
       },
       {
-        id: "sms_no_show_alert",
-        label: "No-show alert",
-        description: "Alert when customers don't show up for reservations",
-        channels: ["sms"],
-      },
-    ],
-  },
-  {
-    id: "customers",
-    title: "Customers",
-    icon: UserPlus,
-    notifications: [
-      {
-        id: "email_new_review",
-        label: "New review posted",
-        description: "Get notified when customers leave reviews",
-        channels: ["email"],
-      },
-      {
-        id: "email_new_vip",
-        label: "New VIP customer",
-        description: "Alert when a customer reaches VIP status",
-        channels: ["email"],
+        id: "booking_modifications",
+        label: "Booking changes",
+        description: "When restaurants modify your reservation details",
+        channels: ["email", "push"],
       },
     ],
   },
   {
-    id: "reminders",
-    title: "Reminders",
-    icon: Clock,
+    id: "social",
+    title: "Social & Friends",
+    icon: Users,
+    description: "Connect and share experiences with friends",
     notifications: [
       {
-        id: "push_booking_reminder",
-        label: "Upcoming booking reminder",
-        description: "Remind about bookings 1 hour before",
+        id: "friend_requests",
+        label: "Friend requests",
+        description: "When someone sends you a friend request",
+        channels: ["push", "email"],
+      },
+      {
+        id: "friend_activity",
+        label: "Friend activity",
+        description: "When friends share reviews or favorite new restaurants",
         channels: ["push"],
       },
       {
-        id: "push_table_ready",
-        label: "Table ready notification",
-        description: "Notify when a table becomes available",
-        channels: ["push"],
+        id: "group_invites",
+        label: "Group booking invites",
+        description: "When friends invite you to join their reservations",
+        channels: ["push", "email"],
       },
     ],
   },
   {
-    id: "reports",
-    title: "Reports & Summaries",
-    icon: TrendingUp,
+    id: "restaurants",
+    title: "Restaurant Updates",
+    icon: Star,
+    description: "Discover new places and special offers",
     notifications: [
       {
-        id: "email_daily_summary",
-        label: "Daily summary",
-        description: "Daily overview of bookings and performance",
+        id: "special_offers",
+        label: "Special offers",
+        description: "Exclusive deals from your favorite restaurants",
+        channels: ["email", "push"],
+      },
+      {
+        id: "new_restaurants",
+        label: "New restaurants",
+        description: "When new restaurants join in your area",
         channels: ["email"],
       },
       {
-        id: "email_weekly_report",
-        label: "Weekly report",
-        description: "Comprehensive weekly analytics report",
-        channels: ["email"],
+        id: "loyalty_updates",
+        label: "Loyalty rewards",
+        description: "Updates about your points and available rewards",
+        channels: ["push", "email"],
       },
     ],
   },
@@ -176,104 +176,103 @@ export default function NotificationSettingsPage() {
   const router = useRouter()
   const supabase = createClient()
   const queryClient = useQueryClient()
-  const [restaurantId, setRestaurantId] = useState<string>("")
 
-  useEffect(() => {
-    async function getRestaurantId() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: staffData } = await supabase
-          .from("restaurant_staff")
-          .select("restaurant_id, user_id")
-          .eq("user_id", user.id)
-          .single()
-        
-        if (staffData) {
-          setRestaurantId(staffData.restaurant_id)
-        }
-      }
-    }
-    getRestaurantId()
-  }, [supabase])
-
-  // Fetch notification settings
-  const { data: notificationSettings, isLoading } = useQuery({
-    queryKey: ["notification-settings", restaurantId],
+  // Fetch user notification settings
+  const { data: userSettings, isLoading } = useQuery({
+    queryKey: ["user-notification-settings"],
     queryFn: async () => {
-      if (!restaurantId) return null
-      
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return null
+      if (!user) throw new Error("Not authenticated")
 
-      const { data, error } = await supabase
-        .from("notification_preferences")
-        .select("*")
-        .eq("restaurant_id", restaurantId)
+      // Fetch from profiles table (notification_preferences JSONB)
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("notification_preferences")
+        .eq("id", user.id)
+        .single()
+
+      if (profileError) throw profileError
+
+      // Fetch from user_privacy_settings table
+      const { data: privacyData, error: privacyError } = await supabase
+        .from("user_privacy_settings")
+        .select("marketing_emails, push_notifications")
         .eq("user_id", user.id)
         .single()
 
-      if (error && error.code !== "PGRST116") throw error
-      
-      // Return default settings if none exist
-      return data || {
-        email_new_booking: true,
-        email_booking_cancelled: true,
-        email_booking_modified: true,
-        email_new_review: true,
-        email_new_vip: true,
-        email_daily_summary: false,
-        email_weekly_report: true,
-        sms_new_booking: false,
-        sms_booking_cancelled: false,
-        sms_no_show_alert: false,
-        push_new_booking: true,
-        push_booking_reminder: true,
-        push_table_ready: true,
-        app_all_activities: true,
-        app_mention_only: false,
-        quiet_hours_enabled: false,
-        quiet_hours_start: "22:00",
-        quiet_hours_end: "08:00",
-        summary_frequency: "weekly",
-        summary_time: "09:00",
+      // Combine the data with defaults
+      const notificationPrefs = profileData?.notification_preferences || {}
+      const privacySettings:any = privacyData || {}
+
+      return {
+        // Core preferences from JSONB
+        email: notificationPrefs.email ?? true,
+        sms: notificationPrefs.sms ?? false,
+        push: notificationPrefs.push ?? true,
+        
+        // Specific notification types (with defaults)
+        booking_confirmations: notificationPrefs.booking_confirmations ?? true,
+        booking_reminders: notificationPrefs.booking_reminders ?? true,
+        booking_cancellations: notificationPrefs.booking_cancellations ?? true,
+        booking_modifications: notificationPrefs.booking_modifications ?? true,
+        
+        friend_requests: notificationPrefs.friend_requests ?? true,
+        friend_activity: notificationPrefs.friend_activity ?? false,
+        group_invites: notificationPrefs.group_invites ?? true,
+        
+        special_offers: notificationPrefs.special_offers ?? true,
+        new_restaurants: notificationPrefs.new_restaurants ?? false,
+        loyalty_updates: notificationPrefs.loyalty_updates ?? true,
+        
+        // Marketing from privacy settings
+        marketing_emails: privacySettings.marketing_emails ?? true,
+        promotional_sms: notificationPrefs.promotional_sms ?? false,
+        
+        // Timing
+        quiet_hours_enabled: notificationPrefs.quiet_hours_enabled ?? false,
+        quiet_hours_start: notificationPrefs.quiet_hours_start ?? "22:00",
+        quiet_hours_end: notificationPrefs.quiet_hours_end ?? "08:00",
+        
+        // Summaries
+        weekly_summary: notificationPrefs.weekly_summary ?? true,
+        monthly_highlights: notificationPrefs.monthly_highlights ?? true,
       }
     },
-    enabled: !!restaurantId,
   })
 
   // Form
   const form = useForm<NotificationSettingsData>({
     resolver: zodResolver(notificationSettingsSchema),
     defaultValues: {
-      email_new_booking: true,
-      email_booking_cancelled: true,
-      email_booking_modified: true,
-      email_new_review: true,
-      email_new_vip: true,
-      email_daily_summary: false,
-      email_weekly_report: true,
-      sms_new_booking: false,
-      sms_booking_cancelled: false,
-      sms_no_show_alert: false,
-      push_new_booking: true,
-      push_booking_reminder: true,
-      push_table_ready: true,
-      app_all_activities: true,
-      app_mention_only: false,
+      email: true,
+      sms: false,
+      push: true,
+      booking_confirmations: true,
+      booking_reminders: true,
+      booking_cancellations: true,
+      booking_modifications: true,
+      friend_requests: true,
+      friend_activity: false,
+      group_invites: true,
+      special_offers: true,
+      new_restaurants: false,
+      loyalty_updates: true,
+      marketing_emails: true,
+      promotional_sms: false,
       quiet_hours_enabled: false,
       quiet_hours_start: "22:00",
       quiet_hours_end: "08:00",
-      summary_frequency: "weekly",
-      summary_time: "09:00",
+      weekly_summary: true,
+      monthly_highlights: true,
     },
   })
 
   // Update form when settings load
   useEffect(() => {
-    if (notificationSettings) {
-      form.reset(notificationSettings)
+    if (userSettings) {
+      form.reset(userSettings)
     }
-  }, [notificationSettings, form])
+  }, [userSettings, form])
 
   // Update settings mutation
   const updateSettingsMutation = useMutation({
@@ -281,36 +280,62 @@ export default function NotificationSettingsPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
-      const { error } = await supabase
-        .from("notification_preferences")
+      // Separate the data for different tables
+      const { marketing_emails, ...notificationPrefs } = data
+
+      // Update notification_preferences JSONB in profiles table
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          notification_preferences: notificationPrefs,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id)
+
+      if (profileError) throw profileError
+
+      // Update user_privacy_settings table
+      const { error: privacyError } = await supabase
+        .from("user_privacy_settings")
         .upsert({
-          restaurant_id: restaurantId,
           user_id: user.id,
-          ...data,
+          marketing_emails,
+          push_notifications: data.push,
           updated_at: new Date().toISOString(),
         }, {
-          onConflict: "restaurant_id,user_id",
+          onConflict: "user_id",
         })
 
-      if (error) throw error
+      if (privacyError) throw privacyError
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notification-settings"] })
+      queryClient.invalidateQueries({ queryKey: ["user-notification-settings"] })
       toast.success("Notification settings updated")
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Error updating settings:", error)
       toast.error("Failed to update settings")
     },
   })
 
   const watchQuietHours = form.watch("quiet_hours_enabled")
+  const watchEmail = form.watch("email")
+  const watchSMS = form.watch("sms")
+  const watchPush = form.watch("push")
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-screen">Loading...</div>
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+          <p>Loading notification settings...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 max-w-4xl mx-auto p-6">
       {/* Header */}
       <div>
         <Button
@@ -323,12 +348,104 @@ export default function NotificationSettingsPage() {
         </Button>
         <h1 className="text-3xl font-bold tracking-tight">Notification Settings</h1>
         <p className="text-muted-foreground">
-          Manage how and when you receive notifications
+          Choose how and when you want to receive notifications
         </p>
       </div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit((data) => updateSettingsMutation.mutate(data))} className="space-y-6">
+          
+          {/* Global Notification Channels */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-5 w-5" />
+                Notification Channels
+              </CardTitle>
+              <CardDescription>
+                Choose your preferred ways to receive notifications
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-base flex items-center gap-2">
+                          <Mail className="h-4 w-4" />
+                          Email
+                        </FormLabel>
+                        <FormDescription>
+                          Notifications via email
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          disabled={updateSettingsMutation.isPending}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="sms"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-base flex items-center gap-2">
+                          <MessageSquare className="h-4 w-4" />
+                          SMS
+                        </FormLabel>
+                        <FormDescription>
+                          Text message alerts
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          disabled={updateSettingsMutation.isPending}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="push"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-base flex items-center gap-2">
+                          <Smartphone className="h-4 w-4" />
+                          Push Notifications
+                        </FormLabel>
+                        <FormDescription>
+                          Mobile app notifications
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          disabled={updateSettingsMutation.isPending}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Notification Categories */}
           {NOTIFICATION_CATEGORIES.map((category) => (
             <Card key={category.id}>
@@ -337,91 +454,117 @@ export default function NotificationSettingsPage() {
                   <category.icon className="h-5 w-5" />
                   {category.title}
                 </CardTitle>
+                <CardDescription>
+                  {category.description}
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {category.notifications.map((notification) => (
                   <div key={notification.id} className="space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-1">
-                        <label className="text-sm font-medium leading-none">
-                          {notification.label}
-                        </label>
-                        <p className="text-sm text-muted-foreground">
-                          {notification.description}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-4">
-                      {notification.channels.includes("email") && (
-                        <FormField
-                          control={form.control}
-                          name={notification.id as keyof NotificationSettingsData}
-                          render={({ field }) => (
-                            <FormItem className="flex items-center space-x-2">
-                              <FormControl>
-                                <Switch
-                                  checked={field.value as boolean}
-                                  onCheckedChange={field.onChange}
-                                  disabled={updateSettingsMutation.isPending}
-                                />
-                              </FormControl>
-                              <FormLabel className="text-sm font-normal flex items-center gap-1">
-                                <Mail className="h-3 w-3" />
-                                Email
-                              </FormLabel>
-                            </FormItem>
-                          )}
-                        />
+                    <FormField
+                      control={form.control}
+                      name={notification.id as keyof NotificationSettingsData}
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                          <div className="space-y-0.5">
+                            <FormLabel className="text-base">
+                              {notification.label}
+                            </FormLabel>
+                            <FormDescription>
+                              {notification.description}
+                            </FormDescription>
+                            <div className="flex gap-2 mt-2">
+                              {notification.channels.map((channel) => {
+                                const isEnabled = channel === "email" ? watchEmail : 
+                                                channel === "sms" ? watchSMS : watchPush
+                                const Icon = channel === "email" ? Mail : 
+                                           channel === "sms" ? MessageSquare : Smartphone
+                                return (
+                                  <Badge 
+                                    key={channel} 
+                                    variant={isEnabled ? "default" : "secondary"}
+                                    className="text-xs"
+                                  >
+                                    <Icon className="h-3 w-3 mr-1" />
+                                    {channel.toUpperCase()}
+                                  </Badge>
+                                )
+                              })}
+                            </div>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value as boolean}
+                              onCheckedChange={field.onChange}
+                              disabled={updateSettingsMutation.isPending}
+                            />
+                          </FormControl>
+                        </FormItem>
                       )}
-                      {notification.channels.includes("sms") && (
-                        <FormField
-                          control={form.control}
-                          name={`sms_${notification.id.split("_").slice(1).join("_")}` as keyof NotificationSettingsData}
-                          render={({ field }) => (
-                            <FormItem className="flex items-center space-x-2">
-                              <FormControl>
-                                <Switch
-                                  checked={field.value as boolean}
-                                  onCheckedChange={field.onChange}
-                                  disabled={updateSettingsMutation.isPending}
-                                />
-                              </FormControl>
-                              <FormLabel className="text-sm font-normal flex items-center gap-1">
-                                <MessageSquare className="h-3 w-3" />
-                                SMS
-                              </FormLabel>
-                            </FormItem>
-                          )}
-                        />
-                      )}
-                      {notification.channels.includes("push") && (
-                        <FormField
-                          control={form.control}
-                          name={`push_${notification.id.split("_").slice(1).join("_")}` as keyof NotificationSettingsData}
-                          render={({ field }) => (
-                            <FormItem className="flex items-center space-x-2">
-                              <FormControl>
-                                <Switch
-                                  checked={field.value as boolean}
-                                  onCheckedChange={field.onChange}
-                                  disabled={updateSettingsMutation.isPending}
-                                />
-                              </FormControl>
-                              <FormLabel className="text-sm font-normal flex items-center gap-1">
-                                <Smartphone className="h-3 w-3" />
-                                Push
-                              </FormLabel>
-                            </FormItem>
-                          )}
-                        />
-                      )}
-                    </div>
-                    <Separator />
+                    />
                   </div>
                 ))}
               </CardContent>
             </Card>
           ))}
+
+          {/* Marketing & Promotions */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Marketing & Promotions
+              </CardTitle>
+              <CardDescription>
+                Control promotional and marketing communications
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="marketing_emails"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Marketing emails</FormLabel>
+                      <FormDescription>
+                        Promotional offers, newsletters, and restaurant features
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={updateSettingsMutation.isPending || !watchEmail}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="promotional_sms"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Promotional SMS</FormLabel>
+                      <FormDescription>
+                        Last-minute deals and flash offers via text
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={updateSettingsMutation.isPending || !watchSMS}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
 
           {/* Quiet Hours */}
           <Card>
@@ -431,7 +574,7 @@ export default function NotificationSettingsPage() {
                 Quiet Hours
               </CardTitle>
               <CardDescription>
-                Pause non-urgent notifications during specified hours
+                Set times when you don't want to receive non-urgent notifications
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -443,7 +586,7 @@ export default function NotificationSettingsPage() {
                     <div className="space-y-0.5">
                       <FormLabel className="text-base">Enable Quiet Hours</FormLabel>
                       <FormDescription>
-                        Only critical notifications will be sent during quiet hours
+                        Booking confirmations and urgent alerts will still come through
                       </FormDescription>
                     </div>
                     <FormControl>
@@ -502,110 +645,53 @@ export default function NotificationSettingsPage() {
           {/* Summary Settings */}
           <Card>
             <CardHeader>
-              <CardTitle>Summary & Reports</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Summary & Highlights
+              </CardTitle>
               <CardDescription>
-                Configure how often you receive summary reports
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="summary_frequency"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Summary Frequency</FormLabel>
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        disabled={updateSettingsMutation.isPending}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="daily">Daily</SelectItem>
-                          <SelectItem value="weekly">Weekly</SelectItem>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                          <SelectItem value="never">Never</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )}
-                />
-                
-                {form.watch("summary_frequency") !== "never" && (
-                  <FormField
-                    control={form.control}
-                    name="summary_time"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Delivery Time</FormLabel>
-                        <FormControl>
-                          <input
-                            type="time"
-                            {...field}
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            disabled={updateSettingsMutation.isPending}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* In-App Notifications */}
-          <Card>
-            <CardHeader>
-              <CardTitle>In-App Notifications</CardTitle>
-              <CardDescription>
-                Control what appears in your notification center
+                Periodic summaries of your dining activity and recommendations
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <FormField
                 control={form.control}
-                name="app_all_activities"
+                name="weekly_summary"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-base">All Activities</FormLabel>
+                      <FormLabel className="text-base">Weekly Summary</FormLabel>
                       <FormDescription>
-                        Show all restaurant activities in notification center
+                        Your week in dining - bookings, reviews, and new discoveries
                       </FormDescription>
                     </div>
                     <FormControl>
                       <Switch
                         checked={field.value}
                         onCheckedChange={field.onChange}
-                        disabled={updateSettingsMutation.isPending}
+                        disabled={updateSettingsMutation.isPending || !watchEmail}
                       />
                     </FormControl>
                   </FormItem>
                 )}
               />
-              
+
               <FormField
                 control={form.control}
-                name="app_mention_only"
+                name="monthly_highlights"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-base">Mentions Only</FormLabel>
+                      <FormLabel className="text-base">Monthly Highlights</FormLabel>
                       <FormDescription>
-                        Only notify when you're directly mentioned or assigned
+                        Personal dining stats and recommendations for next month
                       </FormDescription>
                     </div>
                     <FormControl>
                       <Switch
                         checked={field.value}
                         onCheckedChange={field.onChange}
-                        disabled={updateSettingsMutation.isPending || form.watch("app_all_activities")}
+                        disabled={updateSettingsMutation.isPending || !watchEmail}
                       />
                     </FormControl>
                   </FormItem>

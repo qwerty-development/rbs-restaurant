@@ -1,38 +1,38 @@
 // app/(dashboard)/staff/page.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm } from "react-hook-form"
+import * as z from "zod"
+import { restaurantAuth } from "@/lib/restaurant-auth"
 import { createClient } from "@/lib/supabase/client"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form"
 import {
   Select,
@@ -42,601 +42,715 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "react-hot-toast"
-import { 
-  Plus, 
-  Search, 
-  UserPlus, 
-  MoreHorizontal,
-  Shield,
-  Mail,
-  Phone,
-  Calendar,
+import {
+  UserPlus,
+  Search,
+  Filter,
+  MoreVertical,
   Edit,
   Trash2,
-  UserX,
-  UserCheck,
-  Users
+  Mail,
+  Phone,
+  Shield,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  Users,
+  Crown,
+  Star,
+  Coffee,
+  Eye,
+  Activity,
+  Loader2,
+  Settings,
+  X
 } from "lucide-react"
-import { format } from "date-fns"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
-import * as z from "zod"
-import type { RestaurantStaff, Profile } from "@/types"
 
+// Types
+type StaffMember = {
+  id: string
+  role: 'owner' | 'manager' | 'staff' | 'viewer'
+  permissions: string[]
+  is_active: boolean
+  hired_at: string
+  last_login_at: string | null
+  user: {
+    id: string
+    full_name: string
+    email: string
+    phone_number: string | null
+    avatar_url: string | null
+  }
+}
+
+type User = {
+  id: string
+  email: string
+  user_metadata: {
+    full_name?: string
+    phone_number?: string
+  }
+}
+
+// Form schemas
 const staffFormSchema = z.object({
-  email: z.string().email("Invalid email address"),
   fullName: z.string().min(2, "Name must be at least 2 characters"),
+  email: z.string().email("Invalid email address"),
   phoneNumber: z.string().optional(),
-  role: z.enum(["owner", "manager", "staff", "viewer"]),
+  role: z.enum(["manager", "staff", "viewer"]),
   permissions: z.array(z.string()).min(1, "Select at least one permission"),
 })
 
 type StaffFormData = z.infer<typeof staffFormSchema>
 
+// Constants
 const ROLES = [
-  { value: "owner", label: "Owner", description: "Full access to all features" },
-  { value: "manager", label: "Manager", description: "Manage bookings, menu, and staff" },
-  { value: "staff", label: "Staff", description: "Handle bookings and customers" },
-  { value: "viewer", label: "Viewer", description: "View-only access" },
+  { 
+    value: 'owner', 
+    label: 'Owner', 
+    description: 'Full access to all features',
+    icon: Crown,
+    color: 'bg-yellow-100 text-yellow-800'
+  },
+  { 
+    value: 'manager', 
+    label: 'Manager', 
+    description: 'Manage bookings, menu, and staff',
+    icon: Star,
+    color: 'bg-purple-100 text-purple-800'
+  },
+  { 
+    value: 'staff', 
+    label: 'Staff', 
+    description: 'Handle bookings and customers',
+    icon: Coffee,
+    color: 'bg-blue-100 text-blue-800'
+  },
+  { 
+    value: 'viewer', 
+    label: 'Viewer', 
+    description: 'View-only access',
+    icon: Eye,
+    color: 'bg-gray-100 text-gray-800'
+  }
 ]
 
 const PERMISSIONS = [
-  { value: "bookings.view", label: "View Bookings", category: "Bookings" },
-  { value: "bookings.manage", label: "Manage Bookings", category: "Bookings" },
-  { value: "menu.view", label: "View Menu", category: "Menu" },
-  { value: "menu.manage", label: "Manage Menu", category: "Menu" },
-  { value: "tables.view", label: "View Tables", category: "Tables" },
-  { value: "tables.manage", label: "Manage Tables", category: "Tables" },
-  { value: "customers.view", label: "View Customers", category: "Customers" },
-  { value: "customers.manage", label: "Manage VIP/Loyalty", category: "Customers" },
-  { value: "analytics.view", label: "View Analytics", category: "Analytics" },
-  { value: "settings.view", label: "View Settings", category: "Settings" },
-  { value: "settings.manage", label: "Manage Settings", category: "Settings" },
-  { value: "staff.manage", label: "Manage Staff", category: "Staff" },
+  { 
+    id: 'bookings.view', 
+    label: 'View Bookings', 
+    category: 'Bookings',
+    description: 'See all restaurant bookings'
+  },
+  { 
+    id: 'bookings.manage', 
+    label: 'Manage Bookings', 
+    category: 'Bookings',
+    description: 'Create, edit, and cancel bookings'
+  },
+  { 
+    id: 'menu.view', 
+    label: 'View Menu', 
+    category: 'Menu',
+    description: 'See restaurant menu items'
+  },
+  { 
+    id: 'menu.manage', 
+    label: 'Manage Menu', 
+    category: 'Menu',
+    description: 'Add, edit, and remove menu items'
+  },
+  { 
+    id: 'tables.view', 
+    label: 'View Tables', 
+    category: 'Tables',
+    description: 'See table layout and availability'
+  },
+  { 
+    id: 'tables.manage', 
+    label: 'Manage Tables', 
+    category: 'Tables',
+    description: 'Edit table configuration'
+  },
+  { 
+    id: 'customers.view', 
+    label: 'View Customers', 
+    category: 'Customers',
+    description: 'See customer information'
+  },
+  { 
+    id: 'customers.manage', 
+    label: 'Manage VIP/Loyalty', 
+    category: 'Customers',
+    description: 'Manage customer VIP status and loyalty'
+  },
+  { 
+    id: 'analytics.view', 
+    label: 'View Analytics', 
+    category: 'Analytics',
+    description: 'Access restaurant analytics'
+  },
+  { 
+    id: 'settings.view', 
+    label: 'View Settings', 
+    category: 'Settings',
+    description: 'See restaurant settings'
+  },
+  { 
+    id: 'settings.manage', 
+    label: 'Manage Settings', 
+    category: 'Settings',
+    description: 'Change restaurant configuration'
+  },
+  { 
+    id: 'staff.manage', 
+    label: 'Manage Staff', 
+    category: 'Staff',
+    description: 'Add, edit, and remove staff members'
+  }
 ]
 
-const DEFAULT_PERMISSIONS_BY_ROLE = {
-  owner: ["all"],
-  manager: [
-    "bookings.view", "bookings.manage",
-    "menu.view", "menu.manage",
-    "tables.view", "tables.manage",
-    "customers.view", "customers.manage",
-    "analytics.view",
-    "settings.view"
-  ],
-  staff: [
-    "bookings.view", "bookings.manage",
-    "menu.view",
-    "tables.view",
-    "customers.view"
-  ],
-  viewer: [
-    "bookings.view",
-    "menu.view",
-    "tables.view",
-    "analytics.view"
-  ],
-}
-
 export default function StaffPage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [isAddingStaff, setIsAddingStaff] = useState(false)
-  const [selectedStaff, setSelectedStaff] = useState<RestaurantStaff | null>(null)
-  const [roleFilter, setRoleFilter] = useState<string>("all")
-  
+  const router = useRouter()
   const supabase = createClient()
-  const queryClient = useQueryClient()
-
-  // Get restaurant ID and current user role
-  const [restaurantId, setRestaurantId] = useState<string>("")
-  const [currentUserRole, setCurrentUserRole] = useState<string>("")
   
-  useEffect(() => {
-    async function getRestaurantInfo() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: staffData } = await supabase
-          .from("restaurant_staff")
-          .select("restaurant_id, role")
-          .eq("user_id", user.id)
-          .single()
-        
-        if (staffData) {
-          setRestaurantId(staffData.restaurant_id)
-          setCurrentUserRole(staffData.role)
-        }
-      }
-    }
-    getRestaurantInfo()
-  }, [supabase])
+  // State
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([])
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [currentStaff, setCurrentStaff] = useState<StaffMember | null>(null)
+  const [restaurantId, setRestaurantId] = useState<string>("")
+  const [loading, setLoading] = useState(true)
+  const [isAddingStaff, setIsAddingStaff] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [roleFilter, setRoleFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all")
 
-  // Fetch staff members
-  const { data: staffMembers, isLoading } = useQuery({
-    queryKey: ["staff-members", restaurantId],
-    queryFn: async () => {
-      if (!restaurantId) return []
-      
-      const { data, error } = await supabase
-        .from("restaurant_staff")
-        .select(`
-          *,
-          user:profiles(
-            id,
-            full_name,
-            email,
-            phone_number,
-            avatar_url
-          )
-        `)
-        .eq("restaurant_id", restaurantId)
-        .order("created_at", { ascending: false })
-
-      if (error) throw error
-      return data as (RestaurantStaff & { user: Profile })[]
-    },
-    enabled: !!restaurantId,
-  })
-
-  // Form setup
+  // Form
   const form = useForm<StaffFormData>({
     resolver: zodResolver(staffFormSchema),
     defaultValues: {
-      email: "",
       fullName: "",
+      email: "",
       phoneNumber: "",
       role: "staff",
-      permissions: DEFAULT_PERMISSIONS_BY_ROLE.staff,
+      permissions: restaurantAuth.getDefaultPermissions("staff"),
     },
   })
 
-  // Watch for role changes to update permissions
+  // Watch role changes to update permissions
   const watchedRole = form.watch("role")
   useEffect(() => {
-    if (watchedRole !== "owner") {
-      form.setValue("permissions", DEFAULT_PERMISSIONS_BY_ROLE[watchedRole as keyof typeof DEFAULT_PERMISSIONS_BY_ROLE])
+    if (watchedRole) {
+      form.setValue("permissions", restaurantAuth.getDefaultPermissions(watchedRole))
     }
   }, [watchedRole, form])
 
-  // Add staff member mutation
-  const addStaffMutation = useMutation({
-    mutationFn: async (data: StaffFormData) => {
-      // First check if user exists
-      let userId: string | null = null
-      
-      const { data: existingUser } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("email", data.email)
+  // Load initial data
+  useEffect(() => {
+    loadInitialData()
+  }, [])
+
+  const loadInitialData = async () => {
+    try {
+      setLoading(true)
+
+      // Get current user
+      const { data: { user } }:any = await supabase.auth.getUser()
+      if (!user) {
+        router.push('/login')
+        return
+      }
+      setCurrentUser(user)
+
+      // Get current staff data
+      const { data: staffData, error: staffError } = await supabase
+        .from('restaurant_staff')
+        .select(`
+          id,
+          role,
+          permissions,
+          restaurant_id,
+          user:profiles(*)
+        `)
+        .eq('user_id', user.id)
+        .eq('is_active', true)
         .single()
 
-      if (existingUser) {
-        userId = existingUser.id
-        
-        // Check if already a staff member
-        const { data: existingStaff } = await supabase
-          .from("restaurant_staff")
-          .select("id")
-          .eq("restaurant_id", restaurantId)
-          .eq("user_id", userId)
-          .single()
-
-        if (existingStaff) {
-          throw new Error("User is already a staff member")
-        }
-      } else {
-        // Create user account with temporary password
-        const tempPassword = Math.random().toString(36).slice(-8) + "Aa1!"
-        
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email: data.email,
-          password: tempPassword,
-          options: {
-            data: {
-              full_name: data.fullName,
-              phone_number: data.phoneNumber,
-            },
-          },
-        })
-
-        if (authError) throw authError
-        if (!authData.user) throw new Error("Failed to create user account")
-        
-        userId = authData.user.id
-
-        // TODO: Send email with login credentials and password reset link
+      if (staffError || !staffData) {
+        toast.error("You don't have access to manage staff")
+        router.push('/dashboard')
+        return
       }
 
-      // Add staff member
-      const { error } = await supabase
-        .from("restaurant_staff")
-        .insert({
-          restaurant_id: restaurantId,
-          user_id: userId,
-          role: data.role,
-          permissions: data.role === "owner" ? ["all"] : data.permissions,
-          is_active: true,
-        })
+      setCurrentStaff(staffData as any)
+      setRestaurantId(staffData.restaurant_id)
 
-      if (error) throw error
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["staff-members"] })
+      // Check if user can manage staff
+      if (!restaurantAuth.hasPermission(staffData.permissions, 'staff.manage', staffData.role)) {
+        toast.error("You don't have permission to manage staff")
+        router.push('/dashboard')
+        return
+      }
+
+      // Load staff members
+      await loadStaffMembers(staffData.restaurant_id)
+
+    } catch (error) {
+      console.error('Error loading initial data:', error)
+      toast.error('Failed to load staff data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadStaffMembers = async (restaurantId: string) => {
+    try {
+      const staff:any = await restaurantAuth.getRestaurantStaff(restaurantId)
+      setStaffMembers(staff as StaffMember[])
+    } catch (error) {
+      console.error('Error loading staff members:', error)
+      toast.error('Failed to load staff members')
+    }
+  }
+
+  // Add staff member
+  const handleAddStaff = async (data: StaffFormData) => {
+    if (!currentUser || !restaurantId) return
+
+    try {
+      setLoading(true)
+      
+      await restaurantAuth.addStaffMember(
+        restaurantId,
+        {
+          fullName: data.fullName,
+          email: data.email,
+          phoneNumber: data.phoneNumber,
+          role: data.role,
+          permissions: data.permissions
+        },
+        currentUser.id
+      )
+
       toast.success("Staff member added successfully")
       setIsAddingStaff(false)
       form.reset()
-    },
-    onError: (error: any) => {
+      await loadStaffMembers(restaurantId)
+
+    } catch (error: any) {
+      console.error('Error adding staff:', error)
       toast.error(error.message || "Failed to add staff member")
-    },
-  })
-
-  // Update staff member mutation
-  const updateStaffMutation = useMutation({
-    mutationFn: async ({ staffId, data }: { staffId: string; data: Partial<RestaurantStaff> }) => {
-      const { error } = await supabase
-        .from("restaurant_staff")
-        .update(data)
-        .eq("id", staffId)
-
-      if (error) throw error
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["staff-members"] })
-      toast.success("Staff member updated")
-    },
-    onError: () => {
-      toast.error("Failed to update staff member")
-    },
-  })
-
-  // Remove staff member mutation
-  const removeStaffMutation = useMutation({
-    mutationFn: async (staffId: string) => {
-      const { error } = await supabase
-        .from("restaurant_staff")
-        .delete()
-        .eq("id", staffId)
-
-      if (error) throw error
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["staff-members"] })
-      toast.success("Staff member removed")
-    },
-    onError: () => {
-      toast.error("Failed to remove staff member")
-    },
-  })
-
-  // Filter staff members
-  const filteredStaff = staffMembers?.filter((staff) => {
-    const matchesSearch = !searchQuery || 
-      staff.user?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      staff.user?.email?.toLowerCase().includes(searchQuery.toLowerCase())
-    
-    const matchesRole = roleFilter === "all" || staff.role === roleFilter
-    
-    return matchesSearch && matchesRole
-  })
-
-  // Get staff statistics
-  const getStaffStats = () => {
-    if (!staffMembers) return { total: 0, active: 0, byRole: {} }
-    
-    const stats = {
-      total: staffMembers.length,
-      active: staffMembers.filter(s => s.is_active).length,
-      byRole: staffMembers.reduce((acc, staff) => {
-        acc[staff.role] = (acc[staff.role] || 0) + 1
-        return acc
-      }, {} as Record<string, number>),
+    } finally {
+      setLoading(false)
     }
-
-    return stats
   }
 
-  const stats = getStaffStats()
+  // Toggle staff status
+  const handleToggleStatus = async (staffId: string, currentStatus: boolean) => {
+    if (!currentUser) return
+
+    try {
+      await restaurantAuth.updateStaffMember(
+        staffId,
+        { is_active: !currentStatus },
+        currentUser.id
+      )
+
+      toast.success(`Staff member ${!currentStatus ? 'activated' : 'deactivated'}`)
+      await loadStaffMembers(restaurantId)
+
+    } catch (error: any) {
+      console.error('Error updating staff status:', error)
+      toast.error(error.message || "Failed to update staff status")
+    }
+  }
+
+  // Remove staff member
+  const handleRemoveStaff = async (staffId: string, staffName: string) => {
+    if (!currentUser) return
+    if (!confirm(`Are you sure you want to remove ${staffName}?`)) return
+
+    try {
+      await restaurantAuth.removeStaffMember(staffId, currentUser.id)
+      toast.success("Staff member removed successfully")
+      await loadStaffMembers(restaurantId)
+
+    } catch (error: any) {
+      console.error('Error removing staff:', error)
+      toast.error(error.message || "Failed to remove staff member")
+    }
+  }
+
+  // Filter staff members
+  const filteredStaff = useMemo(() => {
+    return staffMembers.filter(staff => {
+      const matchesSearch = !searchQuery || 
+        staff.user.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        staff.user.email.toLowerCase().includes(searchQuery.toLowerCase())
+      
+      const matchesRole = roleFilter === 'all' || staff.role === roleFilter
+      const matchesStatus = statusFilter === 'all' || 
+        (statusFilter === 'active' && staff.is_active) ||
+        (statusFilter === 'inactive' && !staff.is_active)
+      
+      return matchesSearch && matchesRole && matchesStatus
+    })
+  }, [staffMembers, searchQuery, roleFilter, statusFilter])
+
+  // Staff statistics
+  const stats = useMemo(() => {
+    const total = staffMembers.length
+    const active = staffMembers.filter(s => s.is_active).length
+    const byRole = staffMembers.reduce((acc, staff) => {
+      acc[staff.role] = (acc[staff.role] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+
+    return { total, active, inactive: total - active, byRole }
+  }, [staffMembers])
+
+  const StatsCard = ({ title, value, subtitle, icon: Icon }: {
+    title: string
+    value: string | number
+    subtitle?: string
+    icon: any
+  }) => (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+            <p className="text-2xl font-bold">{value}</p>
+            {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
+          </div>
+          <div className="p-3 bg-primary/10 rounded-lg">
+            <Icon className="h-6 w-6 text-primary" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+
+  const RoleBadge = ({ role }: { role: string }) => {
+    const roleConfig = ROLES.find(r => r.value === role)
+    if (!roleConfig) return <Badge variant="secondary">{role}</Badge>
+
+    return (
+      <Badge variant="secondary" className={roleConfig.color}>
+        <roleConfig.icon className="w-3 h-3 mr-1" />
+        {roleConfig.label}
+      </Badge>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
-      {/* Page Header */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Staff Management</h1>
           <p className="text-muted-foreground">
-            Manage your restaurant staff and their permissions
+            Manage your restaurant team and their permissions
           </p>
         </div>
-        {(currentUserRole === "owner" || currentUserRole === "manager") && (
-          <Dialog open={isAddingStaff} onOpenChange={setIsAddingStaff}>
-            <DialogTrigger asChild>
-              <Button>
-                <UserPlus className="mr-2 h-4 w-4" />
-                Add Staff
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
-              <DialogHeader>
-                <DialogTitle>Add Staff Member</DialogTitle>
-                <DialogDescription>
-                  Invite a new staff member to your restaurant
-                </DialogDescription>
-              </DialogHeader>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit((data) => addStaffMutation.mutate(data))} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="fullName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Full Name</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="John Doe"
-                              {...field}
-                              disabled={addStaffMutation.isPending}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Email</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="email"
-                              placeholder="john@example.com"
-                              {...field}
-                              disabled={addStaffMutation.isPending}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+        
+        <Dialog open={isAddingStaff} onOpenChange={setIsAddingStaff}>
+          <DialogTrigger asChild>
+            <Button>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Add Staff Member
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add Staff Member</DialogTitle>
+              <DialogDescription>
+                Invite a new team member to your restaurant
+              </DialogDescription>
+            </DialogHeader>
+            
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleAddStaff)} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="fullName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Full Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="John Doe" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="phoneNumber"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Phone Number (Optional)</FormLabel>
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="john@restaurant.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="phoneNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone Number (Optional)</FormLabel>
+                        <FormControl>
+                          <Input type="tel" placeholder="+961 70 123456" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={form.control}
+                    name="role"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Role</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
-                            <Input
-                              placeholder="+961 XX XXX XXX"
-                              {...field}
-                              disabled={addStaffMutation.isPending}
-                            />
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a role" />
+                            </SelectTrigger>
                           </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="role"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Role</FormLabel>
-                          <Select
-                            value={field.value}
-                            onValueChange={field.onChange}
-                            disabled={addStaffMutation.isPending || currentUserRole !== "owner"}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {ROLES.map((role) => (
-                                <SelectItem 
-                                  key={role.value} 
-                                  value={role.value}
-                                  disabled={role.value === "owner" && currentUserRole !== "owner"}
-                                >
+                          <SelectContent>
+                            {ROLES.slice(1).map((role) => (
+                              <SelectItem key={role.value} value={role.value}>
+                                <div className="flex items-center space-x-2">
+                                  <role.icon className="w-4 h-4" />
                                   <div>
                                     <div className="font-medium">{role.label}</div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {role.description}
-                                    </div>
+                                    <div className="text-sm text-muted-foreground">{role.description}</div>
                                   </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
-                  {watchedRole !== "owner" && (
-                    <FormField
-                      control={form.control}
-                      name="permissions"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Permissions</FormLabel>
-                          <FormDescription>
-                            Select the permissions for this staff member
-                          </FormDescription>
-                          <div className="space-y-4 mt-3">
-                            {Object.entries(
-                              PERMISSIONS.reduce((acc, perm) => {
-                                if (!acc[perm.category]) acc[perm.category] = []
-                                acc[perm.category].push(perm)
-                                return acc
-                              }, {} as Record<string, typeof PERMISSIONS>)
-                            ).map(([category, perms]) => (
-                              <div key={category}>
-                                <h4 className="text-sm font-medium mb-2">{category}</h4>
-                                <div className="space-y-2">
-                                  {perms.map((permission) => (
-                                    <div key={permission.value} className="flex items-center space-x-2">
-                                      <Checkbox
-                                        id={permission.value}
-                                        checked={field.value.includes(permission.value)}
-                                        onCheckedChange={(checked) => {
-                                          if (checked) {
-                                            field.onChange([...field.value, permission.value])
-                                          } else {
-                                            field.onChange(
-                                              field.value.filter((v) => v !== permission.value)
-                                            )
-                                          }
-                                        }}
-                                        disabled={addStaffMutation.isPending}
-                                      />
-                                      <label
-                                        htmlFor={permission.value}
-                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                      >
-                                        {permission.label}
-                                      </label>
-                                    </div>
-                                  ))}
                                 </div>
-                              </div>
+                              </SelectItem>
                             ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="permissions"
+                  render={() => (
+                    <FormItem>
+                      <div className="mb-4">
+                        <FormLabel className="text-base">Permissions</FormLabel>
+                        <FormDescription>
+                          Select what this staff member can do
+                        </FormDescription>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-64 overflow-y-auto border rounded-lg p-4">
+                        {Object.entries(
+                          PERMISSIONS.reduce((acc, permission) => {
+                            if (!acc[permission.category]) acc[permission.category] = []
+                            acc[permission.category].push(permission)
+                            return acc
+                          }, {} as Record<string, typeof PERMISSIONS>)
+                        ).map(([category, permissions]) => (
+                          <div key={category} className="space-y-3">
+                            <h4 className="font-medium text-sm">{category}</h4>
+                            <div className="space-y-3">
+                              {permissions.map((permission) => (
+                                <FormField
+                                  key={permission.id}
+                                  control={form.control}
+                                  name="permissions"
+                                  render={({ field }) => {
+                                    return (
+                                      <FormItem
+                                        key={permission.id}
+                                        className="flex flex-row items-start space-x-3 space-y-0"
+                                      >
+                                        <FormControl>
+                                          <Checkbox
+                                            checked={field.value?.includes(permission.id)}
+                                            onCheckedChange={(checked) => {
+                                              return checked
+                                                ? field.onChange([...field.value, permission.id])
+                                                : field.onChange(
+                                                    field.value?.filter(
+                                                      (value) => value !== permission.id
+                                                    )
+                                                  )
+                                            }}
+                                          />
+                                        </FormControl>
+                                        <div className="space-y-1 leading-none">
+                                          <FormLabel className="text-sm font-normal">
+                                            {permission.label}
+                                          </FormLabel>
+                                          <p className="text-xs text-muted-foreground">
+                                            {permission.description}
+                                          </p>
+                                        </div>
+                                      </FormItem>
+                                    )
+                                  }}
+                                />
+                              ))}
+                            </div>
                           </div>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
                   )}
-                  
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsAddingStaff(false)}
-                      disabled={addStaffMutation.isPending}
-                    >
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={addStaffMutation.isPending}>
-                      {addStaffMutation.isPending ? "Adding..." : "Add Staff Member"}
-                    </Button>
-                  </div>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
-        )}
+                />
+
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsAddingStaff(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={loading}>
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Adding...
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Add Staff Member
+                      </>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      {/* Statistics */}
+      {/* Stats */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Staff</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Staff</CardTitle>
-            <UserCheck className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.active}</div>
-            <p className="text-xs text-muted-foreground">
-              Currently active
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Managers</CardTitle>
-            <Shield className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {(stats.byRole.owner || 0) + (stats.byRole.manager || 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              With admin access
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Staff Members</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.byRole.staff || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              Regular staff
-            </p>
-          </CardContent>
-        </Card>
+        <StatsCard
+          title="Total Staff"
+          value={stats.total}
+          icon={Users}
+        />
+        <StatsCard
+          title="Active Staff"
+          value={stats.active}
+          subtitle={`${stats.inactive} inactive`}
+          icon={CheckCircle2}
+        />
+        <StatsCard
+          title="Managers"
+          value={stats.byRole.manager || 0}
+          icon={Star}
+        />
+        <StatsCard
+          title="Staff Members"
+          value={stats.byRole.staff || 0}
+          icon={Coffee}
+        />
       </div>
 
-      {/* Staff List */}
+      {/* Filters */}
       <Card>
-        <CardHeader>
-          <CardTitle>Staff Members</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <CardContent className="p-6">
+          <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name or email..."
+                placeholder="Search staff members..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
+                className="pl-8 w-full md:w-64"
               />
             </div>
-            <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Roles</SelectItem>
-                {ROLES.map((role) => (
-                  <SelectItem key={role.value} value={role.value}>
-                    {role.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            
+            <div className="flex space-x-2">
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="All Roles" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  {ROLES.map((role) => (
+                    <SelectItem key={role.value} value={role.value}>
+                      {role.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+        </CardContent>
+      </Card>
 
-          {/* Staff Table */}
-          {isLoading ? (
-            <div className="text-center py-8">Loading staff members...</div>
-          ) : filteredStaff?.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              {searchQuery || roleFilter !== "all" 
-                ? "No staff members found matching your filters" 
-                : "No staff members yet"}
+      {/* Staff Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Staff Members ({filteredStaff.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {filteredStaff.length === 0 ? (
+            <div className="text-center py-12">
+              <Users className="mx-auto h-12 w-12 text-muted-foreground" />
+              <h3 className="mt-4 text-lg font-semibold">No staff members found</h3>
+              <p className="text-muted-foreground mt-2">
+                {searchQuery || roleFilter !== 'all' || statusFilter !== 'all'
+                  ? 'Try adjusting your search or filters'
+                  : 'Get started by adding your first staff member'
+                }
+              </p>
             </div>
           ) : (
             <Table>
@@ -644,43 +758,41 @@ export default function StaffPage() {
                 <TableRow>
                   <TableHead>Staff Member</TableHead>
                   <TableHead>Role</TableHead>
-                  <TableHead>Contact</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Joined</TableHead>
+                  <TableHead>Last Login</TableHead>
+                  <TableHead>Hired</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredStaff?.map((staff) => (
+                {filteredStaff.map((staff) => (
                   <TableRow key={staff.id}>
                     <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarImage src={staff.user?.avatar_url} />
-                          <AvatarFallback>
-                            {staff.user?.full_name?.split(" ").map(n => n[0]).join("")}
-                          </AvatarFallback>
-                        </Avatar>
+                      <div className="flex items-center space-x-4">
+                        <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                          <span className="text-sm font-semibold">
+                            {staff.user.full_name.split(' ').map(n => n[0]).join('')}
+                          </span>
+                        </div>
                         <div>
-                          <div className="font-medium">{staff.user?.full_name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {staff.user?.email}
+                          <div className="font-medium">{staff.user.full_name}</div>
+                          <div className="text-sm text-muted-foreground flex items-center space-x-4">
+                            <span className="flex items-center">
+                              <Mail className="h-3 w-3 mr-1" />
+                              {staff.user.email}
+                            </span>
+                            {staff.user.phone_number && (
+                              <span className="flex items-center">
+                                <Phone className="h-3 w-3 mr-1" />
+                                {staff.user.phone_number}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={staff.role === "owner" ? "default" : "secondary"}>
-                        {staff.role}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {staff.user?.phone_number && (
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Phone className="h-3 w-3" />
-                          {staff.user.phone_number}
-                        </div>
-                      )}
+                      <RoleBadge role={staff.role} />
                     </TableCell>
                     <TableCell>
                       <Badge variant={staff.is_active ? "default" : "secondary"}>
@@ -688,51 +800,38 @@ export default function StaffPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm text-muted-foreground">
-                        {format(new Date(staff.created_at), "MMM d, yyyy")}
+                      <div className="flex items-center text-sm text-muted-foreground">
+                        <Clock className="h-3 w-3 mr-1" />
+                        {staff.last_login_at 
+                          ? new Date(staff.last_login_at).toLocaleDateString()
+                          : 'Never'
+                        }
                       </div>
                     </TableCell>
+                    <TableCell>
+                      {new Date(staff.hired_at).toLocaleDateString()}
+                    </TableCell>
                     <TableCell className="text-right">
-                      {currentUserRole === "owner" || 
-                       (currentUserRole === "manager" && staff.role !== "owner" && staff.role !== "manager") ? (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => 
-                                updateStaffMutation.mutate({
-                                  staffId: staff.id,
-                                  data: { is_active: !staff.is_active }
-                                })
-                              }
-                            >
-                              {staff.is_active ? (
-                                <>
-                                  <UserX className="mr-2 h-4 w-4" />
-                                  Deactivate
-                                </>
-                              ) : (
-                                <>
-                                  <UserCheck className="mr-2 h-4 w-4" />
-                                  Activate
-                                </>
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="text-destructive">
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Remove
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">-</span>
-                      )}
+                      <div className="flex items-center justify-end space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleToggleStatus(staff.id, staff.is_active)}
+                        >
+                          {staff.is_active ? 'Deactivate' : 'Activate'}
+                        </Button>
+                        
+                        {currentStaff?.role === 'owner' && staff.role !== 'owner' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveStaff(staff.id, staff.user.full_name)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

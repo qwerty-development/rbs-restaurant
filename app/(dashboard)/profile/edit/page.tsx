@@ -92,8 +92,8 @@ export default function EditProfilePage() {
   const router = useRouter()
   const supabase = createClient()
   const queryClient = useQueryClient()
-  const [logoFile, setLogoFile] = useState<File | null>(null)
-  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [restaurantId, setRestaurantId] = useState<string>("")
 
   useEffect(() => {
@@ -173,8 +173,8 @@ export default function EditProfilePage() {
         shisha_available: restaurant.shisha_available,
       })
       
-      if (restaurant.logo_url) {
-        setLogoPreview(restaurant.logo_url)
+      if (restaurant.main_image_url) {
+        setImagePreview(restaurant.main_image_url)
       }
     }
   }, [restaurant, form])
@@ -182,31 +182,31 @@ export default function EditProfilePage() {
   // Update restaurant mutation
   const updateRestaurantMutation = useMutation({
     mutationFn: async (data: ProfileFormData) => {
-      let logo_url = restaurant?.logo_url
+      let main_image_url = restaurant?.main_image_url
 
-      // Upload logo if changed
-      if (logoFile) {
-        const fileExt = logoFile.name.split('.').pop()
+      // Upload image if changed
+      if (imageFile) {
+        const fileExt = imageFile.name.split('.').pop()
         const fileName = `${restaurantId}-${Date.now()}.${fileExt}`
         
         const { error: uploadError } = await supabase.storage
-          .from('restaurant-logos')
-          .upload(fileName, logoFile)
+          .from('restaurant-images')
+          .upload(fileName, imageFile)
 
         if (uploadError) throw uploadError
 
         const { data: { publicUrl } } = supabase.storage
-          .from('restaurant-logos')
+          .from('restaurant-images')
           .getPublicUrl(fileName)
 
-        logo_url = publicUrl
+        main_image_url = publicUrl
       }
 
       const { error } = await supabase
         .from("restaurants")
         .update({
           ...data,
-          logo_url,
+          main_image_url,
           updated_at: new Date().toISOString(),
         })
         .eq("id", restaurantId)
@@ -223,27 +223,27 @@ export default function EditProfilePage() {
     },
   })
 
-  // Handle logo upload
-  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle image upload
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
-        toast.error("Logo must be less than 5MB")
+        toast.error("Image must be less than 5MB")
         return
       }
       
-      setLogoFile(file)
+      setImageFile(file)
       const reader = new FileReader()
       reader.onloadend = () => {
-        setLogoPreview(reader.result as string)
+        setImagePreview(reader.result as string)
       }
       reader.readAsDataURL(file)
     }
   }
 
-  const removeLogo = () => {
-    setLogoFile(null)
-    setLogoPreview(restaurant?.logo_url || null)
+  const removeImage = () => {
+    setImageFile(null)
+    setImagePreview(restaurant?.main_image_url || null)
   }
 
   if (isLoading) {
@@ -272,18 +272,18 @@ export default function EditProfilePage() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit((data) => updateRestaurantMutation.mutate(data))} className="space-y-6">
-          {/* Logo Upload */}
+          {/* Main Image Upload */}
           <Card>
             <CardHeader>
-              <CardTitle>Restaurant Logo</CardTitle>
+              <CardTitle>Restaurant Image</CardTitle>
               <CardDescription>
-                Upload a logo for your restaurant (max 5MB)
+                Upload a main image for your restaurant (max 5MB)
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-6">
                 <Avatar className="h-24 w-24">
-                  <AvatarImage src={logoPreview || undefined} />
+                  <AvatarImage src={imagePreview || undefined} />
                   <AvatarFallback>
                     <Store className="h-12 w-12" />
                   </AvatarFallback>
@@ -293,17 +293,17 @@ export default function EditProfilePage() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => document.getElementById("logo-upload")?.click()}
+                    onClick={() => document.getElementById("image-upload")?.click()}
                   >
                     <Upload className="mr-2 h-4 w-4" />
-                    Upload Logo
+                    Upload Image
                   </Button>
                   
-                  {logoPreview && (
+                  {imagePreview && (
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={removeLogo}
+                      onClick={removeImage}
                     >
                       <X className="mr-2 h-4 w-4" />
                       Remove
@@ -311,10 +311,10 @@ export default function EditProfilePage() {
                   )}
                   
                   <input
-                    id="logo-upload"
+                    id="image-upload"
                     type="file"
                     accept="image/*"
-                    onChange={handleLogoChange}
+                    onChange={handleImageChange}
                     className="hidden"
                   />
                 </div>
