@@ -22,6 +22,7 @@ import type { RestaurantTable } from "@/types"
 const formSchema = z.object({
   table_number: z.string().min(1, "Table number is required"),
   table_type: z.enum(["booth", "window", "patio", "standard", "bar", "private"]),
+  capacity: z.number().min(1).max(50),
   min_capacity: z.number().min(1).max(20),
   max_capacity: z.number().min(1).max(50),
   shape: z.enum(["rectangle", "circle", "square"]),
@@ -29,6 +30,15 @@ const formSchema = z.object({
   is_combinable: z.boolean(),
   features: z.array(z.string()).optional(),
   priority_score: z.number().min(0).max(100),
+}).refine((data) => data.min_capacity <= data.capacity, {
+  message: "Default capacity must be >= minimum capacity",
+  path: ["capacity"],
+}).refine((data) => data.capacity <= data.max_capacity, {
+  message: "Default capacity must be <= maximum capacity", 
+  path: ["capacity"],
+}).refine((data) => data.min_capacity <= data.max_capacity, {
+  message: "Minimum capacity must be <= maximum capacity",
+  path: ["max_capacity"],
 })
 
 type FormData = z.infer<typeof formSchema>
@@ -69,6 +79,7 @@ export function TableForm({ table, tables, onSubmit, onCancel, isLoading }: Tabl
     defaultValues: {
       table_number: table?.table_number || "",
       table_type: table?.table_type || "standard",
+      capacity: table?.capacity || 4,
       min_capacity: table?.min_capacity || 2,
       max_capacity: table?.max_capacity || 4,
       shape: table?.shape || "rectangle",
@@ -127,7 +138,25 @@ export function TableForm({ table, tables, onSubmit, onCancel, isLoading }: Tabl
       </div>
 
       {/* Capacity */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <Label htmlFor="capacity">Default Capacity *</Label>
+          <Input
+            id="capacity"
+            type="number"
+            min="1"
+            max="50"
+            {...register("capacity", { valueAsNumber: true })}
+            disabled={isLoading}
+          />
+          {errors.capacity && (
+            <p className="text-sm text-red-600 mt-1">{errors.capacity.message}</p>
+          )}
+          <p className="text-xs text-muted-foreground mt-1">
+            Standard seating capacity
+          </p>
+        </div>
+
         <div>
           <Label htmlFor="min_capacity">Min Capacity *</Label>
           <Input
@@ -138,6 +167,9 @@ export function TableForm({ table, tables, onSubmit, onCancel, isLoading }: Tabl
             {...register("min_capacity", { valueAsNumber: true })}
             disabled={isLoading}
           />
+          {errors.min_capacity && (
+            <p className="text-sm text-red-600 mt-1">{errors.min_capacity.message}</p>
+          )}
         </div>
 
         <div>
@@ -150,6 +182,9 @@ export function TableForm({ table, tables, onSubmit, onCancel, isLoading }: Tabl
             {...register("max_capacity", { valueAsNumber: true })}
             disabled={isLoading}
           />
+          {errors.max_capacity && (
+            <p className="text-sm text-red-600 mt-1">{errors.max_capacity.message}</p>
+          )}
         </div>
       </div>
 

@@ -36,6 +36,8 @@ import {
 } from "@/components/ui/form"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
 import { toast } from "react-hot-toast"
 import { Plus, Search, Crown, Calendar as CalendarIcon, UserPlus, Star, TrendingUp, X } from "lucide-react"
 import { format, addDays } from "date-fns"
@@ -69,7 +71,8 @@ type RestaurantVIPUser = {
 }
 
 const vipFormSchema = z.object({
-  userEmail: z.string().email("Invalid email address"),
+  userId: z.string().optional(),
+  userEmail: z.string().email("Please enter a valid email").optional(),
   extendedBookingDays: z.number().min(30).max(365),
   validUntil: z.date(),
   priorityBooking: z.boolean(),
@@ -92,7 +95,7 @@ export default function VIPPage() {
     async function getRestaurantId() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        const { data: staffData } = await supabase
+        const { data: staffData, error } = await supabase
           .from("restaurant_staff")
           .select("restaurant_id")
           .eq("user_id", user.id)
@@ -130,12 +133,74 @@ export default function VIPPage() {
         .gte("valid_until", new Date().toISOString())
         .order("created_at", { ascending: false })
 
+      if (error) throw error
+      
+      // Get emails for each user from auth.users
+      const enrichedData = await Promise.all((data || []).map(async (vipUser) => {
+        const { data: authUser } = await supabase.auth.admin.getUserById(vipUser.user_id)
+        return {
+          ...vipUser,
+          user: {
+            ...vipUser.user,
+            email: authUser?.user?.email
+          }
+        }
+      }))
+      
+      return enrichedData as RestaurantVIPUser[]
+    },
+    enabled: !!restaurantId,
+  })
+
+  // Fetch existing customers who have made bookings
+  const { data: existingCustomers } = useQuery({
+    queryKey: ["existing-customers", restaurantId],
+    queryFn: async () => {
+      if (!restaurantId) return []
+      
+      // Get all unique user_ids who have made bookings at this restaurant
+      const { data: bookings, error } = await supabase
+        .from("bookings")
+        .select("user_id")
+        .eq("restaurant_id", restaurantId)
+        .not("user_id", "is", null)
+
       if (error) {
-        console.error("Error fetching VIP users:", error)
+        console.error("Error fetching bookings:", error)
         throw error
       }
+
+      // Get unique user IDs
+      const uniqueUserIds = [...new Set(bookings?.map(booking => booking.user_id) || [])]
       
-      return (data || []) as RestaurantVIPUser[]
+      if (uniqueUserIds.length === 0) return []
+
+      // Now fetch profile data for these users
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select(`
+          id,
+          full_name,
+          phone_number,
+          avatar_url,
+          loyalty_points,
+          total_bookings,
+          completed_bookings
+        `)
+        .in("id", uniqueUserIds)
+
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError)
+        throw profilesError
+      }
+
+      // Return users without trying to fetch emails for now
+      const enrichedUsers = (profiles || []).map((user: any) => ({
+        ...user,
+        email: null // Set to null instead of placeholder
+      }))
+
+      return enrichedUsers
     },
     enabled: !!restaurantId,
   })
@@ -144,6 +209,7 @@ export default function VIPPage() {
   const form = useForm<VIPFormData>({
     resolver: zodResolver(vipFormSchema),
     defaultValues: {
+      userId: "",
       userEmail: "",
       extendedBookingDays: 60,
       validUntil: addDays(new Date(), 365),
@@ -154,25 +220,21 @@ export default function VIPPage() {
   // Add VIP user mutation
   const addVIPMutation = useMutation({
     mutationFn: async (data: VIPFormData) => {
-      // First, find the user by email in profiles table
-      // Note: We can't directly access auth.users from client side
-      // We need to search by a field that exists in profiles
-      // For now, let's search by the provided email in guest bookings or use a different approach
+      let userId = data.userId;
       
-      // Check if user exists by searching bookings with guest_email
-      const { data: existingBookings } = await supabase
-        .from("bookings")
-        .select("user_id, profiles!bookings_user_id_fkey(id, full_name)")
-        .eq("guest_email", data.userEmail)
-        .not("user_id", "is", null)
-        .limit(1)
-
-      let userId = null
-      if (existingBookings && existingBookings.length > 0) {
-        userId = existingBookings[0].user_id
-      } else {
-        throw new Error("User not found. Please ensure the user has made at least one booking with this email.")
+      // If no userId selected but email provided, find user by email
+      if ((!userId || userId === "") && data.userEmail) {
+        // Simple email lookup without admin functions
+        console.log("Looking up user by email:", data.userEmail)
+        // For now, just throw an error asking them to select from list
+        throw new Error("Please select a customer from the list above")
       }
+      
+      if (!userId || userId === "") {
+        throw new Error("Please select a customer from the list")
+      }
+
+      console.log("Adding VIP for user:", userId)
 
       // Check if already VIP
       const { data: existingVIP } = await supabase
@@ -198,7 +260,10 @@ export default function VIPPage() {
           valid_until: data.validUntil.toISOString(),
         })
 
-      if (error) throw error
+      if (error) {
+        console.error("Error adding VIP:", error)
+        throw error
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vip-users"] })
@@ -210,6 +275,12 @@ export default function VIPPage() {
       toast.error(error.message || "Failed to add VIP user")
     },
   })
+
+  // Filter customers to show only non-VIP ones
+  const availableCustomers = existingCustomers?.filter(customer => {
+    if (!vipUsers) return true
+    return !vipUsers.some(vip => vip.user_id === customer.id)
+  }) || []
 
   // Remove VIP status
   const removeVIPMutation = useMutation({
@@ -283,7 +354,12 @@ export default function VIPPage() {
             Manage your restaurant's VIP customers and their benefits
           </p>
         </div>
-        <Dialog open={isAddingVIP} onOpenChange={setIsAddingVIP}>
+        <Dialog open={isAddingVIP} onOpenChange={(open) => {
+          setIsAddingVIP(open)
+          if (!open) {
+            form.reset()
+          }
+        }}>
           <DialogTrigger asChild>
             <Button>
               <UserPlus className="mr-2 h-4 w-4" />
@@ -301,24 +377,95 @@ export default function VIPPage() {
               <form onSubmit={form.handleSubmit((data) => addVIPMutation.mutate(data))} className="space-y-4">
                 <FormField
                   control={form.control}
-                  name="userEmail"
+                  name="userId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Customer Email</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="customer@email.com"
-                          {...field}
-                          disabled={addVIPMutation.isPending}
-                        />
-                      </FormControl>
+                      <FormLabel>Select Customer</FormLabel>
+                      <Select 
+                        onValueChange={(value) => {
+                          field.onChange(value)
+                          form.setValue("userEmail", "")
+                        }} 
+                        value={field.value}
+                        disabled={addVIPMutation.isPending}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose a customer who has booked before..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="max-h-60">
+                          {availableCustomers?.length === 0 ? (
+                            <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                              No available customers found
+                            </div>
+                          ) : (
+                            availableCustomers?.map((customer) => (
+                              <SelectItem key={customer.id} value={customer.id}>
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="h-6 w-6">
+                                    <AvatarImage src={customer.avatar_url} />
+                                    <AvatarFallback className="text-xs">
+                                      {customer.full_name?.split(" ").map((n: string) => n[0]).join("") || "?"}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                    <div className="font-medium">{customer.full_name}</div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {customer.phone_number || "No phone"} • {customer.completed_bookings || 0} bookings
+                                    </div>
+                                  </div>
+                                </div>
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
                       <FormDescription>
-                        The email address of the registered customer
+                        Select from customers who have previously booked at your restaurant
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
+                {!form.watch("userId") && (
+                  <>
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1 border-t" />
+                      <span className="text-sm text-muted-foreground">OR</span>
+                      <div className="flex-1 border-t" />
+                    </div>
+                    
+                    <FormField
+                      control={form.control}
+                      name="userEmail"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Customer Email</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="customer@email.com"
+                              {...field}
+                              onChange={(e) => {
+                                field.onChange(e)
+                                // Clear selected user when typing email
+                                if (e.target.value) {
+                                  form.setValue("userId", "")
+                                }
+                              }}
+                              disabled={addVIPMutation.isPending}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Enter the email address of a registered customer
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </>
+                )}
                 
                 <FormField
                   control={form.control}
@@ -392,7 +539,10 @@ export default function VIPPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setIsAddingVIP(false)}
+                    onClick={() => {
+                      setIsAddingVIP(false)
+                      form.reset()
+                    }}
                     disabled={addVIPMutation.isPending}
                   >
                     Cancel

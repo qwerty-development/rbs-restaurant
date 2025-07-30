@@ -113,10 +113,7 @@ export default function TablesPage() {
         // Update existing table
         const { error } = await supabase
           .from("restaurant_tables")
-          .update({
-            ...tableData,
-            updated_at: new Date().toISOString()
-          })
+          .update(tableData)
           .eq("id", tableData.id)
 
         if (error) throw error
@@ -369,6 +366,16 @@ export default function TablesPage() {
                     x_position: position.x,
                     y_position: position.y,
                   })
+                }}
+                onTableResize={(tableId, dimensions) => {
+                  tableMutation.mutate({
+                    id: tableId,
+                    width: dimensions.width,
+                    height: dimensions.height,
+                  })
+                }}
+                onTableDelete={(tableId) => {
+                  deleteTableMutation.mutate(tableId)
                 }}
               />
             </CardContent>

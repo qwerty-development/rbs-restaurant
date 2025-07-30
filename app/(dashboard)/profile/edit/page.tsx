@@ -39,12 +39,31 @@ import {
   X,
   ArrowLeft
 } from "lucide-react"
-import type { Restaurant } from "@/types"
+
+// Type definitions
+type Restaurant = {
+  id: string
+  name: string
+  description?: string
+  phone_number?: string
+  whatsapp_number?: string
+  website_url?: string
+  instagram_handle?: string
+  address: string
+  cuisine_type: string
+  price_range: number
+  dietary_options?: string[]
+  parking_available: boolean
+  valet_parking: boolean
+  outdoor_seating: boolean
+  shisha_available: boolean
+  main_image_url?: string
+}
 
 // Form schema
 const profileFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  description: z.string().min(10, "Description must be at least 10 characters"),
+  description: z.string().optional(),
   phone_number: z.string().optional(),
   whatsapp_number: z.string().optional(),
   website_url: z.string().url().optional().or(z.literal("")),
@@ -107,15 +126,21 @@ export default function EditProfilePage() {
           .single()
         
         if (staffData) {
+          // Check if user has permission to edit
+          if (staffData.role !== 'owner' && staffData.role !== 'manager') {
+            toast.error("You don't have permission to edit restaurant profile")
+            router.push("/profile")
+            return
+          }
           setRestaurantId(staffData.restaurant_id)
         }
       }
     }
     getRestaurantId()
-  }, [supabase])
+  }, [supabase, router])
 
   // Fetch restaurant data
-  const { data: restaurant, isLoading }:any = useQuery({
+  const { data: restaurant, isLoading } = useQuery({
     queryKey: ["restaurant-profile", restaurantId],
     queryFn: async () => {
       if (!restaurantId) return null
@@ -158,7 +183,7 @@ export default function EditProfilePage() {
     if (restaurant) {
       form.reset({
         name: restaurant.name,
-        description: restaurant.description,
+        description: restaurant.description || "",
         phone_number: restaurant.phone_number || "",
         whatsapp_number: restaurant.whatsapp_number || "",
         website_url: restaurant.website_url || "",
@@ -189,7 +214,7 @@ export default function EditProfilePage() {
         const fileExt = imageFile.name.split('.').pop()
         const fileName = `${restaurantId}-${Date.now()}.${fileExt}`
         
-        const { error: uploadError } = await supabase.storage
+        const { error: uploadError, data: uploadData } = await supabase.storage
           .from('restaurant-images')
           .upload(fileName, imageFile)
 
@@ -215,11 +240,12 @@ export default function EditProfilePage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["restaurant-profile"] })
+      queryClient.invalidateQueries({ queryKey: ["restaurant"] })
       toast.success("Profile updated successfully")
       router.push("/profile")
     },
-    onError: () => {
-      toast.error("Failed to update profile")
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to update profile")
     },
   })
 
@@ -263,7 +289,7 @@ export default function EditProfilePage() {
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Profile
           </Button>
-          <h1 className="text-3xl font-bold tracking-tight">Edit Profile</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Edit Restaurant Profile</h1>
           <p className="text-muted-foreground">
             Update your restaurant information
           </p>
@@ -282,9 +308,9 @@ export default function EditProfilePage() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-6">
-                <Avatar className="h-24 w-24">
-                  <AvatarImage src={imagePreview || undefined} />
-                  <AvatarFallback>
+                <Avatar className="h-24 w-24 rounded-lg">
+                  <AvatarImage src={imagePreview || undefined} className="object-cover" />
+                  <AvatarFallback className="rounded-lg">
                     <Store className="h-12 w-12" />
                   </AvatarFallback>
                 </Avatar>
@@ -353,6 +379,7 @@ export default function EditProfilePage() {
                         {...field}
                         disabled={updateRestaurantMutation.isPending}
                         rows={4}
+                        placeholder="Tell customers about your restaurant..."
                       />
                     </FormControl>
                     <FormMessage />
@@ -479,7 +506,11 @@ export default function EditProfilePage() {
                     <FormItem>
                       <FormLabel>Website URL</FormLabel>
                       <FormControl>
-                        <Input {...field} disabled={updateRestaurantMutation.isPending} />
+                        <Input 
+                          {...field} 
+                          disabled={updateRestaurantMutation.isPending}
+                          placeholder="https://example.com"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -529,10 +560,12 @@ export default function EditProfilePage() {
                           variant={field.value.includes(option) ? "default" : "outline"}
                           className="cursor-pointer capitalize"
                           onClick={() => {
-                            if (field.value.includes(option)) {
-                              field.onChange(field.value.filter((o) => o !== option))
-                            } else {
-                              field.onChange([...field.value, option])
+                            if (!updateRestaurantMutation.isPending) {
+                              if (field.value.includes(option)) {
+                                field.onChange(field.value.filter((o) => o !== option))
+                              } else {
+                                field.onChange([...field.value, option])
+                              }
                             }
                           }}
                         >

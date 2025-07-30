@@ -64,11 +64,7 @@ export function TopCustomers({ customers }: TopCustomersProps) {
                   {customer.count} {customer.count === 1 ? 'visit' : 'visits'}
                 </p>
               </div>
-              {index === 0 && (
-                <Badge variant="default" className="bg-yellow-500">
-                  VIP
-                </Badge>
-              )}
+              
             </div>
           ))}
         </div>

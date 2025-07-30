@@ -77,8 +77,7 @@ export default function BookingsPage() {
           profiles!bookings_user_id_fkey(
             id,
             full_name,
-            phone_number,
-            email: auth.users(email)
+            phone_number
           ),
           booking_tables(
             table:restaurant_tables(*)
@@ -144,31 +143,19 @@ export default function BookingsPage() {
   // Create manual booking
   const createManualBookingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
-      // First, create or get the user
-      let userId = null
+      // Get the current staff user to use as the booking creator for manual bookings
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error("Must be logged in to create bookings")
       
-      if (bookingData.guest_email) {
-        // Check if user exists
-        const { data: existingUser } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("email", bookingData.guest_email)
-          .single()
-
-        if (existingUser) {
-          userId = existingUser.id
-        }
-      }
-
       // Generate confirmation code
       const confirmationCode = `${restaurantId.slice(0, 4).toUpperCase()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`
 
-      // Create booking
+      // Create booking with the staff user as the creator, but guest info for the actual guest
       const { data: booking, error } = await supabase
         .from("bookings")
         .insert({
           restaurant_id: restaurantId,
-          user_id: userId,
+          user_id: user.id, // Use staff user ID to satisfy NOT NULL constraint
           guest_name: bookingData.guest_name,
           guest_email: bookingData.guest_email,
           guest_phone: bookingData.guest_phone,
@@ -379,7 +366,6 @@ export default function BookingsPage() {
               bookingId: selectedBooking.id, 
               updates 
             })
-            setSelectedBooking(null)
           }}
         />
       )}
