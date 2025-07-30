@@ -2,28 +2,10 @@
 "use client"
 
 import { format } from "date-fns"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { 
-  Calendar, 
-  Clock, 
-  Users, 
-  Phone, 
-  Mail,
-  MoreHorizontal,
-  CheckCircle,
-  XCircle,
-  Clock3
-} from "lucide-react"
+import { Skeleton } from "../ui/skeleton"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,233 +14,172 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { 
+  Clock, 
+  Users, 
+  Phone, 
+  MoreVertical,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Table2
+} from "lucide-react"
 import type { Booking } from "@/types"
 
 interface BookingListProps {
   bookings: Booking[]
   isLoading: boolean
   onSelectBooking: (booking: Booking) => void
-  onUpdateStatus: (bookingId: string, status: string) => void
+  onUpdateStatus: (bookingId: string, status: Booking['status']) => void
   compact?: boolean
 }
 
-export function BookingList({ 
-  bookings, 
-  isLoading, 
-  onSelectBooking, 
+export function BookingList({
+  bookings,
+  isLoading,
+  onSelectBooking,
   onUpdateStatus,
-  compact = false 
+  compact = false
 }: BookingListProps) {
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: Booking['status']) => {
     switch (status) {
       case 'confirmed':
-        return <CheckCircle className="h-4 w-4" />
+        return <CheckCircle className="h-4 w-4 text-green-600" />
       case 'pending':
-        return <Clock3 className="h-4 w-4" />
+        return <AlertCircle className="h-4 w-4 text-yellow-600" />
       case 'cancelled_by_user':
       case 'declined_by_restaurant':
-        return <XCircle className="h-4 w-4" />
+        return <XCircle className="h-4 w-4 text-red-600" />
       default:
         return null
     }
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: Booking['status']) => {
     switch (status) {
       case 'confirmed':
-        return 'bg-green-100 text-green-800'
+        return 'default'
       case 'pending':
-        return 'bg-yellow-100 text-yellow-800'
+        return 'secondary'
       case 'completed':
-        return 'bg-blue-100 text-blue-800'
+        return 'outline'
       case 'cancelled_by_user':
       case 'declined_by_restaurant':
-        return 'bg-red-100 text-red-800'
+        return 'destructive'
       case 'no_show':
-        return 'bg-gray-100 text-gray-800'
+        return 'destructive'
       default:
-        return 'bg-gray-100 text-gray-800'
+        return 'secondary'
     }
+  }
+
+  const formatGuestName = (booking: Booking) => {
+    return booking.user?.full_name || booking.guest_name || 'Guest'
+  }
+
+  const formatGuestPhone = (booking: Booking) => {
+    return booking.user?.phone_number || booking.guest_phone || 'No phone'
   }
 
   if (isLoading) {
     return (
-      <Card>
-        <CardContent className="py-8">
-          <div className="text-center text-muted-foreground">
-            Loading bookings...
-          </div>
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        {[...Array(3)].map((_, i) => (
+          <Card key={i}>
+            <CardHeader>
+              <Skeleton className="h-4 w-[200px]" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-4 w-[150px]" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     )
   }
 
   if (bookings.length === 0) {
     return (
       <Card>
-        <CardContent className="py-8">
-          <div className="text-center text-muted-foreground">
-            No bookings found
-          </div>
+        <CardContent className="py-8 text-center">
+          <p className="text-muted-foreground">No bookings found</p>
         </CardContent>
       </Card>
     )
   }
 
-  const getDisplayName = (booking: Booking) => {
-    return booking.user?.full_name || booking.guest_name || 'Guest'
-  }
-
-  const getDisplayPhone = (booking: Booking) => {
-    return booking.user?.phone_number || booking.guest_phone || '-'
-  }
-
-  const getDisplayEmail = (booking: Booking) => {
-    return booking.user?.email || booking.guest_email || '-'
-  }
-
-  if (compact) {
-    return (
-      <div className="space-y-2">
-        {bookings.map((booking) => {
-          const bookingDate = new Date(booking.booking_time)
-          
-          return (
-            <Card 
-              key={booking.id} 
-              className="cursor-pointer hover:bg-muted/50 transition-colors"
-              onClick={() => onSelectBooking(booking)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-4">
-                      <div>
-                        <p className="font-medium">{getDisplayName(booking)}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {format(bookingDate, "h:mm a")} • {booking.party_size} guests
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <Badge className={getStatusColor(booking.status)}>
-                    {getStatusIcon(booking.status)}
-                    <span className="ml-1">{booking.status.replace(/_/g, ' ')}</span>
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-    )
-  }
-
   return (
-    <Card>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Guest</TableHead>
-              <TableHead>Contact</TableHead>
-              <TableHead>Date & Time</TableHead>
-              <TableHead>Party</TableHead>
-              <TableHead>Tables</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {bookings.map((booking) => {
-              const bookingDate = new Date(booking.booking_time)
-              
-              return (
-                <TableRow 
-                  key={booking.id} 
-                  className="cursor-pointer"
-                  onClick={() => onSelectBooking(booking)}
-                >
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{getDisplayName(booking)}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {booking.confirmation_code}
-                      </p>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1 text-sm">
-                        <Phone className="h-3 w-3" />
-                        {getDisplayPhone(booking)}
-                      </div>
-                      <div className="flex items-center gap-1 text-sm">
-                        <Mail className="h-3 w-3" />
-                        {getDisplayEmail(booking)}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1 text-sm">
-                        <Calendar className="h-3 w-3" />
-                        {format(bookingDate, "MMM d, yyyy")}
-                      </div>
-                      <div className="flex items-center gap-1 text-sm">
-                        <Clock className="h-3 w-3" />
-                        {format(bookingDate, "h:mm a")}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Users className="h-4 w-4" />
-                      {booking.party_size}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {booking.tables && booking.tables.length > 0 ? (
-                      <div className="flex gap-1">
-                        {booking.tables.map((table) => (
-                          <Badge key={table.id} variant="outline">
-                            {table.table_number}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={getStatusColor(booking.status)}>
-                      {booking.status.replace(/_/g, ' ')}
+    <div className="space-y-4">
+      {bookings.map((booking:any) => {
+        const bookingTime = new Date(booking.booking_time)
+        const hasAssignedTables = booking.tables && booking.tables.length > 0
+
+        return (
+          <Card
+            key={booking.id}
+            className="cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => onSelectBooking(booking)}
+          >
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-lg">
+                      {formatGuestName(booking)}
+                    </h3>
+                    <Badge variant={getStatusColor(booking.status)}>
+                      <span className="flex items-center gap-1">
+                        {getStatusIcon(booking.status)}
+                        {booking.status.replace(/_/g, ' ')}
+                      </span>
                     </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Confirmation: <span className="font-mono">{booking.confirmation_code}</span>
+                  </p>
+                </div>
+                
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                    <Button variant="ghost" size="icon">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {booking.status === 'pending' && (
+                      <>
                         <DropdownMenuItem
                           onClick={(e) => {
                             e.stopPropagation()
                             onUpdateStatus(booking.id, 'confirmed')
                           }}
                         >
+                          <CheckCircle className="mr-2 h-4 w-4" />
                           Confirm Booking
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onUpdateStatus(booking.id, 'declined_by_restaurant')
+                          }}
+                          className="text-destructive"
+                        >
+                          <XCircle className="mr-2 h-4 w-4" />
+                          Decline Booking
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {booking.status === 'confirmed' && (
+                      <>
                         <DropdownMenuItem
                           onClick={(e) => {
                             e.stopPropagation()
                             onUpdateStatus(booking.id, 'completed')
                           }}
                         >
+                          <CheckCircle className="mr-2 h-4 w-4" />
                           Mark as Completed
                         </DropdownMenuItem>
                         <DropdownMenuItem
@@ -266,19 +187,72 @@ export function BookingList({
                             e.stopPropagation()
                             onUpdateStatus(booking.id, 'no_show')
                           }}
-                          className="text-red-600"
+                          className="text-destructive"
                         >
+                          <XCircle className="mr-2 h-4 w-4" />
                           Mark as No Show
                         </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </CardHeader>
+            
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span>{format(bookingTime, compact ? 'h:mm a' : 'MMM d, h:mm a')}</span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span>{booking.party_size} guests</span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <span>{formatGuestPhone(booking)}</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Table2 className="h-4 w-4 text-muted-foreground" />
+                  <span>
+                    {hasAssignedTables ? (
+                      booking.tables.map((t: { table_number: any }) => t.table_number).join(", ")
+                    ) : (
+                      <span className="text-yellow-600">No table assigned</span>
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              {booking.special_requests && (
+                <div className="mt-3 p-2 bg-muted rounded text-sm">
+                  <p className="font-medium">Special requests:</p>
+                  <p className="text-muted-foreground">{booking.special_requests}</p>
+                </div>
+              )}
+
+              {booking.occasion && (
+                <Badge variant="secondary" className="mt-2">
+                  🎉 {booking.occasion}
+                </Badge>
+              )}
+
+              {!hasAssignedTables && booking.status === 'confirmed' && (
+                <div className="mt-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded text-sm">
+                  <p className="text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" />
+                    Table assignment required
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )
+      })}
+    </div>
   )
 }

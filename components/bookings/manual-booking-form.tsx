@@ -1,13 +1,14 @@
 // components/bookings/manual-booking-form.tsx
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { format } from "date-fns"
+import { format, addMinutes } from "date-fns"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery } from "@tanstack/react-query"
+import { TableAvailabilityService } from "@/lib/table-availability"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -25,8 +26,20 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { CalendarIcon, Clock } from "lucide-react"
+import { 
+  CalendarIcon, 
+  Clock, 
+  AlertCircle, 
+  Table2,
+  RefreshCw,
+  Users
+} from "lucide-react"
+import { toast } from "react-hot-toast"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 const formSchema = z.object({
   guest_name: z.string().min(2, "Name is required"),
@@ -58,7 +71,9 @@ export function ManualBookingForm({
   isLoading
 }: ManualBookingFormProps) {
   const [selectedTables, setSelectedTables] = useState<string[]>([])
+  const [checkingAvailability, setCheckingAvailability] = useState(false)
   const supabase = createClient()
+  const tableService = new TableAvailabilityService()
 
   const {
     register,
@@ -79,10 +94,12 @@ export function ManualBookingForm({
 
   const bookingDate = watch("booking_date")
   const bookingTime = watch("booking_time")
+  const partySize = watch("party_size")
+  const turnTime = watch("turn_time_minutes")
 
-  // Fetch available tables
-  const { data: tables } = useQuery({
-    queryKey: ["available-tables", restaurantId],
+  // Fetch all tables
+  const { data: allTables } = useQuery({
+    queryKey: ["restaurant-tables", restaurantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("restaurant_tables")
@@ -96,7 +113,118 @@ export function ManualBookingForm({
     },
   })
 
+  // Check availability when date/time/tables change
+  const { data: availability, refetch: checkAvailability } = useQuery({
+    queryKey: [
+      "manual-booking-availability",
+      bookingDate,
+      bookingTime,
+      selectedTables,
+      turnTime
+    ],
+    queryFn: async () => {
+      if (!bookingDate || !bookingTime || selectedTables.length === 0) return null
+
+      const [hours, minutes] = bookingTime.split(":")
+      const bookingDateTime = new Date(bookingDate)
+      bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+
+      return await tableService.checkTableAvailability(
+        restaurantId,
+        selectedTables,
+        bookingDateTime,
+        turnTime
+      )
+    },
+    enabled: selectedTables.length > 0,
+  })
+
+  // Auto-suggest optimal tables
+  const suggestTables = async () => {
+    if (!bookingDate || !bookingTime) {
+      toast.error("Please select date and time first")
+      return
+    }
+
+    setCheckingAvailability(true)
+    try {
+      const [hours, minutes] = bookingTime.split(":")
+      const bookingDateTime = new Date(bookingDate)
+      bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+
+      const optimal = await tableService.getOptimalTableAssignment(
+        restaurantId,
+        bookingDateTime,
+        partySize,
+        turnTime
+      )
+
+      if (optimal) {
+        setSelectedTables(optimal.tableIds)
+        toast.success(
+          optimal.requiresCombination
+            ? `Found ${optimal.tableIds.length} tables that can be combined`
+            : "Found optimal table"
+        )
+      } else {
+        toast.error("No available tables for this time slot")
+      }
+    } catch (error) {
+      console.error("Error suggesting tables:", error)
+      toast.error("Failed to find available tables")
+    } finally {
+      setCheckingAvailability(false)
+    }
+  }
+
+  // Get available tables for the time slot
+  const { data: availableTablesData } = useQuery({
+    queryKey: [
+      "available-tables-slot",
+      bookingDate,
+      bookingTime,
+      partySize,
+      turnTime
+    ],
+    queryFn: async () => {
+      if (!bookingDate || !bookingTime) return null
+
+      const [hours, minutes] = bookingTime.split(":")
+      const bookingDateTime = new Date(bookingDate)
+      bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+
+      return await tableService.getAvailableTablesForSlot(
+        restaurantId,
+        bookingDateTime,
+        partySize,
+        turnTime
+      )
+    },
+    enabled: !!bookingDate && !!bookingTime,
+  })
+
   const handleFormSubmit = (data: FormData) => {
+    // Validate table selection
+    if (selectedTables.length === 0) {
+      toast.error("Please select at least one table")
+      return
+    }
+
+    // Check if there are conflicts
+    if (availability && !availability.available) {
+      toast.error("Selected tables have conflicts. Please choose different tables or time.")
+      return
+    }
+
+    // Validate capacity
+    const selectedTableObjects = allTables?.filter(t => selectedTables.includes(t.id)) || []
+    const capacityCheck = tableService.validateCapacity(selectedTableObjects, data.party_size)
+    
+    if (!capacityCheck.valid) {
+      toast.error(capacityCheck.message || "Invalid table selection")
+      return
+    }
+
     const [hours, minutes] = data.booking_time.split(":")
     const bookingDateTime = new Date(data.booking_date)
     bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
@@ -108,11 +236,39 @@ export function ManualBookingForm({
     })
   }
 
+  const handleTableToggle = (tableId: string) => {
+    setSelectedTables(prev => {
+      if (prev.includes(tableId)) {
+        return prev.filter(id => id !== tableId)
+      } else {
+        return [...prev, tableId]
+      }
+    })
+  }
+
+  // Calculate total capacity
+  const selectedTablesCapacity = allTables
+    ?.filter(t => selectedTables.includes(t.id))
+    .reduce((sum, t) => sum + t.capacity, 0) || 0
+
+  // Determine which tables are available
+  const getTableAvailability = (tableId: string) => {
+    if (!availableTablesData) return true
+    
+    const isInSingleTables = availableTablesData.singleTables.some(t => t.id === tableId)
+    const isInCombinations = availableTablesData.combinations.some(c => 
+      c.tables.includes(tableId)
+    )
+    
+    return isInSingleTables || isInCombinations
+  }
+
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
-      {/* Guest Information */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Guest Information</h3>
+    <ScrollArea className="h-[80vh] pr-4">
+      <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+        {/* Guest Information */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold">Guest Information</h3>
         
         <div>
           <Label htmlFor="guest_name">Guest Name *</Label>
@@ -182,6 +338,7 @@ export function ManualBookingForm({
                   selected={bookingDate}
                   onSelect={(date) => date && setValue("booking_date", date)}
                   initialFocus
+                  disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                 />
               </PopoverContent>
             </Popover>
@@ -205,27 +362,38 @@ export function ManualBookingForm({
         <div className="grid grid-cols-3 gap-4">
           <div>
             <Label htmlFor="party_size">Party Size *</Label>
-            <Input
-              id="party_size"
-              type="number"
-              min="1"
-              max="20"
-              {...register("party_size", { valueAsNumber: true })}
-              disabled={isLoading}
-            />
+            <div className="relative">
+              <Users className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="party_size"
+                type="number"
+                min="1"
+                max="20"
+                {...register("party_size", { valueAsNumber: true })}
+                className="pl-10"
+                disabled={isLoading}
+              />
+            </div>
           </div>
 
           <div>
-            <Label htmlFor="turn_time_minutes">Turn Time (minutes)</Label>
-            <Input
-              id="turn_time_minutes"
-              type="number"
-              min="30"
-              max="240"
-              step="15"
-              {...register("turn_time_minutes", { valueAsNumber: true })}
+            <Label htmlFor="turn_time_minutes">Turn Time</Label>
+            <Select
+              value={turnTime.toString()}
+              onValueChange={(value) => setValue("turn_time_minutes", parseInt(value))}
               disabled={isLoading}
-            />
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="60">1 hour</SelectItem>
+                <SelectItem value="90">1.5 hours</SelectItem>
+                <SelectItem value="120">2 hours</SelectItem>
+                <SelectItem value="150">2.5 hours</SelectItem>
+                <SelectItem value="180">3 hours</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div>
@@ -250,37 +418,117 @@ export function ManualBookingForm({
 
       {/* Table Assignment */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Table Assignment (Optional)</h3>
-        
-        <div className="grid grid-cols-4 gap-2">
-          {tables?.map((table) => (
-            <label
-              key={table.id}
-              className={cn(
-                "flex items-center justify-center p-3 border rounded-lg cursor-pointer hover:bg-muted",
-                selectedTables.includes(table.id) && "bg-primary text-primary-foreground"
-              )}
-            >
-              <input
-                type="checkbox"
-                value={table.id}
-                checked={selectedTables.includes(table.id)}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    setSelectedTables([...selectedTables, table.id])
-                  } else {
-                    setSelectedTables(selectedTables.filter(id => id !== table.id))
-                  }
-                }}
-                className="sr-only"
-                disabled={isLoading}
-              />
-              <span className="text-sm font-medium">
-                {table.table_number} ({table.capacity})
-              </span>
-            </label>
-          ))}
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">Table Assignment</h3>
+            <p className="text-sm text-muted-foreground">
+              Select tables for {partySize} guests 
+              (Selected capacity: {selectedTablesCapacity})
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={suggestTables}
+            disabled={checkingAvailability || isLoading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-1 ${checkingAvailability ? 'animate-spin' : ''}`} />
+            Auto-suggest
+          </Button>
         </div>
+
+        {/* Show conflicts if any */}
+        {availability && !availability.available && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Selected tables have conflicts at this time:
+              <ul className="mt-2 text-sm">
+                {availability.conflicts.map((conflict: any) => (
+                  <li key={conflict.id}>
+                    • {conflict.guestName} - {format(new Date(conflict.booking_time), "h:mm a")}
+                    ({conflict.party_size} guests)
+                  </li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Capacity warning */}
+        {selectedTablesCapacity > 0 && selectedTablesCapacity < partySize && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Selected tables only have capacity for {selectedTablesCapacity} guests, 
+              but you need seating for {partySize} guests.
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {allTables?.map((table) => {
+            const isSelected = selectedTables.includes(table.id)
+            const isAvailable = getTableAvailability(table.id)
+            const availabilityInfo = availability?.tables.find(t => t.tableId === table.id)
+
+            return (
+              <label
+                key={table.id}
+                className={cn(
+                  "flex items-center p-3 border rounded-lg cursor-pointer transition-colors",
+                  isSelected && "bg-primary/10 border-primary",
+                  !isSelected && "hover:bg-muted",
+                  !isAvailable && !isSelected && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={() => handleTableToggle(table.id)}
+                  disabled={isLoading || (!isAvailable && !isSelected)}
+                  className="mr-3"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <Table2 className="h-4 w-4" />
+                    <span className="font-medium">{table.table_number}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {table.capacity} seats • {table.table_type}
+                  </p>
+                  {table.features && table.features.length > 0 && (
+                    <div className="flex gap-1 mt-1">
+                      {table.features.slice(0, 2).map((feature: string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | Promise<string | number | bigint | boolean | ReactPortal | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | null | undefined> | null | undefined, idx: Key | null | undefined) => (
+                        <Badge key={idx} variant="outline" className="text-xs">
+                          {feature}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  {availabilityInfo && !availabilityInfo.isAvailable && (
+                    <p className="text-xs text-red-600 mt-1">
+                      Booked at this time
+                    </p>
+                  )}
+                </div>
+              </label>
+            )
+          })}
+        </div>
+
+        {/* Show suggested combinations if no single table works */}
+        {availableTablesData?.combinations && 
+         availableTablesData.combinations.length > 0 &&
+         availableTablesData.singleTables.length === 0 && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              No single table available for {partySize} guests. 
+              Consider combining tables using auto-suggest.
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
       {/* Additional Information */}
@@ -318,10 +566,19 @@ export function ManualBookingForm({
         >
           Cancel
         </Button>
-        <Button type="submit" disabled={isLoading}>
+        <Button 
+          type="submit" 
+          disabled={
+            isLoading || 
+            selectedTables.length === 0 ||
+            (availability && !availability.available) ||
+            (selectedTablesCapacity > 0 && selectedTablesCapacity < partySize)
+          }
+        >
           {isLoading ? "Creating..." : "Create Booking"}
         </Button>
       </div>
     </form>
+    </ScrollArea>
   )
 }

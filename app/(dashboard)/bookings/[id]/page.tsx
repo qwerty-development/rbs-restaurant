@@ -1,26 +1,16 @@
-// app/(dashboard)/bookings/[id]/page.tsx
+// app/(dashboard)/bookings/page.tsx
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { format } from "date-fns"
+import { format, startOfDay, endOfDay, addMinutes } from "date-fns"
+import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
@@ -29,840 +19,589 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert"
-import { Label } from "@/components/ui/label"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { BookingList } from "@/components/bookings/booking-list"
+import { BookingDetails } from "@/components/bookings/booking-details"
+import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
+import { TableAvailabilityService } from "@/lib/table-availability"
 import { toast } from "react-hot-toast"
 import { 
-  ArrowLeft,
-  Calendar,
-  Clock,
-  Users,
-  Phone,
-  Mail,
-  MessageSquare,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  Edit,
-  MoreVertical,
-  Printer,
-  Copy,
-  Ban,
-  UserX,
-  CreditCard,
-  Utensils,
-  Star,
-  Hash,
+  Search, 
+  Calendar as CalendarIcon, 
+  Download, 
   Plus,
-  Gift,
-  Crown,
-  Award
+  Table2,
+  AlertCircle,
+  TrendingUp,
+  TrendingDown,
+  Clock
 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import type { Booking } from "@/types"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
-const STATUS_OPTIONS = [
-  { value: "pending", label: "Pending", icon: AlertCircle, color: "text-yellow-600" },
-  { value: "confirmed", label: "Confirmed", icon: CheckCircle, color: "text-green-600" },
-  { value: "completed", label: "Completed", icon: CheckCircle, color: "text-blue-600" },
-  { value: "cancelled_by_user", label: "Cancelled by Customer", icon: XCircle, color: "text-red-600" },
-  { value: "declined_by_restaurant", label: "Declined by Restaurant", icon: Ban, color: "text-red-600" },
-  { value: "no_show", label: "No Show", icon: UserX, color: "text-gray-600" },
-]
-
-type BookingUser = {
-  id: string
-  full_name: string
-  phone_number: string | null
-  avatar_url: string | null
-  loyalty_points: number
-  membership_tier: string
-  total_bookings: number
-  completed_bookings: number
-  user_rating: number
-}
-
-type BookingTable = {
-  table: {
-    id: string
-    table_number: string
-    capacity: number
-    table_type: string
-  }
-}
-
-type BookingOffer = {
+// Add statistics card component
+function StatCard({ 
+  title, 
+  value, 
+  description, 
+  icon: Icon,
+  trend 
+}: { 
   title: string
-  discount_percentage: number
+  value: string | number
+  description?: string
+  icon: any
+  trend?: { value: number; isPositive: boolean }
+}) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">{value}</div>
+        {description && (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        )}
+        {trend && (
+          <div className="flex items-center mt-2">
+            {trend.isPositive ? (
+              <TrendingUp className="h-4 w-4 text-green-600 mr-1" />
+            ) : (
+              <TrendingDown className="h-4 w-4 text-red-600 mr-1" />
+            )}
+            <span className={`text-xs ${trend.isPositive ? 'text-green-600' : 'text-red-600'}`}>
+              {trend.value}% from last week
+            </span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
 }
 
-type Booking = {
-  id: string
-  user_id: string
-  restaurant_id: string
-  booking_time: string
-  party_size: number
-  status: string
-  special_requests: string | null
-  occasion: string | null
-  dietary_notes: string[] | null
-  confirmation_code: string
-  table_preferences: string[] | null
-  reminder_sent: boolean
-  checked_in_at: string | null
-  loyalty_points_earned: number
-  created_at: string
-  updated_at: string
-  applied_offer_id: string | null
-  expected_loyalty_points: number
-  guest_name: string | null
-  guest_email: string | null
-  guest_phone: string | null
-  is_group_booking: boolean
-  organizer_id: string | null
-  attendees: number
-  turn_time_minutes: number
-  user: BookingUser | null
-  restaurant: {
-    id: string
-    name: string
-    phone_number: string | null
-  }
-  tables: BookingTable[]
-  offer: BookingOffer | null
-}
-
-type BookingStatusHistory = {
-  id: string
-  booking_id: string
-  old_status: string | null
-  new_status: string
-  changed_by: string | null
-  changed_at: string
-  reason: string | null
-  metadata: any
-  changed_by_profile: {
-    full_name: string
-  } | null
-}
-
-export default function BookingDetailsPage() {
-  const router = useRouter()
-  const params = useParams()
-  const bookingId = params.id as string
+export default function BookingsPage() {
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list")
+  const [showManualBooking, setShowManualBooking] = useState(false)
+  const [timeFilter, setTimeFilter] = useState<string>("all") // all, lunch, dinner
+  
   const supabase = createClient()
   const queryClient = useQueryClient()
-  
-  const [isEditingStatus, setIsEditingStatus] = useState(false)
-  const [newStatus, setNewStatus] = useState("")
-  const [statusReason, setStatusReason] = useState("")
+  const tableService = new TableAvailabilityService()
 
-  // Fetch booking details
-  const { data: booking, isLoading } = useQuery({
-    queryKey: ["booking", bookingId],
+  // Get restaurant ID
+  const [restaurantId, setRestaurantId] = useState<string>("")
+  
+  useEffect(() => {
+    async function getRestaurantId() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: staffData } = await supabase
+          .from("restaurant_staff")
+          .select("restaurant_id")
+          .eq("user_id", user.id)
+          .single()
+        
+        if (staffData) {
+          setRestaurantId(staffData.restaurant_id)
+        }
+      }
+    }
+    getRestaurantId()
+  }, [supabase])
+
+  // Fetch bookings with proper joins and table information
+  const { data: bookings, isLoading } = useQuery({
+    queryKey: ["bookings", restaurantId, selectedDate, statusFilter, timeFilter],
     queryFn: async () => {
-      const { data, error } = await supabase
+      if (!restaurantId) return []
+      
+      let query = supabase
         .from("bookings")
         .select(`
           *,
-          user:profiles(
+          profiles!bookings_user_id_fkey(
             id,
             full_name,
             phone_number,
-            avatar_url,
-            loyalty_points,
-            membership_tier,
-            total_bookings,
-            completed_bookings,
-            user_rating
+            email
           ),
-          restaurant:restaurants(
-            id,
-            name,
-            phone_number
-          ),
-          tables:booking_tables(
-            table:restaurant_tables(
-              id,
-              table_number,
-              capacity,
-              table_type
-            )
-          ),
-          offer:special_offers(
-            title,
-            discount_percentage
+          booking_tables(
+            table:restaurant_tables(*)
           )
         `)
+        .eq("restaurant_id", restaurantId)
+        .order("booking_time", { ascending: true })
+
+      // Date filter for calendar view
+      if (viewMode === "calendar" && selectedDate) {
+        const dayStart = startOfDay(selectedDate)
+        const dayEnd = endOfDay(selectedDate)
+        query = query
+          .gte("booking_time", dayStart.toISOString())
+          .lte("booking_time", dayEnd.toISOString())
+      }
+
+      // Status filter
+      if (statusFilter !== "all") {
+        query = query.eq("status", statusFilter)
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        console.error("Error fetching bookings:", error)
+        throw error
+      }
+
+      // Transform data and apply time filter
+      let transformedData = data?.map((booking: any) => ({
+        ...booking,
+        user: booking.profiles || null,
+        tables: booking.booking_tables?.map((bt: { table: any }) => bt.table) || []
+      })) as Booking[]
+
+      // Apply time filter
+      if (timeFilter !== "all" && transformedData) {
+        transformedData = transformedData.filter(booking => {
+          const hour = new Date(booking.booking_time).getHours()
+          if (timeFilter === "lunch") return hour >= 11 && hour < 15
+          if (timeFilter === "dinner") return hour >= 17 && hour < 23
+          return true
+        })
+      }
+
+      return transformedData
+    },
+    enabled: !!restaurantId,
+  })
+
+  // Fetch table utilization stats
+  const { data: tableStats } = useQuery({
+    queryKey: ["table-stats", restaurantId, selectedDate],
+    queryFn: async () => {
+      if (!restaurantId) return null
+
+      const dayStart = startOfDay(selectedDate)
+      const dayEnd = endOfDay(selectedDate)
+
+      // Get total tables
+      const { data: tables } = await supabase
+        .from("restaurant_tables")
+        .select("id")
+        .eq("restaurant_id", restaurantId)
+        .eq("is_active", true)
+
+      // Get occupied table slots for the day
+      const { data: occupiedSlots } = await supabase
+        .from("bookings")
+        .select(`
+          booking_time,
+          turn_time_minutes,
+          booking_tables(table_id)
+        `)
+        .eq("restaurant_id", restaurantId)
+        .gte("booking_time", dayStart.toISOString())
+        .lte("booking_time", dayEnd.toISOString())
+        .neq("status", "cancelled_by_user")
+        .neq("status", "declined_by_restaurant")
+
+      // Calculate utilization
+      const totalTables = tables?.length || 0
+      const totalSlots = totalTables * 12 // Assuming 12 hours of operation
+      const occupiedCount = occupiedSlots?.reduce((acc, booking) => {
+        const slots = Math.ceil((booking.turn_time_minutes || 120) / 60)
+        return acc + (booking.booking_tables?.length || 0) * slots
+      }, 0) || 0
+
+      const utilization = totalSlots > 0 ? Math.round((occupiedCount / totalSlots) * 100) : 0
+
+      return {
+        totalTables,
+        utilization,
+        peakHour: getPeakHour(occupiedSlots || [])
+      }
+    },
+    enabled: !!restaurantId
+  })
+
+  // Update booking status
+  const updateBookingMutation = useMutation({
+    mutationFn: async ({ bookingId, updates }: { bookingId: string; updates: Partial<Booking> }) => {
+      const { error } = await supabase
+        .from("bookings")
+        .update({ 
+          ...updates,
+          updated_at: new Date().toISOString() 
+        })
         .eq("id", bookingId)
+
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      toast.success("Booking updated")
+    },
+    onError: (error) => {
+      console.error("Update error:", error)
+      toast.error("Failed to update booking")
+    },
+  })
+
+  // Create manual booking with table validation
+  const createManualBookingMutation = useMutation({
+    mutationFn: async (bookingData: any) => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error("Must be logged in to create bookings")
+      
+      // Validate table availability one more time before creating
+      if (bookingData.table_ids && bookingData.table_ids.length > 0) {
+        const availability = await tableService.checkTableAvailability(
+          restaurantId,
+          bookingData.table_ids,
+          new Date(bookingData.booking_time),
+          bookingData.turn_time_minutes || 120
+        )
+
+        if (!availability.available) {
+          throw new Error("Selected tables are no longer available")
+        }
+      }
+
+      // Generate confirmation code
+      const confirmationCode = `${restaurantId.slice(0, 4).toUpperCase()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+
+      // Create booking
+      const { data: booking, error } = await supabase
+        .from("bookings")
+        .insert({
+          restaurant_id: restaurantId,
+          user_id: user.id,
+          guest_name: bookingData.guest_name,
+          guest_email: bookingData.guest_email,
+          guest_phone: bookingData.guest_phone,
+          booking_time: bookingData.booking_time,
+          party_size: bookingData.party_size,
+          turn_time_minutes: bookingData.turn_time_minutes || 120,
+          status: bookingData.status || "confirmed",
+          special_requests: bookingData.special_requests,
+          occasion: bookingData.occasion,
+          confirmation_code: confirmationCode,
+        })
+        .select()
         .single()
 
       if (error) throw error
-      return data as Booking
-    },
-  })
 
-  // Fetch booking status history
-  const { data: bookingHistory } = useQuery({
-    queryKey: ["booking-status-history", bookingId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("booking_status_history")
-        .select(`
-          *,
-          changed_by_profile:profiles!booking_status_history_changed_by_fkey(full_name)
-        `)
-        .eq("booking_id", bookingId)
-        .order("changed_at", { ascending: false })
+      // Assign tables if provided
+      if (bookingData.table_ids && bookingData.table_ids.length > 0) {
+        const tableAssignments = bookingData.table_ids.map((tableId: string) => ({
+          booking_id: booking.id,
+          table_id: tableId,
+        }))
 
-      if (error) throw error
-      return data as BookingStatusHistory[]
-    },
-    enabled: !!booking,
-  })
+        const { error: tableError } = await supabase
+          .from("booking_tables")
+          .insert(tableAssignments)
 
-  // Update booking status mutation
-  const updateStatusMutation = useMutation({
-    mutationFn: async ({ status, reason }: { status: string; reason?: string }) => {
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      // Update booking status
-      const { error: bookingError } = await supabase
-        .from("bookings")
-        .update({
-          status,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", bookingId)
+        if (tableError) {
+          // Rollback booking if table assignment fails
+          await supabase.from("bookings").delete().eq("id", booking.id)
+          throw tableError
+        }
+      }
 
-      if (bookingError) throw bookingError
-
-      // Add to status history
-      const { error: historyError } = await supabase
-        .from("booking_status_history")
-        .insert({
-          booking_id: bookingId,
-          old_status: booking?.status,
-          new_status: status,
-          changed_by: user?.id,
-          reason: reason || null,
-          metadata: reason ? { reason } : {},
-        })
-
-      if (historyError) throw historyError
+      return booking
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["booking", "booking-status-history"] })
-      toast.success("Booking status updated")
-      setIsEditingStatus(false)
-      setStatusReason("")
-      setNewStatus("")
+      queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      toast.success("Booking created successfully")
+      setShowManualBooking(false)
     },
-    onError: (error) => {
-      console.error("Failed to update booking status:", error)
-      toast.error("Failed to update booking status")
+    onError: (error: any) => {
+      console.error("Create booking error:", error)
+      toast.error(error.message || "Failed to create booking")
     },
   })
 
-  // Mark as no-show mutation
-  const markNoShowMutation = useMutation({
-    mutationFn: async () => {
-      await updateStatusMutation.mutateAsync({ 
-        status: "no_show",
-        reason: "Customer did not arrive" 
-      })
-    },
+  // Filter bookings based on search
+  const filteredBookings = bookings?.filter((booking) => {
+    if (!searchQuery) return true
+    
+    const searchLower = searchQuery.toLowerCase()
+    const userName = booking.user?.full_name?.toLowerCase() || ""
+    const guestName = booking.guest_name?.toLowerCase() || ""
+    const confirmationCode = booking.confirmation_code?.toLowerCase() || ""
+    const phone = booking.guest_phone?.toLowerCase() || booking.user?.phone_number?.toLowerCase() || ""
+    const email = booking.guest_email?.toLowerCase() || booking.user?.email?.toLowerCase() || ""
+    const tableNumbers = booking.tables?.map(t => t.table_number.toLowerCase()).join(" ") || ""
+    
+    return (
+      userName.includes(searchLower) ||
+      guestName.includes(searchLower) ||
+      confirmationCode.includes(searchLower) ||
+      phone.includes(searchLower) ||
+      email.includes(searchLower) ||
+      tableNumbers.includes(searchLower)
+    )
   })
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p>Loading booking details...</p>
-        </div>
-      </div>
-    )
+  // Get booking counts and statistics
+  const bookingStats = {
+    all: bookings?.length || 0,
+    pending: bookings?.filter(b => b.status === "pending").length || 0,
+    confirmed: bookings?.filter(b => b.status === "confirmed").length || 0,
+    completed: bookings?.filter(b => b.status === "completed").length || 0,
+    cancelled: bookings?.filter(b => 
+      b.status === "cancelled_by_user" || b.status === "declined_by_restaurant"
+    ).length || 0,
+    no_show: bookings?.filter(b => b.status === "no_show").length || 0,
+    withoutTables: bookings?.filter(b => 
+      b.status === "confirmed" && (!b.tables || b.tables.length === 0)
+    ).length || 0,
   }
 
-  if (!booking) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Booking Not Found</h2>
-          <p className="text-muted-foreground mb-4">
-            The booking you're looking for doesn't exist or you don't have permission to view it.
-          </p>
-          <Button onClick={() => router.push("/dashboard/bookings")}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Bookings
-          </Button>
-        </div>
-      </div>
+  // Helper function to get peak hour
+  function getPeakHour(bookings: any[]): string {
+    const hourCounts: Record<number, number> = {}
+    
+    bookings.forEach(booking => {
+      const hour = new Date(booking.booking_time).getHours()
+      hourCounts[hour] = (hourCounts[hour] || 0) + 1
+    })
+
+    const peakHour = Object.entries(hourCounts).reduce((max, [hour, count]) => 
+      count > max.count ? { hour: parseInt(hour), count } : max,
+      { hour: 0, count: 0 }
     )
-  }
 
-  const statusConfig = STATUS_OPTIONS.find(s => s.value === booking.status)
-  const StatusIcon = statusConfig?.icon || AlertCircle
-
-  // Calculate booking age
-  const bookingAge = Math.floor(
-    (new Date().getTime() - new Date(booking.created_at).getTime()) / (1000 * 60 * 60 * 24)
-  )
-
-  // Copy confirmation code
-  const copyConfirmationCode = () => {
-    navigator.clipboard.writeText(booking.confirmation_code)
-    toast.success("Confirmation code copied")
+    return peakHour.count > 0 ? `${peakHour.hour}:00` : "N/A"
   }
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <Button
-          variant="ghost"
-          className="mb-4"
-          onClick={() => router.push("/dashboard/bookings")}
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Bookings
-        </Button>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Booking Details</h1>
-            <p className="text-muted-foreground">
-              View and manage booking information
-            </p>
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <Printer className="mr-2 h-4 w-4" />
-                Print Details
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Mail className="mr-2 h-4 w-4" />
-                Send Confirmation
-              </DropdownMenuItem>
-              {booking.status === "confirmed" && (
-                <DropdownMenuItem
-                  className="text-destructive"
-                  onClick={() => markNoShowMutation.mutate()}
-                >
-                  <UserX className="mr-2 h-4 w-4" />
-                  Mark as No Show
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+      {/* Page Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Bookings</h1>
+          <p className="text-muted-foreground">
+            Manage your restaurant bookings and table assignments
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline">
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button onClick={() => setShowManualBooking(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Booking
+          </Button>
         </div>
       </div>
 
-      {/* Status Alert */}
-      {booking.status === "pending" && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Action Required</AlertTitle>
-          <AlertDescription>
-            This booking is pending confirmation. Please review and confirm or decline.
-          </AlertDescription>
-        </Alert>
+      {/* Statistics Cards */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <StatCard
+          title="Today's Bookings"
+          value={bookingStats.confirmed}
+          description={`${bookingStats.pending} pending`}
+          icon={CalendarIcon}
+        />
+        <StatCard
+          title="Table Utilization"
+          value={`${tableStats?.utilization || 0}%`}
+          description={`${tableStats?.totalTables || 0} tables total`}
+          icon={Table2}
+          trend={{ value: 12, isPositive: true }}
+        />
+        <StatCard
+          title="Peak Hour"
+          value={tableStats?.peakHour || "N/A"}
+          description="Busiest time today"
+          icon={Clock}
+        />
+        <StatCard
+          title="Needs Assignment"
+          value={bookingStats.withoutTables}
+          description="Confirmed without tables"
+          icon={AlertCircle}
+        />
+      </div>
+
+      {/* View Toggle */}
+      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "calendar")}>
+        <TabsList className="grid w-[200px] grid-cols-2">
+          <TabsTrigger value="list">List View</TabsTrigger>
+          <TabsTrigger value="calendar">Calendar</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="list" className="space-y-4">
+          {/* Filters */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Filters</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by name, code, phone, email, or table..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">
+                      All Bookings ({bookingStats.all})
+                    </SelectItem>
+                    <SelectItem value="pending">
+                      Pending ({bookingStats.pending})
+                    </SelectItem>
+                    <SelectItem value="confirmed">
+                      Confirmed ({bookingStats.confirmed})
+                    </SelectItem>
+                    <SelectItem value="completed">
+                      Completed ({bookingStats.completed})
+                    </SelectItem>
+                    <SelectItem value="cancelled_by_user">
+                      Cancelled ({bookingStats.cancelled})
+                    </SelectItem>
+                    <SelectItem value="no_show">
+                      No Show ({bookingStats.no_show})
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={timeFilter} onValueChange={setTimeFilter}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue placeholder="Time" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Times</SelectItem>
+                    <SelectItem value="lunch">Lunch (11-3)</SelectItem>
+                    <SelectItem value="dinner">Dinner (5-11)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Quick alerts */}
+              {bookingStats.withoutTables > 0 && (
+                <Alert className="mt-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    {bookingStats.withoutTables} confirmed booking{bookingStats.withoutTables > 1 ? 's' : ''} 
+                    {bookingStats.withoutTables > 1 ? 'need' : 'needs'} table assignment
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Booking List */}
+          <BookingList
+            bookings={filteredBookings || []}
+            isLoading={isLoading}
+            onSelectBooking={setSelectedBooking}
+            onUpdateStatus={(bookingId, status) => 
+              updateBookingMutation.mutate({ bookingId, updates: { status } })
+            }
+          />
+        </TabsContent>
+
+        <TabsContent value="calendar" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-[300px_1fr]">
+            {/* Calendar */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Select Date</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => date && setSelectedDate(date)}
+                  className="rounded-md"
+                />
+              </CardContent>
+            </Card>
+
+            {/* Day's Bookings */}
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  Bookings for {format(selectedDate, "MMMM d, yyyy")}
+                </CardTitle>
+                <CardDescription>
+                  {filteredBookings?.length || 0} bookings scheduled
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <BookingList
+                  bookings={filteredBookings || []}
+                  isLoading={isLoading}
+                  onSelectBooking={setSelectedBooking}
+                  onUpdateStatus={(bookingId, status) => 
+                    updateBookingMutation.mutate({ bookingId, updates: { status } })
+                  }
+                  compact
+                />
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* Booking Details Modal */}
+      {selectedBooking && (
+        <BookingDetails
+          booking={selectedBooking}
+          onClose={() => setSelectedBooking(null)}
+          onUpdate={(updates) => {
+            updateBookingMutation.mutate({ 
+              bookingId: selectedBooking.id, 
+              updates 
+            })
+          }}
+        />
       )}
 
-      {/* Main Content Grid */}
-      <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
-        <div className="space-y-6">
-          {/* Booking Overview */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Booking Information</CardTitle>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant="outline"
-                    className={cn("gap-1", statusConfig?.color)}
-                  >
-                    <StatusIcon className="h-3 w-3" />
-                    {statusConfig?.label}
-                  </Badge>
-                  <Dialog open={isEditingStatus} onOpenChange={setIsEditingStatus}>
-                    <DialogTrigger asChild>
-                      <Button variant="ghost" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Update Booking Status</DialogTitle>
-                        <DialogDescription>
-                          Change the status of this booking
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <div>
-                          <Label>New Status</Label>
-                          <Select value={newStatus} onValueChange={setNewStatus}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {STATUS_OPTIONS.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>
-                                  <div className="flex items-center gap-2">
-                                    <option.icon className={cn("h-4 w-4", option.color)} />
-                                    {option.label}
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        {(newStatus.includes("cancelled") || newStatus === "no_show") && (
-                          <div>
-                            <Label>Reason</Label>
-                            <Textarea
-                              placeholder="Provide a reason for this status change..."
-                              value={statusReason}
-                              onChange={(e) => setStatusReason(e.target.value)}
-                              rows={3}
-                            />
-                          </div>
-                        )}
-                      </div>
-                      <DialogFooter>
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setIsEditingStatus(false)
-                            setNewStatus("")
-                            setStatusReason("")
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          onClick={() => updateStatusMutation.mutate({
-                            status: newStatus,
-                            reason: statusReason,
-                          })}
-                          disabled={!newStatus || updateStatusMutation.isPending}
-                        >
-                          {updateStatusMutation.isPending ? "Updating..." : "Update Status"}
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Confirmation Code */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Hash className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Confirmation Code</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <code className="font-mono text-sm font-semibold bg-muted px-2 py-1 rounded">
-                    {booking.confirmation_code}
-                  </code>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={copyConfirmationCode}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Date & Time */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Date</p>
-                    <p className="font-medium">
-                      {format(new Date(booking.booking_time), "EEEE, MMMM d, yyyy")}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Time</p>
-                    <p className="font-medium">
-                      {format(new Date(booking.booking_time), "h:mm a")}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Party Details */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Party Size</p>
-                    <p className="font-medium">{booking.party_size} guests</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Utensils className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Tables</p>
-                    <p className="font-medium">
-                      {booking.tables?.length > 0 
-                        ? booking.tables.map(t => `Table ${t.table.table_number}`).join(", ")
-                        : "Not assigned"
-                      }
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Turn Time */}
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Turn Time</p>
-                  <p className="font-medium">{booking.turn_time_minutes} minutes</p>
-                </div>
-              </div>
-
-              {/* Special Requests */}
-              {booking.special_requests && (
-                <>
-                  <Separator />
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">Special Requests</p>
-                    </div>
-                    <p className="text-sm bg-muted p-3 rounded-lg">{booking.special_requests}</p>
-                  </div>
-                </>
-              )}
-
-              {/* Occasion */}
-              {booking.occasion && (
-                <>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Gift className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Occasion</span>
-                    </div>
-                    <Badge variant="secondary" className="capitalize">
-                      {booking.occasion}
-                    </Badge>
-                  </div>
-                </>
-              )}
-
-              {/* Dietary Notes */}
-              {booking.dietary_notes && booking.dietary_notes.length > 0 && (
-                <>
-                  <Separator />
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">Dietary Requirements</p>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {booking.dietary_notes.map((note, index) => (
-                        <Badge key={index} variant="outline" className="text-xs">
-                          {note}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Offer Applied */}
-              {booking.offer && (
-                <>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <CreditCard className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Special Offer</span>
-                    </div>
-                    <Badge variant="secondary" className="bg-green-100 text-green-800">
-                      {booking.offer.title} - {booking.offer.discount_percentage}% off
-                    </Badge>
-                  </div>
-                </>
-              )}
-
-              {/* Loyalty Points */}
-              {booking.loyalty_points_earned > 0 && (
-                <>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Award className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Loyalty Points Earned</span>
-                    </div>
-                    <Badge variant="secondary" className="bg-purple-100 text-purple-800">
-                      +{booking.loyalty_points_earned} points
-                    </Badge>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Customer Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Customer Information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {booking.user ? (
-                <div className="space-y-4">
-                  <div className="flex items-start gap-4">
-                    <Avatar className="h-12 w-12">
-                      <AvatarImage src={booking.user.avatar_url || undefined} />
-                      <AvatarFallback>
-                        {booking.user.full_name?.split(" ").map(n => n[0]).join("").toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <h4 className="font-semibold">{booking.user.full_name}</h4>
-                      <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Mail className="h-3 w-3" />
-                          Contact via account
-                        </div>
-                        {booking.user.phone_number && (
-                          <div className="flex items-center gap-1">
-                            <Phone className="h-3 w-3" />
-                            {booking.user.phone_number}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <Badge 
-                        variant={booking.user.membership_tier === "platinum" ? "default" : "secondary"}
-                        className={cn(
-                          "capitalize",
-                          booking.user.membership_tier === "gold" && "bg-yellow-100 text-yellow-800",
-                          booking.user.membership_tier === "silver" && "bg-gray-100 text-gray-800",
-                          booking.user.membership_tier === "platinum" && "bg-purple-100 text-purple-800"
-                        )}
-                      >
-                        <Crown className="mr-1 h-3 w-3" />
-                        {booking.user.membership_tier}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    <div>
-                      <p className="text-2xl font-bold">{booking.user.total_bookings}</p>
-                      <p className="text-xs text-muted-foreground">Total Bookings</p>
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{booking.user.loyalty_points}</p>
-                      <p className="text-xs text-muted-foreground">Loyalty Points</p>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-center">
-                        <Star className="h-5 w-5 text-yellow-500 mr-1" />
-                        <p className="text-2xl font-bold">{booking.user.user_rating.toFixed(1)}</p>
-                      </div>
-                      <p className="text-xs text-muted-foreground">Customer Rating</p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="flex-1">
-                      View Profile
-                    </Button>
-                    <Button variant="outline" size="sm" className="flex-1">
-                      Contact Customer
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Guest Booking</AlertTitle>
-                    <AlertDescription>
-                      This booking was made without an account
-                    </AlertDescription>
-                  </Alert>
-                  <div className="space-y-2">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Name</p>
-                      <p className="font-medium">{booking.guest_name}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Phone</p>
-                      <p className="font-medium">{booking.guest_phone}</p>
-                    </div>
-                    {booking.guest_email && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Email</p>
-                        <p className="font-medium">{booking.guest_email}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Booking Timeline */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Booking Timeline</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex gap-3">
-                  <div className="flex flex-col items-center">
-                    <div className="h-2 w-2 rounded-full bg-primary" />
-                    <div className="h-full w-px bg-muted" />
-                  </div>
-                  <div className="flex-1 pb-4">
-                    <p className="text-sm font-medium">Booking Created</p>
-                    <p className="text-xs text-muted-foreground">
-                      {format(new Date(booking.created_at), "MMM d, yyyy h:mm a")}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {bookingAge === 0 ? "Today" : `${bookingAge} day${bookingAge === 1 ? "" : "s"} ago`}
-                    </p>
-                  </div>
-                </div>
-
-                {bookingHistory?.map((event, index) => (
-                  <div key={event.id} className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <div className="h-2 w-2 rounded-full bg-muted-foreground" />
-                      {index < bookingHistory.length - 1 && (
-                        <div className="h-full w-px bg-muted" />
-                      )}
-                    </div>
-                    <div className="flex-1 pb-4">
-                      <p className="text-sm font-medium">
-                        Status changed to {STATUS_OPTIONS.find(s => s.value === event.new_status)?.label}
-                      </p>
-                      {event.reason && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Reason: {event.reason}
-                        </p>
-                      )}
-                      {event.changed_by_profile && (
-                        <p className="text-xs text-muted-foreground">
-                          by {event.changed_by_profile.full_name}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground">
-                        {format(new Date(event.changed_at), "MMM d, yyyy h:mm a")}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Quick Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {booking.status === "pending" && (
-                <>
-                  <Button
-                    className="w-full"
-                    onClick={() => updateStatusMutation.mutate({ status: "confirmed" })}
-                    disabled={updateStatusMutation.isPending}
-                  >
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Confirm Booking
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    className="w-full"
-                    onClick={() => {
-                      setNewStatus("declined_by_restaurant")
-                      setIsEditingStatus(true)
-                    }}
-                  >
-                    <XCircle className="mr-2 h-4 w-4" />
-                    Decline Booking
-                  </Button>
-                </>
-              )}
-              
-              {booking.status === "confirmed" && (
-                <>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => updateStatusMutation.mutate({ status: "completed" })}
-                    disabled={updateStatusMutation.isPending}
-                  >
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Mark as Completed
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                  >
-                    <Edit className="mr-2 h-4 w-4" />
-                    Modify Booking
-                  </Button>
-                </>
-              )}
-
-              <Button
-                variant="outline"
-                className="w-full"
-              >
-                <MessageSquare className="mr-2 h-4 w-4" />
-                Send Message
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      {/* Manual Booking Modal */}
+      <Dialog open={showManualBooking} onOpenChange={setShowManualBooking}>
+        <DialogContent className="max-w-4xl w-full h-[95vh] flex flex-col p-0">
+          <div className="flex-shrink-0 px-6 py-4 border-b">
+            <DialogHeader>
+              <DialogTitle>Add Manual Booking</DialogTitle>
+              <DialogDescription>
+                Create a new booking manually for walk-ins or phone reservations
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <ManualBookingForm
+              restaurantId={restaurantId}
+              onSubmit={(data) => createManualBookingMutation.mutate(data)}
+              onCancel={() => setShowManualBooking(false)}
+              isLoading={createManualBookingMutation.isPending}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
