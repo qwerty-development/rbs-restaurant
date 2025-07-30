@@ -1,187 +1,247 @@
 // components/layout/mobile-nav.tsx
-"use client"
 
-import { useState } from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import {
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { 
   Menu,
   X,
-  LayoutDashboard,
-  CalendarDays,
-  Users,
-  Utensils,
-  TableProperties,
-  Star,
-  Gift,
-  TrendingUp,
+  LayoutDashboard, 
+  Calendar, 
+  Users, 
+  Utensils, 
+  TableIcon,
+  BarChart3, 
   Settings,
-  Crown,
-  MessageSquare,
-  Award,
-} from "lucide-react"
-import type { Restaurant } from "@/types"
-
-interface NavItem {
-  title: string
-  href: string
-  icon: React.ElementType
-  permission?: string
-}
-
-const navItems: NavItem[] = [
-  {
-    title: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    title: "Bookings",
-    href: "/bookings",
-    icon: CalendarDays,
-  },
-  {
-    title: "Tables",
-    href: "/tables",
-    icon: TableProperties,
-  },
-  {
-    title: "Menu",
-    href: "/menu",
-    icon: Utensils,
-  },
-  {
-    title: "VIP Customers",
-    href: "/vip",
-    icon: Crown,
-    permission: "manage_vip",
-  },
-  {
-    title: "Special Offers",
-    href: "/offers",
-    icon: Gift,
-  },
-  {
-    title: "Loyalty Program",
-    href: "/loyalty",
-    icon: Award,
-  },
-  {
-    title: "Reviews",
-    href: "/reviews",
-    icon: MessageSquare,
-  },
-  {
-    title: "Analytics",
-    href: "/analytics",
-    icon: TrendingUp,
-    permission: "view_analytics",
-  },
-  {
-    title: "Settings",
-    href: "/settings",
-    icon: Settings,
-    permission: "manage_settings",
-  },
-]
+  Star,
+  DollarSign,
+  Gift,
+  Megaphone,
+  HelpCircle,
+  LogOut
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { restaurantAuth } from '@/lib/restaurant-auth'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 interface MobileNavProps {
-  restaurant: Restaurant
+  restaurant: {
+    id: string
+    name: string
+    main_image_url?: string
+  }
   role: string
   permissions: string[]
 }
 
-export function MobileNav({ restaurant, role, permissions }: any) {
-  const [open, setOpen] = useState(false)
-  const pathname = usePathname()
+const navigationItems = [
+  {
+    title: 'Dashboard',
+    href: '/dashboard',
+    icon: LayoutDashboard,
+    permission: null,
+  },
+  {
+    title: 'Bookings',
+    href: '/bookings',
+    icon: Calendar,
+    permission: 'bookings.view',
+  },
+  {
+    title: 'Customers',
+    href: '/customers',
+    icon: Users,
+    permission: 'customers.view',
+  },
+  {
+    title: 'Menu',
+    href: '/menu',
+    icon: Utensils,
+    permission: 'menu.view',
+  },
+  {
+    title: 'Tables',
+    href: '/tables',
+    icon: TableIcon,
+    permission: 'tables.view',
+  },
+  {
+    title: 'Analytics',
+    href: '/analytics',
+    icon: BarChart3,
+    permission: 'analytics.view',
+  },
+  {
+    title: 'Reviews',
+    href: '/reviews',
+    icon: Star,
+    permission: 'reviews.view',
+  },
+  {
+    title: 'Loyalty',
+    href: '/loyalty',
+    icon: Gift,
+    permission: 'loyalty.view',
+  },
+  {
+    title: 'Offers',
+    href: '/offers',
+    icon: DollarSign,
+    permission: 'offers.view',
+  },
+  {
+    title: 'Marketing',
+    href: '/marketing',
+    icon: Megaphone,
+    permission: 'marketing.view',
+  },
+  {
+    title: 'Staff',
+    href: '/staff',
+    icon: Users,
+    permission: 'staff.manage',
+  },
+  {
+    title: 'Settings',
+    href: '/settings',
+    icon: Settings,
+    permission: 'settings.view',
+  },
+]
 
-  // Filter nav items based on permissions
-  const filteredNavItems = navItems.filter((item) => {
-    if (!item.permission) return true
-    if (role === "owner") return true
-    return permissions.includes(item.permission)
-  })
+const bottomNavigationItems = [
+  {
+    title: 'Help & Support',
+    href: '/help',
+    icon: HelpCircle,
+    permission: null,
+  },
+]
+
+export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
+  const pathname = usePathname()
+  const router = useRouter()
+  const supabase = createClient()
+  const [isOpen, setIsOpen] = useState(false)
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut()
+      router.push('/login')
+      toast.success('Signed out successfully')
+    } catch (error) {
+      console.error('Error signing out:', error)
+      toast.error('Failed to sign out')
+    }
+  }
+
+  const filteredNavItems = navigationItems.filter(item => 
+    !item.permission || restaurantAuth.hasPermission(permissions, item.permission, role)
+  )
+
+  const filteredBottomItems = bottomNavigationItems.filter(item => 
+    !item.permission || restaurantAuth.hasPermission(permissions, item.permission, role)
+  )
 
   return (
-    <div className="sticky top-0 z-40 flex h-16 items-center gap-x-4 border-b bg-background px-4 sm:gap-x-6 sm:px-6 lg:hidden">
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="-ml-2">
+    <>
+      {/* Mobile Header */}
+      <header className="sticky top-0 z-50 w-full border-b bg-background">
+        <div className="flex h-16 items-center px-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsOpen(true)}
+            className="lg:hidden"
+          >
             <Menu className="h-6 w-6" />
-            <span className="sr-only">Open sidebar</span>
+            <span className="sr-only">Toggle navigation menu</span>
           </Button>
-        </SheetTrigger>
+          
+          <div className="ml-4">
+            <h1 className="text-lg font-semibold">{restaurant.name}</h1>
+          </div>
+        </div>
+      </header>
+
+      {/* Mobile Navigation Sheet */}
+      <Sheet open={isOpen} onOpenChange={setIsOpen}>
         <SheetContent side="left" className="w-[280px] p-0">
-          <SheetHeader className="border-b px-6 py-4">
+          <SheetHeader className="p-4 border-b">
             <SheetTitle className="text-left">
-              <div className="flex items-center gap-3">
-                {restaurant.main_image_url && (
-                  <img
-                    src={restaurant.main_image_url}
-                    alt={restaurant.name}
-                    className="h-8 w-8 rounded-full object-cover"
-                  />
-                )}
-                <div>
-                  <h2 className="text-sm font-semibold">{restaurant.name}</h2>
-                  <p className="text-xs text-muted-foreground capitalize">{role}</p>
-                </div>
+              <div>
+                <div className="font-semibold">{restaurant.name}</div>
+                <div className="text-sm text-muted-foreground capitalize">{role}</div>
               </div>
             </SheetTitle>
           </SheetHeader>
 
-          {/* Navigation */}
-          <nav className="flex-1 space-y-1 px-3 py-4">
-            {filteredNavItems.map((item) => {
-              const Icon = item.icon
-              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
-              
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.title}
-                </Link>
-              )
-            })}
-          </nav>
+          <div className="flex flex-col h-[calc(100vh-5rem)]">
+            {/* Navigation Items */}
+            <nav className="flex-1 overflow-y-auto px-2 py-4">
+              <div className="space-y-1">
+                {filteredNavItems.map((item) => {
+                  const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setIsOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                        isActive
+                          ? "bg-accent text-accent-foreground"
+                          : "text-foreground hover:bg-accent/50"
+                      )}
+                    >
+                      <item.icon className="h-5 w-5" />
+                      <span>{item.title}</span>
+                    </Link>
+                  )
+                })}
+              </div>
+            </nav>
 
-          {/* Restaurant Status */}
-          <div className="border-t p-4">
-            <div className="rounded-lg bg-muted p-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium">Restaurant Status</span>
-                <span className={cn(
-                  "text-xs font-medium",
-                  restaurant.is_active ? "text-green-600" : "text-red-600"
-                )}>
-                  {restaurant.is_active ? "Open" : "Closed"}
-                </span>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {restaurant.opening_time} - {restaurant.closing_time}
-              </div>
+            {/* Bottom Items */}
+            <div className="border-t p-2 space-y-1">
+              {filteredBottomItems.map((item) => {
+                const isActive = pathname === item.href
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setIsOpen(false)}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-accent text-accent-foreground"
+                        : "text-foreground hover:bg-accent/50"
+                    )}
+                  >
+                    <item.icon className="h-5 w-5" />
+                    <span>{item.title}</span>
+                  </Link>
+                )
+              })}
+              
+              <Button
+                variant="ghost"
+                onClick={handleSignOut}
+                className="w-full justify-start gap-3"
+              >
+                <LogOut className="h-5 w-5" />
+                <span>Sign Out</span>
+              </Button>
             </div>
           </div>
         </SheetContent>
       </Sheet>
-
-      {/* Logo/Title */}
-      <div className="flex items-center gap-2">
-        <h2 className="text-lg font-semibold">{restaurant.name}</h2>
-      </div>
-    </div>
+    </>
   )
 }

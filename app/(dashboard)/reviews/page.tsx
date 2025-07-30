@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { ReviewReply } from "@/components/reviews/review-reply"
 import { toast } from "react-hot-toast"
 import { 
   Star, 
@@ -55,6 +56,15 @@ type Review = {
     id: string
     booking_time: string
     party_size: number
+  }
+  reply?: {
+    id: string
+    reply_message: string
+    created_at: string
+    staff_member?: {
+      full_name: string
+      avatar_url?: string
+    }
   }
 }
 
@@ -108,7 +118,13 @@ export default function ReviewsPage() {
         .select(`
           *,
           user:profiles(id, full_name, avatar_url),
-          booking:bookings(id, booking_time, party_size)
+          booking:bookings(id, booking_time, party_size),
+          reply:review_replies(
+            id,
+            reply_message,
+            created_at,
+            staff_member:profiles!review_replies_replied_by_fkey(full_name, avatar_url)
+          )
         `)
         .eq("restaurant_id", restaurantId)
 
@@ -435,6 +451,18 @@ export default function ReviewsPage() {
                       </Badge>
                     ))}
                   </div>
+
+                  {/* Review Reply */}
+                  <ReviewReply
+                    reviewId={review.id}
+                    restaurantId={restaurantId}
+                    existingReply={review.reply ? {
+                      id: review.reply.id,
+                      reply_message: review.reply.reply_message,
+                      created_at: review.reply.created_at,
+                      staff_member: review.reply.staff_member
+                    } : undefined}
+                  />
                 </div>
               ))}
             </div>

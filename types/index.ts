@@ -253,6 +253,19 @@ export interface Restaurant {
     // Relations
     user?: Profile;
     booking?: Booking;
+    reply?: ReviewReply;
+  }
+
+  export interface ReviewReply {
+    id: string;
+    review_id: string;
+    restaurant_id: string;
+    replied_by: string;
+    reply_message: string;
+    created_at: string;
+    updated_at: string;
+    // Relations
+    staff_member?: Profile;
   }
   
   export interface FloorPlan {

@@ -354,11 +354,28 @@ export default function LoyaltyPage() {
       case 'deduction':
         return <Minus className="h-4 w-4 text-red-600" />
       case 'award':
-        return <Gift className="h-4 w-4 text-blue-600" />
+        return <Gift className="h-4 w-4 text-green-600" />
       case 'refund':
-        return <CreditCard className="h-4 w-4 text-orange-600" />
+        return <CreditCard className="h-4 w-4 text-green-600" />
       default:
         return <Activity className="h-4 w-4" />
+    }
+  }
+
+  const getTransactionValue = (transaction: LoyaltyTransaction) => {
+    const isPositive = ['purchase', 'award', 'refund'].includes(transaction.transaction_type)
+    const points = Math.abs(transaction.points)
+    
+    if (isPositive) {
+      return {
+        value: `+${points.toLocaleString()}`,
+        color: "text-green-600"
+      }
+    } else {
+      return {
+        value: `-${points.toLocaleString()}`,
+        color: "text-red-600"
+      }
     }
   }
 
@@ -970,31 +987,32 @@ export default function LoyaltyPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {transactions?.map((transaction) => (
-                <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    {getTransactionIcon(transaction.transaction_type)}
-                    <div>
-                      <p className="font-medium">{transaction.description}</p>
+              {transactions?.map((transaction) => {
+                const transactionValue = getTransactionValue(transaction)
+                
+                return (
+                  <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      {getTransactionIcon(transaction.transaction_type)}
+                      <div>
+                        <p className="font-medium">{transaction.description}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(transaction.created_at).toLocaleDateString()}
+                          {transaction.user && ` • ${transaction.user.full_name}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={cn("font-bold", transactionValue.color)}>
+                        {transactionValue.value}
+                      </p>
                       <p className="text-sm text-muted-foreground">
-                        {new Date(transaction.created_at).toLocaleDateString()}
-                        {transaction.user && ` • ${transaction.user.full_name}`}
+                        Balance: {transaction.balance_after.toLocaleString()}
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className={cn(
-                      "font-bold",
-                      transaction.points > 0 ? "text-green-600" : "text-red-600"
-                    )}>
-                      {transaction.points > 0 ? '+' : ''}{transaction.points.toLocaleString()}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Balance: {transaction.balance_after.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>
