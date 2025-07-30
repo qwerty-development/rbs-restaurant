@@ -18,10 +18,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { BookingList } from "@/components/bookings/booking-list"
 import { BookingDetails } from "@/components/bookings/booking-details"
+import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
 import { toast } from "react-hot-toast"
-import { Search, Filter, Calendar as CalendarIcon, Download } from "lucide-react"
+import { Search, Filter, Calendar as CalendarIcon, Download, Plus } from "lucide-react"
 import type { Booking } from "@/types"
 
 export default function BookingsPage() {
@@ -30,6 +38,7 @@ export default function BookingsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list")
+  const [showManualBooking, setShowManualBooking] = useState(false)
   
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -55,7 +64,7 @@ export default function BookingsPage() {
     getRestaurantId()
   }, [supabase])
 
-  // Fetch bookings
+  // Fetch bookings with proper joins
   const { data: bookings, isLoading } = useQuery({
     queryKey: ["bookings", restaurantId, selectedDate, statusFilter],
     queryFn: async () => {
@@ -65,8 +74,13 @@ export default function BookingsPage() {
         .from("bookings")
         .select(`
           *,
-          user:profiles(full_name, phone_number, email),
-          tables:booking_tables(
+          profiles!bookings_user_id_fkey(
+            id,
+            full_name,
+            phone_number,
+            email: auth.users(email)
+          ),
+          booking_tables(
             table:restaurant_tables(*)
           )
         `)
@@ -89,28 +103,110 @@ export default function BookingsPage() {
 
       const { data, error } = await query
 
-      if (error) throw error
-      return data as Booking[]
+      if (error) {
+        console.error("Error fetching bookings:", error)
+        throw error
+      }
+
+      // Transform the data to match expected format
+      return data?.map((booking:any) => ({
+        ...booking,
+        user: booking.profiles || null,
+        tables: booking.booking_tables?.map((bt: { table: any }) => bt.table) || []
+      })) as Booking[]
     },
     enabled: !!restaurantId,
   })
 
   // Update booking status
   const updateBookingMutation = useMutation({
-    mutationFn: async ({ bookingId, status }: { bookingId: string; status: string }) => {
+    mutationFn: async ({ bookingId, updates }: { bookingId: string; updates: Partial<Booking> }) => {
       const { error } = await supabase
         .from("bookings")
-        .update({ status, updated_at: new Date().toISOString() })
+        .update({ 
+          ...updates,
+          updated_at: new Date().toISOString() 
+        })
         .eq("id", bookingId)
 
       if (error) throw error
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bookings"] })
-      toast.success("Booking status updated")
+      toast.success("Booking updated")
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Update error:", error)
       toast.error("Failed to update booking")
+    },
+  })
+
+  // Create manual booking
+  const createManualBookingMutation = useMutation({
+    mutationFn: async (bookingData: any) => {
+      // First, create or get the user
+      let userId = null
+      
+      if (bookingData.guest_email) {
+        // Check if user exists
+        const { data: existingUser } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("email", bookingData.guest_email)
+          .single()
+
+        if (existingUser) {
+          userId = existingUser.id
+        }
+      }
+
+      // Generate confirmation code
+      const confirmationCode = `${restaurantId.slice(0, 4).toUpperCase()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+
+      // Create booking
+      const { data: booking, error } = await supabase
+        .from("bookings")
+        .insert({
+          restaurant_id: restaurantId,
+          user_id: userId,
+          guest_name: bookingData.guest_name,
+          guest_email: bookingData.guest_email,
+          guest_phone: bookingData.guest_phone,
+          booking_time: bookingData.booking_time,
+          party_size: bookingData.party_size,
+          turn_time_minutes: bookingData.turn_time_minutes || 120,
+          status: bookingData.status || "confirmed",
+          special_requests: bookingData.special_requests,
+          occasion: bookingData.occasion,
+          confirmation_code: confirmationCode,
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Assign tables if provided
+      if (bookingData.table_ids && bookingData.table_ids.length > 0) {
+        const tableAssignments = bookingData.table_ids.map((tableId: string) => ({
+          booking_id: booking.id,
+          table_id: tableId,
+        }))
+
+        await supabase
+          .from("booking_tables")
+          .insert(tableAssignments)
+      }
+
+      return booking
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      toast.success("Booking created successfully")
+      setShowManualBooking(false)
+    },
+    onError: (error) => {
+      console.error("Create booking error:", error)
+      toast.error("Failed to create booking")
     },
   })
 
@@ -121,12 +217,16 @@ export default function BookingsPage() {
     const searchLower = searchQuery.toLowerCase()
     const userName = booking.user?.full_name?.toLowerCase() || ""
     const guestName = booking.guest_name?.toLowerCase() || ""
-    const confirmationCode = booking.confirmation_code.toLowerCase()
+    const confirmationCode = booking.confirmation_code?.toLowerCase() || ""
+    const phone = booking.guest_phone?.toLowerCase() || ""
+    const email = booking.guest_email?.toLowerCase() || ""
     
     return (
       userName.includes(searchLower) ||
       guestName.includes(searchLower) ||
-      confirmationCode.includes(searchLower)
+      confirmationCode.includes(searchLower) ||
+      phone.includes(searchLower) ||
+      email.includes(searchLower)
     )
   })
 
@@ -136,6 +236,8 @@ export default function BookingsPage() {
     pending: bookings?.filter(b => b.status === "pending").length || 0,
     confirmed: bookings?.filter(b => b.status === "confirmed").length || 0,
     completed: bookings?.filter(b => b.status === "completed").length || 0,
+    cancelled: bookings?.filter(b => b.status === "cancelled_by_user" || b.status === "declined_by_restaurant").length || 0,
+    no_show: bookings?.filter(b => b.status === "no_show").length || 0,
   }
 
   return (
@@ -148,10 +250,16 @@ export default function BookingsPage() {
             Manage your restaurant bookings and reservations
           </p>
         </div>
-        <Button variant="outline">
-          <Download className="mr-2 h-4 w-4" />
-          Export
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline">
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button onClick={() => setShowManualBooking(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Booking
+          </Button>
+        </div>
       </div>
 
       {/* View Toggle */}
@@ -172,7 +280,7 @@ export default function BookingsPage() {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Search by name or confirmation code..."
+                    placeholder="Search by name, confirmation code, phone, or email..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-9"
@@ -195,6 +303,12 @@ export default function BookingsPage() {
                     <SelectItem value="completed">
                       Completed ({bookingCounts.completed})
                     </SelectItem>
+                    <SelectItem value="cancelled_by_user">
+                      Cancelled ({bookingCounts.cancelled})
+                    </SelectItem>
+                    <SelectItem value="no_show">
+                      No Show ({bookingCounts.no_show})
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -206,8 +320,8 @@ export default function BookingsPage() {
             bookings={filteredBookings || []}
             isLoading={isLoading}
             onSelectBooking={setSelectedBooking}
-            onUpdateStatus={(bookingId, status) => 
-              updateBookingMutation.mutate({ bookingId, status })
+            onUpdateStatus={(bookingId:any, status:any) => 
+              updateBookingMutation.mutate({ bookingId, updates: { status } })
             }
           />
         </TabsContent>
@@ -244,8 +358,8 @@ export default function BookingsPage() {
                   bookings={filteredBookings || []}
                   isLoading={isLoading}
                   onSelectBooking={setSelectedBooking}
-                  onUpdateStatus={(bookingId, status) => 
-                    updateBookingMutation.mutate({ bookingId, status })
+                  onUpdateStatus={(bookingId:any, status:any) => 
+                    updateBookingMutation.mutate({ bookingId, updates: { status } })
                   }
                   compact
                 />
@@ -260,15 +374,33 @@ export default function BookingsPage() {
         <BookingDetails
           booking={selectedBooking}
           onClose={() => setSelectedBooking(null)}
-          onUpdateStatus={(status) => {
+          onUpdate={(updates: any) => {
             updateBookingMutation.mutate({ 
               bookingId: selectedBooking.id, 
-              status 
+              updates 
             })
             setSelectedBooking(null)
           }}
         />
       )}
+
+      {/* Manual Booking Modal */}
+      <Dialog open={showManualBooking} onOpenChange={setShowManualBooking}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add Manual Booking</DialogTitle>
+            <DialogDescription>
+              Create a new booking manually for walk-ins or phone reservations
+            </DialogDescription>
+          </DialogHeader>
+          <ManualBookingForm
+            restaurantId={restaurantId}
+            onSubmit={(data: any) => createManualBookingMutation.mutate(data)}
+            onCancel={() => setShowManualBooking(false)}
+            isLoading={createManualBookingMutation.isPending}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

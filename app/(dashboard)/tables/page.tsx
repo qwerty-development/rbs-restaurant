@@ -12,13 +12,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { TableGrid } from "@/components/tables/table-grid"
 import { FloorPlanEditor } from "@/components/tables/floor-plan-editor"
 import { TableForm } from "@/components/tables/table-form"
+import { TableCombinationsManager } from "@/components/tables/table-combinations-manager"
 import { toast } from "react-hot-toast"
-import { Plus, Edit2, LayoutGrid, Map } from "lucide-react"
+import { Plus, Edit2, LayoutGrid, Map, Link } from "lucide-react"
 import type { RestaurantTable, FloorPlan } from "@/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export default function TablesPage() {
-  const [viewMode, setViewMode] = useState<"grid" | "floor-plan">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "floor-plan" | "combinations">("grid")
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(null)
   const [isAddingTable, setIsAddingTable] = useState(false)
   const [selectedFloorPlan, setSelectedFloorPlan] = useState<string>("")
@@ -83,6 +84,28 @@ export default function TablesPage() {
     enabled: !!restaurantId,
   })
 
+  // Fetch table combinations
+  const { data: tableCombinations } = useQuery({
+    queryKey: ["table-combinations", restaurantId],
+    queryFn: async () => {
+      if (!restaurantId) return []
+      
+      const { data, error } = await supabase
+        .from("table_combinations")
+        .select(`
+          *,
+          primary_table:restaurant_tables!table_combinations_primary_table_id_fkey(*),
+          secondary_table:restaurant_tables!table_combinations_secondary_table_id_fkey(*)
+        `)
+        .eq("restaurant_id", restaurantId)
+        .eq("is_active", true)
+
+      if (error) throw error
+      return data
+    },
+    enabled: !!restaurantId,
+  })
+
   // Create/Update table
   const tableMutation = useMutation({
     mutationFn: async (tableData: Partial<RestaurantTable>) => {
@@ -90,10 +113,21 @@ export default function TablesPage() {
         // Update existing table
         const { error } = await supabase
           .from("restaurant_tables")
-          .update(tableData)
+          .update({
+            ...tableData,
+            updated_at: new Date().toISOString()
+          })
           .eq("id", tableData.id)
 
         if (error) throw error
+
+        // Update combinable_with array if provided
+        if (tableData.combinable_with !== undefined) {
+          await supabase
+            .from("restaurant_tables")
+            .update({ combinable_with: tableData.combinable_with })
+            .eq("id", tableData.id)
+        }
       } else {
         // Create new table
         const { error } = await supabase
@@ -101,6 +135,8 @@ export default function TablesPage() {
           .insert({
             ...tableData,
             restaurant_id: restaurantId,
+            x_position: tableData.x_position || 50,
+            y_position: tableData.y_position || 50,
           })
 
         if (error) throw error
@@ -112,7 +148,8 @@ export default function TablesPage() {
       setSelectedTable(null)
       setIsAddingTable(false)
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Table mutation error:", error)
       toast.error("Failed to save table")
     },
   })
@@ -133,6 +170,34 @@ export default function TablesPage() {
     },
     onError: () => {
       toast.error("Failed to delete table")
+    },
+  })
+
+  // Create table combination
+  const createCombinationMutation = useMutation({
+    mutationFn: async ({ primaryTableId, secondaryTableId, combinedCapacity }: {
+      primaryTableId: string;
+      secondaryTableId: string;
+      combinedCapacity: number;
+    }) => {
+      const { error } = await supabase
+        .from("table_combinations")
+        .insert({
+          restaurant_id: restaurantId,
+          primary_table_id: primaryTableId,
+          secondary_table_id: secondaryTableId,
+          combined_capacity: combinedCapacity,
+        })
+
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["table-combinations"] })
+      toast.success("Table combination created")
+    },
+    onError: (error) => {
+      console.error("Combination error:", error)
+      toast.error("Failed to create combination")
     },
   })
 
@@ -173,11 +238,12 @@ export default function TablesPage() {
               Add Table
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-[600px]">
             <DialogHeader>
               <DialogTitle>Add New Table</DialogTitle>
             </DialogHeader>
             <TableForm
+              tables={tables || []}
               onSubmit={(data) => tableMutation.mutate(data)}
               onCancel={() => setIsAddingTable(false)}
               isLoading={tableMutation.isPending}
@@ -224,7 +290,7 @@ export default function TablesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {tables?.reduce((sum, t) => sum + t.capacity, 0) || 0}
+              {tables?.reduce((sum, t) => sum + t.max_capacity, 0) || 0}
             </div>
             <p className="text-xs text-muted-foreground">
               Seats available
@@ -234,8 +300,8 @@ export default function TablesPage() {
       </div>
 
       {/* View Toggle */}
-      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "grid" | "floor-plan")}>
-        <TabsList className="grid w-[200px] grid-cols-2">
+      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "grid" | "floor-plan" | "combinations")}>
+        <TabsList className="grid w-[300px] grid-cols-3">
           <TabsTrigger value="grid">
             <LayoutGrid className="mr-2 h-4 w-4" />
             Grid View
@@ -244,6 +310,10 @@ export default function TablesPage() {
             <Map className="mr-2 h-4 w-4" />
             Floor Plan
           </TabsTrigger>
+          <TabsTrigger value="combinations">
+            <Link className="mr-2 h-4 w-4" />
+            Combinations
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="grid" className="space-y-4">
@@ -251,7 +321,10 @@ export default function TablesPage() {
           <TableGrid
             tables={tables || []}
             isLoading={tablesLoading}
-            onEdit={setSelectedTable}
+            onEdit={(table) => {
+              setSelectedTable(table)
+              setIsAddingTable(true)
+            }}
             onDelete={(id) => deleteTableMutation.mutate(id)}
           />
         </TabsContent>
@@ -301,19 +374,41 @@ export default function TablesPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="combinations" className="space-y-4">
+          <TableCombinationsManager
+            tables={tables || []}
+            combinations={tableCombinations || []}
+            onCreateCombination={createCombinationMutation.mutate}
+            onDeleteCombination={async (id) => {
+              await supabase
+                .from("table_combinations")
+                .update({ is_active: false })
+                .eq("id", id)
+              queryClient.invalidateQueries({ queryKey: ["table-combinations"] })
+            }}
+          />
+        </TabsContent>
       </Tabs>
 
       {/* Edit Table Dialog */}
-      {selectedTable && (
-        <Dialog open={!!selectedTable} onOpenChange={() => setSelectedTable(null)}>
-          <DialogContent className="sm:max-w-[425px]">
+      {selectedTable && isAddingTable && (
+        <Dialog open={!!selectedTable} onOpenChange={() => {
+          setSelectedTable(null)
+          setIsAddingTable(false)
+        }}>
+          <DialogContent className="sm:max-w-[600px]">
             <DialogHeader>
               <DialogTitle>Edit Table</DialogTitle>
             </DialogHeader>
             <TableForm
               table={selectedTable}
+              tables={tables || []}
               onSubmit={(data) => tableMutation.mutate({ ...data, id: selectedTable.id })}
-              onCancel={() => setSelectedTable(null)}
+              onCancel={() => {
+                setSelectedTable(null)
+                setIsAddingTable(false)
+              }}
               isLoading={tableMutation.isPending}
             />
           </DialogContent>

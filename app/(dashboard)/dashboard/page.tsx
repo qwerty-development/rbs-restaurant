@@ -11,7 +11,6 @@ export default async function DashboardPage() {
   const today = new Date()
   const todayStart = startOfDay(today)
   const todayEnd = endOfDay(today)
-  const last30Days = subDays(today, 30)
 
   // Get user's restaurant
   const { data: { user } } = await supabase.auth.getUser()
@@ -27,28 +26,23 @@ export default async function DashboardPage() {
 
   const restaurantId = staffData.restaurant_id
 
-  // Fetch today's bookings
+  // Fetch today's bookings with proper status
   const { data: todayBookings } = await supabase
     .from("bookings")
     .select("*")
     .eq("restaurant_id", restaurantId)
     .gte("booking_time", todayStart.toISOString())
     .lte("booking_time", todayEnd.toISOString())
+    .in("status", ["pending", "confirmed", "completed"])
 
-  // Fetch this month's revenue (estimated based on party size)
-  const { data: monthBookings } = await supabase
+  // Fetch total customers (unique users who have made bookings)
+  const { data: uniqueCustomers } = await supabase
     .from("bookings")
-    .select("party_size, status")
-    .eq("restaurant_id", restaurantId)
-    .gte("booking_time", startOfDay(new Date(today.getFullYear(), today.getMonth(), 1)).toISOString())
-    .in("status", ["completed", "confirmed"])
-
-  // Fetch total customers
-  const { data: totalCustomers }:any = await supabase
-    .from("bookings")
-    .select("user_id", { count: "exact", head: true })
+    .select("user_id")
     .eq("restaurant_id", restaurantId)
     .not("user_id", "is", null)
+    
+  const uniqueUserIds = [...new Set(uniqueCustomers?.map(b => b.user_id) || [])]
 
   // Fetch average rating
   const { data: reviews } = await supabase
@@ -58,8 +52,8 @@ export default async function DashboardPage() {
 
   // Calculate stats
   const todayCount = todayBookings?.length || 0
-  const monthRevenue = monthBookings?.reduce((sum, booking) => sum + (booking.party_size * 50), 0) || 0 // Estimated $50 per person
-  const totalCustomersCount = totalCustomers?.count || 0
+  const pendingCount = todayBookings?.filter(b => b.status === 'pending').length || 0
+  const totalCustomersCount = uniqueUserIds.length
   const avgRating = reviews?.length 
     ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
     : "0.0"
@@ -71,9 +65,9 @@ export default async function DashboardPage() {
     const dayStart = startOfDay(date)
     const dayEnd = endOfDay(date)
     
-    const { count } = await supabase
+    const { data: dayBookings } = await supabase
       .from("bookings")
-      .select("*", { count: "exact", head: true })
+      .select("*")
       .eq("restaurant_id", restaurantId)
       .gte("booking_time", dayStart.toISOString())
       .lte("booking_time", dayEnd.toISOString())
@@ -81,46 +75,57 @@ export default async function DashboardPage() {
 
     chartData.push({
       date: format(date, "MMM dd"),
-      bookings: count || 0,
+      bookings: dayBookings?.length || 0,
     })
   }
 
-  // Fetch recent bookings
+  // Fetch recent bookings with user info
   const { data: recentBookings } = await supabase
     .from("bookings")
     .select(`
       *,
-      user:profiles(full_name, phone_number)
+      profiles!bookings_user_id_fkey(full_name, phone_number)
     `)
     .eq("restaurant_id", restaurantId)
     .order("created_at", { ascending: false })
     .limit(5)
 
   // Fetch top customers
-  const { data: topCustomers }:any = await supabase
+  const { data: bookingsByUser } = await supabase
     .from("bookings")
     .select(`
       user_id,
-      user:profiles(full_name, avatar_url),
-      count:user_id.count()
+      profiles!bookings_user_id_fkey(full_name, avatar_url)
     `)
     .eq("restaurant_id", restaurantId)
     .eq("status", "completed")
-    .order("count", { ascending: false })
-    .limit(5)
+    .not("user_id", "is", null)
+
+  // Count bookings per user
+  const userCounts = bookingsByUser?.reduce((acc, booking) => {
+    if (booking.user_id) {
+      if (!acc[booking.user_id]) {
+        acc[booking.user_id] = {
+          user_id: booking.user_id,
+          user: booking.profiles,
+          count: 0
+        }
+      }
+      acc[booking.user_id].count++
+    }
+    return acc
+  }, {} as Record<string, { user_id: string; user: any; count: number }>) || {}
+
+  const topCustomers = Object.values(userCounts)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
 
   const stats = [
     {
       title: "Today's Bookings",
       value: todayCount.toString(),
-      description: `${todayBookings?.filter(b => b.status === 'pending').length || 0} pending`,
+      description: `${pendingCount} pending`,
       trend: { value: 12, isPositive: true },
-    },
-    {
-      title: "Monthly Revenue",
-      value: `$${monthRevenue.toLocaleString()}`,
-      description: "Estimated revenue",
-      trend: { value: 8, isPositive: true },
     },
     {
       title: "Total Customers",
@@ -133,6 +138,13 @@ export default async function DashboardPage() {
       value: avgRating,
       description: `${reviews?.length || 0} reviews`,
       trend: { value: 0.2, isPositive: true },
+    },
+    {
+      title: "Active Tables",
+      value: "View Tables",
+      description: "Manage floor plan",
+      trend: undefined,
+      link: "/dashboard/tables"
     },
   ]
 
@@ -163,7 +175,10 @@ export default async function DashboardPage() {
       </div>
 
       {/* Recent Bookings */}
-      <RecentBookings bookings={recentBookings || []} />
+      <RecentBookings bookings={recentBookings?.map(b => ({
+        ...b,
+        user: b.profiles
+      })) || []} />
     </div>
   )
 }

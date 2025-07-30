@@ -1,20 +1,23 @@
 // components/dashboard/stats-cards.tsx
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowDown, ArrowUp } from "lucide-react"
-import { cn } from "@/lib/utils"
+"use client"
 
-interface Stat {
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ArrowUpIcon, ArrowDownIcon, ArrowRightIcon } from "lucide-react"
+import Link from "next/link"
+
+interface StatCard {
   title: string
   value: string
   description: string
   trend?: {
     value: number
     isPositive: boolean
-  }
+  } | null
+  link?: string
 }
 
 interface StatsCardsProps {
-  stats: Stat[]
+  stats: StatCard[]
 }
 
 export function StatsCards({ stats }: StatsCardsProps) {
@@ -27,21 +30,29 @@ export function StatsCards({ stats }: StatsCardsProps) {
               {stat.title}
             </CardTitle>
             {stat.trend && (
-              <div className={cn(
-                "flex items-center text-xs font-medium",
-                stat.trend.isPositive ? "text-green-600" : "text-red-600"
-              )}>
+              <div className={`flex items-center text-xs ${
+                stat.trend.isPositive ? 'text-green-600' : 'text-red-600'
+              }`}>
                 {stat.trend.isPositive ? (
-                  <ArrowUp className="mr-1 h-3 w-3" />
+                  <ArrowUpIcon className="h-4 w-4" />
                 ) : (
-                  <ArrowDown className="mr-1 h-3 w-3" />
+                  <ArrowDownIcon className="h-4 w-4" />
                 )}
-                {stat.trend.value}%
+                <span>{stat.trend.value}%</span>
               </div>
             )}
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stat.value}</div>
+            {stat.link ? (
+              <Link href={stat.link} className="group">
+                <div className="text-2xl font-bold group-hover:text-primary transition-colors">
+                  {stat.value}
+                  <ArrowRightIcon className="inline-block h-4 w-4 ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </Link>
+            ) : (
+              <div className="text-2xl font-bold">{stat.value}</div>
+            )}
             <p className="text-xs text-muted-foreground">
               {stat.description}
             </p>

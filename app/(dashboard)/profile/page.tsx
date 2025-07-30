@@ -28,7 +28,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { toast } from "react-hot-toast"
 import { 
@@ -70,6 +69,7 @@ export default function ProfilePage() {
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
   const [userData, setUserData] = useState<any>(null)
   const [staffData, setStaffData] = useState<any>(null)
+  const [profileData, setProfileData] = useState<any>(null)
 
   const profileForm = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
@@ -111,6 +111,7 @@ export default function ProfilePage() {
         .single()
 
       if (profile) {
+        setProfileData(profile)
         profileForm.reset({
           full_name: profile.full_name || "",
           email: user.email || "",
@@ -118,7 +119,7 @@ export default function ProfilePage() {
         })
       }
 
-      // Get staff data
+      // Get staff data with restaurant info
       const { data: staff } = await supabase
         .from("restaurant_staff")
         .select(`
@@ -146,6 +147,8 @@ export default function ProfilePage() {
           email: data.email,
         })
         if (emailError) throw emailError
+        
+        toast.success("Email update requested. Please check your email to confirm the change.")
       }
 
       // Update profile
@@ -161,6 +164,7 @@ export default function ProfilePage() {
       if (profileError) throw profileError
 
       toast.success("Profile updated successfully")
+      await fetchUserData() // Refresh data
     } catch (error: any) {
       toast.error(error.message || "Failed to update profile")
     } finally {
@@ -172,6 +176,17 @@ export default function ProfilePage() {
     try {
       setChangingPassword(true)
 
+      // First verify current password by attempting to sign in
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: userData.email,
+        password: data.currentPassword,
+      })
+
+      if (signInError) {
+        throw new Error("Current password is incorrect")
+      }
+
+      // Update password
       const { error } = await supabase.auth.updateUser({
         password: data.newPassword,
       })
@@ -209,6 +224,7 @@ export default function ProfilePage() {
     owner: { label: "Owner", color: "destructive" },
     manager: { label: "Manager", color: "default" },
     staff: { label: "Staff", color: "secondary" },
+    viewer: { label: "Viewer", color: "outline" },
   } as const
 
   if (loading) {
@@ -233,7 +249,7 @@ export default function ProfilePage() {
         <CardContent>
           <div className="flex items-start gap-6">
             <Avatar className="h-20 w-20">
-              <AvatarImage src={userData?.user_metadata?.avatar_url} />
+              <AvatarImage src={profileData?.avatar_url} />
               <AvatarFallback>
                 {getInitials(profileForm.getValues("full_name") || "U")}
               </AvatarFallback>
@@ -248,7 +264,9 @@ export default function ProfilePage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant={ROLE_LABELS[staffData?.role as keyof typeof ROLE_LABELS]?.color || "default"}>
+                <Badge 
+                  variant={ROLE_LABELS[staffData?.role as keyof typeof ROLE_LABELS]?.color || "default"}
+                >
                   {ROLE_LABELS[staffData?.role as keyof typeof ROLE_LABELS]?.label || staffData?.role}
                 </Badge>
                 {staffData?.restaurant && (
@@ -352,16 +370,17 @@ export default function ProfilePage() {
             <div className="space-y-1">
               <p className="font-medium">Password</p>
               <p className="text-sm text-muted-foreground">
-                Last changed: Never
+                Secure your account with a strong password
               </p>
             </div>
             <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
-                  <KeyRound className="mr-2 h-4 w-4" />
-                  Change Password
-                </Button>
-              </DialogTrigger>
+              <Button
+                variant="outline"
+                onClick={() => setShowPasswordDialog(true)}
+              >
+                <KeyRound className="mr-2 h-4 w-4" />
+                Change Password
+              </Button>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Change Password</DialogTitle>
@@ -448,6 +467,48 @@ export default function ProfilePage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Restaurant Information (if staff) */}
+      {staffData && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Restaurant Information</CardTitle>
+            <CardDescription>
+              Your role and permissions at {staffData.restaurant?.name}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Role</p>
+                <p className="font-medium">{staffData.role}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Status</p>
+                <Badge variant={staffData.is_active ? "default" : "secondary"}>
+                  {staffData.is_active ? "Active" : "Inactive"}
+                </Badge>
+              </div>
+            </div>
+            {staffData.permissions && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-2">Permissions</p>
+                <div className="flex flex-wrap gap-2">
+                  {staffData.permissions.includes("all") ? (
+                    <Badge>All Permissions</Badge>
+                  ) : (
+                    staffData.permissions.map((permission: string) => (
+                      <Badge key={permission} variant="outline">
+                        {permission.replace(".", " ").replace(/_/g, " ")}
+                      </Badge>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Danger Zone */}
       <Card className="border-destructive/50">

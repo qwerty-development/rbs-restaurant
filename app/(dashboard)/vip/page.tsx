@@ -37,13 +37,36 @@ import {
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { toast } from "react-hot-toast"
-import { Plus, Search, Crown, Calendar as CalendarIcon, UserPlus, Star, TrendingUp } from "lucide-react"
+import { Plus, Search, Crown, Calendar as CalendarIcon, UserPlus, Star, TrendingUp, X } from "lucide-react"
 import { format, addDays } from "date-fns"
 import { cn } from "@/lib/utils"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import type { RestaurantVIPUser, Profile } from "@/types"
+import { useRouter } from "next/navigation"
+
+// Type definitions
+type Profile = {
+  id: string
+  full_name: string
+  email?: string
+  phone_number?: string
+  avatar_url?: string
+  loyalty_points: number
+  total_bookings: number
+  completed_bookings: number
+}
+
+type RestaurantVIPUser = {
+  id: string
+  restaurant_id: string
+  user_id: string
+  extended_booking_days: number
+  priority_booking: boolean
+  valid_until: string
+  created_at: string
+  user?: Profile
+}
 
 const vipFormSchema = z.object({
   userEmail: z.string().email("Invalid email address"),
@@ -57,7 +80,7 @@ type VIPFormData = z.infer<typeof vipFormSchema>
 export default function VIPPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isAddingVIP, setIsAddingVIP] = useState(false)
-  const [selectedVIP, setSelectedVIP] = useState<RestaurantVIPUser | null>(null)
+  const router = useRouter()
   
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -83,7 +106,7 @@ export default function VIPPage() {
     getRestaurantId()
   }, [supabase])
 
-  // Fetch VIP users
+  // Fetch VIP users with proper user data
   const { data: vipUsers, isLoading } = useQuery({
     queryKey: ["vip-users", restaurantId],
     queryFn: async () => {
@@ -96,7 +119,6 @@ export default function VIPPage() {
           user:profiles(
             id,
             full_name,
-            email,
             phone_number,
             avatar_url,
             loyalty_points,
@@ -108,8 +130,12 @@ export default function VIPPage() {
         .gte("valid_until", new Date().toISOString())
         .order("created_at", { ascending: false })
 
-      if (error) throw error
-      return data as RestaurantVIPUser[]
+      if (error) {
+        console.error("Error fetching VIP users:", error)
+        throw error
+      }
+      
+      return (data || []) as RestaurantVIPUser[]
     },
     enabled: !!restaurantId,
   })
@@ -128,15 +154,24 @@ export default function VIPPage() {
   // Add VIP user mutation
   const addVIPMutation = useMutation({
     mutationFn: async (data: VIPFormData) => {
-      // First, find the user by email
-      const { data: profiles, error: profileError } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("email", data.userEmail)
-        .single()
+      // First, find the user by email in profiles table
+      // Note: We can't directly access auth.users from client side
+      // We need to search by a field that exists in profiles
+      // For now, let's search by the provided email in guest bookings or use a different approach
+      
+      // Check if user exists by searching bookings with guest_email
+      const { data: existingBookings } = await supabase
+        .from("bookings")
+        .select("user_id, profiles!bookings_user_id_fkey(id, full_name)")
+        .eq("guest_email", data.userEmail)
+        .not("user_id", "is", null)
+        .limit(1)
 
-      if (profileError || !profiles) {
-        throw new Error("User not found")
+      let userId = null
+      if (existingBookings && existingBookings.length > 0) {
+        userId = existingBookings[0].user_id
+      } else {
+        throw new Error("User not found. Please ensure the user has made at least one booking with this email.")
       }
 
       // Check if already VIP
@@ -144,7 +179,7 @@ export default function VIPPage() {
         .from("restaurant_vip_users")
         .select("id")
         .eq("restaurant_id", restaurantId)
-        .eq("user_id", profiles.id)
+        .eq("user_id", userId)
         .gte("valid_until", new Date().toISOString())
         .single()
 
@@ -157,7 +192,7 @@ export default function VIPPage() {
         .from("restaurant_vip_users")
         .insert({
           restaurant_id: restaurantId,
-          user_id: profiles.id,
+          user_id: userId,
           extended_booking_days: data.extendedBookingDays,
           priority_booking: data.priorityBooking,
           valid_until: data.validUntil.toISOString(),
@@ -421,7 +456,7 @@ export default function VIPPage() {
         </Card>
       </div>
 
-      {/* Search */}
+      {/* Search and Table */}
       <Card>
         <CardHeader>
           <CardTitle>VIP Customers</CardTitle>
@@ -459,19 +494,23 @@ export default function VIPPage() {
               </TableHeader>
               <TableBody>
                 {filteredVIPUsers?.map((vip) => (
-                  <TableRow key={vip.id}>
+                  <TableRow 
+                    key={vip.id}
+                    className="cursor-pointer"
+                    onClick={() => router.push(`/vip/${vip.user_id}`)}
+                  >
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="h-10 w-10">
                           <AvatarImage src={vip.user?.avatar_url} />
                           <AvatarFallback>
-                            {vip.user?.full_name?.split(" ").map(n => n[0]).join("")}
+                            {vip.user?.full_name?.split(" ").map(n => n[0]).join("") || "?"}
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <div className="font-medium">{vip.user?.full_name}</div>
+                          <div className="font-medium">{vip.user?.full_name || "Unknown"}</div>
                           <div className="text-sm text-muted-foreground">
-                            {vip.user?.email}
+                            {vip.user?.email || "No email"}
                           </div>
                         </div>
                       </div>
@@ -505,10 +544,13 @@ export default function VIPPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => removeVIPMutation.mutate(vip.id)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          removeVIPMutation.mutate(vip.id)
+                        }}
                         disabled={removeVIPMutation.isPending}
                       >
-                        Remove
+                        <X className="h-4 w-4" />
                       </Button>
                     </TableCell>
                   </TableRow>

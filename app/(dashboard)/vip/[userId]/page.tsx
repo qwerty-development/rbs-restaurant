@@ -40,7 +40,39 @@ import { cn } from "@/lib/utils"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import type { RestaurantVIPUser, Booking } from "@/types"
+
+// Type definitions
+type Profile = {
+  id: string
+  full_name: string
+  email?: string
+  phone_number?: string
+  avatar_url?: string
+  loyalty_points: number
+  total_bookings: number
+  completed_bookings: number
+}
+
+type RestaurantVIPUser = {
+  id: string
+  restaurant_id: string
+  user_id: string
+  extended_booking_days: number
+  priority_booking: boolean
+  valid_until: string
+  created_at: string
+  user?: Profile
+}
+
+type Booking = {
+  id: string
+  user_id: string
+  restaurant_id: string
+  booking_time: string
+  party_size: number
+  status: string
+  table_ids?: string[]
+}
 
 const vipFormSchema = z.object({
   extendedBookingDays: z.number().min(30).max(365),
@@ -57,10 +89,33 @@ export default function VIPUserDetailPage() {
   const queryClient = useQueryClient()
 
   const [isEditing, setIsEditing] = useState(false)
+  const [restaurantId, setRestaurantId] = useState<string>("")
 
+  // Get restaurant ID
+  useEffect(() => {
+    async function getRestaurantId() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: staffData } = await supabase
+          .from("restaurant_staff")
+          .select("restaurant_id")
+          .eq("user_id", user.id)
+          .single()
+        
+        if (staffData) {
+          setRestaurantId(staffData.restaurant_id)
+        }
+      }
+    }
+    getRestaurantId()
+  }, [supabase])
+
+  // Fetch VIP user details
   const { data: vipUser, isLoading: vipLoading } = useQuery({
-    queryKey: ["vip-user", userId],
+    queryKey: ["vip-user", userId, restaurantId],
     queryFn: async () => {
+      if (!restaurantId) return null
+
       const { data, error } = await supabase
         .from("restaurant_vip_users")
         .select(`
@@ -68,28 +123,49 @@ export default function VIPUserDetailPage() {
           user:profiles(*)
         `)
         .eq("user_id", userId)
+        .eq("restaurant_id", restaurantId)
         .single()
 
       if (error) throw error
-      return data as RestaurantVIPUser
+      
+      // Get email from auth.users
+      const { data: authUser } = await supabase.auth.admin.getUserById(userId as string)
+      
+      return {
+        ...data,
+        user: {
+          ...data.user,
+          email: authUser?.user?.email
+        }
+      } as RestaurantVIPUser
     },
-    enabled: !!userId,
+    enabled: !!userId && !!restaurantId,
   })
 
+  // Fetch user's bookings at this restaurant
   const { data: bookings, isLoading: bookingsLoading } = useQuery({
-    queryKey: ["user-bookings", userId],
+    queryKey: ["user-bookings", userId, restaurantId],
     queryFn: async () => {
+      if (!restaurantId) return []
+
       const { data, error } = await supabase
         .from("bookings")
-        .select("*, table:restaurant_tables(table_number)")
+        .select(`
+          *,
+          booking_tables(
+            table_id,
+            table:restaurant_tables(table_number)
+          )
+        `)
         .eq("user_id", userId)
+        .eq("restaurant_id", restaurantId)
         .order("booking_time", { ascending: false })
         .limit(5)
       
       if (error) throw error
-      return data as Booking[]
+      return data as any[]
     },
-    enabled: !!userId,
+    enabled: !!userId && !!restaurantId,
   })
 
   const form = useForm<VIPFormData>({
@@ -119,7 +195,6 @@ export default function VIPUserDetailPage() {
           extended_booking_days: data.extendedBookingDays,
           priority_booking: data.priorityBooking,
           valid_until: data.validUntil.toISOString(),
-          updated_at: new Date().toISOString(),
         })
         .eq("id", vipUser!.id)
       
@@ -163,7 +238,7 @@ export default function VIPUserDetailPage() {
     return <div className="flex justify-center items-center h-64">VIP user not found.</div>
   }
 
-  const user:any = vipUser.user
+  const user = vipUser.user
 
   return (
     <div className="space-y-8">
@@ -270,22 +345,22 @@ export default function VIPUserDetailPage() {
           <Card>
             <CardHeader className="flex flex-col items-center text-center">
               <Avatar className="h-24 w-24 mb-4">
-                <AvatarImage src={user.avatar_url} />
+                <AvatarImage src={user?.avatar_url} />
                 <AvatarFallback className="text-3xl">
-                  {user.full_name?.split(" ").map((n: any[]) => n[0]).join("")}
+                  {user?.full_name?.split(" ").map((n: string) => n[0]).join("") || "?"}
                 </AvatarFallback>
               </Avatar>
-              <CardTitle className="text-2xl">{user.full_name}</CardTitle>
+              <CardTitle className="text-2xl">{user?.full_name || "Unknown"}</CardTitle>
               <Badge>VIP Customer</Badge>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground space-y-2">
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4" />
-                <span>{user.email}</span>
+                <span>{user?.email || "No email"}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Phone className="h-4 w-4" />
-                <span>{user.phone_number || "Not provided"}</span>
+                <span>{user?.phone_number || "Not provided"}</span>
               </div>
             </CardContent>
           </Card>
@@ -324,15 +399,15 @@ export default function VIPUserDetailPage() {
             </CardHeader>
             <CardContent className="grid grid-cols-3 gap-4 text-center">
               <div>
-                <p className="text-2xl font-bold">{user.total_bookings || 0}</p>
+                <p className="text-2xl font-bold">{user?.total_bookings || 0}</p>
                 <p className="text-sm text-muted-foreground">Total Bookings</p>
               </div>
               <div>
-                <p className="text-2xl font-bold">{user.completed_bookings || 0}</p>
+                <p className="text-2xl font-bold">{user?.completed_bookings || 0}</p>
                 <p className="text-sm text-muted-foreground">Completed</p>
               </div>
               <div>
-                <p className="text-2xl font-bold">{user.loyalty_points || 0}</p>
+                <p className="text-2xl font-bold">{user?.loyalty_points || 0}</p>
                 <p className="text-sm text-muted-foreground">Loyalty Points</p>
               </div>
             </CardContent>
@@ -341,17 +416,19 @@ export default function VIPUserDetailPage() {
           <Card>
             <CardHeader>
               <CardTitle>Recent Bookings</CardTitle>
-              <CardDescription>Last 5 bookings from this customer.</CardDescription>
+              <CardDescription>Last 5 bookings at your restaurant</CardDescription>
             </CardHeader>
             <CardContent>
               {bookingsLoading ? (
                 <p>Loading bookings...</p>
               ) : bookings && bookings.length > 0 ? (
                 <ul className="space-y-4">
-                  {bookings.map((booking:any) => (
+                  {bookings.map((booking: any) => (
                     <li key={booking.id} className="flex justify-between items-center p-3 bg-muted rounded-lg">
                       <div>
-                        <p className="font-medium">Table {booking.table.table_number}</p>
+                        <p className="font-medium">
+                          Table {booking.booking_tables?.[0]?.table?.table_number || "N/A"}
+                        </p>
                         <p className="text-sm text-muted-foreground">
                           {format(new Date(booking.booking_time), "PPP, p")}
                         </p>

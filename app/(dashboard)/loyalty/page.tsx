@@ -48,14 +48,58 @@ import {
   Trash2,
   Trophy,
   Star,
-  Target
+  Target,
+  Activity,
+  CreditCard,
+  Minus,
+  Gift
 } from "lucide-react"
 import { format, addDays } from "date-fns"
 import { cn } from "@/lib/utils"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import type { RestaurantLoyaltyRule } from "@/types"
+
+// Type definitions for loyalty
+type RestaurantLoyaltyRule = {
+  id: string
+  restaurant_id: string
+  rule_name: string
+  points_to_award: number
+  minimum_party_size: number
+  maximum_party_size?: number
+  applicable_days: number[]
+  start_time_minutes?: number
+  end_time_minutes?: number
+  valid_from: string
+  valid_until?: string
+  max_uses_per_user?: number
+  max_uses_total?: number
+  priority: number
+  current_uses: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+// Type definitions for transactions
+type LoyaltyTransaction = {
+  id: string
+  restaurant_id: string
+  transaction_type: 'purchase' | 'deduction' | 'refund' | 'adjustment' | 'award'
+  points: number
+  balance_before: number
+  balance_after: number
+  description?: string
+  booking_id?: string
+  user_id?: string
+  created_at: string
+  metadata?: any
+  user?: {
+    full_name: string
+    email?: string
+  }
+}
 
 const loyaltyRuleFormSchema = z.object({
   ruleName: z.string().min(3, "Rule name must be at least 3 characters"),
@@ -153,6 +197,28 @@ export default function LoyaltyPage() {
 
       if (error && error.code !== "PGRST116") throw error
       return data
+    },
+    enabled: !!restaurantId,
+  })
+
+  // Fetch recent transactions
+  const { data: transactions, isLoading: transactionsLoading } = useQuery({
+    queryKey: ["loyalty-transactions", restaurantId],
+    queryFn: async () => {
+      if (!restaurantId) return []
+      
+      const { data, error } = await supabase
+        .from("restaurant_loyalty_transactions")
+        .select(`
+          *,
+          user:profiles(full_name)
+        `)
+        .eq("restaurant_id", restaurantId)
+        .order("created_at", { ascending: false })
+        .limit(10)
+
+      if (error) throw error
+      return data as LoyaltyTransaction[]
     },
     enabled: !!restaurantId,
   })
@@ -280,6 +346,21 @@ export default function LoyaltyPage() {
   }
 
   const stats = getRuleStats()
+
+  const getTransactionIcon = (type: string) => {
+    switch (type) {
+      case 'purchase':
+        return <Plus className="h-4 w-4 text-green-600" />
+      case 'deduction':
+        return <Minus className="h-4 w-4 text-red-600" />
+      case 'award':
+        return <Gift className="h-4 w-4 text-blue-600" />
+      case 'refund':
+        return <CreditCard className="h-4 w-4 text-orange-600" />
+      default:
+        return <Activity className="h-4 w-4" />
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -867,6 +948,53 @@ export default function LoyaltyPage() {
                   </Card>
                 )
               })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recent Transactions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Transactions</CardTitle>
+          <CardDescription>
+            Latest loyalty point transactions
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {transactionsLoading ? (
+            <div className="text-center py-4">Loading transactions...</div>
+          ) : transactions?.length === 0 ? (
+            <div className="text-center py-4 text-muted-foreground">
+              No transactions yet
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {transactions?.map((transaction) => (
+                <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    {getTransactionIcon(transaction.transaction_type)}
+                    <div>
+                      <p className="font-medium">{transaction.description}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(transaction.created_at).toLocaleDateString()}
+                        {transaction.user && ` • ${transaction.user.full_name}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={cn(
+                      "font-bold",
+                      transaction.points > 0 ? "text-green-600" : "text-red-600"
+                    )}>
+                      {transaction.points > 0 ? '+' : ''}{transaction.points.toLocaleString()}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Balance: {transaction.balance_after.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </CardContent>

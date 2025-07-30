@@ -47,12 +47,36 @@ import {
   Link2,
   Save
 } from "lucide-react"
-import type { Restaurant } from "@/types"
+
+// Type definitions
+type Restaurant = {
+  id: string
+  name: string
+  description?: string
+  address: string
+  phone_number?: string
+  whatsapp_number?: string
+  website_url?: string
+  instagram_handle?: string
+  opening_time: string
+  closing_time: string
+  booking_window_days: number
+  cancellation_window_hours: number
+  table_turnover_minutes: number
+  booking_policy: "instant" | "request"
+  price_range: number
+  cuisine_type: string
+  dietary_options?: string[]
+  parking_available: boolean
+  valet_parking: boolean
+  outdoor_seating: boolean
+  shisha_available: boolean
+}
 
 // Form schemas
 const generalSettingsSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  description: z.string().min(10, "Description must be at least 10 characters"),
+  description: z.string().optional(),
   phone_number: z.string().optional(),
   whatsapp_number: z.string().optional(),
   website_url: z.string().url().optional().or(z.literal("")),
@@ -171,7 +195,7 @@ export default function SettingsPage() {
     if (restaurant) {
       generalForm.reset({
         name: restaurant.name,
-        description: restaurant.description,
+        description: restaurant.description || "",
         phone_number: restaurant.phone_number || "",
         whatsapp_number: restaurant.whatsapp_number || "",
         website_url: restaurant.website_url || "",
