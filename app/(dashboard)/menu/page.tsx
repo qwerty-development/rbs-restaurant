@@ -70,7 +70,10 @@ export default function MenuPage() {
         .eq("is_active", true)
         .order("display_order", { ascending: true })
 
-      if (error) throw error
+      if (error) {
+        console.error("Error fetching categories:", error)
+        throw error
+      }
       return data as MenuCategory[]
     },
     enabled: !!restaurantId,
@@ -86,7 +89,7 @@ export default function MenuPage() {
         .from("menu_items")
         .select(`
           *,
-          category:menu_categories(*)
+          category:menu_categories!menu_items_category_id_fkey(*)
         `)
         .eq("restaurant_id", restaurantId)
         .order("display_order", { ascending: true })
@@ -97,7 +100,10 @@ export default function MenuPage() {
 
       const { data, error } = await query
 
-      if (error) throw error
+      if (error) {
+        console.error("Error fetching menu items:", error)
+        throw error
+      }
       return data as MenuItem[]
     },
     enabled: !!restaurantId,
@@ -124,6 +130,7 @@ export default function MenuPage() {
           .insert({
             ...itemData,
             restaurant_id: restaurantId,
+            display_order: menuItems?.length || 0,
           })
 
         if (error) throw error
@@ -135,7 +142,8 @@ export default function MenuPage() {
       setSelectedItem(null)
       setIsAddingItem(false)
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Item mutation error:", error)
       toast.error("Failed to save menu item")
     },
   })
@@ -143,11 +151,14 @@ export default function MenuPage() {
   // Create category
   const categoryMutation = useMutation({
     mutationFn: async (categoryData: Partial<MenuCategory>) => {
+      const displayOrder = categories?.length || 0
+      
       const { error } = await supabase
         .from("menu_categories")
         .insert({
           ...categoryData,
           restaurant_id: restaurantId,
+          display_order: displayOrder,
         })
 
       if (error) throw error
@@ -157,7 +168,8 @@ export default function MenuPage() {
       toast.success("Category created")
       setIsAddingCategory(false)
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Category mutation error:", error)
       toast.error("Failed to create category")
     },
   })
@@ -202,7 +214,7 @@ export default function MenuPage() {
     
     const available = menuItems.filter(item => item.is_available)
     const featured = menuItems.filter(item => item.is_featured)
-    const avgPrice = menuItems.reduce((sum, item) => sum + item.price, 0) / menuItems.length
+    const avgPrice = menuItems.reduce((sum, item) => sum + Number(item.price), 0) / menuItems.length
     
     return {
       total: menuItems.length,
@@ -381,7 +393,11 @@ export default function MenuPage() {
           ) : filteredItems?.length === 0 ? (
             <Card>
               <CardContent className="text-center py-8">
-                <p className="text-muted-foreground">No menu items found</p>
+                <p className="text-muted-foreground">
+                  {menuItems?.length === 0 
+                    ? "No menu items added yet. Click 'Add Item' to get started."
+                    : "No menu items found matching your filters."}
+                </p>
               </CardContent>
             </Card>
           ) : (
@@ -390,7 +406,10 @@ export default function MenuPage() {
                 <MenuItemCard
                   key={item.id}
                   item={item}
-                  onEdit={() => setSelectedItem(item)}
+                  onEdit={() => {
+                    setSelectedItem(item)
+                    setIsAddingItem(true)
+                  }}
                   onToggleAvailability={(isAvailable) =>
                     toggleAvailabilityMutation.mutate({ itemId: item.id, isAvailable })
                   }
@@ -402,8 +421,11 @@ export default function MenuPage() {
       </div>
 
       {/* Edit Item Dialog */}
-      {selectedItem && (
-        <Dialog open={!!selectedItem} onOpenChange={() => setSelectedItem(null)}>
+      {selectedItem && isAddingItem && (
+        <Dialog open={!!selectedItem} onOpenChange={() => {
+          setSelectedItem(null)
+          setIsAddingItem(false)
+        }}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Edit Menu Item</DialogTitle>
@@ -412,7 +434,10 @@ export default function MenuPage() {
               item={selectedItem}
               categories={categories || []}
               onSubmit={(data) => itemMutation.mutate({ ...data, id: selectedItem.id })}
-              onCancel={() => setSelectedItem(null)}
+              onCancel={() => {
+                setSelectedItem(null)
+                setIsAddingItem(false)
+              }}
               isLoading={itemMutation.isPending}
             />
           </DialogContent>
