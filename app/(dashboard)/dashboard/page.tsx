@@ -832,6 +832,7 @@ export default function DashboardPage() {
               onSubmit={(data) => createManualBookingMutation.mutate(data)}
               onCancel={() => setShowManualBooking(false)}
               isLoading={createManualBookingMutation.isPending}
+              currentBookings={todaysBookings}
             />
           </div>
         </DialogContent>
@@ -863,10 +864,34 @@ export default function DashboardPage() {
           <div className="grid grid-cols-3 gap-3 py-4">
             {tables
               .filter(table => {
-                const isOccupied = activeBookings.some(b => 
-                  b.tables?.some((t: any) => t.id === table.id) &&
-                  ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(b.status)
-                )
+                // Check if table is currently occupied by any active booking
+                const isOccupied = todaysBookings.some(booking => {
+                  // Check if this booking has this table assigned
+                  const hasTable = booking.tables?.some((t: any) => t.id === table.id)
+                  if (!hasTable) return false
+
+                  // Check if booking is in an active status that occupies the table
+                  const activeStatuses = [
+                    'confirmed', 'arrived', 'seated', 'ordered', 
+                    'appetizers', 'main_course', 'dessert', 'payment'
+                  ]
+                  if (!activeStatuses.includes(booking.status)) return false
+
+                  // For confirmed bookings, check if they're within their time window
+                  if (booking.status === 'confirmed') {
+                    const bookingTime = new Date(booking.booking_time)
+                    const endTime = addMinutes(bookingTime, booking.turn_time_minutes || 120)
+                    const now = currentTime
+                    
+                    // Table is occupied if booking time is within 15 minutes or has passed but hasn't exceeded turn time
+                    const minutesUntil = differenceInMinutes(bookingTime, now)
+                    return minutesUntil <= 15 && now <= endTime
+                  }
+
+                  // For other active statuses, table is definitely occupied
+                  return true
+                })
+
                 return !isOccupied && table.is_active
               })
               .map(table => (
@@ -885,6 +910,33 @@ export default function DashboardPage() {
                 </Button>
               ))}
           </div>
+          {tables.filter(table => {
+            const isOccupied = todaysBookings.some(booking => {
+              const hasTable = booking.tables?.some((t: any) => t.id === table.id)
+              if (!hasTable) return false
+              const activeStatuses = [
+                'confirmed', 'arrived', 'seated', 'ordered', 
+                'appetizers', 'main_course', 'dessert', 'payment'
+              ]
+              if (!activeStatuses.includes(booking.status)) return false
+              if (booking.status === 'confirmed') {
+                const bookingTime = new Date(booking.booking_time)
+                const endTime = addMinutes(bookingTime, booking.turn_time_minutes || 120)
+                const now = currentTime
+                const minutesUntil = differenceInMinutes(bookingTime, now)
+                return minutesUntil <= 15 && now <= endTime
+              }
+              return true
+            })
+            return !isOccupied && table.is_active
+          }).length === 0 && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                No tables are currently available. All tables are either occupied or reserved for upcoming bookings.
+              </AlertDescription>
+            </Alert>
+          )}
         </DialogContent>
       </Dialog>
     </div>

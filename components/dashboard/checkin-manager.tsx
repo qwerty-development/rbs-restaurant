@@ -91,15 +91,35 @@ export function CheckInManager({
   // Get available tables
   const getAvailableTables = () => {
     return tables.filter(table => {
-      const tableBookings = bookings.filter(b => 
-        b.tables?.some((t: any) => t.id === table.id) &&
-        ['confirmed', 'arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(b.status)
+      // Check if table is currently occupied by any active booking
+      const tableBookings = bookings.filter(booking => 
+        booking.tables?.some((t: any) => t.id === table.id)
       )
       
       const isCurrentlyOccupied = tableBookings.some(booking => {
-        const start = new Date(booking.booking_time)
-        const end = new Date(start.getTime() + (booking.turn_time_minutes || 120) * 60000)
-        return currentTime >= start && currentTime <= end
+        // Define all statuses that indicate table occupancy
+        const occupiedStatuses = [
+          'arrived', 'seated', 'ordered', 'appetizers', 
+          'main_course', 'dessert', 'payment'
+        ]
+        
+        // If booking is in an active occupied status, table is occupied
+        if (occupiedStatuses.includes(booking.status)) {
+          return true
+        }
+        
+        // For confirmed bookings, check if they're within their time window
+        if (booking.status === 'confirmed') {
+          const bookingTime = new Date(booking.booking_time)
+          const endTime = new Date(bookingTime.getTime() + (booking.turn_time_minutes || 120) * 60000)
+          const now = currentTime
+          
+          // Table is occupied if booking time is within 15 minutes or has passed but hasn't exceeded turn time
+          const minutesUntil = differenceInMinutes(bookingTime, now)
+          return minutesUntil <= 15 && now <= endTime
+        }
+        
+        return false
       })
       
       return !isCurrentlyOccupied && table.is_active

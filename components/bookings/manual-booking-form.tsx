@@ -5,7 +5,7 @@ import { useState, useEffect, JSXElementConstructor, Key, ReactElement, ReactNod
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { format, addMinutes } from "date-fns"
+import { format, addMinutes, differenceInMinutes } from "date-fns"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery } from "@tanstack/react-query"
 import { TableAvailabilityService } from "@/lib/table-availability"
@@ -62,13 +62,15 @@ interface ManualBookingFormProps {
   onSubmit: (data: any) => void
   onCancel: () => void
   isLoading: boolean
+  currentBookings?: any[] // Add current bookings to check occupancy
 }
 
 export function ManualBookingForm({
   restaurantId,
   onSubmit,
   onCancel,
-  isLoading
+  isLoading,
+  currentBookings = []
 }: ManualBookingFormProps) {
   const [selectedTables, setSelectedTables] = useState<string[]>([])
   const [checkingAvailability, setCheckingAvailability] = useState(false)
@@ -210,7 +212,49 @@ export function ManualBookingForm({
       return
     }
 
-    // Check if there are conflicts
+    // Check if any selected tables will be occupied during the booking time
+    const [submitHours, submitMinutes] = data.booking_time.split(":")
+    const submitBookingDateTime = new Date(data.booking_date)
+    submitBookingDateTime.setHours(parseInt(submitHours), parseInt(submitMinutes))
+    const submitBookingEndTime = addMinutes(submitBookingDateTime, data.turn_time_minutes || 120)
+
+    const conflictingTables = selectedTables.filter(tableId => {
+      return currentBookings.some(booking => {
+        const hasTable = booking.tables?.some((t: any) => t.id === tableId)
+        if (!hasTable) return false
+
+        const existingBookingTime = new Date(booking.booking_time)
+        const existingBookingEndTime = addMinutes(existingBookingTime, booking.turn_time_minutes || 120)
+
+        const conflictingStatuses = [
+          'confirmed', 'arrived', 'seated', 'ordered', 'appetizers', 
+          'main_course', 'dessert', 'payment'
+        ]
+        
+        if (!conflictingStatuses.includes(booking.status)) {
+          return false
+        }
+
+        // Check for time overlap
+        return (
+          submitBookingDateTime < existingBookingEndTime && 
+          submitBookingEndTime > existingBookingTime
+        )
+      })
+    })
+
+    if (conflictingTables.length > 0) {
+      const tableNumbers = conflictingTables
+        .map(tableId => {
+          const table = allTables?.find(t => t.id === tableId)
+          return table ? `T${table.table_number}` : tableId
+        })
+        .join(", ")
+      toast.error(`Cannot book table(s) that have conflicts: ${tableNumbers}. Please select different tables or time.`)
+      return
+    }
+
+    // Check if there are conflicts from availability service
     if (availability && !availability.available) {
       toast.error("Selected tables have conflicts. Please choose different tables or time.")
       return
@@ -239,8 +283,16 @@ export function ManualBookingForm({
   const handleTableToggle = (tableId: string) => {
     setSelectedTables(prev => {
       if (prev.includes(tableId)) {
+        // Always allow deselecting
         return prev.filter(id => id !== tableId)
       } else {
+        // Check if table is available for the selected booking time
+        const isAvailable = getTableAvailability(tableId)
+        if (!isAvailable) {
+          const table = allTables?.find(t => t.id === tableId)
+          toast.error(`Table ${table ? `T${table.table_number}` : tableId} is not available for the selected time`)
+          return prev
+        }
         return [...prev, tableId]
       }
     })
@@ -253,6 +305,47 @@ export function ManualBookingForm({
 
   // Determine which tables are available
   const getTableAvailability = (tableId: string) => {
+    // If no booking date/time selected yet, allow all tables
+    if (!bookingDate || !bookingTime) return true
+
+    // Create the booking datetime
+    const [hours, minutes] = bookingTime.split(":")
+    const bookingDateTime = new Date(bookingDate)
+    bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+    const bookingEndTime = addMinutes(bookingDateTime, turnTime || 120)
+
+    // Check if table will be occupied during the selected booking time
+    const isOccupiedDuringBookingTime = currentBookings.some(booking => {
+      // Check if this booking has this table assigned
+      const hasTable = booking.tables?.some((t: any) => t.id === tableId)
+      if (!hasTable) return false
+
+      // Get the existing booking's time window
+      const existingBookingTime = new Date(booking.booking_time)
+      const existingBookingEndTime = addMinutes(existingBookingTime, booking.turn_time_minutes || 120)
+
+      // Check if booking is in an active status that would conflict
+      const conflictingStatuses = [
+        'confirmed', 'arrived', 'seated', 'ordered', 'appetizers', 
+        'main_course', 'dessert', 'payment'
+      ]
+      
+      if (!conflictingStatuses.includes(booking.status)) {
+        return false
+      }
+
+      // Check for time overlap between new booking and existing booking
+      return (
+        bookingDateTime < existingBookingEndTime && 
+        bookingEndTime > existingBookingTime
+      )
+    })
+
+    if (isOccupiedDuringBookingTime) {
+      return false
+    }
+
+    // Then check against the availability data for the selected time slot
     if (!availableTablesData) return true
     
     const isInSingleTables = availableTablesData.singleTables.some(t => t.id === tableId)
@@ -438,6 +531,51 @@ export function ManualBookingForm({
           </Button>
         </div>
 
+        {/* Show occupied tables warning */}
+        {(() => {
+          if (!bookingDate || !bookingTime) return null
+
+          const [hours, minutes] = bookingTime.split(":")
+          const bookingDateTime = new Date(bookingDate)
+          bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+          const bookingEndTime = addMinutes(bookingDateTime, turnTime || 120)
+
+          const conflictingCount = allTables?.filter(table => {
+            return currentBookings.some(booking => {
+              const hasTable = booking.tables?.some((t: any) => t.id === table.id)
+              if (!hasTable) return false
+
+              const existingBookingTime = new Date(booking.booking_time)
+              const existingBookingEndTime = addMinutes(existingBookingTime, booking.turn_time_minutes || 120)
+
+              const conflictingStatuses = [
+                'confirmed', 'arrived', 'seated', 'ordered', 'appetizers', 
+                'main_course', 'dessert', 'payment'
+              ]
+              
+              if (!conflictingStatuses.includes(booking.status)) {
+                return false
+              }
+
+              // Check for time overlap
+              return (
+                bookingDateTime < existingBookingEndTime && 
+                bookingEndTime > existingBookingTime
+              )
+            })
+          }).length || 0
+
+          return conflictingCount > 0 ? (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {conflictingCount} table(s) have conflicts with the selected time slot. 
+                Conflicting tables are marked with a red background.
+              </AlertDescription>
+            </Alert>
+          ) : null
+        })()}
+
         {/* Show conflicts if any */}
         {availability && !availability.available && (
           <Alert variant="destructive">
@@ -472,6 +610,45 @@ export function ManualBookingForm({
             const isSelected = selectedTables.includes(table.id)
             const isAvailable = getTableAvailability(table.id)
             const availabilityInfo = availability?.tables.find(t => t.tableId === table.id)
+            
+            // Check if table will be occupied during the selected booking time
+            let isOccupiedDuringBookingTime = false
+            let conflictingBooking = null
+            
+            if (bookingDate && bookingTime) {
+              const [hours, minutes] = bookingTime.split(":")
+              const bookingDateTime = new Date(bookingDate)
+              bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+              const bookingEndTime = addMinutes(bookingDateTime, turnTime || 120)
+
+              const conflict = currentBookings.find(booking => {
+                const hasTable = booking.tables?.some((t: any) => t.id === table.id)
+                if (!hasTable) return false
+
+                const existingBookingTime = new Date(booking.booking_time)
+                const existingBookingEndTime = addMinutes(existingBookingTime, booking.turn_time_minutes || 120)
+
+                const conflictingStatuses = [
+                  'confirmed', 'arrived', 'seated', 'ordered', 'appetizers', 
+                  'main_course', 'dessert', 'payment'
+                ]
+                
+                if (!conflictingStatuses.includes(booking.status)) {
+                  return false
+                }
+
+                // Check for time overlap
+                return (
+                  bookingDateTime < existingBookingEndTime && 
+                  bookingEndTime > existingBookingTime
+                )
+              })
+
+              if (conflict) {
+                isOccupiedDuringBookingTime = true
+                conflictingBooking = conflict
+              }
+            }
 
             return (
               <label
@@ -479,13 +656,20 @@ export function ManualBookingForm({
                 className={cn(
                   "flex items-center p-3 border rounded-lg cursor-pointer transition-colors",
                   isSelected && "bg-primary/10 border-primary",
-                  !isSelected && "hover:bg-muted",
-                  !isAvailable && !isSelected && "opacity-50 cursor-not-allowed"
+                  !isSelected && isAvailable && "hover:bg-muted",
+                  !isAvailable && !isSelected && "opacity-50 cursor-not-allowed",
+                  isOccupiedDuringBookingTime && "bg-red-50 border-red-200"
                 )}
               >
                 <Checkbox
                   checked={isSelected}
-                  onCheckedChange={() => handleTableToggle(table.id)}
+                  onCheckedChange={() => {
+                    if (!isAvailable && !isSelected) {
+                      toast.error("This table is not available for the selected time")
+                      return
+                    }
+                    handleTableToggle(table.id)
+                  }}
                   disabled={isLoading || (!isAvailable && !isSelected)}
                   className="mr-3"
                 />
@@ -493,6 +677,9 @@ export function ManualBookingForm({
                   <div className="flex items-center gap-2">
                     <Table2 className="h-4 w-4" />
                     <span className="font-medium">{table.table_number}</span>
+                    {isOccupiedDuringBookingTime && (
+                      <Badge variant="destructive" className="text-xs">Booked</Badge>
+                    )}
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {table.capacity} seats • {table.table_type}
@@ -506,9 +693,15 @@ export function ManualBookingForm({
                       ))}
                     </div>
                   )}
-                  {availabilityInfo && !availabilityInfo.isAvailable && (
+                  {isOccupiedDuringBookingTime && conflictingBooking && (
                     <p className="text-xs text-red-600 mt-1">
-                      Booked at this time
+                      Booked by {conflictingBooking.user?.full_name || conflictingBooking.guest_name} 
+                      at {format(new Date(conflictingBooking.booking_time), "h:mm a")}
+                    </p>
+                  )}
+                  {availabilityInfo && !availabilityInfo.isAvailable && !isOccupiedDuringBookingTime && (
+                    <p className="text-xs text-red-600 mt-1">
+                      Not available at this time
                     </p>
                   )}
                 </div>
@@ -572,7 +765,37 @@ export function ManualBookingForm({
             isLoading || 
             selectedTables.length === 0 ||
             (availability && !availability.available) ||
-            (selectedTablesCapacity > 0 && selectedTablesCapacity < partySize)
+            (selectedTablesCapacity > 0 && selectedTablesCapacity < partySize) ||
+            // Check if any selected tables will conflict with the booking time
+            (!!bookingDate && !!bookingTime && selectedTables.some(tableId => {
+              const [hours, minutes] = bookingTime.split(":")
+              const bookingDateTime = new Date(bookingDate)
+              bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+              const bookingEndTime = addMinutes(bookingDateTime, turnTime || 120)
+
+              return currentBookings.some(booking => {
+                const hasTable = booking.tables?.some((t: any) => t.id === tableId)
+                if (!hasTable) return false
+
+                const existingBookingTime = new Date(booking.booking_time)
+                const existingBookingEndTime = addMinutes(existingBookingTime, booking.turn_time_minutes || 120)
+
+                const conflictingStatuses = [
+                  'confirmed', 'arrived', 'seated', 'ordered', 'appetizers', 
+                  'main_course', 'dessert', 'payment'
+                ]
+                
+                if (!conflictingStatuses.includes(booking.status)) {
+                  return false
+                }
+
+                // Check for time overlap
+                return (
+                  bookingDateTime < existingBookingEndTime && 
+                  bookingEndTime > existingBookingTime
+                )
+              })
+            }))
           }
         >
           {isLoading ? "Creating..." : "Create Booking"}
