@@ -2,10 +2,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { format, addMinutes } from "date-fns"
+import { format, addMinutes, differenceInMinutes } from "date-fns"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { TableAvailabilityService } from "@/lib/table-availability"
+import { TableStatusService, type DiningStatus } from "@/lib/table-status"
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Progress } from "@/components/ui/progress"
+import { Separator } from "@/components/ui/separator"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "react-hot-toast"
 import { 
   Calendar,
@@ -41,14 +45,40 @@ import {
   X,
   AlertCircle,
   Table2,
-  RefreshCw
+  RefreshCw,
+  UserCheck,
+  ChefHat,
+  Utensils,
+  CreditCard,
+  CheckCircle,
+  History,
+  ArrowRight,
+  Timer,
+  Activity
 } from "lucide-react"
+import { cn } from "@/lib/utils"
 import type { Booking } from "@/types"
+import { Card, CardHeader, CardTitle, CardContent } from "../ui/card"
 
 interface BookingDetailsProps {
   booking: Booking
   onClose: () => void
   onUpdate: (updates: Partial<Booking>) => void
+}
+
+const STATUS_CONFIGS = {
+  pending: { icon: Timer, color: 'text-yellow-600', bg: 'bg-yellow-100' },
+  confirmed: { icon: CheckCircle, color: 'text-blue-600', bg: 'bg-blue-100' },
+  arrived: { icon: UserCheck, color: 'text-indigo-600', bg: 'bg-indigo-100' },
+  seated: { icon: ChefHat, color: 'text-purple-600', bg: 'bg-purple-100' },
+  ordered: { icon: Clock, color: 'text-orange-600', bg: 'bg-orange-100' },
+  appetizers: { icon: Utensils, color: 'text-green-600', bg: 'bg-green-100' },
+  main_course: { icon: Utensils, color: 'text-green-700', bg: 'bg-green-200' },
+  dessert: { icon: Utensils, color: 'text-pink-600', bg: 'bg-pink-100' },
+  payment: { icon: CreditCard, color: 'text-yellow-700', bg: 'bg-yellow-200' },
+  completed: { icon: CheckCircle, color: 'text-gray-600', bg: 'bg-gray-100' },
+  no_show: { icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-100' },
+  cancelled: { icon: X, color: 'text-red-600', bg: 'bg-red-100' }
 }
 
 export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsProps) {
@@ -63,10 +93,38 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
     booking.tables?.map(t => t.id) || []
   )
   const [checkingAvailability, setCheckingAvailability] = useState(false)
+  const [activeTab, setActiveTab] = useState("details")
   
   const supabase = createClient()
   const queryClient = useQueryClient()
   const tableService = new TableAvailabilityService()
+  const statusService = new TableStatusService()
+
+  // Get current user
+  const [userId, setUserId] = useState<string>("")
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setUserId(user.id)
+    })
+  }, [])
+
+  // Fetch status history
+  const { data: statusHistory } = useQuery({
+    queryKey: ["booking-status-history", booking.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("booking_status_history")
+        .select(`
+          *,
+          changed_by_user:profiles!booking_status_history_changed_by_fkey(full_name)
+        `)
+        .eq("booking_id", booking.id)
+        .order("changed_at", { ascending: false })
+
+      if (error) throw error
+      return data
+    },
+  })
 
   // Fetch all tables for the restaurant
   const { data: allTables } = useQuery({
@@ -100,7 +158,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
         selectedTableIds,
         new Date(booking.booking_time),
         editedData.turn_time_minutes,
-        booking.id // Exclude current booking from conflict check
+        booking.id
       )
     },
     enabled: isEditing && selectedTableIds.length > 0,
@@ -119,25 +177,30 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
 
       if (bookingError) throw bookingError
 
-      // Update table assignments
-      // First, remove existing assignments
-      await supabase
-        .from("booking_tables")
-        .delete()
-        .eq("booking_id", booking.id)
+      // Update table assignments if changed
+      const currentTableIds = booking.tables?.map(t => t.id) || []
+      const tablesChanged = JSON.stringify(currentTableIds.sort()) !== JSON.stringify(selectedTableIds.sort())
 
-      // Then add new assignments
-      if (selectedTableIds.length > 0) {
-        const tableAssignments = selectedTableIds.map(tableId => ({
-          booking_id: booking.id,
-          table_id: tableId
-        }))
-
-        const { error: tablesError } = await supabase
+      if (tablesChanged) {
+        // Remove existing assignments
+        await supabase
           .from("booking_tables")
-          .insert(tableAssignments)
+          .delete()
+          .eq("booking_id", booking.id)
 
-        if (tablesError) throw tablesError
+        // Add new assignments
+        if (selectedTableIds.length > 0) {
+          const tableAssignments = selectedTableIds.map(tableId => ({
+            booking_id: booking.id,
+            table_id: tableId
+          }))
+
+          const { error: tablesError } = await supabase
+            .from("booking_tables")
+            .insert(tableAssignments)
+
+          if (tablesError) throw tablesError
+        }
       }
 
       return { ...editedData, tableIds: selectedTableIds }
@@ -154,411 +217,473 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
     },
   })
 
-  const handleSave = async () => {
-    // Validate table capacity
-    if (selectedTableIds.length > 0 && allTables) {
-      const selectedTables = allTables.filter(t => selectedTableIds.includes(t.id))
-      const capacityCheck = tableService.validateCapacity(selectedTables, editedData.party_size)
-      
-      if (!capacityCheck.valid) {
-        toast.error(capacityCheck.message || "Invalid table selection")
-        return
-      }
-    }
-
-    // Check availability before saving
-    if (tableAvailability && !tableAvailability.available) {
-      toast.error("Selected tables have conflicts. Please choose different tables.")
-      return
-    }
-
-    updateBookingMutation.mutate()
-  }
-
-  const handleTableToggle = (tableId: string) => {
-    setSelectedTableIds(prev => {
-      if (prev.includes(tableId)) {
-        return prev.filter(id => id !== tableId)
-      } else {
-        return [...prev, tableId]
-      }
-    })
-  }
-
-  // Auto-suggest tables
-  const suggestOptimalTables = async () => {
-    setCheckingAvailability(true)
+  // Handle status transitions
+  const handleStatusTransition = async (newStatus: any) => {
     try {
-      const optimal = await tableService.getOptimalTableAssignment(
-        booking.restaurant_id,
-        new Date(booking.booking_time),
-        editedData.party_size,
-        editedData.turn_time_minutes
-      )
-
-      if (optimal) {
-        setSelectedTableIds(optimal.tableIds)
-        toast.success(
-          optimal.requiresCombination
-            ? "Found table combination for your party"
-            : "Found optimal table"
-        )
-      } else {
-        toast.error("No available tables found for this time slot")
-      }
+      await statusService.updateBookingStatus(booking.id, newStatus, userId)
+      onUpdate({ status: newStatus })
+      queryClient.invalidateQueries({ queryKey: ["booking-status-history"] })
+      toast.success(`Status updated to ${newStatus.replace(/_/g, ' ')}`)
     } catch (error) {
-      console.error("Error suggesting tables:", error)
-      toast.error("Failed to find available tables")
-    } finally {
-      setCheckingAvailability(false)
+      toast.error("Failed to update status")
     }
   }
 
-  const bookingDate = new Date(booking.booking_time)
-  const displayName = booking.user?.full_name || booking.guest_name || "Guest"
-  const displayPhone = booking.user?.phone_number || booking.guest_phone || "-"
-  const displayEmail = booking.user?.email || booking.guest_email || "-"
+  // Handle table switch
+  const handleTableSwitch = async (newTableIds: string[]) => {
+    try {
+      await statusService.switchTables(booking.id, newTableIds, userId, "Table switch from booking details")
+      toast.success("Tables switched successfully")
+      setSelectedTableIds(newTableIds)
+      queryClient.invalidateQueries({ queryKey: ["bookings"] })
+    } catch (error) {
+      toast.error("Failed to switch tables")
+    }
+  }
 
-  // Calculate total capacity of selected tables
-  const selectedTablesCapacity = allTables
-    ?.filter(t => selectedTableIds.includes(t.id))
-    .reduce((sum, t) => sum + t.capacity, 0) || 0
+  // Get valid status transitions
+  const validTransitions = statusService.getValidTransitions(booking.status as DiningStatus)
+  const currentProgress = TableStatusService.getDiningProgress(booking.status as DiningStatus)
+  const statusConfig = STATUS_CONFIGS[booking.status as keyof typeof STATUS_CONFIGS]
+  const StatusIcon = statusConfig?.icon || Timer
+
+  // Calculate dining time
+  const bookingTime = new Date(booking.booking_time)
+  const now = new Date()
+  const elapsedMinutes = differenceInMinutes(now, bookingTime)
+  const isCurrentlyDining = ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status)
 
   return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <div className="flex items-center justify-between">
-            <DialogTitle>Booking Details</DialogTitle>
-            <div className="flex gap-2">
-              {isEditing ? (
-                <>
-                  <Button 
-                    size="sm" 
-                    onClick={handleSave}
-                    disabled={updateBookingMutation.isPending}
-                  >
-                    <Save className="h-4 w-4 mr-1" />
-                    Save
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    onClick={() => {
-                      setIsEditing(false)
-                      setSelectedTableIds(booking.tables?.map(t => t.id) || [])
-                      setEditedData({
-                        party_size: booking.party_size,
-                        turn_time_minutes: booking.turn_time_minutes,
-                        special_requests: booking.special_requests || "",
-                        status: booking.status,
-                      })
-                    }}
-                  >
-                    <X className="h-4 w-4 mr-1" />
-                    Cancel
-                  </Button>
-                </>
-              ) : (
-                <Button size="sm" variant="outline" onClick={() => setIsEditing(true)}>
-                  <Edit className="h-4 w-4 mr-1" />
-                  Edit
+            <DialogTitle className="flex items-center gap-3">
+              <StatusIcon className={cn("h-6 w-6", statusConfig?.color)} />
+              Booking Details
+            </DialogTitle>
+            {!isEditing ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditing(true)}
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setIsEditing(false)
+                    setEditedData({
+                      party_size: booking.party_size,
+                      turn_time_minutes: booking.turn_time_minutes,
+                      special_requests: booking.special_requests || "",
+                      status: booking.status,
+                    })
+                    setSelectedTableIds(booking.tables?.map(t => t.id) || [])
+                  }}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel
                 </Button>
-              )}
-            </div>
+                <Button
+                  size="sm"
+                  onClick={() => updateBookingMutation.mutate()}
+                  disabled={updateBookingMutation.isPending}
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  Save
+                </Button>
+              </div>
+            )}
           </div>
         </DialogHeader>
 
-        <Tabs defaultValue="details" className="mt-4">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="details">Details</TabsTrigger>
-            <TabsTrigger value="guest">Guest Info</TabsTrigger>
-            <TabsTrigger value="tables">Tables</TabsTrigger>
-          </TabsList>
+        <div className="flex-1 overflow-hidden">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+            <TabsList className="grid w-full grid-cols-3 flex-shrink-0">
+              <TabsTrigger value="details">Details</TabsTrigger>
+              <TabsTrigger value="status">Status & Progress</TabsTrigger>
+              <TabsTrigger value="history">History</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="details" className="space-y-4">
-            {/* Confirmation Code */}
-            <div className="bg-muted p-4 rounded-lg">
-              <Label className="text-sm text-muted-foreground">Confirmation Code</Label>
-              <p className="font-mono text-lg font-semibold">{booking.confirmation_code}</p>
-            </div>
-
-            {/* Date & Time */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  Date
-                </Label>
-                <p className="font-medium">{format(bookingDate, "PPP")}</p>
-              </div>
-              <div>
-                <Label className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  Time
-                </Label>
-                <p className="font-medium">
-                  {format(bookingDate, "p")} - 
-                  {format(addMinutes(bookingDate, booking.turn_time_minutes || 120), "p")}
-                </p>
-              </div>
-            </div>
-
-            {/* Party Size & Turn Time */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  Party Size
-                </Label>
-                {isEditing ? (
-                  <Input
-                    type="number"
-                    min="1"
-                    max="20"
-                    value={editedData.party_size}
-                    onChange={(e) => setEditedData({
-                      ...editedData,
-                      party_size: parseInt(e.target.value)
-                    })}
-                  />
-                ) : (
-                  <p className="font-medium">{booking.party_size} guests</p>
-                )}
-              </div>
-              <div>
-                <Label>Turn Time</Label>
-                {isEditing ? (
-                  <Select
-                    value={editedData.turn_time_minutes.toString()}
-                    onValueChange={(value) => setEditedData({
-                      ...editedData,
-                      turn_time_minutes: parseInt(value)
-                    })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="60">1 hour</SelectItem>
-                      <SelectItem value="90">1.5 hours</SelectItem>
-                      <SelectItem value="120">2 hours</SelectItem>
-                      <SelectItem value="150">2.5 hours</SelectItem>
-                      <SelectItem value="180">3 hours</SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="font-medium">{booking.turn_time_minutes} minutes</p>
-                )}
-              </div>
-            </div>
-
-            {/* Status */}
-            <div>
-              <Label>Status</Label>
-              {isEditing ? (
-                <Select
-                  value={editedData.status}
-                  onValueChange={(value) => setEditedData({
-                    ...editedData,
-                    status: value as Booking['status']
-                  })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="confirmed">Confirmed</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="cancelled_by_user">Cancelled by User</SelectItem>
-                    <SelectItem value="declined_by_restaurant">Declined</SelectItem>
-                    <SelectItem value="no_show">No Show</SelectItem>
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Badge className="mt-2">{booking.status}</Badge>
-              )}
-            </div>
-
-            {/* Special Requests */}
-            <div>
-              <Label className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4" />
-                Special Requests
-              </Label>
-              {isEditing ? (
-                <Textarea
-                  value={editedData.special_requests}
-                  onChange={(e) => setEditedData({
-                    ...editedData,
-                    special_requests: e.target.value
-                  })}
-                  placeholder="Any special requirements..."
-                />
-              ) : (
-                <p className="text-sm mt-1">{booking.special_requests || "None"}</p>
-              )}
-            </div>
-
-            {/* Occasion */}
-            {booking.occasion && (
-              <div>
-                <Label className="flex items-center gap-2">
-                  <Gift className="h-4 w-4" />
-                  Occasion
-                </Label>
-                <p className="font-medium mt-1">{booking.occasion}</p>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="guest" className="space-y-4">
-            <div className="space-y-4">
-              <div>
-                <Label>Name</Label>
-                <p className="font-medium">{displayName}</p>
-              </div>
-              
-              <div>
-                <Label className="flex items-center gap-2">
-                  <Phone className="h-4 w-4" />
-                  Phone
-                </Label>
-                <p className="font-medium">{displayPhone}</p>
-              </div>
-              
-              <div>
-                <Label className="flex items-center gap-2">
-                  <Mail className="h-4 w-4" />
-                  Email
-                </Label>
-                <p className="font-medium">{displayEmail}</p>
-              </div>
-
-              {booking.dietary_notes && booking.dietary_notes.length > 0 && (
+            <ScrollArea className="flex-1">
+              <TabsContent value="details" className="p-4 space-y-6">
+                {/* Guest Information */}
                 <div>
-                  <Label>Dietary Requirements</Label>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {booking.dietary_notes.map((note, index) => (
-                      <Badge key={index} variant="secondary">{note}</Badge>
-                    ))}
+                  <h3 className="font-semibold mb-3">Guest Information</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-sm text-muted-foreground">Name</Label>
+                      <p className="font-medium">
+                        {booking.user?.full_name || booking.guest_name || 'Guest'}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm text-muted-foreground">Phone</Label>
+                      <p className="font-medium">
+                        {booking.user?.phone_number || booking.guest_phone || 'Not provided'}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm text-muted-foreground">Email</Label>
+                      <p className="font-medium">
+                        {booking.user?.email || booking.guest_email || 'Not provided'}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm text-muted-foreground">Confirmation Code</Label>
+                      <code className="font-mono text-sm bg-muted px-2 py-1 rounded">
+                        {booking.confirmation_code}
+                      </code>
+                    </div>
                   </div>
                 </div>
-              )}
-            </div>
-          </TabsContent>
 
-          <TabsContent value="tables" className="space-y-4">
-            {isEditing ? (
-              <>
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <Label>Assign Tables</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Select tables for {editedData.party_size} guests 
-                      (Selected capacity: {selectedTablesCapacity})
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={suggestOptimalTables}
-                    disabled={checkingAvailability}
-                  >
-                    <RefreshCw className={`h-4 w-4 mr-1 ${checkingAvailability ? 'animate-spin' : ''}`} />
-                    Auto-suggest
-                  </Button>
-                </div>
+                <Separator />
 
-                {/* Show availability conflicts */}
-                {tableAvailability && !tableAvailability.available && (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Selected tables have conflicts:
-                      <ul className="mt-2 text-sm">
-                        {tableAvailability.conflicts.map((conflict: any) => (
-                          <li key={conflict.id}>
-                            • {conflict.guestName} - {format(new Date(conflict.booking_time), "h:mm a")}
-                          </li>
-                        ))}
-                      </ul>
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {allTables?.map((table) => {
-                    const isSelected = selectedTableIds.includes(table.id)
-                    const isAvailable = !tableAvailability?.tables.find(
-                      t => t.tableId === table.id && !t.isAvailable
-                    )
-
-                    return (
-                      <label
-                        key={table.id}
-                        className={`
-                          flex items-center p-3 border rounded-lg cursor-pointer transition-colors
-                          ${isSelected ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}
-                          ${!isAvailable && !isSelected ? 'opacity-50 cursor-not-allowed' : ''}
-                        `}
-                      >
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => handleTableToggle(table.id)}
-                          disabled={!isAvailable && !isSelected}
-                          className="mr-3"
-                        />
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <Table2 className="h-4 w-4" />
-                            <span className="font-medium">{table.table_number}</span>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            Capacity: {table.capacity} • {table.table_type}
-                          </p>
-                          {!isAvailable && !isSelected && (
-                            <p className="text-xs text-red-600 mt-1">Unavailable</p>
-                          )}
-                        </div>
-                      </label>
-                    )
-                  })}
-                </div>
-              </>
-            ) : (
-              <div>
-                <Label className="flex items-center gap-2 mb-3">
-                  <Table2 className="h-4 w-4" />
-                  Assigned Tables
-                </Label>
-                {booking.tables && booking.tables.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {booking.tables.map((table) => (
-                      <div
-                        key={table.id}
-                        className="p-3 border rounded-lg"
-                      >
-                        <p className="font-medium">{table.table_number}</p>
-                        <p className="text-sm text-muted-foreground">
-                          Capacity: {table.capacity} • {table.table_type}
+                {/* Booking Details */}
+                <div>
+                  <h3 className="font-semibold mb-3">Booking Details</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-sm text-muted-foreground">Date & Time</Label>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <p className="font-medium">
+                          {format(bookingTime, "MMM d, yyyy")} at {format(bookingTime, "h:mm a")}
                         </p>
                       </div>
-                    ))}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm text-muted-foreground">Party Size</Label>
+                      {isEditing ? (
+                        <Input
+                          type="number"
+                          min="1"
+                          max="20"
+                          value={editedData.party_size}
+                          onChange={(e) => setEditedData(prev => ({
+                            ...prev,
+                            party_size: parseInt(e.target.value) || 1
+                          }))}
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4 text-muted-foreground" />
+                          <p className="font-medium">{booking.party_size} guests</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm text-muted-foreground">Turn Time</Label>
+                      {isEditing ? (
+                        <Select
+                          value={editedData.turn_time_minutes.toString()}
+                          onValueChange={(value) => setEditedData(prev => ({
+                            ...prev,
+                            turn_time_minutes: parseInt(value)
+                          }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="90">1.5 hours</SelectItem>
+                            <SelectItem value="120">2 hours</SelectItem>
+                            <SelectItem value="150">2.5 hours</SelectItem>
+                            <SelectItem value="180">3 hours</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <p className="font-medium">{booking.turn_time_minutes / 60} hours</p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-sm text-muted-foreground">Status</Label>
+                      <Badge className={cn("text-sm", statusConfig?.bg, statusConfig?.color)}>
+                        {booking.status.replace(/_/g, ' ')}
+                      </Badge>
+                    </div>
                   </div>
-                ) : (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      No tables assigned. Click Edit to assign tables.
-                    </AlertDescription>
-                  </Alert>
+
+                  {booking.occasion && (
+                    <div className="mt-4">
+                      <Label className="text-sm text-muted-foreground">Occasion</Label>
+                      <Badge variant="secondary" className="mt-1">
+                        <Gift className="h-3 w-3 mr-1" />
+                        {booking.occasion}
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+
+                <Separator />
+
+                {/* Table Assignment */}
+                <div>
+                  <h3 className="font-semibold mb-3">Table Assignment</h3>
+                  {isEditing ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-4 gap-2">
+                        {allTables?.map(table => {
+                          const isSelected = selectedTableIds.includes(table.id)
+                          const isAvailable = tableAvailability?.tables.find(t => t.tableId === table.id)?.isAvailable !== false
+                          
+                          return (
+                            <Button
+                              key={table.id}
+                              variant={isSelected ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => {
+                                setSelectedTableIds(prev => 
+                                  prev.includes(table.id)
+                                    ? prev.filter(id => id !== table.id)
+                                    : [...prev, table.id]
+                                )
+                              }}
+                              disabled={!isAvailable && !isSelected}
+                              className={cn(
+                                !isAvailable && !isSelected && "opacity-50"
+                              )}
+                            >
+                              T{table.table_number} ({table.capacity})
+                              {!isAvailable && !isSelected && (
+                                <AlertCircle className="h-3 w-3 ml-1" />
+                              )}
+                            </Button>
+                          )
+                        })}
+                      </div>
+                      {tableAvailability && !tableAvailability.available && (
+                        <Alert>
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            Some selected tables have conflicts
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Table2 className="h-4 w-4 text-muted-foreground" />
+                      {booking.tables && booking.tables.length > 0 ? (
+                        <p className="font-medium">
+                          Tables {booking.tables.map(t => t.table_number).join(", ")}
+                        </p>
+                      ) : (
+                        <Badge variant="destructive">No table assigned</Badge>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <Separator />
+
+                {/* Special Requests */}
+                <div>
+                  <Label className="text-sm text-muted-foreground">Special Requests</Label>
+                  {isEditing ? (
+                    <Textarea
+                      value={editedData.special_requests}
+                      onChange={(e) => setEditedData(prev => ({
+                        ...prev,
+                        special_requests: e.target.value
+                      }))}
+                      placeholder="Any special requests..."
+                      className="mt-2"
+                    />
+                  ) : (
+                    <p className="mt-2 text-sm">
+                      {booking.special_requests || "No special requests"}
+                    </p>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="status" className="p-4 space-y-6">
+                {/* Current Status Overview */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Current Status</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <StatusIcon className={cn("h-8 w-8", statusConfig?.color)} />
+                        <div>
+                          <p className="font-semibold text-lg capitalize">
+                            {booking.status.replace(/_/g, ' ')}
+                          </p>
+                          {isCurrentlyDining && (
+                            <p className="text-sm text-muted-foreground">
+                              Dining for {Math.floor(elapsedMinutes / 60)}h {elapsedMinutes % 60}m
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-lg px-3 py-1">
+                        {currentProgress}%
+                      </Badge>
+                    </div>
+
+                    <Progress value={currentProgress} className="h-3" />
+
+                    {isCurrentlyDining && (
+                      <Alert>
+                        <Activity className="h-4 w-4" />
+                        <AlertDescription>
+                          Guest has been dining for {elapsedMinutes} minutes.
+                          Estimated {statusService.estimateRemainingTime(booking.status as DiningStatus, booking.turn_time_minutes)} minutes remaining.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Status Transitions */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Update Status</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-3">
+                      {validTransitions.map(transition => {
+                        const ToIcon = STATUS_CONFIGS[transition.to as keyof typeof STATUS_CONFIGS]?.icon || ArrowRight
+                        const toConfig = STATUS_CONFIGS[transition.to as keyof typeof STATUS_CONFIGS]
+                        
+                        return (
+                          <Button
+                            key={transition.to}
+                            variant="outline"
+                            className={cn(
+                              "justify-start",
+                              transition.requiresConfirmation && "border-red-200"
+                            )}
+                            onClick={() => {
+                              if (transition.requiresConfirmation) {
+                                if (confirm(`Are you sure you want to ${transition.label.toLowerCase()}?`)) {
+                                  handleStatusTransition(transition.to)
+                                }
+                              } else {
+                                handleStatusTransition(transition.to)
+                              }
+                            }}
+                          >
+                            <ToIcon className={cn("h-4 w-4 mr-2", toConfig?.color)} />
+                            {transition.label}
+                          </Button>
+                        )
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Quick Actions */}
+                {booking.tables && booking.tables.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Quick Actions</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start"
+                        onClick={() => {
+                          // Open table switch dialog
+                          setActiveTab("details")
+                          setIsEditing(true)
+                        }}
+                      >
+                        <Table2 className="h-4 w-4 mr-2" />
+                        Switch Tables
+                      </Button>
+                      {booking.status === 'confirmed' && (
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start"
+                          onClick={() => handleStatusTransition('arrived')}
+                        >
+                          <UserCheck className="h-4 w-4 mr-2" />
+                          Check In Guest
+                        </Button>
+                      )}
+                      {['main_course', 'dessert'].includes(booking.status) && (
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start"
+                          onClick={() => handleStatusTransition('payment')}
+                        >
+                          <CreditCard className="h-4 w-4 mr-2" />
+                          Request Bill
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
                 )}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+              </TabsContent>
+
+              <TabsContent value="history" className="p-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Status History</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {statusHistory && statusHistory.length > 0 ? (
+                      <div className="space-y-3">
+                        {statusHistory.map((entry, index) => {
+                          const entryConfig = STATUS_CONFIGS[entry.new_status as keyof typeof STATUS_CONFIGS]
+                          const EntryIcon = entryConfig?.icon || History
+                          
+                          return (
+                            <div key={entry.id} className="flex items-start gap-3">
+                              <div className={cn(
+                                "p-2 rounded-full flex-shrink-0",
+                                entryConfig?.bg
+                              )}>
+                                <EntryIcon className={cn("h-4 w-4", entryConfig?.color)} />
+                              </div>
+                              <div className="flex-1 space-y-1">
+                                <p className="font-medium">
+                                  {entry.old_status ? (
+                                    <>
+                                      {entry.old_status.replace(/_/g, ' ')} → {entry.new_status.replace(/_/g, ' ')}
+                                    </>
+                                  ) : (
+                                    <span className="capitalize">{entry.new_status.replace(/_/g, ' ')}</span>
+                                  )}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {format(new Date(entry.changed_at), "MMM d, h:mm a")}
+                                  {entry.changed_by_user && (
+                                    <> by {entry.changed_by_user.full_name}</>
+                                  )}
+                                </p>
+                                {entry.reason && (
+                                  <p className="text-sm text-muted-foreground italic">
+                                    {entry.reason}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-center text-muted-foreground py-4">
+                        No status history available
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </ScrollArea>
+          </Tabs>
+        </div>
       </DialogContent>
     </Dialog>
   )

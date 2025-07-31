@@ -4,15 +4,18 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { format, startOfDay, endOfDay, addMinutes, isWithinInterval, isBefore, isAfter, differenceInMinutes } from "date-fns"
+import { format, startOfDay, endOfDay, addMinutes, isWithinInterval, differenceInMinutes } from "date-fns"
 import { OperationalStatusCards } from "@/components/dashboard/operational-status-cards"
 import { TodaysTimeline } from "@/components/dashboard/todays-timeline"
 import { TableStatusView } from "@/components/dashboard/table-status-view"
+import { EnhancedFloorPlan } from "@/components/dashboard/enhanced-floor-plan"
+import { CheckInManager } from "@/components/dashboard/checkin-manager"
 import { QuickActions } from "@/components/dashboard/quick-actions"
 import { RecentBookings } from "@/components/dashboard/recent-bookings"
 import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
 import { BookingDetails } from "@/components/bookings/booking-details"
 import { TableAvailabilityService } from "@/lib/table-availability"
+import { TableStatusService, type DiningStatus } from "@/lib/table-status"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -36,12 +39,28 @@ import {
   XCircle,
   Timer,
   Activity,
-  Eye
+  Eye,
+  UserCheck,
+  Utensils,
+  CreditCard,
+  Map,
+  Cake,
+  Coffee
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-// Quick view component for arriving guests
-function ArrivingGuestsCard({ bookings, currentTime }: { bookings: any[], currentTime: Date }) {
+// Enhanced Quick view component for arriving guests with check-in actions
+function ArrivingGuestsCard({ 
+  bookings, 
+  currentTime,
+  onCheckIn,
+  tables 
+}: { 
+  bookings: any[], 
+  currentTime: Date,
+  onCheckIn: (bookingId: string) => void,
+  tables: any[]
+}) {
   const arrivingSoon = bookings
     .filter(booking => {
       const bookingTime = new Date(booking.booking_time)
@@ -59,7 +78,7 @@ function ArrivingGuestsCard({ bookings, currentTime }: { bookings: any[], curren
         </div>
       </CardHeader>
       <CardContent>
-        <ScrollArea className="h-[200px]">
+        <ScrollArea className="h-[300px]">
           <div className="space-y-3">
             {arrivingSoon.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">No arrivals in next 30 min</p>
@@ -68,40 +87,55 @@ function ArrivingGuestsCard({ bookings, currentTime }: { bookings: any[], curren
                 const bookingTime = new Date(booking.booking_time)
                 const minutesUntil = differenceInMinutes(bookingTime, currentTime)
                 const isLate = minutesUntil < 0
+                const hasTable = booking.tables && booking.tables.length > 0
                 
                 return (
                   <div key={booking.id} className={cn(
-                    "flex items-center justify-between p-2 rounded-lg border",
-                    isLate && "border-red-200 bg-red-50"
+                    "p-3 rounded-lg border-2 transition-all",
+                    isLate ? "border-red-200 bg-red-50" : "border-gray-200",
+                    "hover:shadow-md cursor-pointer"
                   )}>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">
-                        {booking.user?.full_name || booking.guest_name || 'Guest'}
-                      </p>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {format(bookingTime, 'h:mm a')}
-                          {isLate && <span className="text-red-600 font-medium">(Late)</span>}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Users className="h-3 w-3" />
-                          {booking.party_size}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Phone className="h-3 w-3" />
-                          {booking.user?.phone_number || booking.guest_phone || 'No phone'}
-                        </span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">
+                          {booking.user?.full_name || booking.guest_name || 'Guest'}
+                        </p>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {format(bookingTime, 'h:mm a')}
+                            {isLate && <span className="text-red-600 font-medium ml-1">(Late)</span>}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Users className="h-3 w-3" />
+                            {booking.party_size}
+                          </span>
+                        </div>
+                        {booking.special_requests && (
+                          <p className="text-xs text-muted-foreground mt-1 truncate">
+                            Note: {booking.special_requests}
+                          </p>
+                        )}
                       </div>
-                    </div>
-                    <div className="text-right">
-                      {booking.tables && booking.tables.length > 0 ? (
-                        <Badge variant="outline" className="text-xs">
-                          T{booking.tables[0].table_number}
-                        </Badge>
-                      ) : (
-                        <Badge variant="destructive" className="text-xs">No table</Badge>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {hasTable ? (
+                          <Badge variant="outline" className="text-xs">
+                            T{booking.tables[0].table_number}
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive" className="text-xs">No table</Badge>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onCheckIn(booking.id)
+                          }}
+                        >
+                          <UserCheck className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )
@@ -114,13 +148,24 @@ function ArrivingGuestsCard({ bookings, currentTime }: { bookings: any[], curren
   )
 }
 
-// Service metrics component
+// Enhanced Service metrics component with meal progress
 function ServiceMetrics({ bookings, currentTime }: { bookings: any[], currentTime: Date }) {
   const completedToday = bookings.filter(b => b.status === 'completed').length
   const noShowToday = bookings.filter(b => b.status === 'no_show').length
   const cancelledToday = bookings.filter(b => 
     b.status === 'cancelled_by_user' || b.status === 'declined_by_restaurant'
   ).length
+  
+  // Calculate dining stages
+  const diningStages = {
+    arrived: bookings.filter(b => b.status === 'arrived').length,
+    seated: bookings.filter(b => b.status === 'seated').length,
+    appetizers: bookings.filter(b => b.status === 'appetizers').length,
+    mainCourse: bookings.filter(b => b.status === 'main_course').length,
+    payment: bookings.filter(b => b.status === 'payment').length,
+  }
+
+
   
   // Calculate average turn time for completed bookings
   const completedWithTurnTime = bookings.filter(b => 
@@ -137,25 +182,57 @@ function ServiceMetrics({ bookings, currentTime }: { bookings: any[], currentTim
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Today's Service Metrics</CardTitle>
+        <CardTitle className="text-base">Service Metrics</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">Completed</p>
-            <p className="text-2xl font-bold text-green-600">{completedToday}</p>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Completed</p>
+              <p className="text-2xl font-bold text-green-600">{completedToday}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Avg Turn Time</p>
+              <p className="text-2xl font-bold">{Math.round(avgTurnTime)}m</p>
+            </div>
           </div>
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">No Shows</p>
-            <p className="text-2xl font-bold text-red-600">{noShowToday}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">Cancelled</p>
-            <p className="text-2xl font-bold text-orange-600">{cancelledToday}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">Avg Turn Time</p>
-            <p className="text-2xl font-bold">{Math.round(avgTurnTime)}m</p>
+          
+          <Separator />
+          
+          <div>
+            <p className="text-sm font-medium mb-2">Current Service Stage</p>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2">
+                  <UserCheck className="h-3 w-3" />
+                  Arrived
+                </span>
+                <Badge variant="secondary">{diningStages.arrived}</Badge>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2">
+                  <ChefHat className="h-3 w-3" />
+                  Seated
+                </span>
+                <Badge variant="secondary">{diningStages.seated}</Badge>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2">
+                  <Utensils className="h-3 w-3" />
+                  Dining
+                </span>
+                <Badge variant="secondary">
+                  {diningStages.appetizers + diningStages.mainCourse}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2">
+                  <CreditCard className="h-3 w-3" />
+                  Payment
+                </span>
+                <Badge variant="secondary">{diningStages.payment}</Badge>
+              </div>
+            </div>
           </div>
         </div>
       </CardContent>
@@ -168,11 +245,30 @@ export default function DashboardPage() {
   const [showManualBooking, setShowManualBooking] = useState(false)
   const [selectedBooking, setSelectedBooking] = useState<any>(null)
   const [restaurantId, setRestaurantId] = useState<string>("")
-  const [activeTab, setActiveTab] = useState("overview")
+  const [userId, setUserId] = useState<string>("")
+  const [activeTab, setActiveTab] = useState("floor-plan")
+  const [showCheckInDialog, setShowCheckInDialog] = useState(false)
+  const [checkInBookingId, setCheckInBookingId] = useState<string | null>(null)
+
+    const STATUS_ICONS: any = {
+  'pending': Timer,
+  'confirmed': CheckCircle,
+  'arrived': UserCheck,
+  'seated': ChefHat,
+  'ordered': Coffee,
+  'appetizers': Utensils,
+  'main_course': Utensils,
+  'dessert': Cake,
+  'payment': CreditCard,
+  'completed': CheckCircle,
+  'no_show': AlertCircle,
+  'cancelled': AlertCircle
+}
   
   const supabase = createClient()
   const queryClient = useQueryClient()
   const tableService = new TableAvailabilityService()
+  const statusService = new TableStatusService()
 
   // Update current time every minute
   useEffect(() => {
@@ -183,11 +279,12 @@ export default function DashboardPage() {
     return () => clearInterval(interval)
   }, [])
 
-  // Get restaurant ID
+  // Get restaurant and user ID
   useEffect(() => {
-    async function getRestaurantId() {
+    async function getIds() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
+        setUserId(user.id)
         const { data: staffData } = await supabase
           .from("restaurant_staff")
           .select("restaurant_id")
@@ -199,10 +296,10 @@ export default function DashboardPage() {
         }
       }
     }
-    getRestaurantId()
+    getIds()
   }, [supabase])
 
-  // Fetch today's bookings with better query
+  // Fetch today's bookings with enhanced status
   const { data: todaysBookings = [], isLoading: bookingsLoading, refetch: refetchBookings } = useQuery({
     queryKey: ["todays-bookings", restaurantId, format(currentTime, 'yyyy-MM-dd')],
     queryFn: async () => {
@@ -210,12 +307,6 @@ export default function DashboardPage() {
       
       const todayStart = startOfDay(currentTime)
       const todayEnd = endOfDay(currentTime)
-      
-      console.log('Fetching bookings for:', {
-        start: todayStart.toISOString(),
-        end: todayEnd.toISOString(),
-        restaurantId
-      })
       
       const { data, error } = await supabase
         .from("bookings")
@@ -228,6 +319,11 @@ export default function DashboardPage() {
           ),
           booking_tables(
             table:restaurant_tables(*)
+          ),
+          booking_status_history(
+            new_status,
+            changed_at,
+            metadata
           )
         `)
         .eq("restaurant_id", restaurantId)
@@ -239,8 +335,6 @@ export default function DashboardPage() {
         console.error('Error fetching bookings:', error)
         throw error
       }
-
-      console.log('Fetched bookings:', data?.length || 0)
 
       // Transform the data
       const transformedData = data?.map((booking: any) => ({
@@ -273,18 +367,29 @@ export default function DashboardPage() {
     enabled: !!restaurantId,
   })
 
-  // Update booking status
+  // Update booking status with new status service
   const updateBookingMutation = useMutation({
     mutationFn: async ({ bookingId, updates }: { bookingId: string; updates: any }) => {
-      const { error } = await supabase
-        .from("bookings")
-        .update({ 
-          ...updates,
-          updated_at: new Date().toISOString() 
-        })
-        .eq("id", bookingId)
+      if (updates.status) {
+        // Use the new status service for status updates
+        await statusService.updateBookingStatus(
+          bookingId,
+          updates.status as DiningStatus,
+          userId,
+          updates.metadata
+        )
+      } else {
+        // Regular update for other fields
+        const { error } = await supabase
+          .from("bookings")
+          .update({ 
+            ...updates,
+            updated_at: new Date().toISOString() 
+          })
+          .eq("id", bookingId)
 
-      if (error) throw error
+        if (error) throw error
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
@@ -296,7 +401,57 @@ export default function DashboardPage() {
     },
   })
 
-  // Create manual booking
+  // Handle check-in
+  const handleCheckIn = async (bookingId: string, tableIds?: string[]) => {
+    try {
+      const booking = todaysBookings.find(b => b.id === bookingId)
+      if (!booking) return
+
+      const finalTableIds = tableIds || booking.tables?.map((t: any) => t.id) || []
+      
+      if (finalTableIds.length === 0) {
+        setCheckInBookingId(bookingId)
+        setShowCheckInDialog(true)
+        return
+      }
+
+      await statusService.checkInBooking(bookingId, finalTableIds, userId)
+      queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+      toast.success("Guest checked in successfully")
+    } catch (error) {
+      toast.error("Failed to check in guest")
+    }
+  }
+
+  // Handle table switch
+  const handleTableSwitch = async (bookingId: string, newTableIds: string[]) => {
+    try {
+      // Validate availability first
+      const booking = todaysBookings.find(b => b.id === bookingId)
+      if (!booking) return
+
+      const availability = await tableService.checkTableAvailability(
+        restaurantId,
+        newTableIds,
+        new Date(booking.booking_time),
+        booking.turn_time_minutes || 120,
+        bookingId
+      )
+
+      if (!availability.available) {
+        toast.error("Selected tables are not available")
+        return
+      }
+
+      await statusService.switchTables(bookingId, newTableIds, userId, "Table switch requested")
+      queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+      toast.success("Table switched successfully")
+    } catch (error) {
+      toast.error("Failed to switch tables")
+    }
+  }
+
+  // Create manual booking (enhanced with immediate check-in option)
   const createManualBookingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -359,6 +514,11 @@ export default function DashboardPage() {
         }
       }
 
+      // Auto check-in if it's a walk-in
+      if (bookingData.status === 'arrived') {
+        await statusService.updateBookingStatus(booking.id, 'seated', userId)
+      }
+
       return booking
     },
     onSuccess: () => {
@@ -372,19 +532,17 @@ export default function DashboardPage() {
     },
   })
 
-  // Filter bookings - only show active bookings (confirmed and pending)
+  // Filter bookings by status
   const activeBookings = todaysBookings.filter(b => 
-    ['pending', 'confirmed'].includes(b.status)
+    !['completed', 'no_show', 'cancelled_by_user', 'declined_by_restaurant'].includes(b.status)
   )
   
   const currentlyDining = activeBookings.filter(booking => {
-    const bookingStart = new Date(booking.booking_time)
-    const bookingEnd = addMinutes(bookingStart, booking.turn_time_minutes || 120)
-    return booking.status === 'confirmed' && 
-           isWithinInterval(currentTime, { start: bookingStart, end: bookingEnd })
+    const diningStatuses = ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+    return diningStatuses.includes(booking.status)
   })
 
-  // Calculate statistics
+  // Calculate enhanced statistics
   const stats = {
     pendingCount: activeBookings.filter(b => b.status === 'pending').length,
     unassignedCount: activeBookings.filter(b => 
@@ -396,39 +554,29 @@ export default function DashboardPage() {
       return booking.status === 'confirmed' && minutesUntil > 0 && minutesUntil <= 30
     }).length,
     currentGuests: currentlyDining.reduce((sum, b) => sum + b.party_size, 0),
+    awaitingCheckIn: activeBookings.filter(b => b.status === 'arrived').length,
+    inService: currentlyDining.length,
   }
 
-  const handleTableClick = (table: any) => {
-    // Find bookings for this table (only active bookings)
-    const tableBookings = activeBookings.filter(booking => 
-      booking.tables?.some((t: any) => t.id === table.id)
-    )
-    
-    if (tableBookings.length > 0) {
-      // Check if table is currently occupied
-      const currentBooking = tableBookings.find(booking => {
-        const bookingStart = new Date(booking.booking_time)
-        const bookingEnd = addMinutes(bookingStart, booking.turn_time_minutes || 120)
-        return booking.status === 'confirmed' && 
-               isWithinInterval(currentTime, { start: bookingStart, end: bookingEnd })
-      })
-      
-      if (currentBooking) {
-        setSelectedBooking(currentBooking)
-      } else {
-        // Show next booking for this table
-        const nextBooking = tableBookings
-          .filter(b => new Date(b.booking_time) > currentTime && b.status === 'confirmed')
-          .sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())[0]
-        
-        if (nextBooking) {
-          setSelectedBooking(nextBooking)
-        }
-      }
+  const handleTableClick = (table: any, statusInfo: any) => {
+    if (statusInfo.current) {
+      setSelectedBooking(todaysBookings.find(b => b.id === statusInfo.current.id))
+    } else if (statusInfo.upcoming) {
+      setSelectedBooking(todaysBookings.find(b => b.id === statusInfo.upcoming.id))
     }
   }
 
-  if (!restaurantId) {
+  const handleQuickSeat = (guestData: any, tableIds: string[]) => {
+    const bookingData = {
+      ...guestData,
+      booking_time: new Date().toISOString(),
+      status: 'arrived',
+      table_ids: tableIds
+    }
+    createManualBookingMutation.mutate(bookingData)
+  }
+
+  if (!restaurantId || !userId) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
@@ -441,7 +589,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
+      {/* Enhanced Page Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Operational Dashboard</h1>
@@ -450,6 +598,10 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Badge variant={stats.awaitingCheckIn > 0 ? "destructive" : "outline"} className="text-sm">
+            <UserCheck className="h-3 w-3 mr-1" />
+            {stats.awaitingCheckIn} awaiting check-in
+          </Badge>
           <Badge variant="outline" className="text-sm">
             <Activity className="h-3 w-3 mr-1 text-green-500" />
             Live
@@ -465,39 +617,105 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Status Cards */}
+      {/* Enhanced Status Cards */}
       <OperationalStatusCards 
-        bookings={activeBookings} // Pass only active bookings
+        bookings={activeBookings}
         tables={tables}
         currentTime={currentTime}
       />
 
-      {/* Main Content Tabs */}
+      {/* Enhanced Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="floor-plan" className="flex items-center gap-2">
+            <Map className="h-4 w-4" />
+            Floor Plan
+          </TabsTrigger>
+          <TabsTrigger value="checkin" className="flex items-center gap-2">
+            <UserCheck className="h-4 w-4" />
+            Check-in
+          </TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          <TabsTrigger value="tables">Table View</TabsTrigger>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-4">
-          {/* Overview Grid */}
+        {/* Enhanced Floor Plan Tab */}
+        <TabsContent value="floor-plan" className="space-y-4">
+          <EnhancedFloorPlan
+            tables={tables}
+            bookings={activeBookings}
+            currentTime={currentTime}
+            restaurantId={restaurantId}
+            userId={userId}
+            onTableClick={handleTableClick}
+            onStatusUpdate={(bookingId, status) => 
+              updateBookingMutation.mutate({ bookingId, updates: { status } })
+            }
+            onTableSwitch={handleTableSwitch}
+            onCheckIn={handleCheckIn}
+          />
+        </TabsContent>
+
+        {/* Check-in Management Tab */}
+        <TabsContent value="checkin" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-[1fr_350px]">
-            {/* Left column - Main content */}
+            <CheckInManager
+              bookings={todaysBookings}
+              tables={tables}
+              restaurantId={restaurantId}
+              userId={userId}
+              currentTime={currentTime}
+              onCheckIn={handleCheckIn}
+              onStatusUpdate={(bookingId, status) => 
+                updateBookingMutation.mutate({ bookingId, updates: { status } })
+              }
+              onQuickSeat={handleQuickSeat}
+            />
+            
             <div className="space-y-4">
-              {/* Current Status */}
+              <ArrivingGuestsCard 
+                bookings={activeBookings}
+                currentTime={currentTime}
+                onCheckIn={handleCheckIn}
+                tables={tables}
+              />
+              
+              <ServiceMetrics 
+                bookings={todaysBookings}
+                currentTime={currentTime}
+              />
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Timeline Tab */}
+        <TabsContent value="timeline" className="space-y-4">
+          <TodaysTimeline 
+            bookings={activeBookings}
+            currentTime={currentTime}
+            onSelectBooking={setSelectedBooking}
+            onUpdateStatus={(bookingId, status) => 
+              updateBookingMutation.mutate({ bookingId, updates: { status } })
+            }
+          />
+        </TabsContent>
+
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-[1fr_350px]">
+            <div className="space-y-4">
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle>Current Status</CardTitle>
+                    <CardTitle>Current Service Status</CardTitle>
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary">
                         <Users className="h-3 w-3 mr-1" />
-                        {stats.currentGuests} guests dining
+                        {stats.currentGuests} guests
                       </Badge>
                       <Badge variant="outline">
                         <Table2 className="h-3 w-3 mr-1" />
-                        {currentlyDining.length} tables occupied
+                        {stats.inService} tables
                       </Badge>
                     </div>
                   </div>
@@ -506,33 +724,37 @@ export default function DashboardPage() {
                   {currentlyDining.length === 0 ? (
                     <p className="text-center py-8 text-muted-foreground">No guests currently dining</p>
                   ) : (
-                    <ScrollArea className="h-[300px]">
+                    <ScrollArea className="h-[400px]">
                       <div className="space-y-3">
                         {currentlyDining.map((booking) => {
-                          const bookingStart = new Date(booking.booking_time)
-                          const bookingEnd = addMinutes(bookingStart, booking.turn_time_minutes || 120)
-                          const progress = ((currentTime.getTime() - bookingStart.getTime()) / 
-                                           (bookingEnd.getTime() - bookingStart.getTime())) * 100
+                          const StatusIcon = STATUS_ICONS[booking.status as DiningStatus]
+                          const progress = TableStatusService.getDiningProgress(booking.status as DiningStatus)
                           
                           return (
                             <div
                               key={booking.id}
-                              className="p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                              className="p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
                               onClick={() => setSelectedBooking(booking)}
                             >
                               <div className="flex items-start justify-between">
                                 <div>
-                                  <p className="font-medium">
-                                    {booking.user?.full_name || booking.guest_name || 'Guest'}
-                                  </p>
-                                  <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <StatusIcon className="h-4 w-4" />
+                                    <p className="font-medium">
+                                      {booking.user?.full_name || booking.guest_name || 'Guest'}
+                                    </p>
+                                    <Badge variant="secondary" className="text-xs">
+                                      {booking.status.replace(/_/g, ' ')}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
                                     <span className="flex items-center gap-1">
                                       <Users className="h-3 w-3" />
-                                      {booking.party_size} guests
+                                      {booking.party_size}
                                     </span>
                                     <span className="flex items-center gap-1">
                                       <Clock className="h-3 w-3" />
-                                      Since {format(bookingStart, 'h:mm a')}
+                                      Since {format(new Date(booking.booking_time), 'h:mm a')}
                                     </span>
                                     {booking.tables && booking.tables.length > 0 && (
                                       <span className="flex items-center gap-1">
@@ -542,15 +764,10 @@ export default function DashboardPage() {
                                     )}
                                   </div>
                                 </div>
-                                <Badge variant="outline" className="text-xs">
-                                  {Math.round(progress)}% complete
-                                </Badge>
-                              </div>
-                              <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                <div 
-                                  className="h-full bg-green-500 transition-all"
-                                  style={{ width: `${Math.min(100, progress)}%` }}
-                                />
+                                <div className="text-right">
+                                  <div className="text-sm font-medium">{progress}%</div>
+                                  <div className="text-xs text-muted-foreground">Progress</div>
+                                </div>
                               </div>
                             </div>
                           )
@@ -561,60 +778,38 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
-              {/* Recent Activity */}
-              <RecentBookings bookings={activeBookings.slice(0, 5)} />
+              <RecentBookings bookings={todaysBookings.slice(0, 10)} />
             </div>
 
-            {/* Right column - Quick views */}
             <div className="space-y-4">
               <QuickActions 
                 onAddBooking={() => setShowManualBooking(true)}
                 stats={stats}
               />
               
-              <ArrivingGuestsCard 
-                bookings={activeBookings} // Pass only active bookings
-                currentTime={currentTime}
-              />
-              
-              <ServiceMetrics 
-                bookings={todaysBookings} // Keep all bookings for metrics
-                currentTime={currentTime}
-              />
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="timeline" className="space-y-4">
-          <TodaysTimeline 
-            bookings={activeBookings} // Pass only active bookings
-            currentTime={currentTime}
-            onSelectBooking={setSelectedBooking}
-            onUpdateStatus={(bookingId, status) => 
-              updateBookingMutation.mutate({ bookingId, updates: { status } })
-            }
-          />
-        </TabsContent>
-
-        <TabsContent value="tables" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-[1fr_350px]">
-            <TableStatusView 
-              tables={tables}
-              bookings={activeBookings} // Pass only active bookings
-              currentTime={currentTime}
-              onTableClick={handleTableClick}
-            />
-            
-            <div className="space-y-4">
-              <QuickActions 
-                onAddBooking={() => setShowManualBooking(true)}
-                stats={stats}
-              />
-              
-              <ArrivingGuestsCard 
-                bookings={activeBookings} // Pass only active bookings
-                currentTime={currentTime}
-              />
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Quick Stats</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Tables Available</span>
+                      <Badge variant="outline">
+                        {tables.filter(t => t.is_active).length - stats.inService} / {tables.filter(t => t.is_active).length}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Avg Wait Time</span>
+                      <Badge variant="outline">12 min</Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Today's Revenue</span>
+                      <Badge variant="outline">$4,280</Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </TabsContent>
@@ -625,7 +820,7 @@ export default function DashboardPage() {
         <DialogContent className="max-w-4xl w-full h-[95vh] flex flex-col p-0">
           <div className="flex-shrink-0 px-6 py-4 border-b">
             <DialogHeader>
-              <DialogTitle>Add Walk-in Booking</DialogTitle>
+              <DialogTitle>Add Booking</DialogTitle>
               <DialogDescription>
                 Create a booking for walk-in guests or phone reservations
               </DialogDescription>
@@ -642,7 +837,7 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Booking Details Modal */}
+      {/* Enhanced Booking Details Modal with Status Management */}
       {selectedBooking && (
         <BookingDetails
           booking={selectedBooking}
@@ -655,6 +850,43 @@ export default function DashboardPage() {
           }}
         />
       )}
+
+      {/* Check-in Table Selection Dialog */}
+      <Dialog open={showCheckInDialog} onOpenChange={setShowCheckInDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Select Table for Check-in</DialogTitle>
+            <DialogDescription>
+              Choose an available table for this guest
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-3 gap-3 py-4">
+            {tables
+              .filter(table => {
+                const isOccupied = activeBookings.some(b => 
+                  b.tables?.some((t: any) => t.id === table.id) &&
+                  ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(b.status)
+                )
+                return !isOccupied && table.is_active
+              })
+              .map(table => (
+                <Button
+                  key={table.id}
+                  variant="outline"
+                  onClick={() => {
+                    if (checkInBookingId) {
+                      handleCheckIn(checkInBookingId, [table.id])
+                      setShowCheckInDialog(false)
+                      setCheckInBookingId(null)
+                    }
+                  }}
+                >
+                  T{table.table_number} ({table.capacity})
+                </Button>
+              ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
