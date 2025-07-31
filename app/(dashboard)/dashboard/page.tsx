@@ -372,12 +372,12 @@ export default function DashboardPage() {
     },
   })
 
-  // Filter bookings by status
+  // Filter bookings - only show active bookings (confirmed and pending)
   const activeBookings = todaysBookings.filter(b => 
     ['pending', 'confirmed'].includes(b.status)
   )
   
-  const currentlyDining = todaysBookings.filter(booking => {
+  const currentlyDining = activeBookings.filter(booking => {
     const bookingStart = new Date(booking.booking_time)
     const bookingEnd = addMinutes(bookingStart, booking.turn_time_minutes || 120)
     return booking.status === 'confirmed' && 
@@ -386,11 +386,11 @@ export default function DashboardPage() {
 
   // Calculate statistics
   const stats = {
-    pendingCount: todaysBookings.filter(b => b.status === 'pending').length,
-    unassignedCount: todaysBookings.filter(b => 
+    pendingCount: activeBookings.filter(b => b.status === 'pending').length,
+    unassignedCount: activeBookings.filter(b => 
       b.status === 'confirmed' && (!b.tables || b.tables.length === 0)
     ).length,
-    arrivingSoonCount: todaysBookings.filter(booking => {
+    arrivingSoonCount: activeBookings.filter(booking => {
       const bookingTime = new Date(booking.booking_time)
       const minutesUntil = differenceInMinutes(bookingTime, currentTime)
       return booking.status === 'confirmed' && minutesUntil > 0 && minutesUntil <= 30
@@ -399,8 +399,8 @@ export default function DashboardPage() {
   }
 
   const handleTableClick = (table: any) => {
-    // Find bookings for this table
-    const tableBookings = todaysBookings.filter(booking => 
+    // Find bookings for this table (only active bookings)
+    const tableBookings = activeBookings.filter(booking => 
       booking.tables?.some((t: any) => t.id === table.id)
     )
     
@@ -465,12 +465,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Debug info - remove in production */}
-      
-
       {/* Status Cards */}
       <OperationalStatusCards 
-        bookings={todaysBookings}
+        bookings={activeBookings} // Pass only active bookings
         tables={tables}
         currentTime={currentTime}
       />
@@ -576,12 +573,12 @@ export default function DashboardPage() {
               />
               
               <ArrivingGuestsCard 
-                bookings={todaysBookings}
+                bookings={activeBookings} // Pass only active bookings
                 currentTime={currentTime}
               />
               
               <ServiceMetrics 
-                bookings={todaysBookings}
+                bookings={todaysBookings} // Keep all bookings for metrics
                 currentTime={currentTime}
               />
             </div>
@@ -590,7 +587,7 @@ export default function DashboardPage() {
 
         <TabsContent value="timeline" className="space-y-4">
           <TodaysTimeline 
-            bookings={todaysBookings}
+            bookings={activeBookings} // Pass only active bookings
             currentTime={currentTime}
             onSelectBooking={setSelectedBooking}
             onUpdateStatus={(bookingId, status) => 
@@ -603,7 +600,7 @@ export default function DashboardPage() {
           <div className="grid gap-4 md:grid-cols-[1fr_350px]">
             <TableStatusView 
               tables={tables}
-              bookings={todaysBookings}
+              bookings={activeBookings} // Pass only active bookings
               currentTime={currentTime}
               onTableClick={handleTableClick}
             />
@@ -615,7 +612,7 @@ export default function DashboardPage() {
               />
               
               <ArrivingGuestsCard 
-                bookings={todaysBookings}
+                bookings={activeBookings} // Pass only active bookings
                 currentTime={currentTime}
               />
             </div>
