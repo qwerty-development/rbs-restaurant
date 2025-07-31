@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
 import { 
   TrendingUp, 
   Users, 
@@ -21,9 +22,14 @@ import {
   Star,
   Clock,
   AlertCircle,
-  Award
+  Award,
+  UserCheck,
+  ArrowRight,
+  BarChart3,
+  PieChart
 } from "lucide-react"
 import { format, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from "date-fns"
+import { useRouter } from "next/navigation"
 
 // Type definitions
 type BookingStats = {
@@ -32,6 +38,7 @@ type BookingStats = {
   completed: number
   cancelled: number
   noShow: number
+  pending: number
   revenue: number
 }
 
@@ -39,7 +46,7 @@ type CustomerStats = {
   uniqueCustomers: number
   repeatCustomers: number
   newCustomers: number
-  vipCustomers: number
+  frequentCustomers: number
 }
 
 type TimeStats = {
@@ -49,8 +56,16 @@ type TimeStats = {
   averageTurnTime: number
 }
 
+type ReviewStats = {
+  averageRating: number
+  totalReviews: number
+  recentReviews: number
+  recentAverage: number
+}
+
 export default function AnalyticsPage() {
   const supabase = createClient()
+  const router = useRouter()
   const [restaurantId, setRestaurantId] = useState<string>("")
   const [dateRange, setDateRange] = useState<string>("7days")
 
@@ -102,18 +117,28 @@ export default function AnalyticsPage() {
         .from("bookings")
         .select("*")
         .eq("restaurant_id", restaurantId)
-        .gte("created_at", start.toISOString())
-        .lte("created_at", end.toISOString())
+        .gte("booking_time", start.toISOString())
+        .lte("booking_time", end.toISOString())
 
       if (error) throw error
+
+      // Calculate estimated revenue (assuming $50 per person average)
+      const PRICE_PER_PERSON = 50
+      const completedBookings = bookings.filter(b => b.status === "completed")
+      const revenue = completedBookings.reduce((sum, booking) => 
+        sum + (booking.party_size * PRICE_PER_PERSON), 0
+      )
 
       const stats: BookingStats = {
         total: bookings.length,
         confirmed: bookings.filter(b => b.status === "confirmed").length,
-        completed: bookings.filter(b => b.status === "completed").length,
-        cancelled: bookings.filter(b => b.status === "cancelled_by_user" || b.status === "declined_by_restaurant").length,
+        completed: completedBookings.length,
+        cancelled: bookings.filter(b => 
+          b.status === "cancelled_by_user" || b.status === "declined_by_restaurant"
+        ).length,
         noShow: bookings.filter(b => b.status === "no_show").length,
-        revenue: 0, // Would need actual revenue data
+        pending: bookings.filter(b => b.status === "pending").length,
+        revenue,
       }
 
       return stats
@@ -127,40 +152,73 @@ export default function AnalyticsPage() {
     queryFn: async () => {
       if (!restaurantId) return null
 
+      // Get bookings in the date range
       const { data: bookings, error } = await supabase
         .from("bookings")
-        .select("user_id, created_at")
+        .select("user_id, booking_time")
         .eq("restaurant_id", restaurantId)
-        .gte("created_at", start.toISOString())
-        .lte("created_at", end.toISOString())
+        .gte("booking_time", start.toISOString())
+        .lte("booking_time", end.toISOString())
+        .not("user_id", "is", null)
 
       if (error) throw error
 
-      // Get unique customers
+      // Get unique customers in this period
       const uniqueCustomers = new Set(bookings.map(b => b.user_id)).size
 
-      // Get repeat customers (those who booked more than once)
-      const customerBookingCounts = bookings.reduce((acc, booking) => {
-        acc[booking.user_id] = (acc[booking.user_id] || 0) + 1
-        return acc
-      }, {} as Record<string, number>)
-
-      const repeatCustomers = Object.values(customerBookingCounts).filter(count => count > 1).length
-
-      // Get VIP customers
-      const { data: vipData, error: vipError } = await supabase
-        .from("restaurant_vip_users")
-        .select("user_id")
+      // Get all-time booking stats to determine repeat vs new customers
+      const { data: allTimeBookings, error: allTimeError } = await supabase
+        .from("bookings")
+        .select("user_id, booking_time")
         .eq("restaurant_id", restaurantId)
-        .gte("valid_until", new Date().toISOString())
+        .not("user_id", "is", null)
 
-      if (vipError) throw vipError
+      if (allTimeError) throw allTimeError
+
+      // Analyze customers
+      const customerBookingCounts = new Map()
+      allTimeBookings.forEach(booking => {
+        const userId = booking.user_id
+        if (!customerBookingCounts.has(userId)) {
+          customerBookingCounts.set(userId, {
+            totalBookings: 0,
+            firstBooking: booking.booking_time,
+          })
+        }
+        customerBookingCounts.get(userId).totalBookings++
+        
+        // Update first booking if this is earlier
+        if (new Date(booking.booking_time) < new Date(customerBookingCounts.get(userId).firstBooking)) {
+          customerBookingCounts.get(userId).firstBooking = booking.booking_time
+        }
+      })
+
+      // Count customers in current period
+      const currentPeriodCustomers = new Set(bookings.map(b => b.user_id))
+      let newCustomers = 0
+      let repeatCustomers = 0
+      let frequentCustomers = 0
+
+      currentPeriodCustomers.forEach(userId => {
+        const customerData = customerBookingCounts.get(userId)
+        if (customerData) {
+          const firstBookingInPeriod = new Date(customerData.firstBooking) >= start
+          
+          if (firstBookingInPeriod) {
+            newCustomers++
+          } else if (customerData.totalBookings >= 5) {
+            frequentCustomers++
+          } else {
+            repeatCustomers++
+          }
+        }
+      })
 
       const stats: CustomerStats = {
         uniqueCustomers,
         repeatCustomers,
-        newCustomers: uniqueCustomers - repeatCustomers,
-        vipCustomers: vipData?.length || 0,
+        newCustomers,
+        frequentCustomers,
       }
 
       return stats
@@ -180,7 +238,7 @@ export default function AnalyticsPage() {
         .eq("restaurant_id", restaurantId)
         .gte("booking_time", start.toISOString())
         .lte("booking_time", end.toISOString())
-        .eq("status", "completed")
+        .in("status", ["completed", "confirmed"])
 
       if (error) throw error
 
@@ -202,7 +260,7 @@ export default function AnalyticsPage() {
 
       // Calculate averages
       const averagePartySize = bookings.length > 0 
-        ? bookings.reduce((sum, b) => sum + b.party_size, 0) / bookings.length 
+        ? bookings.reduce((sum, b) => sum + (b.party_size || 2), 0) / bookings.length 
         : 0
 
       const averageTurnTime = bookings.length > 0
@@ -223,10 +281,11 @@ export default function AnalyticsPage() {
 
   // Fetch review statistics
   const { data: reviewStats, isLoading: reviewStatsLoading } = useQuery({
-    queryKey: ["review-stats", restaurantId],
+    queryKey: ["review-stats", restaurantId, dateRange],
     queryFn: async () => {
       if (!restaurantId) return null
 
+      // Get restaurant's overall stats
       const { data: restaurant, error } = await supabase
         .from("restaurants")
         .select("average_rating, total_reviews")
@@ -235,6 +294,7 @@ export default function AnalyticsPage() {
 
       if (error) throw error
 
+      // Get recent reviews in the date range
       const { data: recentReviews, error: reviewError } = await supabase
         .from("reviews")
         .select("rating")
@@ -244,7 +304,7 @@ export default function AnalyticsPage() {
 
       if (reviewError) throw reviewError
 
-      return {
+      const stats: ReviewStats = {
         averageRating: restaurant.average_rating || 0,
         totalReviews: restaurant.total_reviews || 0,
         recentReviews: recentReviews?.length || 0,
@@ -252,6 +312,8 @@ export default function AnalyticsPage() {
           ? recentReviews.reduce((sum, r) => sum + r.rating, 0) / recentReviews.length
           : 0,
       }
+
+      return stats
     },
     enabled: !!restaurantId,
   })
@@ -259,7 +321,14 @@ export default function AnalyticsPage() {
   const isLoading = bookingStatsLoading || customerStatsLoading || timeStatsLoading || reviewStatsLoading
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-screen">Loading analytics...</div>
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-4">Loading analytics...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -267,7 +336,7 @@ export default function AnalyticsPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Analytics Dashboard</h1>
           <p className="text-muted-foreground">
             Track your restaurant's performance and insights
           </p>
@@ -295,10 +364,11 @@ export default function AnalyticsPage() {
           <CardContent>
             <div className="text-2xl font-bold">{bookingStats?.total || 0}</div>
             <p className="text-xs text-muted-foreground">
-              {bookingStats?.confirmed || 0} confirmed
+              {bookingStats?.confirmed || 0} confirmed, {bookingStats?.pending || 0} pending
             </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Unique Customers</CardTitle>
@@ -307,40 +377,66 @@ export default function AnalyticsPage() {
           <CardContent>
             <div className="text-2xl font-bold">{customerStats?.uniqueCustomers || 0}</div>
             <p className="text-xs text-muted-foreground">
-              {customerStats?.repeatCustomers || 0} repeat
+              {customerStats?.newCustomers || 0} new, {customerStats?.repeatCustomers || 0} returning
             </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Average Rating</CardTitle>
             <Star className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold flex items-center gap-1">
               {reviewStats?.averageRating ? reviewStats.averageRating.toFixed(1) : "0.0"}
+              <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
             </div>
             <p className="text-xs text-muted-foreground">
               {reviewStats?.recentReviews || 0} new reviews
             </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completion Rate</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Est. Revenue</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {bookingStats && bookingStats.total > 0
-                ? Math.round((bookingStats.completed / bookingStats.total) * 100)
-                : 0}%
+              ${(bookingStats?.revenue || 0).toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">
-              {bookingStats?.noShow || 0} no-shows
+              From completed bookings
             </p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Button 
+          onClick={() => router.push("/analytics/customers")} 
+          variant="outline" 
+          className="h-20 flex-col gap-2"
+        >
+          <Users className="h-6 w-6" />
+          <span>Customer Analytics</span>
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+        
+      
+        
+        <Button 
+          onClick={() => router.push("/bookings")} 
+          variant="outline" 
+          className="h-20 flex-col gap-2"
+        >
+          <Calendar className="h-6 w-6" />
+          <span>Booking Management</span>
+          <ArrowRight className="h-4 w-4" />
+        </Button>
       </div>
 
       <Tabs defaultValue="bookings" className="space-y-4">
@@ -355,40 +451,115 @@ export default function AnalyticsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Booking Status Distribution</CardTitle>
+                <CardDescription>
+                  Breakdown of all bookings in the selected period
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">Confirmed</span>
-                    <span className="text-sm text-muted-foreground">
-                      {bookingStats?.confirmed || 0} ({bookingStats && bookingStats.total > 0
-                        ? Math.round((bookingStats.confirmed / bookingStats.total) * 100)
-                        : 0}%)
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-16 bg-green-200 rounded">
+                        <div 
+                          className="h-2 bg-green-500 rounded" 
+                          style={{ 
+                            width: `${bookingStats && bookingStats.total > 0 
+                              ? (bookingStats.confirmed / bookingStats.total) * 100 
+                              : 0}%` 
+                          }}
+                        />
+                      </div>
+                      <span className="text-sm text-muted-foreground">
+                        {bookingStats?.confirmed || 0} ({bookingStats && bookingStats.total > 0
+                          ? Math.round((bookingStats.confirmed / bookingStats.total) * 100)
+                          : 0}%)
+                      </span>
+                    </div>
                   </div>
+
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">Completed</span>
-                    <span className="text-sm text-muted-foreground">
-                      {bookingStats?.completed || 0} ({bookingStats && bookingStats.total > 0
-                        ? Math.round((bookingStats.completed / bookingStats.total) * 100)
-                        : 0}%)
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-16 bg-blue-200 rounded">
+                        <div 
+                          className="h-2 bg-blue-500 rounded" 
+                          style={{ 
+                            width: `${bookingStats && bookingStats.total > 0 
+                              ? (bookingStats.completed / bookingStats.total) * 100 
+                              : 0}%` 
+                          }}
+                        />
+                      </div>
+                      <span className="text-sm text-muted-foreground">
+                        {bookingStats?.completed || 0} ({bookingStats && bookingStats.total > 0
+                          ? Math.round((bookingStats.completed / bookingStats.total) * 100)
+                          : 0}%)
+                      </span>
+                    </div>
                   </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Pending</span>
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-16 bg-yellow-200 rounded">
+                        <div 
+                          className="h-2 bg-yellow-500 rounded" 
+                          style={{ 
+                            width: `${bookingStats && bookingStats.total > 0 
+                              ? (bookingStats.pending / bookingStats.total) * 100 
+                              : 0}%` 
+                          }}
+                        />
+                      </div>
+                      <span className="text-sm text-muted-foreground">
+                        {bookingStats?.pending || 0} ({bookingStats && bookingStats.total > 0
+                          ? Math.round((bookingStats.pending / bookingStats.total) * 100)
+                          : 0}%)
+                      </span>
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">Cancelled</span>
-                    <span className="text-sm text-muted-foreground">
-                      {bookingStats?.cancelled || 0} ({bookingStats && bookingStats.total > 0
-                        ? Math.round((bookingStats.cancelled / bookingStats.total) * 100)
-                        : 0}%)
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-16 bg-red-200 rounded">
+                        <div 
+                          className="h-2 bg-red-500 rounded" 
+                          style={{ 
+                            width: `${bookingStats && bookingStats.total > 0 
+                              ? (bookingStats.cancelled / bookingStats.total) * 100 
+                              : 0}%` 
+                          }}
+                        />
+                      </div>
+                      <span className="text-sm text-muted-foreground">
+                        {bookingStats?.cancelled || 0} ({bookingStats && bookingStats.total > 0
+                          ? Math.round((bookingStats.cancelled / bookingStats.total) * 100)
+                          : 0}%)
+                      </span>
+                    </div>
                   </div>
+
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">No Show</span>
-                    <span className="text-sm text-muted-foreground">
-                      {bookingStats?.noShow || 0} ({bookingStats && bookingStats.total > 0
-                        ? Math.round((bookingStats.noShow / bookingStats.total) * 100)
-                        : 0}%)
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-16 bg-gray-200 rounded">
+                        <div 
+                          className="h-2 bg-gray-500 rounded" 
+                          style={{ 
+                            width: `${bookingStats && bookingStats.total > 0 
+                              ? (bookingStats.noShow / bookingStats.total) * 100 
+                              : 0}%` 
+                          }}
+                        />
+                      </div>
+                      <span className="text-sm text-muted-foreground">
+                        {bookingStats?.noShow || 0} ({bookingStats && bookingStats.total > 0
+                          ? Math.round((bookingStats.noShow / bookingStats.total) * 100)
+                          : 0}%)
+                      </span>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -397,6 +568,9 @@ export default function AnalyticsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Peak Times</CardTitle>
+                <CardDescription>
+                  Your busiest periods and averages
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -444,6 +618,7 @@ export default function AnalyticsPage() {
                 </p>
               </CardContent>
             </Card>
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Repeat Customers</CardTitle>
@@ -456,15 +631,16 @@ export default function AnalyticsPage() {
                 </p>
               </CardContent>
             </Card>
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">VIP Customers</CardTitle>
+                <CardTitle className="text-sm font-medium">Frequent Customers</CardTitle>
                 <Award className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{customerStats?.vipCustomers || 0}</div>
+                <div className="text-2xl font-bold">{customerStats?.frequentCustomers || 0}</div>
                 <p className="text-xs text-muted-foreground">
-                  Active VIP members
+                  5+ visits total
                 </p>
               </CardContent>
             </Card>
@@ -487,18 +663,22 @@ export default function AnalyticsPage() {
                     <span className="font-medium">Table Turnover</span>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Average table turnover time is {timeStats?.averageTurnTime || 0} minutes
+                    Average table turnover time is {timeStats?.averageTurnTime || 0} minutes. 
+                    {(timeStats?.averageTurnTime || 0) > 150 && " Consider optimizing service flow to reduce wait times."}
                   </p>
                 </div>
+
                 <div className="p-4 border rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <Users className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium">Party Size Trends</span>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Average party size is {timeStats?.averagePartySize || 0} guests
+                    Average party size is {timeStats?.averagePartySize || 0} guests. 
+                    This helps with table allocation and menu planning.
                   </p>
                 </div>
+
                 <div className="p-4 border rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <AlertCircle className="h-4 w-4 text-muted-foreground" />
@@ -507,7 +687,20 @@ export default function AnalyticsPage() {
                   <p className="text-sm text-muted-foreground">
                     {bookingStats && bookingStats.total > 0
                       ? Math.round((bookingStats.noShow / bookingStats.total) * 100)
-                      : 0}% of bookings result in no-shows
+                      : 0}% of bookings result in no-shows.
+                    {bookingStats && (bookingStats.noShow / bookingStats.total) > 0.1 && " Consider implementing a confirmation system."}
+                  </p>
+                </div>
+
+                <div className="p-4 border rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Completion Rate</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {bookingStats && bookingStats.total > 0
+                      ? Math.round((bookingStats.completed / bookingStats.total) * 100)
+                      : 0}% of bookings are completed successfully.
                   </p>
                 </div>
               </div>
