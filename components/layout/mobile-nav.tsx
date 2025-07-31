@@ -29,6 +29,7 @@ import { restaurantAuth } from '@/lib/restaurant-auth'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { Role } from '@/lib/restaurant-auth'
 
 interface MobileNavProps {
   restaurant: {
@@ -36,7 +37,7 @@ interface MobileNavProps {
     name: string
     main_image_url?: string
   }
-  role: string
+  role: Role
   permissions: string[]
 }
 
