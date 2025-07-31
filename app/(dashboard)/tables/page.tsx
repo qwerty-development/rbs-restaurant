@@ -1,7 +1,7 @@
 // app/(dashboard)/tables/page.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,7 +14,7 @@ import { FloorPlanEditor } from "@/components/tables/floor-plan-editor"
 import { TableForm } from "@/components/tables/table-form"
 import { TableCombinationsManager } from "@/components/tables/table-combinations-manager"
 import { toast } from "react-hot-toast"
-import { Plus, Edit2, LayoutGrid, Map, Link } from "lucide-react"
+import { Plus, Edit2, LayoutGrid, Map, Link, RefreshCw } from "lucide-react"
 import type { RestaurantTable, FloorPlan } from "@/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
@@ -48,8 +48,8 @@ export default function TablesPage() {
     getRestaurantId()
   }, [supabase])
 
-  // Fetch tables
-  const { data: tables, isLoading: tablesLoading } = useQuery({
+  // Fetch tables with optimized query
+  const { data: tables, isLoading: tablesLoading, error: tablesError } = useQuery({
     queryKey: ["tables", restaurantId],
     queryFn: async () => {
       if (!restaurantId) return []
@@ -64,10 +64,15 @@ export default function TablesPage() {
       return data as RestaurantTable[]
     },
     enabled: !!restaurantId,
+    staleTime: 30000, // 30 seconds
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+    retry: 1, // Retry once on failure
   })
 
   // Fetch floor plans
-  const { data: floorPlans } = useQuery({
+  const { data: floorPlans, isLoading: floorPlansLoading } = useQuery({
     queryKey: ["floor-plans", restaurantId],
     queryFn: async () => {
       if (!restaurantId) return []
@@ -82,10 +87,11 @@ export default function TablesPage() {
       return data as FloorPlan[]
     },
     enabled: !!restaurantId,
+    staleTime: 60000, // 1 minute
   })
 
   // Fetch table combinations
-  const { data: tableCombinations } = useQuery({
+  const { data: tableCombinations, isLoading: combinationsLoading } = useQuery({
     queryKey: ["table-combinations", restaurantId],
     queryFn: async () => {
       if (!restaurantId) return []
@@ -104,9 +110,10 @@ export default function TablesPage() {
       return data
     },
     enabled: !!restaurantId,
+    staleTime: 60000, // 1 minute
   })
 
-  // Create/Update table
+  // Optimized table update mutation
   const tableMutation = useMutation({
     mutationFn: async (tableData: Partial<RestaurantTable>) => {
       if (tableData.id) {
@@ -139,19 +146,48 @@ export default function TablesPage() {
         if (error) throw error
       }
     },
+    onMutate: async (newTable) => {
+      // Optimistic update for position changes
+      if (newTable.id && (newTable.x_position !== undefined || newTable.y_position !== undefined)) {
+        await queryClient.cancelQueries({ queryKey: ["tables", restaurantId] })
+        
+        const previousTables = queryClient.getQueryData<RestaurantTable[]>(["tables", restaurantId])
+        
+        queryClient.setQueryData<RestaurantTable[]>(["tables", restaurantId], (old) => {
+          if (!old) return []
+          return old.map(table => 
+            table.id === newTable.id 
+              ? { ...table, ...newTable }
+              : table
+          )
+        })
+        
+        return { previousTables }
+      }
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tables"] })
-      toast.success(selectedTable ? "Table updated" : "Table created")
+      // Only show success toast for non-position updates
+      if (!selectedTable || selectedTable.x_position === undefined) {
+        toast.success(selectedTable ? "Table updated" : "Table created")
+      }
       setSelectedTable(null)
       setIsAddingTable(false)
     },
-    onError: (error) => {
+    onError: (error, newTable, context) => {
+      // Rollback optimistic update
+      if (context?.previousTables) {
+        queryClient.setQueryData(["tables", restaurantId], context.previousTables)
+      }
       console.error("Table mutation error:", error)
       toast.error("Failed to save table")
     },
+    onSettled: () => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ["tables", restaurantId] })
+    },
   })
 
-  // Delete table
+  // Delete table mutation
   const deleteTableMutation = useMutation({
     mutationFn: async (tableId: string) => {
       const { error } = await supabase
@@ -170,7 +206,7 @@ export default function TablesPage() {
     },
   })
 
-  // Create table combination
+  // Create table combination mutation
   const createCombinationMutation = useMutation({
     mutationFn: async ({ primaryTableId, secondaryTableId, combinedCapacity }: {
       primaryTableId: string;
@@ -198,25 +234,56 @@ export default function TablesPage() {
     },
   })
 
-  // Get table statistics
-  const getTableStats = () => {
-    if (!tables) return { total: 0, active: 0, inactive: 0, byType: {} }
+  // Optimized table update handlers
+  const handleTableUpdate = useCallback((tableId: string, position: { x: number; y: number }) => {
+    tableMutation.mutate({
+      id: tableId,
+      x_position: position.x,
+      y_position: position.y,
+    })
+  }, [tableMutation])
+
+  const handleTableResize = useCallback((tableId: string, dimensions: { width: number; height: number }) => {
+    tableMutation.mutate({
+      id: tableId,
+      width: dimensions.width,
+      height: dimensions.height,
+    })
+  }, [tableMutation])
+
+  const handleTableDelete = useCallback((tableId: string) => {
+    deleteTableMutation.mutate(tableId)
+  }, [deleteTableMutation])
+
+  // Memoized table statistics
+  const tableStats = useMemo(() => {
+    if (!tables) return { total: 0, active: 0, inactive: 0, byType: {}, totalCapacity: 0 }
     
     const stats = {
       total: tables.length,
       active: tables.filter(t => t.is_active).length,
       inactive: tables.filter(t => !t.is_active).length,
       byType: {} as Record<string, number>,
+      totalCapacity: 0,
     }
 
     tables.forEach(table => {
-      stats.byType[table.table_type] = (stats.byType[table.table_type] || 0) + 1
+      if (table.is_active) {
+        stats.byType[table.table_type] = (stats.byType[table.table_type] || 0) + 1
+        stats.totalCapacity += table.max_capacity
+      }
     })
 
     return stats
-  }
+  }, [tables])
 
-  const stats = getTableStats()
+  // Handle refresh
+  const handleRefresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["tables", restaurantId] })
+    queryClient.invalidateQueries({ queryKey: ["floor-plans", restaurantId] })
+    queryClient.invalidateQueries({ queryKey: ["table-combinations", restaurantId] })
+    toast.success("Data refreshed")
+  }, [queryClient, restaurantId])
 
   return (
     <div className="space-y-8">
@@ -228,35 +295,42 @@ export default function TablesPage() {
             Manage your restaurant tables and floor layout
           </p>
         </div>
-        <Dialog open={isAddingTable} onOpenChange={setIsAddingTable}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Table
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px]">
-            <DialogHeader>
-              <DialogTitle>Add New Table</DialogTitle>
-            </DialogHeader>
-            <TableForm
-              tables={tables || []}
-              onSubmit={(data) => tableMutation.mutate(data)}
-              onCancel={() => setIsAddingTable(false)}
-              isLoading={tableMutation.isPending}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleRefresh}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+          <Dialog open={isAddingTable} onOpenChange={setIsAddingTable}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Table
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px]">
+              <DialogHeader>
+                <DialogTitle>Add New Table</DialogTitle>
+              </DialogHeader>
+              <TableForm
+                tables={tables || []}
+                onSubmit={(data) => tableMutation.mutate(data)}
+                onCancel={() => setIsAddingTable(false)}
+                isLoading={tableMutation.isPending}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
-      {/* Statistics */}
+      {/* Enhanced Statistics */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Tables</CardTitle>
+            {tablesLoading && <div className="w-4 h-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />}
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
+            <div className="text-2xl font-bold">{tableStats.total}</div>
           </CardContent>
         </Card>
         <Card>
@@ -264,9 +338,9 @@ export default function TablesPage() {
             <CardTitle className="text-sm font-medium">Active Tables</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.active}</div>
+            <div className="text-2xl font-bold">{tableStats.active}</div>
             <p className="text-xs text-muted-foreground">
-              {stats.inactive} inactive
+              {tableStats.inactive} inactive
             </p>
           </CardContent>
         </Card>
@@ -275,7 +349,7 @@ export default function TablesPage() {
             <CardTitle className="text-sm font-medium">Table Types</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{Object.keys(stats.byType).length}</div>
+            <div className="text-2xl font-bold">{Object.keys(tableStats.byType).length}</div>
             <p className="text-xs text-muted-foreground">
               Different types
             </p>
@@ -287,7 +361,7 @@ export default function TablesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {tables?.reduce((sum, t) => sum + t.max_capacity, 0) || 0}
+              {tableStats.totalCapacity}
             </div>
             <p className="text-xs text-muted-foreground">
               Seats available
@@ -295,6 +369,24 @@ export default function TablesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Enhanced Error Handling */}
+      {tablesError && (
+        <Card className="border-destructive">
+          <CardHeader>
+            <CardTitle className="text-destructive">Error Loading Tables</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              There was an error loading your tables. Please try refreshing the page.
+            </p>
+            <Button onClick={handleRefresh} variant="outline">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Try Again
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* View Toggle */}
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "grid" | "floor-plan" | "combinations")}>
@@ -322,7 +414,7 @@ export default function TablesPage() {
               setSelectedTable(table)
               setIsAddingTable(true)
             }}
-            onDelete={(id) => deleteTableMutation.mutate(id)}
+            onDelete={handleTableDelete}
           />
         </TabsContent>
 
@@ -341,6 +433,7 @@ export default function TablesPage() {
                   <Select
                     value={selectedFloorPlan}
                     onValueChange={setSelectedFloorPlan}
+                    disabled={floorPlansLoading}
                   >
                     <SelectTrigger className="w-[200px]">
                       <SelectValue placeholder="Select floor plan" />
@@ -357,27 +450,22 @@ export default function TablesPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <FloorPlanEditor
-                tables={tables || []}
-                floorPlanId={selectedFloorPlan}
-                onTableUpdate={(tableId, position) => {
-                  tableMutation.mutate({
-                    id: tableId,
-                    x_position: position.x,
-                    y_position: position.y,
-                  })
-                }}
-                onTableResize={(tableId, dimensions) => {
-                  tableMutation.mutate({
-                    id: tableId,
-                    width: dimensions.width,
-                    height: dimensions.height,
-                  })
-                }}
-                onTableDelete={(tableId) => {
-                  deleteTableMutation.mutate(tableId)
-                }}
-              />
+              {tablesLoading ? (
+                <div className="flex items-center justify-center h-[700px]">
+                  <div className="text-center">
+                    <div className="w-8 h-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
+                    <p className="text-muted-foreground">Loading tables...</p>
+                  </div>
+                </div>
+              ) : (
+                <FloorPlanEditor
+                  tables={tables || []}
+                  floorPlanId={selectedFloorPlan}
+                  onTableUpdate={handleTableUpdate}
+                  onTableResize={handleTableResize}
+                  onTableDelete={handleTableDelete}
+                />
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -394,6 +482,7 @@ export default function TablesPage() {
                 .eq("id", id)
               queryClient.invalidateQueries({ queryKey: ["table-combinations"] })
             }}
+          
           />
         </TabsContent>
       </Tabs>
