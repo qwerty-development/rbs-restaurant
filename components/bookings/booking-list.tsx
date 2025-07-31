@@ -35,19 +35,25 @@ import {
   Activity,
   ArrowRight,
   Coffee,
-  Cake
+  Cake,
+  Star,
+  StickyNote,
+  Ban,
+  AlertTriangle
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
 import type { Booking } from "@/types"
 import { Alert, AlertDescription } from "../ui/alert"
+import { useBookingCustomers } from "@/lib/hooks/use-booking-customers"
 
 interface BookingListProps {
   bookings: Booking[]
   isLoading: boolean
   onSelectBooking: (booking: Booking) => void
-  onUpdateStatus: (bookingId: string, status: Booking['status']) => void
+  onUpdateStatus: (bookingId: string, status: string) => void
   compact?: boolean
+  restaurantId?: string
 }
 
 // Status configuration mapping
@@ -143,9 +149,16 @@ export function BookingList({
   isLoading,
   onSelectBooking,
   onUpdateStatus,
-  compact = false
-}: any) {
+  compact = false,
+  restaurantId
+}: BookingListProps) {
   const tableStatusService = new TableStatusService()
+  
+  // Load customer data for all bookings
+  const { customerData, loading: customerLoading } = useBookingCustomers(
+    bookings, 
+    restaurantId || ''
+  )
 
   const getStatusBadgeVariant = (status: string): any => {
     const diningStatuses = ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
@@ -240,6 +253,42 @@ export function BookingList({
                     <h3 className="font-semibold text-lg">
                       {formatGuestName(booking)}
                     </h3>
+                    
+                    {/* Customer Indicators */}
+                    {customerData[booking.id] && (
+                      <div className="flex items-center gap-1">
+                        {customerData[booking.id].isVip && (
+                          <Badge variant="default" className="text-xs bg-gold text-gold-foreground">
+                            <Star className="h-3 w-3 mr-1" />
+                            VIP
+                          </Badge>
+                        )}
+                        {customerData[booking.id].isBlacklisted && (
+                          <Badge variant="destructive" className="text-xs">
+                            <Ban className="h-3 w-3 mr-1" />
+                            Blacklisted
+                          </Badge>
+                        )}
+                        {customerData[booking.id].hasImportantNotes && (
+                          <Badge variant="secondary" className="text-xs">
+                            <StickyNote className="h-3 w-3 mr-1" />
+                            Notes
+                          </Badge>
+                        )}
+                        {customerData[booking.id].hasDietaryRestrictions && (
+                          <Badge variant="outline" className="text-xs border-orange-300 text-orange-700">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            Dietary
+                          </Badge>
+                        )}
+                        {customerData[booking.id].tagCount > 0 && (
+                          <Badge variant="outline" className="text-xs">
+                            {customerData[booking.id].tagCount} tag{customerData[booking.id].tagCount !== 1 ? 's' : ''}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                    
                     <Badge 
                       variant={getStatusBadgeVariant(booking.status)}
                       className={cn(statusConfig.bgColor, statusConfig.color)}

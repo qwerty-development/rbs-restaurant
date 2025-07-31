@@ -23,6 +23,7 @@ interface Booking {
   guest_name?: string | null
   guest_phone?: string | null
   user?: {
+    id: string
     full_name: string
     phone_number?: string | null
   } | null
@@ -30,9 +31,10 @@ interface Booking {
 
 interface RecentBookingsProps {
   bookings: Booking[]
+  customersData?: Record<string, any>
 }
 
-export function RecentBookings({ bookings }: RecentBookingsProps) {
+export function RecentBookings({ bookings, customersData = {} }: RecentBookingsProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'confirmed':
@@ -97,12 +99,28 @@ export function RecentBookings({ bookings }: RecentBookingsProps) {
           <TableBody>
             {bookings.map((booking) => {
               const bookingDate = new Date(booking.booking_time)
+              const customerData = booking.user?.id ? customersData[booking.user.id] : null
               
               return (
                 <TableRow key={booking.id}>
                   <TableCell>
                     <div>
-                      <p className="font-medium">{getDisplayName(booking)}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{getDisplayName(booking)}</p>
+                        {/* Customer Indicators */}
+                        <div className="flex items-center gap-1">
+                          {customerData?.vip_status && (
+                            <Badge variant="default" className="text-xs px-1.5 py-0.5">
+                              ⭐
+                            </Badge>
+                          )}
+                          {customerData?.blacklisted && (
+                            <Badge variant="destructive" className="text-xs px-1.5 py-0.5">
+                              🚫
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                       <p className="text-sm text-muted-foreground">
                         {getDisplayPhone(booking)}
                       </p>

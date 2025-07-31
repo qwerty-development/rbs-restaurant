@@ -26,13 +26,15 @@ interface TodaysTimelineProps {
   currentTime: Date
   onSelectBooking: (booking: any) => void
   onUpdateStatus: (bookingId: string, status: string) => void
+  customersData?: Record<string, any>
 }
 
 export function TodaysTimeline({ 
   bookings, 
   currentTime, 
   onSelectBooking,
-  onUpdateStatus 
+  onUpdateStatus,
+  customersData = {}
 }: TodaysTimelineProps) {
   // Filter to only show active bookings (confirmed and pending)
   const activeBookings = bookings.filter(booking => 
@@ -218,6 +220,7 @@ export function TodaysTimeline({
                           const timeUntil = getTimeUntilBooking(booking)
                           const guestName = booking.user?.full_name || booking.guest_name || 'Guest'
                           const guestPhone = booking.user?.phone_number || booking.guest_phone
+                          const customerData = booking.user?.id ? customersData[booking.user.id] : null
                           
                           return (
                             <div
@@ -248,6 +251,19 @@ export function TodaysTimeline({
                                     <Badge className={cn("text-xs font-medium", statusConfig.badge)}>
                                       {booking.status === 'pending' ? 'Awaiting Confirmation' : 'Confirmed'}
                                     </Badge>
+                                    {/* Customer Indicators */}
+                                    <div className="flex items-center gap-1">
+                                      {customerData?.vip_status && (
+                                        <Badge variant="default" className="text-xs px-1.5 py-0.5">
+                                          ⭐ VIP
+                                        </Badge>
+                                      )}
+                                      {customerData?.blacklisted && (
+                                        <Badge variant="destructive" className="text-xs px-1.5 py-0.5">
+                                          🚫 Alert
+                                        </Badge>
+                                      )}
+                                    </div>
                                   </div>
 
                                   {/* Booking details */}

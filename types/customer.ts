@@ -79,6 +79,7 @@ export interface CustomerRelationship {
   created_by: string
   created_at: string
   related_customer?: RestaurantCustomer
+  customer?: RestaurantCustomer
 }
 
 export interface CustomerPreference {

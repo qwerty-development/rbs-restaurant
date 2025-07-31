@@ -751,7 +751,7 @@ export default function BookingsPage() {
             <div className={`h-2 w-2 rounded-full ${autoRefresh ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
             <span>{autoRefresh ? 'Live' : 'Paused'}</span>
             <span>•</span>
-            <span>Last updated: {format(now, 'HH:mm:ss')}</span>
+         
           </div>
         </div>
 
@@ -913,8 +913,9 @@ export default function BookingsPage() {
           <BookingList
             bookings={filteredBookings || []}
             isLoading={isLoading}
+            restaurantId={restaurantId}
             onSelectBooking={setSelectedBooking}
-            onUpdateStatus={(bookingId, status) => 
+            onUpdateStatus={(bookingId: any, status: any) => 
               updateBookingMutation.mutate({ bookingId, updates: { status } })
             }
           />
@@ -1023,8 +1024,9 @@ export default function BookingsPage() {
           <BookingList
             bookings={filteredBookings || []}
             isLoading={isLoading}
+            restaurantId={restaurantId}
             onSelectBooking={setSelectedBooking}
-            onUpdateStatus={(bookingId, status) => 
+            onUpdateStatus={(bookingId: any, status: any) => 
               updateBookingMutation.mutate({ bookingId, updates: { status } })
             }
           />
@@ -1062,8 +1064,9 @@ export default function BookingsPage() {
                 <BookingList
                   bookings={filteredBookings || []}
                   isLoading={isLoading}
+                  restaurantId={restaurantId}
                   onSelectBooking={setSelectedBooking}
-                  onUpdateStatus={(bookingId, status) => 
+                  onUpdateStatus={(bookingId: any, status: any) => 
                     updateBookingMutation.mutate({ bookingId, updates: { status } })
                   }
                   compact

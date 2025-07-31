@@ -40,6 +40,7 @@ interface CheckInManagerProps {
   onCheckIn: (bookingId: string, tableIds: string[]) => void
   onStatusUpdate: (bookingId: string, status: DiningStatus) => void
   onQuickSeat: (guestData: any, tableIds: string[]) => void
+  customersData?: Record<string, any>
 }
 
 export function CheckInManager({
@@ -50,7 +51,8 @@ export function CheckInManager({
   currentTime,
   onCheckIn,
   onStatusUpdate,
-  onQuickSeat
+  onQuickSeat,
+  customersData = {}
 }: CheckInManagerProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
@@ -236,6 +238,7 @@ export function CheckInManager({
                     const StatusIcon = status.icon
                     const isSelected = selectedBookingId === booking.id
                     const hasTable = booking.tables && booking.tables.length > 0
+                    const customerData = booking.user?.id ? customersData[booking.user.id] : null
 
                     return (
                       <div
@@ -257,7 +260,27 @@ export function CheckInManager({
                               <Badge variant="outline" className={status.color}>
                                 {status.label}
                               </Badge>
+                              {/* Customer Indicators */}
+                              <div className="flex items-center gap-1">
+                                {customerData?.vip_status && (
+                                  <Badge variant="default" className="text-xs px-1.5 py-0.5">
+                                    ⭐ VIP
+                                  </Badge>
+                                )}
+                                {customerData?.blacklisted && (
+                                  <Badge variant="destructive" className="text-xs px-1.5 py-0.5">
+                                    🚫 Alert
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
+
+                            {/* Customer Alert for Blacklisted */}
+                            {customerData?.blacklisted && customerData?.blacklist_reason && (
+                              <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-xs">
+                                <strong>Alert:</strong> {customerData.blacklist_reason}
+                              </div>
+                            )}
 
                             {/* Booking details */}
                             <div className="grid grid-cols-2 gap-4 text-sm">

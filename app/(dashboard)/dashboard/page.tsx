@@ -54,12 +54,14 @@ function ArrivingGuestsCard({
   bookings, 
   currentTime,
   onCheckIn,
-  tables 
+  tables,
+  customersData
 }: { 
   bookings: any[], 
   currentTime: Date,
   onCheckIn: (bookingId: string) => void,
-  tables: any[]
+  tables: any[],
+  customersData: Record<string, any>
 }) {
   const arrivingSoon = bookings
     .filter(booking => {
@@ -88,6 +90,7 @@ function ArrivingGuestsCard({
                 const minutesUntil = differenceInMinutes(bookingTime, currentTime)
                 const isLate = minutesUntil < 0
                 const hasTable = booking.tables && booking.tables.length > 0
+                const customerData = booking.user?.id ? customersData[booking.user.id] : null
                 
                 return (
                   <div key={booking.id} className={cn(
@@ -97,9 +100,24 @@ function ArrivingGuestsCard({
                   )}>
                     <div className="flex items-center justify-between">
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">
-                          {booking.user?.full_name || booking.guest_name || 'Guest'}
-                        </p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-medium text-sm truncate">
+                            {booking.user?.full_name || booking.guest_name || 'Guest'}
+                          </p>
+                          {/* Customer Indicators */}
+                          <div className="flex items-center gap-1">
+                            {customerData?.vip_status && (
+                              <Badge variant="default" className="text-xs px-1.5 py-0.5">
+                                ⭐ VIP
+                              </Badge>
+                            )}
+                            {customerData?.blacklisted && (
+                              <Badge variant="destructive" className="text-xs px-1.5 py-0.5">
+                                🚫 Alert
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
                         <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
@@ -365,6 +383,62 @@ export default function DashboardPage() {
       return data || []
     },
     enabled: !!restaurantId,
+  })
+
+  // Fetch customer data for all bookings
+  const { data: customersData = {} } = useQuery({
+    queryKey: ["dashboard-customers", restaurantId, todaysBookings.map(b => b.user?.id).filter(Boolean)],
+    queryFn: async () => {
+      if (!restaurantId || todaysBookings.length === 0) return {}
+      
+      const userIds = todaysBookings
+        .map(booking => booking.user?.id)
+        .filter(Boolean)
+        .filter((id, index, self) => self.indexOf(id) === index) // Remove duplicates
+      
+      if (userIds.length === 0) return {}
+
+      const { data, error } = await supabase
+        .from("restaurant_customers")
+        .select(`
+          user_id,
+          vip_status,
+          blacklisted,
+          preferred_table_types,
+          preferred_time_slots,
+          total_bookings,
+          total_spent,
+          no_show_count,
+          blacklist_reason,
+          customer_relationships!customer_relationships_customer_id_fkey(
+            id,
+            related_customer_id,
+            relationship_type,
+            customer:restaurant_customers!customer_relationships_related_customer_id_fkey(
+              user_id
+            ),
+            related_customer:restaurant_customers!customer_relationships_customer_id_fkey(
+              user_id
+            )
+          )
+        `)
+        .eq("restaurant_id", restaurantId)
+        .in("user_id", userIds)
+
+      if (error) {
+        console.error('Error fetching customer data:', error)
+        return {}
+      }
+
+      // Transform data into a map keyed by user_id
+      const customerMap: Record<string, any> = {}
+      data?.forEach(customer => {
+        customerMap[customer.user_id] = customer
+      })
+
+      return customerMap
+    },
+    enabled: !!restaurantId && todaysBookings.length > 0,
   })
 
   // Update booking status with new status service
@@ -670,6 +744,7 @@ export default function DashboardPage() {
                 updateBookingMutation.mutate({ bookingId, updates: { status } })
               }
               onQuickSeat={handleQuickSeat}
+              customersData={customersData}
             />
             
             <div className="space-y-4">
@@ -678,6 +753,7 @@ export default function DashboardPage() {
                 currentTime={currentTime}
                 onCheckIn={handleCheckIn}
                 tables={tables}
+                customersData={customersData}
               />
               
               <ServiceMetrics 
@@ -697,6 +773,7 @@ export default function DashboardPage() {
             onUpdateStatus={(bookingId, status) => 
               updateBookingMutation.mutate({ bookingId, updates: { status } })
             }
+            customersData={customersData}
           />
         </TabsContent>
 
@@ -729,6 +806,7 @@ export default function DashboardPage() {
                         {currentlyDining.map((booking) => {
                           const StatusIcon = STATUS_ICONS[booking.status as DiningStatus]
                           const progress = TableStatusService.getDiningProgress(booking.status as DiningStatus)
+                          const customerData = booking.user?.id ? customersData[booking.user.id] : null
                           
                           return (
                             <div
@@ -746,6 +824,17 @@ export default function DashboardPage() {
                                     <Badge variant="secondary" className="text-xs">
                                       {booking.status.replace(/_/g, ' ')}
                                     </Badge>
+                                    {/* Customer Indicators */}
+                                    {customerData?.vip_status && (
+                                      <Badge variant="default" className="text-xs px-1.5 py-0.5">
+                                        ⭐ VIP
+                                      </Badge>
+                                    )}
+                                    {customerData?.blacklisted && (
+                                      <Badge variant="destructive" className="text-xs px-1.5 py-0.5">
+                                        🚫 Alert
+                                      </Badge>
+                                    )}
                                   </div>
                                   <div className="flex items-center gap-3 text-sm text-muted-foreground">
                                     <span className="flex items-center gap-1">
@@ -763,6 +852,12 @@ export default function DashboardPage() {
                                       </span>
                                     )}
                                   </div>
+                                  {/* Customer Alert for Blacklisted */}
+                                  {customerData?.blacklisted && customerData?.blacklist_reason && (
+                                    <p className="text-xs text-red-600 mt-1">
+                                      Alert: {customerData.blacklist_reason}
+                                    </p>
+                                  )}
                                 </div>
                                 <div className="text-right">
                                   <div className="text-sm font-medium">{progress}%</div>
@@ -778,7 +873,10 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
-              <RecentBookings bookings={todaysBookings.slice(0, 10)} />
+              <RecentBookings 
+                bookings={todaysBookings.slice(0, 10)} 
+                customersData={customersData}
+              />
             </div>
 
             <div className="space-y-4">

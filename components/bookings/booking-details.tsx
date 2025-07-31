@@ -59,6 +59,7 @@ import {
 import { cn } from "@/lib/utils"
 import type { Booking } from "@/types"
 import { Card, CardHeader, CardTitle, CardContent } from "../ui/card"
+import { BookingCustomerDetails } from "./booking-customer-details"
 
 interface BookingDetailsProps {
   booking: Booking
@@ -255,13 +256,14 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="flex items-center gap-3">
-              <StatusIcon className={cn("h-6 w-6", statusConfig?.color)} />
-              Booking Details
-            </DialogTitle>
+      <DialogContent className="max-w-4xl w-full h-[95vh] flex flex-col p-0">
+        <div className="flex-shrink-0 px-6 py-4 border-b">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-3">
+                <StatusIcon className={cn("h-6 w-6", statusConfig?.color)} />
+                Booking Details
+              </DialogTitle>
             {!isEditing ? (
               <Button
                 variant="outline"
@@ -300,20 +302,21 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                 </Button>
               </div>
             )}
-          </div>
-        </DialogHeader>
+            </div>
+          </DialogHeader>
+        </div>
 
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-            <TabsList className="grid w-full grid-cols-3 flex-shrink-0">
+            <TabsList className="grid w-full grid-cols-4 flex-shrink-0 mb-4">
               <TabsTrigger value="details">Details</TabsTrigger>
+              <TabsTrigger value="customer">Customer</TabsTrigger>
               <TabsTrigger value="status">Status & Progress</TabsTrigger>
               <TabsTrigger value="history">History</TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="flex-1">
-              <TabsContent value="details" className="p-4 space-y-6">
-                {/* Guest Information */}
+            <div className="flex-1">
+              <TabsContent value="details" className="space-y-6 m-0">{/* Guest Information */}
                 <div>
                   <h3 className="font-semibold mb-3">Guest Information</h3>
                   <div className="grid grid-cols-2 gap-4">
@@ -505,7 +508,15 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                 </div>
               </TabsContent>
 
-              <TabsContent value="status" className="p-4 space-y-6">
+              <TabsContent value="customer" className="space-y-6 m-0">
+                <BookingCustomerDetails 
+                  booking={booking} 
+                  restaurantId={booking.restaurant_id}
+                  currentUserId={userId}
+                />
+              </TabsContent>
+
+              <TabsContent value="status" className="space-y-6 m-0">
                 {/* Current Status Overview */}
                 <Card>
                   <CardHeader>
@@ -627,7 +638,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                 )}
               </TabsContent>
 
-              <TabsContent value="history" className="p-4">
+              <TabsContent value="history" className="space-y-6 m-0">
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">Status History</CardTitle>
@@ -681,7 +692,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                   </CardContent>
                 </Card>
               </TabsContent>
-            </ScrollArea>
+            </div>
           </Tabs>
         </div>
       </DialogContent>

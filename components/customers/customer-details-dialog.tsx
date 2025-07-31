@@ -119,6 +119,10 @@ export function CustomerDetailsDialog({
           related_customer:restaurant_customers!customer_relationships_related_customer_id_fkey(
             *,
             profile:profiles(full_name, avatar_url)
+          ),
+          customer:restaurant_customers!customer_relationships_customer_id_fkey(
+            *,
+            profile:profiles(full_name, avatar_url)
           )
         `)
         .or(`customer_id.eq.${customer.id},related_customer_id.eq.${customer.id}`)
@@ -255,6 +259,10 @@ export function CustomerDetailsDialog({
         .select(`
           *,
           related_customer:restaurant_customers!customer_relationships_related_customer_id_fkey(
+            *,
+            profile:profiles(full_name, avatar_url)
+          ),
+          customer:restaurant_customers!customer_relationships_customer_id_fkey(
             *,
             profile:profiles(full_name, avatar_url)
           )
@@ -832,8 +840,9 @@ export function CustomerDetailsDialog({
               {/* Relationships List */}
               <div className="space-y-2">
                 {relationships.map((rel) => {
-                  const isCustomer = rel.customer_id === customer.id
-                  const relatedCustomer = isCustomer ? rel.related_customer : customer
+                  // Logic to determine which customer to show (the OTHER person in the relationship)
+                  const isCurrentCustomerTheCreator = rel.customer_id === customer.id
+                  const relatedCustomer = isCurrentCustomerTheCreator ? rel.related_customer : rel.customer
                   
                   return (
                     <Card key={rel.id}>
