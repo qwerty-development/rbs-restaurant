@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { restaurantAuth } from "@/lib/restaurant-auth"
+import { restaurantAuth, type StaffMember, type Role } from "@/lib/restaurant-auth"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
@@ -79,22 +79,6 @@ import {
 } from "lucide-react"
 
 // Types
-type StaffMember = {
-  id: string
-  role: 'owner' | 'manager' | 'staff' | 'viewer'
-  permissions: string[]
-  is_active: boolean
-  hired_at: string
-  last_login_at: string | null
-  user: {
-    id: string
-    full_name: string
-    email: string
-    phone_number: string | null
-    avatar_url: string | null
-  }
-}
-
 type User = {
   id: string
   email: string
@@ -229,7 +213,7 @@ export default function StaffPage() {
   // State
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([])
   const [currentUser, setCurrentUser] = useState<User | null>(null)
-  const [currentStaff, setCurrentStaff] = useState<StaffMember | null>(null)
+  const [currentStaff, setCurrentStaff] = useState<any>(null)
   const [restaurantId, setRestaurantId] = useState<string>("")
   const [loading, setLoading] = useState(true)
   const [isAddingStaff, setIsAddingStaff] = useState(false)
@@ -281,21 +265,33 @@ export default function StaffPage() {
           id,
           role,
           permissions,
-          restaurant_id,
-          user:profiles(*)
+          restaurant_id
         `)
         .eq('user_id', user.id)
         .eq('is_active', true)
         .single()
 
       if (staffError || !staffData) {
+        console.error('Staff query error:', staffError)
+        console.log('Staff data result:', staffData)
         toast.error("You don't have access to manage staff")
         router.push('/dashboard')
         return
       }
 
-      setCurrentStaff(staffData as any)
+      // Debug: Log the complete staff data
+      console.log('Complete staff data received:', staffData)
+
+      setCurrentStaff(staffData)
       setRestaurantId(staffData.restaurant_id)
+
+      // Debug: Log the permission check data
+      console.log('Permission check debug:', {
+        permissions: staffData.permissions,
+        role: staffData.role,
+        requiredPermission: 'staff.manage',
+        hasPermission: restaurantAuth.hasPermission(staffData.permissions, 'staff.manage', staffData.role)
+      })
 
       // Check if user can manage staff
       if (!restaurantAuth.hasPermission(staffData.permissions, 'staff.manage', staffData.role)) {
@@ -317,8 +313,8 @@ export default function StaffPage() {
 
   const loadStaffMembers = async (restaurantId: string) => {
     try {
-      const staff:any = await restaurantAuth.getRestaurantStaff(restaurantId)
-      setStaffMembers(staff as StaffMember[])
+      const staff = await restaurantAuth.getRestaurantStaff(restaurantId)
+      setStaffMembers(staff)
     } catch (error) {
       console.error('Error loading staff members:', error)
       toast.error('Failed to load staff members')
