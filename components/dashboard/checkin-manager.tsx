@@ -150,11 +150,6 @@ export function CheckInManager({
   }
 
   const handleWalkIn = async () => {
-    if (!walkInData.guestName) {
-      toast.error("Please enter guest name")
-      return
-    }
-
     if (selectedTableIds.length === 0) {
       toast.error("Please select at least one table")
       return
@@ -162,7 +157,7 @@ export function CheckInManager({
 
     try {
       const walkInBooking = {
-        guest_name: walkInData.guestName,
+        guest_name: walkInData.guestName || `Walk-in ${format(currentTime, 'HH:mm')}`,
         guest_phone: walkInData.guestPhone,
         party_size: walkInData.partySize,
         table_ids: selectedTableIds,
@@ -369,16 +364,16 @@ export function CheckInManager({
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="guest-name">Guest Name *</Label>
+                  <Label htmlFor="guest-name">Guest Name (Optional)</Label>
                   <Input
                     id="guest-name"
                     value={walkInData.guestName}
                     onChange={(e) => setWalkInData(prev => ({ ...prev, guestName: e.target.value }))}
-                    placeholder="Enter guest name"
+                    placeholder="Enter guest name or leave blank"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="guest-phone">Phone Number</Label>
+                  <Label htmlFor="guest-phone">Phone Number (Optional)</Label>
                   <Input
                     id="guest-phone"
                     value={walkInData.guestPhone}
@@ -448,7 +443,7 @@ export function CheckInManager({
                 className="w-full"
                 size="lg"
                 onClick={handleWalkIn}
-                disabled={!walkInData.guestName || selectedTableIds.length === 0}
+                disabled={selectedTableIds.length === 0}
               >
                 <UserPlus className="h-5 w-5 mr-2" />
                 Seat Walk-in Guest

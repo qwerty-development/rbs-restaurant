@@ -42,9 +42,9 @@ import { toast } from "react-hot-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 const formSchema = z.object({
-  guest_name: z.string().min(2, "Name is required"),
+  guest_name: z.string().optional(),
   guest_email: z.string().email().optional().or(z.literal("")),
-  guest_phone: z.string().min(10, "Phone number is required"),
+  guest_phone: z.string().optional(),
   booking_date: z.date(),
   booking_time: z.string(),
   party_size: z.number().min(1).max(20),
@@ -275,6 +275,8 @@ export function ManualBookingForm({
 
     onSubmit({
       ...data,
+      guest_name: data.guest_name || `Anonymous Guest ${format(new Date(), 'HH:mm')}`,
+      guest_phone: data.guest_phone || '',
       booking_time: bookingDateTime.toISOString(),
       table_ids: selectedTables,
     })
@@ -361,12 +363,13 @@ export function ManualBookingForm({
       <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
         {/* Guest Information */}
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Guest Information</h3>
+          <h3 className="text-lg font-semibold">Guest Information (Optional)</h3>
         
         <div>
-          <Label htmlFor="guest_name">Guest Name *</Label>
+          <Label htmlFor="guest_name">Guest Name (Optional)</Label>
           <Input
             id="guest_name"
+            placeholder="Enter guest name or leave blank for anonymous"
             {...register("guest_name")}
             disabled={isLoading}
           />
@@ -377,10 +380,11 @@ export function ManualBookingForm({
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="guest_phone">Phone Number *</Label>
+            <Label htmlFor="guest_phone">Phone Number (Optional)</Label>
             <Input
               id="guest_phone"
               type="tel"
+              placeholder="Enter phone number"
               {...register("guest_phone")}
               disabled={isLoading}
             />
