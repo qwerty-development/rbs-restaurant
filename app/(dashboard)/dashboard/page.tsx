@@ -1,10 +1,10 @@
 // app/(dashboard)/dashboard/page.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { format, startOfDay, endOfDay, addMinutes, isWithinInterval, differenceInMinutes } from "date-fns"
+import { format, startOfDay, endOfDay, addMinutes, differenceInMinutes, addDays } from "date-fns"
 import { OperationalStatusCards } from "@/components/dashboard/operational-status-cards"
 import { TodaysTimeline } from "@/components/dashboard/todays-timeline"
 import { TableStatusView } from "@/components/dashboard/table-status-view"
@@ -12,13 +12,15 @@ import { EnhancedFloorPlan } from "@/components/dashboard/enhanced-floor-plan"
 import { CheckInManager } from "@/components/dashboard/checkin-manager"
 import { QuickActions } from "@/components/dashboard/quick-actions"
 import { RecentBookings } from "@/components/dashboard/recent-bookings"
+import { PendingRequestsWidget } from "@/components/dashboard/pending-request-widget"
 import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
 import { BookingDetails } from "@/components/bookings/booking-details"
 import { TableAvailabilityService } from "@/lib/table-availability"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
+import { BookingRequestService } from "@/lib/booking-request-service"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -45,7 +47,8 @@ import {
   CreditCard,
   Map,
   Cake,
-  Coffee
+  Coffee,
+  AlertTriangle
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -171,19 +174,19 @@ function ServiceMetrics({ bookings, currentTime }: { bookings: any[], currentTim
   const completedToday = bookings.filter(b => b.status === 'completed').length
   const noShowToday = bookings.filter(b => b.status === 'no_show').length
   const cancelledToday = bookings.filter(b => 
-    b.status === 'cancelled_by_user' || b.status === 'declined_by_restaurant'
+    b.status === 'cancelled_by_user' || b.status === 'declined_by_restaurant' || b.status === 'auto_declined'
   ).length
   
   // Calculate dining stages
   const diningStages = {
     arrived: bookings.filter(b => b.status === 'arrived').length,
     seated: bookings.filter(b => b.status === 'seated').length,
+    ordered: bookings.filter(b => b.status === 'ordered').length,
     appetizers: bookings.filter(b => b.status === 'appetizers').length,
     mainCourse: bookings.filter(b => b.status === 'main_course').length,
+    dessert: bookings.filter(b => b.status === 'dessert').length,
     payment: bookings.filter(b => b.status === 'payment').length,
   }
-
-
   
   // Calculate average turn time for completed bookings
   const completedWithTurnTime = bookings.filter(b => 
@@ -236,11 +239,18 @@ function ServiceMetrics({ bookings, currentTime }: { bookings: any[], currentTim
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="flex items-center gap-2">
+                  <Coffee className="h-3 w-3" />
+                  Ordered
+                </span>
+                <Badge variant="secondary">{diningStages.ordered}</Badge>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2">
                   <Utensils className="h-3 w-3" />
                   Dining
                 </span>
                 <Badge variant="secondary">
-                  {diningStages.appetizers + diningStages.mainCourse}
+                  {diningStages.appetizers + diningStages.mainCourse + diningStages.dessert}
                 </Badge>
               </div>
               <div className="flex items-center justify-between text-sm">
@@ -250,6 +260,19 @@ function ServiceMetrics({ bookings, currentTime }: { bookings: any[], currentTim
                 </span>
                 <Badge variant="secondary">{diningStages.payment}</Badge>
               </div>
+            </div>
+          </div>
+          
+          <Separator />
+          
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">No Shows</span>
+              <Badge variant="outline" className="text-red-600">{noShowToday}</Badge>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Cancelled/Declined</span>
+              <Badge variant="outline" className="text-gray-600">{cancelledToday}</Badge>
             </div>
           </div>
         </div>
@@ -287,6 +310,7 @@ export default function DashboardPage() {
   const queryClient = useQueryClient()
   const tableService = new TableAvailabilityService()
   const statusService = new TableStatusService()
+  const requestService = new BookingRequestService()
 
   // Update current time every minute
   useEffect(() => {
@@ -441,11 +465,110 @@ export default function DashboardPage() {
     enabled: !!restaurantId && todaysBookings.length > 0,
   })
 
+  // Auto-refresh for expiring requests
+  useEffect(() => {
+    if (!todaysBookings.length) return
+
+    const checkExpiring = () => {
+      const expiringRequests = todaysBookings.filter(b => {
+        if (b.status !== 'pending' || !b.request_expires_at) return false
+        const minutesLeft = differenceInMinutes(new Date(b.request_expires_at), currentTime)
+        return minutesLeft > 0 && minutesLeft < 10 // 10 minutes warning
+      })
+      
+      if (expiringRequests.length > 0) {
+        toast.error(
+          <div>
+            <p className="font-medium">{expiringRequests.length} booking request{expiringRequests.length !== 1 ? 's' : ''} expiring soon!</p>
+            <p className="text-sm">Review and respond quickly</p>
+          </div>,
+          {
+            duration: 5000,
+            icon: <Timer className="h-4 w-4" />
+          }
+        )
+      }
+    }
+
+    // Check immediately and then every minute
+    checkExpiring()
+    const interval = setInterval(checkExpiring, 60000)
+    
+    return () => clearInterval(interval)
+  }, [todaysBookings, currentTime])
+
   // Update booking status with new status service
+  // Fixed updateBookingMutation with proper request handling
   const updateBookingMutation = useMutation({
     mutationFn: async ({ bookingId, updates }: { bookingId: string; updates: any }) => {
+      // Special handling for pending to confirmed status
+      if (updates.status === 'confirmed') {
+        const booking = todaysBookings.find(b => b.id === bookingId)
+        if (booking?.status === 'pending') {
+          // Use the request service for proper validation
+          const result = await requestService.acceptRequest(
+            bookingId,
+            userId,
+            updates.tableIds || [],
+            { 
+              suggestAlternatives: true,
+              skipTableAssignment: !updates.tableIds 
+            }
+          )
+          
+          if (!result.success) {
+            // Show detailed error with alternatives
+            if (result.alternatives) {
+              const alternativeTables = result.alternatives.tables?.length || 0
+              const alternativeTimes = result.alternatives.times?.length || 0
+              
+              toast.error(
+                <div>
+                  <p className="font-medium">{result.error}</p>
+                  {(alternativeTables > 0 || alternativeTimes > 0) && (
+                    <p className="text-sm mt-1">
+                      Found {alternativeTables} alternative table{alternativeTables !== 1 ? 's' : ''} and {alternativeTimes} time slot{alternativeTimes !== 1 ? 's' : ''}
+                    </p>
+                  )}
+                </div>,
+                { duration: 5000 }
+              )
+            } else {
+              toast.error(result.error || "Failed to accept request")
+            }
+            
+            throw new Error(result.error || "Failed to accept request")
+          }
+          
+          return
+        }
+      }
+      
+      // Handle declining requests
+      if (updates.status === 'declined_by_restaurant') {
+        const booking = todaysBookings.find(b => b.id === bookingId)
+        if (booking?.status === 'pending') {
+          const result = await requestService.declineRequest(
+            bookingId,
+            userId,
+            "Restaurant declined",
+            true // Suggest alternatives
+          )
+          
+          if (!result.success) {
+            throw new Error(result.error || "Failed to decline request")
+          }
+          
+          if (result.alternatives) {
+            toast.success("Request declined. Alternative suggestions sent to customer.")
+          }
+          
+          return
+        }
+      }
+      
+      // Regular status updates
       if (updates.status) {
-        // Use the new status service for status updates
         await statusService.updateBookingStatus(
           bookingId,
           updates.status as DiningStatus,
@@ -469,9 +592,9 @@ export default function DashboardPage() {
       queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
       toast.success("Booking updated")
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error("Update error:", error)
-      toast.error("Failed to update booking")
+      // Error already shown by mutation function
     },
   })
 
@@ -531,47 +654,34 @@ export default function DashboardPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Must be logged in to create bookings")
       
-      // Validate table availability
-      if (bookingData.table_ids && bookingData.table_ids.length > 0) {
-        const availability = await tableService.checkTableAvailability(
-          restaurantId,
-          bookingData.table_ids,
-          new Date(bookingData.booking_time),
-          bookingData.turn_time_minutes || 120
-        )
-
-        if (!availability.available) {
-          throw new Error("Selected tables are no longer available")
-        }
-      }
-
-      // Generate confirmation code
-      const confirmationCode = `${restaurantId.slice(0, 4).toUpperCase()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`
-
-      // Create booking
-      const { data: booking, error } = await supabase
-        .from("bookings")
-        .insert({
-          restaurant_id: restaurantId,
-          user_id: user.id,
-          guest_name: bookingData.guest_name,
-          guest_email: bookingData.guest_email,
-          guest_phone: bookingData.guest_phone,
-          booking_time: bookingData.booking_time,
-          party_size: bookingData.party_size,
-          turn_time_minutes: bookingData.turn_time_minutes || 120,
-          status: bookingData.status || "confirmed",
-          special_requests: bookingData.special_requests,
-          occasion: bookingData.occasion,
-          confirmation_code: confirmationCode,
-        })
-        .select()
+      // Get restaurant booking policy
+      const { data: restaurant } = await supabase
+        .from("restaurants")
+        .select("booking_policy")
+        .eq("id", restaurantId)
         .single()
 
-      if (error) throw error
+      // Use the BookingRequestService for consistent handling
+      const requestService = new BookingRequestService()
+      
+      const result = await requestService.createBookingRequest({
+        restaurantId,
+        userId: user.id,
+        bookingTime: new Date(bookingData.booking_time),
+        partySize: bookingData.party_size,
+        turnTimeMinutes: bookingData.turn_time_minutes || 120,
+        specialRequests: bookingData.special_requests,
+        occasion: bookingData.occasion,
+        guestName: bookingData.guest_name,
+        guestEmail: bookingData.guest_email,
+        guestPhone: bookingData.guest_phone,
+        preApproved: bookingData.status === 'confirmed' || bookingData.status === 'arrived'
+      })
 
-      // Assign tables if provided
-      if (bookingData.table_ids && bookingData.table_ids.length > 0) {
+      const booking = result.booking
+
+      // Assign tables if provided and not a pending request
+      if (bookingData.table_ids && bookingData.table_ids.length > 0 && booking.status !== 'pending') {
         const tableAssignments = bookingData.table_ids.map((tableId: string) => ({
           booking_id: booking.id,
           table_id: tableId,
@@ -608,7 +718,7 @@ export default function DashboardPage() {
 
   // Filter bookings by status
   const activeBookings = todaysBookings.filter(b => 
-    !['completed', 'no_show', 'cancelled_by_user', 'declined_by_restaurant'].includes(b.status)
+    !['completed', 'no_show', 'cancelled_by_user', 'declined_by_restaurant', 'auto_declined'].includes(b.status)
   )
   
   const currentlyDining = activeBookings.filter(booking => {
@@ -630,6 +740,15 @@ export default function DashboardPage() {
     currentGuests: currentlyDining.reduce((sum, b) => sum + b.party_size, 0),
     awaitingCheckIn: activeBookings.filter(b => b.status === 'arrived').length,
     inService: currentlyDining.length,
+    pendingRequests: todaysBookings.filter(b => b.status === 'pending').length,
+    expiringRequests: todaysBookings.filter(b => {
+      if (b.status !== 'pending' || !b.request_expires_at) return false
+      const hoursLeft = differenceInMinutes(new Date(b.request_expires_at), currentTime) / 60
+      return hoursLeft > 0 && hoursLeft < 2
+    }).length,
+    failedAcceptances: todaysBookings.filter(b => 
+      b.status === 'pending' && b.acceptance_attempted_at
+    ).length,
   }
 
   const handleTableClick = (table: any, statusInfo: any) => {
@@ -672,6 +791,12 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {stats.pendingRequests > 0 && (
+            <Badge variant="destructive" className="text-sm animate-pulse">
+              <Timer className="h-3 w-3 mr-1" />
+              {stats.pendingRequests} pending request{stats.pendingRequests !== 1 ? 's' : ''}
+            </Badge>
+          )}
           <Badge variant={stats.awaitingCheckIn > 0 ? "destructive" : "outline"} className="text-sm">
             <UserCheck className="h-3 w-3 mr-1" />
             {stats.awaitingCheckIn} awaiting check-in
@@ -697,6 +822,36 @@ export default function DashboardPage() {
         tables={tables}
         currentTime={currentTime}
       />
+
+      {/* Critical Alerts */}
+      {(stats.expiringRequests > 0 || stats.failedAcceptances > 0) && (
+        <Alert className="border-red-300 bg-red-50">
+          <AlertTriangle className="h-4 w-4 text-red-600" />
+          <AlertTitle className="text-red-800">Immediate Attention Required</AlertTitle>
+          <AlertDescription className="text-red-700">
+            {stats.expiringRequests > 0 && (
+              <span className="block">
+                • {stats.expiringRequests} booking request{stats.expiringRequests !== 1 ? 's are' : ' is'} expiring within 2 hours
+              </span>
+            )}
+            {stats.failedAcceptances > 0 && (
+              <span className="block">
+                • {stats.failedAcceptances} request{stats.failedAcceptances !== 1 ? 's' : ''} failed acceptance due to conflicts
+              </span>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Pending Requests Widget - Show prominently if there are any */}
+      {todaysBookings.some(b => b.status === 'pending') && (
+        <PendingRequestsWidget
+          bookings={todaysBookings}
+          restaurantId={restaurantId}
+          userId={userId}
+          onUpdate={() => queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })}
+        />
+      )}
 
       {/* Enhanced Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -963,18 +1118,22 @@ export default function DashboardPage() {
             {tables
               .filter(table => {
                 // Check if table is currently occupied by any active booking
-                const isOccupied = todaysBookings.some(booking => {
-                  // Check if this booking has this table assigned
-                  const hasTable = booking.tables?.some((t: any) => t.id === table.id)
-                  if (!hasTable) return false
-
-                  // Check if booking is in an active status that occupies the table
-                  const activeStatuses = [
-                    'confirmed', 'arrived', 'seated', 'ordered', 
-                    'appetizers', 'main_course', 'dessert', 'payment'
+                const tableBookings = todaysBookings.filter(booking => 
+                  booking.tables?.some((t: any) => t.id === table.id)
+                )
+                
+                const isCurrentlyOccupied = tableBookings.some(booking => {
+                  // Define all statuses that indicate table occupancy
+                  const occupiedStatuses = [
+                    'arrived', 'seated', 'ordered', 'appetizers', 
+                    'main_course', 'dessert', 'payment'
                   ]
-                  if (!activeStatuses.includes(booking.status)) return false
-
+                  
+                  // If booking is in an active occupied status, table is occupied
+                  if (occupiedStatuses.includes(booking.status)) {
+                    return true
+                  }
+                  
                   // For confirmed bookings, check if they're within their time window
                   if (booking.status === 'confirmed') {
                     const bookingTime = new Date(booking.booking_time)
@@ -985,12 +1144,11 @@ export default function DashboardPage() {
                     const minutesUntil = differenceInMinutes(bookingTime, now)
                     return minutesUntil <= 15 && now <= endTime
                   }
-
-                  // For other active statuses, table is definitely occupied
-                  return true
+                  
+                  return false
                 })
-
-                return !isOccupied && table.is_active
+                
+                return !isCurrentlyOccupied && table.is_active
               })
               .map(table => (
                 <Button
@@ -1009,9 +1167,10 @@ export default function DashboardPage() {
               ))}
           </div>
           {tables.filter(table => {
-            const isOccupied = todaysBookings.some(booking => {
-              const hasTable = booking.tables?.some((t: any) => t.id === table.id)
-              if (!hasTable) return false
+            const tableBookings = todaysBookings.filter(booking => 
+              booking.tables?.some((t: any) => t.id === table.id)
+            )
+            const isOccupied = tableBookings.some(booking => {
               const activeStatuses = [
                 'confirmed', 'arrived', 'seated', 'ordered', 
                 'appetizers', 'main_course', 'dessert', 'payment'

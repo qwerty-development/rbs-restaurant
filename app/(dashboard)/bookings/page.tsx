@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { format, startOfDay, endOfDay, addDays, isToday, isTomorrow, addMinutes } from "date-fns"
+import { format, startOfDay, endOfDay, addDays, isToday, isTomorrow, addMinutes, differenceInMinutes } from "date-fns"
 import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -112,6 +112,7 @@ export default function BookingsPage() {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [selectedBookings, setSelectedBookings] = useState<string[]>([])
   const [showAnalytics, setShowAnalytics] = useState(false)
+  const [requestFilter, setRequestFilter] = useState<"all" | "pending" | "expiring">("all")
   
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -541,7 +542,7 @@ export default function BookingsPage() {
     const email = booking.guest_email?.toLowerCase() || ""
     const tableNumbers = booking.tables?.map(t => t.table_number.toLowerCase()).join(" ") || ""
     
-    return (
+    const matchesSearch = (
       userName.includes(searchLower) ||
       guestName.includes(searchLower) ||
       confirmationCode.includes(searchLower) ||
@@ -549,6 +550,19 @@ export default function BookingsPage() {
       email.includes(searchLower) ||
       tableNumbers.includes(searchLower)
     )
+
+    if (!matchesSearch) return false
+
+    // Apply request filter
+    if (requestFilter === "pending") {
+      return booking.status === "pending"
+    } else if (requestFilter === "expiring") {
+      if (booking.status !== "pending" || !(booking as any).request_expires_at) return false
+      const hoursLeft = differenceInMinutes(new Date((booking as any).request_expires_at), now) / 60
+      return hoursLeft < 2
+    }
+    
+    return true
   })
 
   // Get booking counts and statistics with enhanced analytics
@@ -786,6 +800,33 @@ export default function BookingsPage() {
                     onClick={() => setDateRange("week")}
                   >
                     This Week
+                  </Button>
+                </div>
+
+                {/* Request Filter Buttons */}
+                <div className="flex gap-2">
+                  <Button
+                    variant={requestFilter === "all" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setRequestFilter("all")}
+                  >
+                    All
+                  </Button>
+                  <Button
+                    variant={requestFilter === "pending" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setRequestFilter("pending")}
+                  >
+                    <Timer className="h-4 w-4 mr-1" />
+                    Pending ({bookingStats.pending})
+                  </Button>
+                  <Button
+                    variant={requestFilter === "expiring" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setRequestFilter("expiring")}
+                  >
+                    <AlertCircle className="h-4 w-4 mr-1" />
+                    Expiring Soon
                   </Button>
                 </div>
 

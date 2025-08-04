@@ -1,6 +1,7 @@
 // components/bookings/booking-list.tsx
 "use client"
 
+import { useState, useEffect, useMemo } from "react"
 import { format, differenceInMinutes } from "date-fns"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -43,9 +44,12 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
+import { BookingRequestService } from "@/lib/booking-request-service"
+import { TableAvailabilityService } from "@/lib/table-availability"
 import type { Booking } from "@/types"
 import { Alert, AlertDescription } from "../ui/alert"
 import { useBookingCustomers } from "@/lib/hooks/use-booking-customers"
+import { toast } from "react-hot-toast"
 
 interface BookingListProps {
   bookings: Booking[]
@@ -56,7 +60,7 @@ interface BookingListProps {
   restaurantId?: string
 }
 
-// Status configuration mapping
+// Fixed status configuration with all statuses
 const STATUS_CONFIG: Record<string, { icon: any; color: string; bgColor: string; label: string }> = {
   'pending': { 
     icon: Timer, 
@@ -141,7 +145,75 @@ const STATUS_CONFIG: Record<string, { icon: any; color: string; bgColor: string;
     color: 'text-red-600', 
     bgColor: 'bg-red-100',
     label: 'No Show'
+  },
+  'auto_declined': { 
+    icon: Timer, 
+    color: 'text-gray-600', 
+    bgColor: 'bg-gray-100',
+    label: 'Expired'
+  },
+  'acceptance_failed': { 
+    icon: AlertTriangle, 
+    color: 'text-orange-600', 
+    bgColor: 'bg-orange-100',
+    label: 'Acceptance Failed'
   }
+}
+
+// Fixed RequestExpiryTimer with singleton service
+const RequestExpiryTimer = ({ booking, requestService }: { 
+  booking: any
+  requestService: BookingRequestService 
+}) => {
+  const [timeLeft, setTimeLeft] = useState<{ 
+    hours: number
+    minutes: number
+    expired: boolean
+    percentage: number
+  } | null>(null)
+  
+  useEffect(() => {
+    if (booking.status !== 'pending' || !booking.request_expires_at) return
+
+    const updateTimer = async () => {
+      const info = await requestService.getTimeUntilExpiry(booking)
+      setTimeLeft(info)
+    }
+
+    updateTimer()
+    const interval = setInterval(updateTimer, 30000) // Update every 30 seconds
+
+    return () => clearInterval(interval)
+  }, [booking, requestService])
+
+  if (!timeLeft || booking.status !== 'pending') return null
+
+  return (
+    <div className="space-y-1">
+      <div className={cn(
+        "flex items-center gap-1 text-xs",
+        timeLeft.expired ? "text-red-600" : 
+        timeLeft.hours < 2 ? "text-orange-600" : 
+        "text-gray-600"
+      )}>
+        <Timer className="h-3 w-3" />
+        {timeLeft.expired ? (
+          "Expired"
+        ) : (
+          `Expires in ${timeLeft.hours}h ${timeLeft.minutes}m`
+        )}
+      </div>
+      <Progress 
+        value={timeLeft.percentage} 
+        className="h-1" 
+        indicatorClassName={cn(
+          timeLeft.percentage < 20 ? "bg-red-500" :
+          timeLeft.percentage < 50 ? "bg-orange-500" :
+          "bg-green-500"
+        )}
+      />
+    </div>
+  )
 }
 
 export function BookingList({
@@ -152,7 +224,10 @@ export function BookingList({
   compact = false,
   restaurantId
 }: BookingListProps) {
-  const tableStatusService = new TableStatusService()
+  // Initialize services as singletons
+  const tableStatusService = useMemo(() => new TableStatusService(), [])
+  const requestService = useMemo(() => new BookingRequestService(), [])
+  const tableService = useMemo(() => new TableAvailabilityService(), [])
   
   // Load customer data for all bookings
   const { customerData, loading: customerLoading } = useBookingCustomers(
@@ -168,7 +243,7 @@ export function BookingList({
     if (status === 'pending') return 'outline'
     if (status === 'arrived') return 'default'
     if (status === 'completed') return 'outline'
-    if (['cancelled_by_user', 'cancelled_by_restaurant', 'declined_by_restaurant', 'no_show'].includes(status)) {
+    if (['cancelled_by_user', 'cancelled_by_restaurant', 'declined_by_restaurant', 'no_show', 'auto_declined'].includes(status)) {
       return 'destructive'
     }
     return 'secondary'
@@ -192,6 +267,28 @@ export function BookingList({
       status: t.to,
       label: t.label
     }))
+  }
+
+  const handlePendingAction = async (bookingId: string, action: 'confirm' | 'decline') => {
+    if (action === 'confirm') {
+      // Quick validation before accepting
+      const booking = bookings.find(b => b.id === bookingId)
+      if (!booking) return
+
+      const hasAvailableTables = await tableService.getAvailableTablesForSlot(
+        booking.restaurant_id,
+        new Date(booking.booking_time),
+        booking.party_size,
+        booking.turn_time_minutes || 120
+      )
+      
+      if (!hasAvailableTables.singleTables.length && !hasAvailableTables.combinations.length) {
+        toast.error("No tables available for this time slot. Please review in booking details.")
+        return
+      }
+    }
+    
+    onUpdateStatus(bookingId, action === 'confirm' ? 'confirmed' : 'declined_by_restaurant')
   }
 
   if (isLoading) {
@@ -241,7 +338,8 @@ export function BookingList({
             className={cn(
               "cursor-pointer hover:shadow-md transition-all",
               isDining && "border-l-4 border-l-purple-500",
-              isLate && "border-l-4 border-l-red-500"
+              isLate && "border-l-4 border-l-red-500",
+              booking.status === 'pending' && booking.request_expires_at && "border-l-4 border-l-yellow-500"
             )}
             onClick={() => onSelectBooking(booking)}
           >
@@ -279,11 +377,6 @@ export function BookingList({
                           <Badge variant="outline" className="text-xs border-orange-300 text-orange-700">
                             <AlertTriangle className="h-3 w-3 mr-1" />
                             Dietary
-                          </Badge>
-                        )}
-                        {customerData[booking.id].tagCount > 0 && (
-                          <Badge variant="outline" className="text-xs">
-                            {customerData[booking.id].tagCount} tag{customerData[booking.id].tagCount !== 1 ? 's' : ''}
                           </Badge>
                         )}
                       </div>
@@ -325,24 +418,43 @@ export function BookingList({
                     {booking.status === 'pending' && (
                       <>
                         <DropdownMenuItem
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation()
-                            onUpdateStatus(booking.id, 'confirmed')
+                            await handlePendingAction(booking.id, 'confirm')
                           }}
+                          className="text-green-600"
                         >
                           <CheckCircle className="mr-2 h-4 w-4" />
-                          Confirm Booking
+                          Accept Request
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={(e) => {
                             e.stopPropagation()
-                            onUpdateStatus(booking.id, 'declined_by_restaurant')
+                            if (confirm("Are you sure you want to decline this request?")) {
+                              handlePendingAction(booking.id, 'decline')
+                            }
                           }}
-                          className="text-destructive"
+                          className="text-red-600"
                         >
                           <XCircle className="mr-2 h-4 w-4" />
-                          Decline Booking
+                          Decline Request
                         </DropdownMenuItem>
+                        {booking.acceptance_attempted_at && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                // Force accept with override
+                                onUpdateStatus(booking.id, 'confirmed')
+                              }}
+                              className="text-orange-600"
+                            >
+                              <AlertTriangle className="mr-2 h-4 w-4" />
+                              Force Accept (Override)
+                            </DropdownMenuItem>
+                          </>
+                        )}
                       </>
                     )}
                     
@@ -402,8 +514,8 @@ export function BookingList({
                       </>
                     )}
                     
-                    {/* Complete/Cancel options for dining statuses */}
-                    {isDining && (
+                    {/* Complete/Cancel options for active bookings */}
+                    {(isDining || booking.status === 'arrived') && (
                       <>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -472,6 +584,13 @@ export function BookingList({
                 </div>
               </div>
 
+              {/* Request expiry timer */}
+              {booking.status === 'pending' && booking.request_expires_at && (
+                <div className="mt-3">
+                  <RequestExpiryTimer booking={booking} requestService={requestService} />
+                </div>
+              )}
+
               {/* Dining progress bar */}
               {isDining && (
                 <div className="mt-3 space-y-1">
@@ -516,6 +635,15 @@ export function BookingList({
                     <UserCheck className="h-4 w-4 text-blue-600" />
                     <AlertDescription className="text-sm text-blue-800">
                       Guest has arrived - ready to be seated at Table {booking.tables[0].table_number}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                
+                {booking.status === 'pending' && booking.acceptance_attempted_at && (
+                  <Alert className="py-2 border-orange-200 bg-orange-50">
+                    <AlertTriangle className="h-4 w-4 text-orange-600" />
+                    <AlertDescription className="text-sm text-orange-800">
+                      Previous acceptance failed: {booking.acceptance_failed_reason}
                     </AlertDescription>
                   </Alert>
                 )}

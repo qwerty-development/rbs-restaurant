@@ -1,0 +1,643 @@
+// lib/booking-request-service.ts
+import { createClient } from "@/lib/supabase/client"
+import { addHours, addMinutes, format, isWithinInterval, parseISO } from "date-fns"
+import { TableAvailabilityService } from "./table-availability"
+
+interface AcceptanceValidation {
+  valid: boolean
+  reason?: string
+  conflicts?: any[]
+  suggestedAlternatives?: {
+    tables?: string[]
+    times?: Array<{ time: Date; availableTables: number }>
+  }
+}
+
+interface AcceptRequestResult {
+  success: boolean
+  booking?: any
+  error?: string
+  alternatives?: AcceptanceValidation['suggestedAlternatives']
+  requiresConfirmation?: boolean
+}
+
+export class BookingRequestService {
+  private supabase
+  private tableService: TableAvailabilityService
+  
+  constructor() {
+    this.supabase = createClient()
+    this.tableService = new TableAvailabilityService()
+  }
+
+  async createBookingRequest(data: {
+    restaurantId: string
+    userId: string
+    bookingTime: Date
+    partySize: number
+    specialRequests?: string
+    occasion?: string
+    guestName?: string
+    guestEmail?: string
+    guestPhone?: string
+    turnTimeMinutes?: number
+    preApproved?: boolean
+  }) {
+    try {
+      // Get restaurant settings with retry logic
+      const { data: restaurant, error: restaurantError } = await this.supabase
+        .from("restaurants")
+        .select(`
+          id,
+          booking_policy,
+          request_expiry_hours,
+          auto_decline_enabled,
+          booking_window_days,
+          operating_hours,
+          max_party_size,
+          min_party_size,
+          table_turnover_minutes,
+          status
+        `)
+        .eq("id", data.restaurantId)
+        .single()
+
+      if (restaurantError || !restaurant) {
+        throw new Error("Restaurant not found or unavailable")
+      }
+
+      // Validate restaurant is active
+      if (restaurant.status !== 'active') {
+        throw new Error("Restaurant is currently not accepting bookings")
+      }
+
+      // Validate party size
+      const minSize = restaurant.min_party_size || 1
+      const maxSize = restaurant.max_party_size || 20
+      
+      if (data.partySize < minSize || data.partySize > maxSize) {
+        throw new Error(`Party size must be between ${minSize} and ${maxSize} guests`)
+      }
+
+      // Validate booking window
+      const bookingWindowDays = restaurant.booking_window_days || 30
+      const maxBookingDate = addHours(new Date(), bookingWindowDays * 24)
+      
+      if (data.bookingTime > maxBookingDate) {
+        throw new Error(`Bookings can only be made up to ${bookingWindowDays} days in advance`)
+      }
+
+      // Validate booking is in the future
+      if (data.bookingTime <= new Date()) {
+        throw new Error("Booking time must be in the future")
+      }
+
+      // Validate operating hours
+      const isWithinHours = await this.validateOperatingHours(
+        data.bookingTime,
+        restaurant.operating_hours
+      )
+      
+      if (!isWithinHours.valid) {
+        throw new Error(isWithinHours.reason || "Booking time is outside operating hours")
+      }
+
+      // Calculate expiry time for requests
+      const isRequestBooking = restaurant.booking_policy === 'request' && !data.preApproved
+      const requestExpiresAt = isRequestBooking && restaurant.auto_decline_enabled
+        ? addHours(new Date(), restaurant.request_expiry_hours || 24)
+        : null
+
+      // Determine initial status
+      const bookingStatus = isRequestBooking ? 'pending' : 'confirmed'
+      
+      // Generate unique confirmation code
+      const confirmationCode = await this.generateUniqueConfirmationCode(data.restaurantId)
+
+      // Create booking
+      const { data: booking, error } = await this.supabase
+        .from("bookings")
+        .insert({
+          restaurant_id: data.restaurantId,
+          user_id: data.userId,
+          booking_time: data.bookingTime.toISOString(),
+          party_size: data.partySize,
+          status: bookingStatus,
+          special_requests: data.specialRequests,
+          occasion: data.occasion,
+          guest_name: data.guestName,
+          guest_email: data.guestEmail,
+          guest_phone: data.guestPhone,
+          confirmation_code: confirmationCode,
+          request_expires_at: requestExpiresAt?.toISOString(),
+          turn_time_minutes: data.turnTimeMinutes || restaurant.table_turnover_minutes || 120,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error("Booking creation error:", error)
+        throw new Error("Failed to create booking")
+      }
+
+      // Log initial status
+      await this.supabase
+        .from("booking_status_history")
+        .insert({
+          booking_id: booking.id,
+          new_status: bookingStatus,
+          changed_by: data.userId,
+          changed_at: new Date().toISOString(),
+          metadata: { 
+            source: 'customer_request',
+            booking_policy: restaurant.booking_policy,
+            expires_at: requestExpiresAt?.toISOString(),
+            pre_approved: data.preApproved || false
+          }
+        })
+
+      return {
+        booking,
+        isRequest: isRequestBooking,
+        expiresAt: requestExpiresAt,
+        confirmationCode
+      }
+    } catch (error) {
+      console.error("Create booking request error:", error)
+      throw error
+    }
+  }
+
+  async acceptRequest(
+    bookingId: string, 
+    userId: string, 
+    tableIds?: string[],
+    options?: {
+      forceAccept?: boolean
+      suggestAlternatives?: boolean
+      skipTableAssignment?: boolean
+    }
+  ): Promise<AcceptRequestResult> {
+    try {
+      // Lock booking for update
+      const { data: lockResult, error: lockError } = await this.supabase
+        .rpc('lock_booking_for_update', { p_booking_id: bookingId })
+
+      if (lockError || !lockResult || lockResult.error) {
+        return { 
+          success: false, 
+          error: lockResult?.error || "Booking not found or being processed" 
+        }
+      }
+
+      const booking = lockResult
+
+      // Validate booking status
+      if (booking.status !== 'pending') {
+        return { 
+          success: false, 
+          error: `Booking is already ${booking.status}` 
+        }
+      }
+
+      // Check expiry
+      if (booking.request_expires_at && new Date(booking.request_expires_at) < new Date()) {
+        // Auto-decline expired booking
+        await this.updateBookingStatus(bookingId, 'auto_declined', userId, {
+          reason: "Request expired before acceptance"
+        })
+        
+        return { 
+          success: false, 
+          error: "This request has expired and cannot be accepted" 
+        }
+      }
+
+      // Skip validation if force accepting
+      if (!options?.forceAccept && !options?.skipTableAssignment) {
+        // Validate table assignment if provided
+        if (tableIds && tableIds.length > 0) {
+          const validation = await this.validateAcceptance(booking, tableIds)
+          
+          if (!validation.valid) {
+            // Record failed attempt
+            await this.supabase
+              .from("bookings")
+              .update({
+                acceptance_attempted_at: new Date().toISOString(),
+                acceptance_failed_reason: validation.reason
+              })
+              .eq("id", bookingId)
+
+            // Get alternatives if requested
+            if (options?.suggestAlternatives) {
+              const alternatives = await this.findAlternatives(booking)
+              
+              return {
+                success: false,
+                error: validation.reason || "Cannot accept with selected tables",
+                alternatives,
+                requiresConfirmation: true
+              }
+            }
+
+            return {
+              success: false,
+              error: validation.reason || "Cannot accept booking with selected tables"
+            }
+          }
+        } else if (!options?.skipTableAssignment) {
+          // No tables selected - find available tables
+          const availableTables = await this.tableService.getOptimalTableAssignment(
+            booking.restaurant_id,
+            new Date(booking.booking_time),
+            booking.party_size,
+            booking.turn_time_minutes || 120
+          )
+
+          if (!availableTables) {
+            return {
+              success: false,
+              error: "No suitable tables available for this booking"
+            }
+          }
+
+          tableIds = availableTables.tableIds
+        }
+      }
+
+      // Proceed with acceptance
+      const { error: updateError } = await this.supabase
+        .from("bookings")
+        .update({
+          status: "confirmed",
+          updated_at: new Date().toISOString(),
+          acceptance_attempted_at: new Date().toISOString(),
+          acceptance_failed_reason: null
+        })
+        .eq("id", bookingId)
+
+      if (updateError) {
+        throw new Error("Failed to update booking status")
+      }
+
+      // Assign tables if provided
+      if (tableIds && tableIds.length > 0 && !options?.skipTableAssignment) {
+        const tableAssignments = tableIds.map(tableId => ({
+          booking_id: bookingId,
+          table_id: tableId
+        }))
+
+        const { error: tableError } = await this.supabase
+          .from("booking_tables")
+          .insert(tableAssignments)
+
+        if (tableError) {
+          // Rollback on table assignment failure
+          await this.supabase
+            .from("bookings")
+            .update({ status: "pending" })
+            .eq("id", bookingId)
+            
+          throw new Error("Failed to assign tables")
+        }
+      }
+
+      // Log status change
+      await this.supabase
+        .from("booking_status_history")
+        .insert({
+          booking_id: bookingId,
+          old_status: "pending",
+          new_status: "confirmed",
+          changed_by: userId,
+          changed_at: new Date().toISOString(),
+          metadata: { 
+            action: "request_accepted",
+            tables_assigned: tableIds || [],
+            force_accepted: options?.forceAccept || false,
+            skip_table_assignment: options?.skipTableAssignment || false
+          }
+        })
+
+      return { 
+        success: true, 
+        booking: { ...booking, status: 'confirmed', tables: tableIds } 
+      }
+
+    } catch (error) {
+      console.error("Accept request error:", error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to accept booking request"
+      }
+    }
+  }
+
+  async declineRequest(
+    bookingId: string, 
+    userId: string, 
+    reason?: string,
+    suggestAlternatives?: boolean
+  ): Promise<{
+    success: boolean
+    error?: string
+    alternatives?: AcceptanceValidation['suggestedAlternatives']
+  }> {
+    try {
+      const { data: booking, error: fetchError } = await this.supabase
+        .from("bookings")
+        .select("*")
+        .eq("id", bookingId)
+        .eq("status", "pending")
+        .single()
+
+      if (fetchError || !booking) {
+        return { 
+          success: false, 
+          error: "Booking not found or already processed" 
+        }
+      }
+
+      // Find alternatives before declining if requested
+      let alternatives: AcceptanceValidation['suggestedAlternatives'] | undefined
+      if (suggestAlternatives) {
+        alternatives = await this.findAlternatives(booking)
+      }
+
+      // Update booking status
+      const { error } = await this.supabase
+        .from("bookings")
+        .update({
+          status: "declined_by_restaurant",
+          updated_at: new Date().toISOString(),
+          suggested_alternative_time: alternatives?.times?.[0]?.time.toISOString(),
+          suggested_alternative_tables: alternatives?.tables
+        })
+        .eq("id", bookingId)
+
+      if (error) {
+        throw new Error("Failed to decline request")
+      }
+
+      // Log status change
+      await this.supabase
+        .from("booking_status_history")
+        .insert({
+          booking_id: bookingId,
+          old_status: "pending",
+          new_status: "declined_by_restaurant",
+          changed_by: userId,
+          changed_at: new Date().toISOString(),
+          reason: reason,
+          metadata: { 
+            action: "request_declined",
+            alternatives_suggested: !!alternatives,
+            alternative_times: alternatives?.times?.length || 0
+          }
+        })
+
+      return { 
+        success: true, 
+        alternatives 
+      }
+    } catch (error) {
+      console.error("Decline request error:", error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to decline request"
+      }
+    }
+  }
+
+  private async validateAcceptance(
+    booking: any, 
+    tableIds: string[]
+  ): Promise<AcceptanceValidation> {
+    try {
+      // Server-side validation using RPC
+      const { data: validation, error } = await this.supabase
+        .rpc('validate_booking_acceptance', {
+          p_booking_id: booking.id,
+          p_table_ids: tableIds
+        })
+
+      if (error) {
+        console.error("Database validation error:", error)
+        return { 
+          valid: false, 
+          reason: "Validation failed" 
+        }
+      }
+
+      // If database validation failed, return early
+      if (!validation.valid) {
+        return validation
+      }
+
+      // Additional client-side validation
+      const availability = await this.tableService.checkTableAvailability(
+        booking.restaurant_id,
+        tableIds,
+        new Date(booking.booking_time),
+        booking.turn_time_minutes || 120,
+        booking.id
+      )
+
+      if (!availability.available) {
+        return {
+          valid: false,
+          reason: "Selected tables have scheduling conflicts",
+          conflicts: availability.conflicts
+        }
+      }
+
+      // Validate total capacity
+      const { data: tables } = await this.supabase
+        .from("restaurant_tables")
+        .select("id, capacity, table_number")
+        .in("id", tableIds)
+
+      if (!tables || tables.length !== tableIds.length) {
+        return {
+          valid: false,
+          reason: "One or more selected tables not found"
+        }
+      }
+
+      const totalCapacity = tables.reduce((sum, t) => sum + t.capacity, 0)
+      
+      if (totalCapacity < booking.party_size) {
+        return {
+          valid: false,
+          reason: `Insufficient capacity: ${totalCapacity} seats available but ${booking.party_size} guests in party`
+        }
+      }
+
+      return { valid: true }
+    } catch (error) {
+      console.error("Validation error:", error)
+      return {
+        valid: false,
+        reason: "Validation failed due to system error"
+      }
+    }
+  }
+
+  private async findAlternatives(booking: any): Promise<AcceptanceValidation['suggestedAlternatives']> {
+    const alternatives: AcceptanceValidation['suggestedAlternatives'] = {
+      tables: [],
+      times: []
+    }
+
+    try {
+      // Find alternative tables for the same time
+      const optimalTables = await this.tableService.getOptimalTableAssignment(
+        booking.restaurant_id,
+        new Date(booking.booking_time),
+        booking.party_size,
+        booking.turn_time_minutes || 120
+      )
+
+      if (optimalTables) {
+        alternatives.tables = optimalTables.tableIds
+      }
+
+      // Find alternative time slots using database function
+      const { data: altSlots, error } = await this.supabase
+        .rpc('find_alternative_slots', {
+          p_restaurant_id: booking.restaurant_id,
+          p_original_time: booking.booking_time,
+          p_party_size: booking.party_size,
+          p_duration_minutes: booking.turn_time_minutes || 120
+        })
+
+      if (!error && altSlots) {
+        alternatives.times = altSlots.map((slot: any) => ({
+          time: new Date(slot.suggested_time),
+          availableTables: slot.available_tables
+        }))
+      }
+
+    } catch (error) {
+      console.error("Error finding alternatives:", error)
+    }
+
+    return alternatives
+  }
+
+  private async validateOperatingHours(
+    bookingTime: Date, 
+    operatingHours: any
+  ): Promise<{ valid: boolean; reason?: string }> {
+    if (!operatingHours) {
+      return { valid: true }
+    }
+
+    const dayOfWeek = bookingTime
+      .toLocaleDateString('en-US', { weekday: 'long' })
+      .toLowerCase()
+    const timeStr = format(bookingTime, 'HH:mm')
+    
+    const dayHours = operatingHours[dayOfWeek]
+    
+    if (!dayHours) {
+      return { valid: true }
+    }
+    
+    if (dayHours.closed) {
+      return { 
+        valid: false, 
+        reason: `Restaurant is closed on ${dayOfWeek}s` 
+      }
+    }
+
+    if (timeStr < dayHours.open || timeStr > dayHours.close) {
+      return {
+        valid: false,
+        reason: `Booking time must be between ${dayHours.open} and ${dayHours.close}`
+      }
+    }
+
+    return { valid: true }
+  }
+
+  private async generateUniqueConfirmationCode(restaurantId: string): Promise<string> {
+    let attempts = 0
+    const maxAttempts = 10
+    
+    while (attempts < maxAttempts) {
+      const code = `${restaurantId.slice(0, 4).toUpperCase()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+      
+      const { data: existing } = await this.supabase
+        .from("bookings")
+        .select("id")
+        .eq("confirmation_code", code)
+        .single()
+      
+      if (!existing) {
+        return code
+      }
+      
+      attempts++
+    }
+    
+    // Fallback with timestamp
+    return `${restaurantId.slice(0, 4).toUpperCase()}${Date.now().toString(36).toUpperCase()}`
+  }
+
+  private async updateBookingStatus(
+    bookingId: string,
+    status: string,
+    userId: string,
+    metadata?: any
+  ): Promise<void> {
+    await this.supabase
+      .from("bookings")
+      .update({
+        status,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", bookingId)
+
+    await this.supabase
+      .from("booking_status_history")
+      .insert({
+        booking_id: bookingId,
+        new_status: status,
+        changed_by: userId,
+        changed_at: new Date().toISOString(),
+        metadata
+      })
+  }
+
+  async getTimeUntilExpiry(booking: any): Promise<{ 
+    hours: number
+    minutes: number
+    expired: boolean
+    percentage: number 
+  }> {
+    if (!booking.request_expires_at) {
+      return { hours: 0, minutes: 0, expired: false, percentage: 100 }
+    }
+
+    const now = new Date()
+    const expiresAt = new Date(booking.request_expires_at)
+    const createdAt = new Date(booking.created_at)
+    
+    const totalMs = expiresAt.getTime() - createdAt.getTime()
+    const remainingMs = expiresAt.getTime() - now.getTime()
+
+    if (remainingMs <= 0) {
+      return { hours: 0, minutes: 0, expired: true, percentage: 0 }
+    }
+
+    const hours = Math.floor(remainingMs / (1000 * 60 * 60))
+    const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60))
+    const percentage = Math.max(0, Math.min(100, Math.round((remainingMs / totalMs) * 100)))
+
+    return { hours, minutes, expired: false, percentage }
+  }
+}
