@@ -5,6 +5,10 @@ This is a comprehensive Next.js 15 restaurant management system with Supabase ba
 
 ## Database Architecture & Domain Model
 
+### Schema Provided by User
+Use the complete SQL schema provided by the user as the ground truth for all database table definitions, column names, relationships, enums, and constraints. Refer to it when generating code to ensure consistency between application types and database schema.
+Always open and reference `db/schema.sql` in the repository before starting any work on database models, queries, or migrations to ensure schema accuracy.
+
 ### Core Entity Relationships
 - **Multi-Tenant Structure**: All operations scoped by `restaurant_id` 
 - **User Profiles**: Extended user system with loyalty points, ratings, and social features
