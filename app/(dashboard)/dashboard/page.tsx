@@ -1129,7 +1129,7 @@ export default function DashboardPage() {
                     'main_course', 'dessert', 'payment'
                   ]
                   
-                  // If booking is in an active occupied status, table is occupied
+                  // If booking is in an active occupied status, table is occupied immediately
                   if (occupiedStatuses.includes(booking.status)) {
                     return true
                   }
@@ -1172,10 +1172,14 @@ export default function DashboardPage() {
             )
             const isOccupied = tableBookings.some(booking => {
               const activeStatuses = [
-                'confirmed', 'arrived', 'seated', 'ordered', 
+                'arrived', 'seated', 'ordered', 
                 'appetizers', 'main_course', 'dessert', 'payment'
               ]
-              if (!activeStatuses.includes(booking.status)) return false
+              // If booking is in an active occupied status, table is occupied immediately
+              if (activeStatuses.includes(booking.status)) {
+                return true
+              }
+              // For confirmed bookings, check time window
               if (booking.status === 'confirmed') {
                 const bookingTime = new Date(booking.booking_time)
                 const endTime = addMinutes(bookingTime, booking.turn_time_minutes || 120)
@@ -1183,7 +1187,7 @@ export default function DashboardPage() {
                 const minutesUntil = differenceInMinutes(bookingTime, now)
                 return minutesUntil <= 15 && now <= endTime
               }
-              return true
+              return false
             })
             return !isOccupied && table.is_active
           }).length === 0 && (

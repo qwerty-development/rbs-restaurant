@@ -262,8 +262,17 @@ export function BookingList({
   }
 
   const getValidTransitions = (currentStatus: string): Array<{ status: string; label: string }> => {
-    const transitions = tableStatusService.getValidTransitions(currentStatus as DiningStatus)
-    return transitions.map(t => ({
+    // Get both sequential transitions and all available statuses for flexibility
+    const sequentialTransitions = tableStatusService.getValidTransitions(currentStatus as DiningStatus)
+    const allStatuses = tableStatusService.getAllAvailableStatuses(currentStatus as DiningStatus)
+    
+    // Combine and deduplicate
+    const allTransitions = [...sequentialTransitions, ...allStatuses]
+    const uniqueTransitions = allTransitions.filter((transition, index, self) => 
+      index === self.findIndex(t => t.to === transition.to)
+    )
+    
+    return uniqueTransitions.map(t => ({
       status: t.to,
       label: t.label
     }))

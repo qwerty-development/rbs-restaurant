@@ -132,6 +132,13 @@ export function EnhancedFloorPlan({
     )
 
     const currentBooking = tableBookings.find(booking => {
+      // If customer is already checked in (arrived, seated, etc.), table is occupied regardless of time
+      const physicallyPresent = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status)
+      if (physicallyPresent) {
+        return true
+      }
+      
+      // For confirmed bookings, only consider occupied if within the booking time window
       const bookingStart = new Date(booking.booking_time)
       const bookingEnd = addMinutes(bookingStart, booking.turn_time_minutes || 120)
       return currentTime >= bookingStart && currentTime <= bookingEnd
@@ -257,21 +264,64 @@ export function EnhancedFloorPlan({
                   Update Status
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuLabel>Change Status</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {tableStatusService.getValidTransitions(current.status as DiningStatus).map(transition => {
-                  const Icon = STATUS_ICONS[transition.to]
+              <DropdownMenuContent className="w-48">
+                {/* Quick transitions */}
+                {tableStatusService.getValidTransitions(current.status as DiningStatus).length > 0 && (
+                  <>
+                    <DropdownMenuLabel>Next Steps</DropdownMenuLabel>
+                    {tableStatusService.getValidTransitions(current.status as DiningStatus).map(transition => {
+                      const Icon = STATUS_ICONS[transition.to]
+                      return (
+                        <DropdownMenuItem
+                          key={`next-${transition.to}`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (transition.requiresConfirmation) {
+                              if (confirm(`Are you sure you want to ${transition.label.toLowerCase()}?`)) {
+                                handleStatusTransition(current.id, transition.to)
+                              }
+                            } else {
+                              handleStatusTransition(current.id, transition.to)
+                            }
+                          }}
+                          className={transition.requiresConfirmation ? "text-red-600" : ""}
+                        >
+                          <Icon className="h-4 w-4 mr-2" />
+                          {transition.label}
+                        </DropdownMenuItem>
+                      )
+                    })}
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                
+                {/* All available statuses */}
+                <DropdownMenuLabel>Jump to Status</DropdownMenuLabel>
+                {tableStatusService.getAllAvailableStatuses(current.status as DiningStatus).map(status => {
+                  const Icon = STATUS_ICONS[status.to]
                   return (
                     <DropdownMenuItem
-                      key={transition.to}
+                      key={`all-${status.to}`}
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleStatusTransition(current.id, transition.to)
+                        if (status.requiresConfirmation) {
+                          if (confirm(`Are you sure you want to ${status.label.toLowerCase()}?`)) {
+                            handleStatusTransition(current.id, status.to)
+                          }
+                        } else {
+                          handleStatusTransition(current.id, status.to)
+                        }
                       }}
+                      className={cn(
+                        "text-sm",
+                        status.requiresConfirmation ? "text-red-600" : ""
+                      )}
                     >
-                      <Icon className="h-4 w-4 mr-2" />
-                      {transition.label}
+                      <Icon className="h-3 w-3 mr-2" />
+                      {status.to === 'appetizers' || status.to === 'main_course' ? 
+                        status.to.replace('_', ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') :
+                        status.to.charAt(0).toUpperCase() + status.to.slice(1)
+                      }
                     </DropdownMenuItem>
                   )
                 })}

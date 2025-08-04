@@ -58,7 +58,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Booking } from "@/types"
-import { Card, CardHeader, CardTitle, CardContent } from "../ui/card"
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "../ui/card"
 import { BookingCustomerDetails } from "./booking-customer-details"
 
 interface BookingDetailsProps {
@@ -244,6 +244,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
 
   // Get valid status transitions
   const validTransitions = statusService.getValidTransitions(booking.status as DiningStatus)
+  const allAvailableStatuses = statusService.getAllAvailableStatuses(booking.status as DiningStatus)
   const currentProgress = TableStatusService.getDiningProgress(booking.status as DiningStatus)
   const statusConfig = STATUS_CONFIGS[booking.status as keyof typeof STATUS_CONFIGS]
   const StatusIcon = statusConfig?.icon || Timer
@@ -517,6 +518,51 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
               </TabsContent>
 
               <TabsContent value="status" className="space-y-6 m-0">
+                {/* Quick Status Selector */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Quick Status Change</CardTitle>
+                    <CardDescription>Select a new status directly</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Select 
+                      value={booking.status} 
+                      onValueChange={(newStatus) => {
+                        const statusOption = allAvailableStatuses.find(s => s.to === newStatus)
+                        if (statusOption?.requiresConfirmation) {
+                          if (confirm(`Are you sure you want to ${statusOption.label.toLowerCase()}?`)) {
+                            handleStatusTransition(newStatus)
+                          }
+                        } else {
+                          handleStatusTransition(newStatus)
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Change status..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={booking.status} disabled>
+                          {booking.status.charAt(0).toUpperCase() + booking.status.slice(1).replace('_', ' ')} (Current)
+                        </SelectItem>
+                        {allAvailableStatuses.map(status => (
+                          <SelectItem 
+                            key={status.to} 
+                            value={status.to}
+                            className={status.requiresConfirmation ? "text-red-600" : ""}
+                          >
+                            {status.to === 'appetizers' || status.to === 'main_course' ? 
+                              status.to.replace('_', ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') :
+                              status.to.charAt(0).toUpperCase() + status.to.slice(1)
+                            }
+                            {status.requiresConfirmation && " ⚠️"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </CardContent>
+                </Card>
+
                 {/* Current Status Overview */}
                 <Card>
                   <CardHeader>
@@ -560,36 +606,88 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">Update Status</CardTitle>
+                    <CardDescription>
+                      Quick transitions or jump to any status
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 gap-3">
-                      {validTransitions.map(transition => {
-                        const ToIcon = STATUS_CONFIGS[transition.to as keyof typeof STATUS_CONFIGS]?.icon || ArrowRight
-                        const toConfig = STATUS_CONFIGS[transition.to as keyof typeof STATUS_CONFIGS]
-                        
-                        return (
-                          <Button
-                            key={transition.to}
-                            variant="outline"
-                            className={cn(
-                              "justify-start",
-                              transition.requiresConfirmation && "border-red-200"
-                            )}
-                            onClick={() => {
-                              if (transition.requiresConfirmation) {
-                                if (confirm(`Are you sure you want to ${transition.label.toLowerCase()}?`)) {
-                                  handleStatusTransition(transition.to)
+                  <CardContent className="space-y-4">
+                    {/* Sequential Transitions (if available) */}
+                    {validTransitions.length > 0 && (
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground mb-2 block">
+                          Next Steps
+                        </Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {validTransitions.map(transition => {
+                            const ToIcon = STATUS_CONFIGS[transition.to as keyof typeof STATUS_CONFIGS]?.icon || ArrowRight
+                            const toConfig = STATUS_CONFIGS[transition.to as keyof typeof STATUS_CONFIGS]
+                            
+                            return (
+                              <Button
+                                key={`next-${transition.to}`}
+                                variant="default"
+                                size="sm"
+                                className={cn(
+                                  "justify-start",
+                                  transition.requiresConfirmation && "bg-red-500 hover:bg-red-600"
+                                )}
+                                onClick={() => {
+                                  if (transition.requiresConfirmation) {
+                                    if (confirm(`Are you sure you want to ${transition.label.toLowerCase()}?`)) {
+                                      handleStatusTransition(transition.to)
+                                    }
+                                  } else {
+                                    handleStatusTransition(transition.to)
+                                  }
+                                }}
+                              >
+                                <ToIcon className="h-4 w-4 mr-2" />
+                                {transition.label}
+                              </Button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* All Available Statuses */}
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground mb-2 block">
+                        Jump to Any Status
+                      </Label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {allAvailableStatuses.map(status => {
+                          const ToIcon = STATUS_CONFIGS[status.to as keyof typeof STATUS_CONFIGS]?.icon || ArrowRight
+                          const toConfig = STATUS_CONFIGS[status.to as keyof typeof STATUS_CONFIGS]
+                          
+                          return (
+                            <Button
+                              key={`all-${status.to}`}
+                              variant="outline"
+                              size="sm"
+                              className={cn(
+                                "justify-start text-xs",
+                                status.requiresConfirmation && "border-red-200 text-red-600 hover:bg-red-50"
+                              )}
+                              onClick={() => {
+                                if (status.requiresConfirmation) {
+                                  if (confirm(`Are you sure you want to ${status.label.toLowerCase()}?`)) {
+                                    handleStatusTransition(status.to)
+                                  }
+                                } else {
+                                  handleStatusTransition(status.to)
                                 }
-                              } else {
-                                handleStatusTransition(transition.to)
+                              }}
+                            >
+                              <ToIcon className={cn("h-3 w-3 mr-1", toConfig?.color)} />
+                              {status.to === 'appetizers' || status.to === 'main_course' ? 
+                                status.to.replace('_', ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') :
+                                status.to.charAt(0).toUpperCase() + status.to.slice(1)
                               }
-                            }}
-                          >
-                            <ToIcon className={cn("h-4 w-4 mr-2", toConfig?.color)} />
-                            {transition.label}
-                          </Button>
-                        )
-                      })}
+                            </Button>
+                          )
+                        })}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

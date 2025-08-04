@@ -292,7 +292,11 @@ export class TableStatusService {
           if (!tableStatus) return
 
           // Check if currently occupied
-          if (currentTime >= bookingStart && currentTime <= bookingEnd) {
+          // If customer is checked in (arrived, seated, etc.), table is occupied regardless of time
+          const physicallyPresent = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status)
+          const withinTimeWindow = currentTime >= bookingStart && currentTime <= bookingEnd
+          
+          if (physicallyPresent || withinTimeWindow) {
             const seatedHistory = booking.booking_status_history?.find(
               (h: any) => h.new_status === 'seated'
             )
@@ -331,6 +335,39 @@ export class TableStatusService {
   // Get valid status transitions for a booking
   getValidTransitions(currentStatus: DiningStatus): StatusTransition[] {
     return TableStatusService.STATUS_TRANSITIONS.filter((t: { from: string }) => t.from === currentStatus)
+  }
+
+  // Get all available statuses for flexibility (restaurants can jump to any status)
+  getAllAvailableStatuses(currentStatus: DiningStatus): StatusTransition[] {
+    // Define all possible status options with logical restrictions
+    const allStatuses: StatusTransition[] = [
+      { from: currentStatus, to: 'pending', label: 'Mark as Pending', icon: '⏳', color: 'gray' },
+      { from: currentStatus, to: 'confirmed', label: 'Confirm Booking', icon: '✅', color: 'green' },
+      { from: currentStatus, to: 'arrived', label: 'Mark as Arrived', icon: '👋', color: 'blue' },
+      { from: currentStatus, to: 'seated', label: 'Mark as Seated', icon: '🪑', color: 'indigo' },
+      { from: currentStatus, to: 'ordered', label: 'Mark as Ordered', icon: '📝', color: 'purple' },
+      { from: currentStatus, to: 'appetizers', label: 'Appetizers Served', icon: '🥗', color: 'green' },
+      { from: currentStatus, to: 'main_course', label: 'Main Course Served', icon: '🍽️', color: 'blue' },
+      { from: currentStatus, to: 'dessert', label: 'Dessert Served', icon: '🍰', color: 'pink' },
+      { from: currentStatus, to: 'payment', label: 'Payment/Bill', icon: '💳', color: 'yellow' },
+      { from: currentStatus, to: 'completed', label: 'Complete Service', icon: '✅', color: 'green' },
+      { from: currentStatus, to: 'no_show', label: 'Mark as No Show', icon: '❌', color: 'red', requiresConfirmation: true },
+      { from: currentStatus, to: 'cancelled_by_restaurant', label: 'Cancel Booking', icon: '🚫', color: 'red', requiresConfirmation: true }
+    ]
+
+    // Filter out the current status to avoid showing "change to same status"
+    const availableStatuses = allStatuses.filter(status => status.to !== currentStatus)
+
+    // Apply logical restrictions based on current status
+    if (currentStatus === 'completed' || currentStatus === 'no_show' || 
+        currentStatus === 'cancelled_by_user' || currentStatus === 'cancelled_by_restaurant') {
+      // For final states, only allow reverting to previous states or re-opening
+      return availableStatuses.filter(status => 
+        ['pending', 'confirmed', 'arrived', 'seated'].includes(status.to)
+      )
+    }
+
+    return availableStatuses
   }
 
   // Estimate remaining dining time
