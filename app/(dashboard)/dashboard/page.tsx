@@ -75,97 +75,93 @@ function ArrivingGuestsCard({
     .sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Arriving Soon</CardTitle>
-          <Badge variant="secondary">{arrivingSoon.length} guests</Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <ScrollArea className="h-[300px]">
-          <div className="space-y-3">
-            {arrivingSoon.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No arrivals in next 30 min</p>
-            ) : (
-              arrivingSoon.map((booking) => {
-                const bookingTime = new Date(booking.booking_time)
-                const minutesUntil = differenceInMinutes(bookingTime, currentTime)
-                const isLate = minutesUntil < 0
-                const hasTable = booking.tables && booking.tables.length > 0
-                const customerData = booking.user?.id ? customersData[booking.user.id] : null
-                
-                return (
-                  <div key={booking.id} className={cn(
-                    "p-3 rounded-lg border-2 transition-all",
-                    isLate ? "border-red-200 bg-red-50" : "border-gray-200",
-                    "hover:shadow-md cursor-pointer"
-                  )}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="font-medium text-sm truncate">
-                            {booking.user?.full_name || booking.guest_name || 'Guest'}
-                          </p>
-                          {/* Customer Indicators */}
-                          <div className="flex items-center gap-1">
-                            {customerData?.vip_status && (
-                              <Badge variant="default" className="text-xs px-1.5 py-0.5">
-                                ⭐ VIP
-                              </Badge>
-                            )}
-                            {customerData?.blacklisted && (
-                              <Badge variant="destructive" className="text-xs px-1.5 py-0.5">
-                                🚫 Alert
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {format(bookingTime, 'h:mm a')}
-                            {isLate && <span className="text-red-600 font-medium ml-1">(Late)</span>}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Users className="h-3 w-3" />
-                            {booking.party_size}
-                          </span>
-                        </div>
-                        {booking.special_requests && (
-                          <p className="text-xs text-muted-foreground mt-1 truncate">
-                            Note: {booking.special_requests}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {hasTable ? (
-                          <Badge variant="outline" className="text-xs">
-                            T{booking.tables[0].table_number}
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive" className="text-xs">No table</Badge>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onCheckIn(booking.id)
-                          }}
-                        >
-                          <UserCheck className="h-3 w-3" />
-                        </Button>
-                      </div>
+    <div className="space-y-3">
+      {arrivingSoon.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-4">No arrivals in next 30 min</p>
+      ) : (
+        arrivingSoon.map((booking) => {
+          const bookingTime = new Date(booking.booking_time)
+          const minutesUntil = differenceInMinutes(bookingTime, currentTime)
+          const isLate = minutesUntil < 0
+          const hasTable = booking.tables && booking.tables.length > 0
+          const customerData = booking.user?.id ? customersData[booking.user.id] : null
+          
+          return (
+            <div key={booking.id} className={cn(
+              "p-3 rounded-lg border transition-all bg-white",
+              isLate ? "border-red-200 bg-red-50" : "border-blue-200",
+              "hover:shadow-md"
+            )}>
+              <div className="flex items-center justify-between">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="font-medium text-sm truncate">
+                      {booking.user?.full_name || booking.guest_name || 'Guest'}
+                    </p>
+                    {/* Customer Indicators */}
+                    <div className="flex items-center gap-1">
+                      {customerData?.vip_status && (
+                        <Badge variant="default" className="text-xs px-1.5 py-0.5">
+                          ⭐ VIP
+                        </Badge>
+                      )}
+                      {customerData?.blacklisted && (
+                        <Badge variant="destructive" className="text-xs px-1.5 py-0.5">
+                          🚫 Alert
+                        </Badge>
+                      )}
                     </div>
                   </div>
-                )
-              })
-            )}
-          </div>
-        </ScrollArea>
-      </CardContent>
-    </Card>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {format(bookingTime, 'h:mm a')}
+                      {isLate && <span className="text-red-600 font-medium ml-1">(Late)</span>}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Users className="h-3 w-3" />
+                      {booking.party_size}
+                    </span>
+                    {hasTable && (
+                      <Badge variant="outline" className="text-xs">
+                        T{booking.tables[0].table_number}
+                      </Badge>
+                    )}
+                    {!hasTable && (
+                      <Badge variant="destructive" className="text-xs">No table</Badge>
+                    )}
+                  </div>
+                  {booking.special_requests && (
+                    <p className="text-xs text-muted-foreground mt-1 truncate">
+                      Note: {booking.special_requests}
+                    </p>
+                  )}
+                  {customerData?.blacklisted && customerData?.blacklist_reason && (
+                    <p className="text-xs text-red-600 mt-1">
+                      ⚠️ {customerData.blacklist_reason}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onCheckIn(booking.id)
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-xs px-2 py-1 h-7"
+                  >
+                    <UserCheck className="h-3 w-3 mr-1" />
+                    {hasTable ? 'Check-in' : 'Assign & Check-in'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )
+        })
+      )}
+    </div>
   )
 }
 
@@ -936,10 +932,131 @@ export default function DashboardPage() {
         <TabsContent value="overview" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-[1fr_350px]">
             <div className="space-y-4">
+              {/* Guests Awaiting Check-in - Priority Section */}
+              {stats.awaitingCheckIn > 0 && (
+                <Card className="border-orange-200 bg-orange-50">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-orange-800 flex items-center gap-2">
+                        <UserCheck className="h-5 w-5" />
+                        Guests Awaiting Check-in
+                      </CardTitle>
+                      <Badge variant="secondary" className="bg-orange-200 text-orange-800">
+                        {stats.awaitingCheckIn} waiting
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {activeBookings
+                        .filter(b => b.status === 'arrived')
+                        .map((booking) => {
+                          const customerData = booking.user?.id ? customersData[booking.user.id] : null
+                          const hasTable = booking.tables && booking.tables.length > 0
+                          
+                          return (
+                            <div
+                              key={booking.id}
+                              className="p-3 bg-white rounded-lg border border-orange-200 hover:shadow-md transition-all"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <p className="font-medium">
+                                      {booking.user?.full_name || booking.guest_name || 'Guest'}
+                                    </p>
+                                    {customerData?.vip_status && (
+                                      <Badge variant="default" className="text-xs px-1.5 py-0.5">
+                                        ⭐ VIP
+                                      </Badge>
+                                    )}
+                                    {customerData?.blacklisted && (
+                                      <Badge variant="destructive" className="text-xs px-1.5 py-0.5">
+                                        🚫 Alert
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                                    <span className="flex items-center gap-1">
+                                      <Users className="h-3 w-3" />
+                                      {booking.party_size} guests
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <Clock className="h-3 w-3" />
+                                      {format(new Date(booking.booking_time), 'h:mm a')}
+                                    </span>
+                                    {hasTable ? (
+                                      <span className="flex items-center gap-1">
+                                        <Table2 className="h-3 w-3" />
+                                        {booking.tables.map((t: any) => `T${t.table_number}`).join(", ")}
+                                      </span>
+                                    ) : (
+                                      <Badge variant="destructive" className="text-xs">No table assigned</Badge>
+                                    )}
+                                  </div>
+                                  {customerData?.blacklisted && customerData?.blacklist_reason && (
+                                    <p className="text-xs text-red-600 mt-1">
+                                      ⚠️ {customerData.blacklist_reason}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => setSelectedBooking(booking)}
+                                    variant="outline"
+                                  >
+                                    <Eye className="h-3 w-3 mr-1" />
+                                    Details
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleCheckIn(booking.id)}
+                                    className="bg-orange-600 hover:bg-orange-700"
+                                  >
+                                    <UserCheck className="h-3 w-3 mr-1" />
+                                    {hasTable ? 'Seat Now' : 'Assign Table'}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Arriving Soon - Quick Check-in Section */}
+              {stats.arrivingSoonCount > 0 && (
+                <Card className="border-blue-200 bg-blue-50">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-blue-800 flex items-center gap-2">
+                        <Clock className="h-5 w-5" />
+                        Arriving Soon (Next 30min)
+                      </CardTitle>
+                      <Badge variant="secondary" className="bg-blue-200 text-blue-800">
+                        {stats.arrivingSoonCount} expected
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ArrivingGuestsCard 
+                      bookings={activeBookings}
+                      currentTime={currentTime}
+                      onCheckIn={handleCheckIn}
+                      tables={tables}
+                      customersData={customersData}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle>Current Service Status</CardTitle>
+                    <CardTitle>Currently Dining</CardTitle>
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary">
                         <Users className="h-3 w-3 mr-1" />
@@ -956,7 +1073,7 @@ export default function DashboardPage() {
                   {currentlyDining.length === 0 ? (
                     <p className="text-center py-8 text-muted-foreground">No guests currently dining</p>
                   ) : (
-                    <ScrollArea className="h-[400px]">
+                    <ScrollArea className="h-[300px]">
                       <div className="space-y-3">
                         {currentlyDining.map((booking) => {
                           const StatusIcon = STATUS_ICONS[booking.status as DiningStatus]
@@ -966,11 +1083,10 @@ export default function DashboardPage() {
                           return (
                             <div
                               key={booking.id}
-                              className="p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
-                              onClick={() => setSelectedBooking(booking)}
+                              className="p-3 border rounded-lg hover:bg-muted/50 transition-colors"
                             >
                               <div className="flex items-start justify-between">
-                                <div>
+                                <div className="flex-1">
                                   <div className="flex items-center gap-2 mb-1">
                                     <StatusIcon className="h-4 w-4" />
                                     <p className="font-medium">
@@ -979,7 +1095,6 @@ export default function DashboardPage() {
                                     <Badge variant="secondary" className="text-xs">
                                       {booking.status.replace(/_/g, ' ')}
                                     </Badge>
-                                    {/* Customer Indicators */}
                                     {customerData?.vip_status && (
                                       <Badge variant="default" className="text-xs px-1.5 py-0.5">
                                         ⭐ VIP
@@ -1007,16 +1122,84 @@ export default function DashboardPage() {
                                       </span>
                                     )}
                                   </div>
-                                  {/* Customer Alert for Blacklisted */}
                                   {customerData?.blacklisted && customerData?.blacklist_reason && (
                                     <p className="text-xs text-red-600 mt-1">
                                       Alert: {customerData.blacklist_reason}
                                     </p>
                                   )}
                                 </div>
-                                <div className="text-right">
-                                  <div className="text-sm font-medium">{progress}%</div>
-                                  <div className="text-xs text-muted-foreground">Progress</div>
+                                <div className="flex items-center gap-2">
+                                  <div className="text-right">
+                                    <div className="text-sm font-medium">{progress}%</div>
+                                    <div className="text-xs text-muted-foreground">Progress</div>
+                                  </div>
+                                  {/* Quick Status Update Buttons */}
+                                  <div className="flex flex-col gap-1">
+                                    {booking.status === 'seated' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => updateBookingMutation.mutate({ 
+                                          bookingId: booking.id, 
+                                          updates: { status: 'ordered' } 
+                                        })}
+                                        className="text-xs px-2 py-1 h-6"
+                                      >
+                                        <Coffee className="h-3 w-3 mr-1" />
+                                        Ordered
+                                      </Button>
+                                    )}
+                                    {booking.status === 'ordered' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => updateBookingMutation.mutate({ 
+                                          bookingId: booking.id, 
+                                          updates: { status: 'appetizers' } 
+                                        })}
+                                        className="text-xs px-2 py-1 h-6"
+                                      >
+                                        <Utensils className="h-3 w-3 mr-1" />
+                                        Served
+                                      </Button>
+                                    )}
+                                    {['appetizers', 'main_course'].includes(booking.status) && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => updateBookingMutation.mutate({ 
+                                          bookingId: booking.id, 
+                                          updates: { status: 'payment' } 
+                                        })}
+                                        className="text-xs px-2 py-1 h-6"
+                                      >
+                                        <CreditCard className="h-3 w-3 mr-1" />
+                                        Check
+                                      </Button>
+                                    )}
+                                    {booking.status === 'payment' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => updateBookingMutation.mutate({ 
+                                          bookingId: booking.id, 
+                                          updates: { status: 'completed' } 
+                                        })}
+                                        className="text-xs px-2 py-1 h-6"
+                                      >
+                                        <CheckCircle className="h-3 w-3 mr-1" />
+                                        Complete
+                                      </Button>
+                                    )}
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => setSelectedBooking(booking)}
+                                      className="text-xs px-2 py-1 h-6"
+                                    >
+                                      <Eye className="h-3 w-3" />
+                                    </Button>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -1039,6 +1222,62 @@ export default function DashboardPage() {
                 onAddBooking={() => setShowManualBooking(true)}
                 stats={stats}
               />
+
+              {/* Quick Action Buttons for Common Tasks */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Quick Actions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => setShowManualBooking(true)}
+                  >
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Add Booking
+                  </Button>
+                  
+                  {stats.awaitingCheckIn > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start text-orange-600 border-orange-200 hover:bg-orange-50"
+                      onClick={() => setActiveTab("checkin")}
+                    >
+                      <UserCheck className="h-4 w-4 mr-2" />
+                      Check-in Queue ({stats.awaitingCheckIn})
+                    </Button>
+                  )}
+                  
+                  {stats.pendingRequests > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start text-red-600 border-red-200 hover:bg-red-50"
+                      onClick={() => {
+                        // Find the first pending booking and open it
+                        const pendingBooking = todaysBookings.find(b => b.status === 'pending')
+                        if (pendingBooking) setSelectedBooking(pendingBooking)
+                      }}
+                    >
+                      <Timer className="h-4 w-4 mr-2" />
+                      Pending Requests ({stats.pendingRequests})
+                    </Button>
+                  )}
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => setActiveTab("floor-plan")}
+                  >
+                    <Map className="h-4 w-4 mr-2" />
+                    Floor Plan View
+                  </Button>
+                </CardContent>
+              </Card>
               
               <Card>
                 <CardHeader>
@@ -1053,12 +1292,18 @@ export default function DashboardPage() {
                       </Badge>
                     </div>
                     <div className="flex items-center justify-between">
+                      <span className="text-sm">Current Capacity</span>
+                      <Badge variant="outline">
+                        {Math.round((stats.inService / tables.filter(t => t.is_active).length) * 100)}%
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
                       <span className="text-sm">Avg Wait Time</span>
                       <Badge variant="outline">12 min</Badge>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm">Today's Revenue</span>
-                      <Badge variant="outline">$4,280</Badge>
+                      <span className="text-sm">Today's Bookings</span>
+                      <Badge variant="outline">{todaysBookings.length}</Badge>
                     </div>
                   </div>
                 </CardContent>
@@ -1067,6 +1312,43 @@ export default function DashboardPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Floating Action Button for Critical Actions */}
+      {(stats.awaitingCheckIn > 0 || stats.pendingRequests > 0) && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <div className="flex flex-col gap-2">
+            {stats.pendingRequests > 0 && (
+              <Button
+                size="lg"
+                className="rounded-full shadow-lg bg-red-600 hover:bg-red-700 animate-pulse"
+                onClick={() => {
+                  const pendingBooking = todaysBookings.find(b => b.status === 'pending')
+                  if (pendingBooking) setSelectedBooking(pendingBooking)
+                }}
+              >
+                <Timer className="h-5 w-5 mr-2" />
+                {stats.pendingRequests} Pending
+              </Button>
+            )}
+            
+            {stats.awaitingCheckIn > 0 && (
+              <Button
+                size="lg"
+                className="rounded-full shadow-lg bg-orange-600 hover:bg-orange-700"
+                onClick={() => {
+                  const awaitingBooking = todaysBookings.find(b => b.status === 'arrived')
+                  if (awaitingBooking) {
+                    handleCheckIn(awaitingBooking.id)
+                  }
+                }}
+              >
+                <UserCheck className="h-5 w-5 mr-2" />
+                Check-in ({stats.awaitingCheckIn})
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Manual Booking Modal */}
       <Dialog open={showManualBooking} onOpenChange={setShowManualBooking}>
