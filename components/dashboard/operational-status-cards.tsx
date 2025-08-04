@@ -11,17 +11,29 @@ import {
   AlertCircle,
   TrendingUp,
   Calendar,
-  ChefHat
+  ChefHat,
+  Store
 } from "lucide-react"
 import { format, addMinutes, isWithinInterval } from "date-fns"
+import { RestaurantAvailability } from "@/lib/restaurant-availability"
+import { useQuery } from "@tanstack/react-query"
 
 interface OperationalStatusCardsProps {
   bookings: any[]
   tables: any[]
   currentTime: Date
+  restaurantId: string
 }
 
-export function OperationalStatusCards({ bookings, tables, currentTime }: OperationalStatusCardsProps) {
+export function OperationalStatusCards({ bookings, tables, currentTime, restaurantId }: OperationalStatusCardsProps) {
+  // Check current operational status
+  const availability = new RestaurantAvailability()
+  const { data: operationalStatus } = useQuery({
+    queryKey: ["restaurant-operational-status", restaurantId, format(currentTime, 'yyyy-MM-dd HH:mm')],
+    queryFn: () => availability.isRestaurantOpen(restaurantId, currentTime, format(currentTime, 'HH:mm')),
+    refetchInterval: 60000, // Refetch every minute
+  })
+
   // Calculate current dining (bookings that are happening now)
   const currentlyDining = bookings.filter(booking => {
     const bookingStart = new Date(booking.booking_time)
@@ -68,6 +80,18 @@ export function OperationalStatusCards({ bookings, tables, currentTime }: Operat
   )
 
   const cards = [
+    {
+      title: "Restaurant Status",
+      value: operationalStatus?.isOpen ? "OPEN" : "CLOSED",
+      description: operationalStatus?.reason || (operationalStatus?.hours ? 
+        `Open: ${operationalStatus.hours.open} - ${operationalStatus.hours.close}` : 
+        "See availability settings"
+      ),
+      icon: Store,
+      color: operationalStatus?.isOpen ? "text-green-600" : "text-red-600",
+      bgColor: operationalStatus?.isOpen ? "bg-green-50" : "bg-red-50",
+      details: null
+    },
     {
       title: "Currently Dining",
       value: currentlyDining.length,

@@ -1,6 +1,7 @@
 // lib/table-availability.ts
 import { createClient } from "@/lib/supabase/client"
 import { addMinutes, format, parse } from "date-fns"
+import { RestaurantAvailability } from "./restaurant-availability"
 
 export interface TableAvailability {
   tableId: string
@@ -25,9 +26,11 @@ export interface TableCombination {
 
 export class TableAvailabilityService {
   private supabase = createClient()
+  private restaurantAvailability = new RestaurantAvailability()
 
   /**
    * Check if tables are available for a specific time slot
+   * Enhanced to check restaurant operating hours
    */
   async checkTableAvailability(
     restaurantId: string,
@@ -39,8 +42,44 @@ export class TableAvailabilityService {
     available: boolean
     conflicts: any[]
     tables: TableAvailability[]
+    restaurantOpen: boolean
+    restaurantMessage?: string
   }> {
+    // First check if restaurant is open at this time
+    const restaurantStatus = await this.restaurantAvailability.isRestaurantOpen(
+      restaurantId,
+      bookingTime,
+      format(bookingTime, 'HH:mm')
+    )
+
+    if (!restaurantStatus.isOpen) {
+      return {
+        available: false,
+        conflicts: [],
+        tables: [],
+        restaurantOpen: false,
+        restaurantMessage: restaurantStatus.reason || 'Restaurant is closed at this time'
+      }
+    }
+
+    // Check if the booking end time is within operating hours
     const endTime = addMinutes(bookingTime, turnTimeMinutes)
+    const endTimeStr = format(endTime, 'HH:mm')
+    const endTimeStatus = await this.restaurantAvailability.isRestaurantOpen(
+      restaurantId,
+      bookingTime, // Same date
+      endTimeStr
+    )
+
+    if (!endTimeStatus.isOpen) {
+      return {
+        available: false,
+        conflicts: [],
+        tables: [],
+        restaurantOpen: false,
+        restaurantMessage: `Restaurant closes at ${restaurantStatus.hours?.close}. Please select an earlier time.`
+      }
+    }
 
     // Get table details
     const { data: tables, error: tablesError } = await this.supabase
@@ -131,12 +170,14 @@ export class TableAvailabilityService {
     return {
       available: !hasConflict,
       conflicts,
-      tables: tableAvailability
+      tables: tableAvailability,
+      restaurantOpen: true
     }
   }
 
   /**
    * Get available tables for a time slot
+   * Enhanced to respect operating hours
    */
   async getAvailableTablesForSlot(
     restaurantId: string,
@@ -146,8 +187,49 @@ export class TableAvailabilityService {
   ): Promise<{
     singleTables: any[]
     combinations: TableCombination[]
+    restaurantOpen: boolean
+    restaurantMessage?: string
   }> {
+    // Check restaurant availability first
+    const restaurantStatus = await this.restaurantAvailability.isRestaurantOpen(
+      restaurantId,
+      bookingTime,
+      format(bookingTime, 'HH:mm')
+    )
+
+    if (!restaurantStatus.isOpen) {
+      return {
+        singleTables: [],
+        combinations: [],
+        restaurantOpen: false,
+        restaurantMessage: restaurantStatus.reason
+      }
+    }
+
+    // Check if booking would end within operating hours
     const endTime = addMinutes(bookingTime, turnTimeMinutes)
+    const endTimeStr = format(endTime, 'HH:mm')
+    
+    if (restaurantStatus.hours) {
+      const [closeHour, closeMin] = restaurantStatus.hours.close.split(':').map(Number)
+      const [endHour, endMin] = endTimeStr.split(':').map(Number)
+      
+      const closeMinutes = closeHour * 60 + closeMin
+      const endMinutes = endHour * 60 + endMin
+      
+      // Handle overnight hours
+      if (closeMinutes < endMinutes && closeHour < 6) {
+        // Restaurant closes after midnight, adjust calculation
+        // This is fine
+      } else if (endMinutes > closeMinutes) {
+        return {
+          singleTables: [],
+          combinations: [],
+          restaurantOpen: false,
+          restaurantMessage: `Restaurant closes at ${restaurantStatus.hours.close}. This booking would end at ${endTimeStr}.`
+        }
+      }
+    }
 
     // Get all active tables for the restaurant
     const { data: allTables, error: tablesError } = await this.supabase
@@ -194,7 +276,8 @@ export class TableAvailabilityService {
 
     return {
       singleTables: availableTables,
-      combinations
+      combinations,
+      restaurantOpen: true
     }
   }
 
@@ -291,6 +374,7 @@ export class TableAvailabilityService {
 
   /**
    * Get optimal table assignment for a party
+   * Enhanced with operating hours check
    */
   async getOptimalTableAssignment(
     restaurantId: string,
@@ -301,13 +385,26 @@ export class TableAvailabilityService {
     tableIds: string[]
     requiresCombination: boolean
     totalCapacity: number
+    restaurantOpen: boolean
+    restaurantMessage?: string
   } | null> {
-    const { singleTables, combinations } = await this.getAvailableTablesForSlot(
-      restaurantId,
-      bookingTime,
-      partySize,
-      turnTimeMinutes
-    )
+    const { singleTables, combinations, restaurantOpen, restaurantMessage } = 
+      await this.getAvailableTablesForSlot(
+        restaurantId,
+        bookingTime,
+        partySize,
+        turnTimeMinutes
+      )
+
+    if (!restaurantOpen) {
+      return {
+        tableIds: [],
+        requiresCombination: false,
+        totalCapacity: 0,
+        restaurantOpen: false,
+        restaurantMessage
+      }
+    }
 
     // First, try to find a single table
     const optimalSingleTable = singleTables
@@ -325,7 +422,8 @@ export class TableAvailabilityService {
       return {
         tableIds: [optimalSingleTable.id],
         requiresCombination: false,
-        totalCapacity: optimalSingleTable.capacity
+        totalCapacity: optimalSingleTable.capacity,
+        restaurantOpen: true
       }
     }
 
@@ -336,7 +434,8 @@ export class TableAvailabilityService {
       return {
         tableIds: optimalCombination.tables,
         requiresCombination: true,
-        totalCapacity: optimalCombination.totalCapacity
+        totalCapacity: optimalCombination.totalCapacity,
+        restaurantOpen: true
       }
     }
 
@@ -345,14 +444,37 @@ export class TableAvailabilityService {
 
   /**
    * Quick check if specific tables are available (using the RPC function)
+   * Enhanced to check operating hours
    */
   async quickAvailabilityCheck(
+    restaurantId: string,
     tableIds: string[],
     bookingTime: Date,
     turnTimeMinutes: number = 120,
     excludeBookingId?: string
   ): Promise<boolean> {
+    // Check restaurant hours first
+    const restaurantStatus = await this.restaurantAvailability.isRestaurantOpen(
+      restaurantId,
+      bookingTime,
+      format(bookingTime, 'HH:mm')
+    )
+
+    if (!restaurantStatus.isOpen) {
+      return false
+    }
+
+    // Check if booking ends within operating hours
     const endTime = addMinutes(bookingTime, turnTimeMinutes)
+    const endTimeStatus = await this.restaurantAvailability.isRestaurantOpen(
+      restaurantId,
+      bookingTime,
+      format(endTime, 'HH:mm')
+    )
+
+    if (!endTimeStatus.isOpen) {
+      return false
+    }
     
     const { data: conflictingBookingId, error } = await this.supabase
       .rpc("check_booking_overlap", {
@@ -369,5 +491,45 @@ export class TableAvailabilityService {
 
     // If conflictingBookingId is null, tables are available
     return conflictingBookingId === null
+  }
+
+  /**
+   * Get available time slots for specific tables
+   * Respects restaurant operating hours
+   */
+  async getTableTimeSlots(
+    restaurantId: string,
+    tableIds: string[],
+    date: Date,
+    slotDuration: number = 30
+  ): Promise<string[]> {
+    // Get restaurant hours for the date
+    const availableSlots = await this.restaurantAvailability.getAvailableTimeSlots(
+      restaurantId,
+      date,
+      1, // Min party size
+      slotDuration
+    )
+
+    // Filter slots based on table availability
+    const validSlots: string[] = []
+
+    for (const slot of availableSlots) {
+      const [hour, minute] = slot.split(':').map(Number)
+      const slotTime = new Date(date)
+      slotTime.setHours(hour, minute, 0, 0)
+
+      const isAvailable = await this.quickAvailabilityCheck(
+        restaurantId,
+        tableIds,
+        slotTime
+      )
+
+      if (isAvailable) {
+        validSlots.push(slot)
+      }
+    }
+
+    return validSlots
   }
 }

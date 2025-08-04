@@ -9,6 +9,7 @@ import { format, addMinutes, differenceInMinutes } from "date-fns"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery } from "@tanstack/react-query"
 import { TableAvailabilityService } from "@/lib/table-availability"
+import { RestaurantAvailability } from "@/lib/restaurant-availability"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -76,6 +77,7 @@ export function ManualBookingForm({
   const [checkingAvailability, setCheckingAvailability] = useState(false)
   const supabase = createClient()
   const tableService = new TableAvailabilityService()
+  const availabilityService = new RestaurantAvailability()
 
   const {
     register,
@@ -113,6 +115,30 @@ export function ManualBookingForm({
       if (error) throw error
       return data
     },
+  })
+
+  // Check restaurant availability when date/time changes
+  const { data: restaurantAvailability } = useQuery({
+    queryKey: [
+      "restaurant-availability",
+      restaurantId,
+      bookingDate,
+      bookingTime
+    ],
+    queryFn: async () => {
+      if (!bookingDate || !bookingTime) return null
+
+      const [hours, minutes] = bookingTime.split(":")
+      const bookingDateTime = new Date(bookingDate)
+      bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+
+      return await availabilityService.isRestaurantOpen(
+        restaurantId,
+        bookingDateTime,
+        bookingTime
+      )
+    },
+    enabled: !!bookingDate && !!bookingTime,
   })
 
   // Check availability when date/time/tables change
@@ -579,6 +605,24 @@ export function ManualBookingForm({
             </Alert>
           ) : null
         })()}
+
+        {/* Restaurant availability warning */}
+        {restaurantAvailability && !restaurantAvailability.isOpen && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Restaurant is closed</strong> at the selected date and time.
+              {restaurantAvailability.reason && (
+                <div className="mt-1">Reason: {restaurantAvailability.reason}</div>
+              )}
+              {restaurantAvailability.hours && (
+                <div className="mt-1">
+                  Regular hours: {restaurantAvailability.hours.open} - {restaurantAvailability.hours.close}
+                </div>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Show conflicts if any */}
         {availability && !availability.available && (

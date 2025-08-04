@@ -45,8 +45,10 @@ import {
   Phone,
   Instagram,
   Link2,
-  Save
+  Save,
+  ChevronRight
 } from "lucide-react"
+import Link from "next/link"
 
 // Type definitions
 type Restaurant = {
@@ -298,6 +300,29 @@ export default function SettingsPage() {
         <p className="text-muted-foreground">
           Manage your restaurant settings and preferences
         </p>
+      </div>
+
+      {/* Quick Access Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {/* Add new settings card for availability */}
+        <Link href="/settings/availability">
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5" />
+                    Operating Hours
+                  </CardTitle>
+                  <CardDescription>
+                    Manage regular hours, holidays, and special events
+                  </CardDescription>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </div>
+            </CardHeader>
+          </Card>
+        </Link>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>

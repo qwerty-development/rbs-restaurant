@@ -1,6 +1,7 @@
 // lib/table-status.ts
 import { createClient } from "@/lib/supabase/client"
-import { addMinutes, differenceInMinutes } from "date-fns"
+import { addMinutes, differenceInMinutes, format } from "date-fns"
+import { RestaurantAvailability } from "./restaurant-availability"
 
 export type DiningStatus = 
   | 'pending'
@@ -37,6 +38,7 @@ export interface TableStatus {
   }
   isOccupied: boolean
   canAcceptWalkIn: boolean
+  minutesUntilClose?: number
 }
 
 export interface StatusTransition {
@@ -50,6 +52,7 @@ export interface StatusTransition {
 
 export class TableStatusService {
   private supabase = createClient()
+  private restaurantAvailability = new RestaurantAvailability()
 
   // Define valid status transitions
   static STATUS_TRANSITIONS: any = [
@@ -64,7 +67,7 @@ export class TableStatusService {
     { from: 'dessert', to: 'payment', label: 'Request Bill', icon: '💳', color: 'yellow' },
     { from: 'payment', to: 'completed', label: 'Complete', icon: '✅', color: 'green' },
     { from: 'confirmed', to: 'no_show', label: 'Mark No Show', icon: '❌', color: 'red', requiresConfirmation: true },
-    { from: 'arrived', to: 'cancelled', label: 'Cancel', icon: '🚫', color: 'red', requiresConfirmation: true }
+    { from: 'arrived', to: 'cancelled_by_restaurant', label: 'Cancel', icon: '🚫', color: 'red', requiresConfirmation: true }
   ]
 
   // Get dining progress percentage
@@ -81,7 +84,9 @@ export class TableStatusService {
       'payment': 95,
       'completed': 100,
       'no_show': 100,
-      'cancelled': 100
+      'cancelled_by_user': 100,
+      'cancelled_by_restaurant': 100,
+      'declined_by_restaurant': 100
     }
     return progressMap[status] || 0
   }
@@ -231,10 +236,33 @@ export class TableStatusService {
   }
 
   // Get table status with current and next bookings
+  // Enhanced to consider restaurant hours
   async getTableStatuses(
     restaurantId: string,
     currentTime: Date
   ): Promise<Map<string, TableStatus>> {
+    // Check if restaurant is currently open
+    const restaurantStatus = await this.restaurantAvailability.isRestaurantOpen(
+      restaurantId,
+      currentTime,
+      format(currentTime, 'HH:mm')
+    )
+
+    // Calculate minutes until close if open
+    let minutesUntilClose: number | undefined
+    if (restaurantStatus.isOpen && restaurantStatus.hours) {
+      const [closeHour, closeMin] = restaurantStatus.hours.close.split(':').map(Number)
+      const closeTime = new Date(currentTime)
+      closeTime.setHours(closeHour, closeMin, 0, 0)
+      
+      // Handle overnight hours
+      if (closeTime < currentTime) {
+        closeTime.setDate(closeTime.getDate() + 1)
+      }
+      
+      minutesUntilClose = differenceInMinutes(closeTime, currentTime)
+    }
+
     // Fetch all tables
     const { data: tables } = await this.supabase
       .from('restaurant_tables')
@@ -276,27 +304,44 @@ export class TableStatusService {
         tableId: table.id,
         tableNumber: table.table_number,
         isOccupied: false,
-        canAcceptWalkIn: true
+        canAcceptWalkIn: restaurantStatus.isOpen,
+        minutesUntilClose
       })
     })
 
+    // If restaurant is closed, no walk-ins
+    if (!restaurantStatus.isOpen) {
+      tableStatusMap.forEach(status => {
+        status.canAcceptWalkIn = false
+      })
+      return tableStatusMap
+    }
+
     // Process bookings
     if (bookings) {
-      bookings.forEach(booking => {
+      for (const booking of bookings) {
         const bookingTables = booking.booking_tables || []
         const bookingStart = new Date(booking.booking_time)
         const bookingEnd = addMinutes(bookingStart, booking.turn_time_minutes || 120)
 
-        bookingTables.forEach(({ table_id }: { table_id: string }) => {
+        // Check if booking time is within operating hours
+        const bookingTimeStatus = await this.restaurantAvailability.isRestaurantOpen(
+          restaurantId,
+          bookingStart,
+          format(bookingStart, 'HH:mm')
+        )
+
+        if (!bookingTimeStatus.isOpen) {
+          // Skip bookings outside operating hours
+          continue
+        }
+
+        for (const { table_id } of bookingTables) {
           const tableStatus = tableStatusMap.get(table_id)
-          if (!tableStatus) return
+          if (!tableStatus) continue
 
           // Check if currently occupied
-          // If customer is checked in (arrived, seated, etc.), table is occupied regardless of time
-          const physicallyPresent = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status)
-          const withinTimeWindow = currentTime >= bookingStart && currentTime <= bookingEnd
-          
-          if (physicallyPresent || withinTimeWindow) {
+          if (currentTime >= bookingStart && currentTime <= bookingEnd) {
             const seatedHistory = booking.booking_status_history?.find(
               (h: any) => h.new_status === 'seated'
             )
@@ -323,11 +368,26 @@ export class TableStatusService {
 
             // Check if we can accept walk-ins before next booking
             const minutesUntilNext = differenceInMinutes(bookingStart, currentTime)
-            tableStatus.canAcceptWalkIn = minutesUntilNext > 90 // 1.5 hours buffer
+            const requiredBuffer = 90 // 1.5 hours buffer
+            
+            // Also check if walk-in would finish before closing
+            if (minutesUntilClose && minutesUntilClose < requiredBuffer) {
+              tableStatus.canAcceptWalkIn = false
+            } else {
+              tableStatus.canAcceptWalkIn = minutesUntilNext > requiredBuffer
+            }
           }
-        })
-      })
+        }
+      }
     }
+
+    // Final check for walk-in availability based on closing time
+    tableStatusMap.forEach(status => {
+      if (!status.isOccupied && !status.nextBooking && minutesUntilClose) {
+        // Need at least 90 minutes before closing for walk-ins
+        status.canAcceptWalkIn = minutesUntilClose >= 90
+      }
+    })
 
     return tableStatusMap
   }
@@ -337,43 +397,106 @@ export class TableStatusService {
     return TableStatusService.STATUS_TRANSITIONS.filter((t: { from: string }) => t.from === currentStatus)
   }
 
-  // Get all available statuses for flexibility (restaurants can jump to any status)
-  getAllAvailableStatuses(currentStatus: DiningStatus): StatusTransition[] {
-    // Define all possible status options with logical restrictions
-    const allStatuses: StatusTransition[] = [
-      { from: currentStatus, to: 'pending', label: 'Mark as Pending', icon: '⏳', color: 'gray' },
-      { from: currentStatus, to: 'confirmed', label: 'Confirm Booking', icon: '✅', color: 'green' },
-      { from: currentStatus, to: 'arrived', label: 'Mark as Arrived', icon: '👋', color: 'blue' },
-      { from: currentStatus, to: 'seated', label: 'Mark as Seated', icon: '🪑', color: 'indigo' },
-      { from: currentStatus, to: 'ordered', label: 'Mark as Ordered', icon: '📝', color: 'purple' },
-      { from: currentStatus, to: 'appetizers', label: 'Appetizers Served', icon: '🥗', color: 'green' },
-      { from: currentStatus, to: 'main_course', label: 'Main Course Served', icon: '🍽️', color: 'blue' },
-      { from: currentStatus, to: 'dessert', label: 'Dessert Served', icon: '🍰', color: 'pink' },
-      { from: currentStatus, to: 'payment', label: 'Payment/Bill', icon: '💳', color: 'yellow' },
-      { from: currentStatus, to: 'completed', label: 'Complete Service', icon: '✅', color: 'green' },
-      { from: currentStatus, to: 'no_show', label: 'Mark as No Show', icon: '❌', color: 'red', requiresConfirmation: true },
-      { from: currentStatus, to: 'cancelled_by_restaurant', label: 'Cancel Booking', icon: '🚫', color: 'red', requiresConfirmation: true }
-    ]
-
-    // Filter out the current status to avoid showing "change to same status"
-    const availableStatuses = allStatuses.filter(status => status.to !== currentStatus)
-
-    // Apply logical restrictions based on current status
-    if (currentStatus === 'completed' || currentStatus === 'no_show' || 
-        currentStatus === 'cancelled_by_user' || currentStatus === 'cancelled_by_restaurant') {
-      // For final states, only allow reverting to previous states or re-opening
-      return availableStatuses.filter(status => 
-        ['pending', 'confirmed', 'arrived', 'seated'].includes(status.to)
-      )
-    }
-
-    return availableStatuses
-  }
-
   // Estimate remaining dining time
   estimateRemainingTime(status: DiningStatus, turnTimeMinutes: number): number {
     const progress = TableStatusService.getDiningProgress(status)
     const elapsed = (progress / 100) * turnTimeMinutes
     return Math.max(0, turnTimeMinutes - elapsed)
+  }
+
+  // Check if restaurant will close before estimated completion
+  async willCloseBeforeCompletion(
+    restaurantId: string,
+    currentTime: Date,
+    estimatedMinutesRemaining: number
+  ): Promise<{
+    willClose: boolean
+    closingTime?: string
+    minutesUntilClose?: number
+  }> {
+    const restaurantStatus = await this.restaurantAvailability.isRestaurantOpen(
+      restaurantId,
+      currentTime,
+      format(currentTime, 'HH:mm')
+    )
+
+    if (!restaurantStatus.isOpen || !restaurantStatus.hours) {
+      return { willClose: true }
+    }
+
+    const [closeHour, closeMin] = restaurantStatus.hours.close.split(':').map(Number)
+    const closeTime = new Date(currentTime)
+    closeTime.setHours(closeHour, closeMin, 0, 0)
+    
+    // Handle overnight hours
+    if (closeTime < currentTime) {
+      closeTime.setDate(closeTime.getDate() + 1)
+    }
+    
+    const minutesUntilClose = differenceInMinutes(closeTime, currentTime)
+    
+    return {
+      willClose: minutesUntilClose < estimatedMinutesRemaining,
+      closingTime: restaurantStatus.hours.close,
+      minutesUntilClose
+    }
+  }
+
+  // Get walk-in availability considering restaurant hours
+  async getWalkInAvailability(
+    restaurantId: string,
+    currentTime: Date = new Date()
+  ): Promise<{
+    available: boolean
+    reason?: string
+    availableTables?: number
+    closingTime?: string
+  }> {
+    // Check if restaurant is open
+    const restaurantStatus = await this.restaurantAvailability.isRestaurantOpen(
+      restaurantId,
+      currentTime,
+      format(currentTime, 'HH:mm')
+    )
+
+    if (!restaurantStatus.isOpen) {
+      return {
+        available: false,
+        reason: restaurantStatus.reason || 'Restaurant is closed'
+      }
+    }
+
+    // Get table statuses
+    const tableStatuses = await this.getTableStatuses(restaurantId, currentTime)
+    
+    // Count available tables for walk-ins
+    const availableTablesForWalkIn = Array.from(tableStatuses.values())
+      .filter(status => status.canAcceptWalkIn)
+    
+    if (availableTablesForWalkIn.length === 0) {
+      // Check why no tables are available
+      const allOccupied = Array.from(tableStatuses.values())
+        .every(status => status.isOccupied)
+      
+      if (allOccupied) {
+        return {
+          available: false,
+          reason: 'All tables are currently occupied'
+        }
+      }
+      
+      // Must be closing soon
+      return {
+        available: false,
+        reason: 'Kitchen closing soon - no walk-ins accepted',
+        closingTime: restaurantStatus.hours?.close
+      }
+    }
+
+    return {
+      available: true,
+      availableTables: availableTablesForWalkIn.length,
+      closingTime: restaurantStatus.hours?.close
+    }
   }
 }

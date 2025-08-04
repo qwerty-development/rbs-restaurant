@@ -314,3 +314,41 @@ export interface Restaurant {
     created_at: string
     updated_at: string
   }
+
+  // Restaurant Availability Types
+  export interface RestaurantHours {
+    id: string
+    restaurant_id: string
+    day_of_week: 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
+    is_open: boolean
+    open_time: string | null
+    close_time: string | null
+    created_at: string
+    updated_at: string
+  }
+
+  export interface RestaurantSpecialHours {
+    id: string
+    restaurant_id: string
+    date: string
+    is_closed: boolean
+    open_time: string | null
+    close_time: string | null
+    reason: string | null
+    created_at: string
+    created_by: string
+    // Relations
+    created_by_user?: Profile
+  }
+
+  export interface RestaurantClosure {
+    id: string
+    restaurant_id: string
+    start_date: string
+    end_date: string
+    reason: string
+    created_at: string
+    created_by: string
+    // Relations
+    created_by_user?: Profile
+  }

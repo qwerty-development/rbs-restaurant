@@ -817,6 +817,7 @@ export default function DashboardPage() {
         bookings={activeBookings}
         tables={tables}
         currentTime={currentTime}
+        restaurantId={restaurantId}
       />
 
       {/* Critical Alerts */}
