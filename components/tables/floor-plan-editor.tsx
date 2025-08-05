@@ -143,22 +143,28 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
     return { clientX: 0, clientY: 0 }
   }
 
+  // Helper function to get touch by identifier
+  const getTouchById = (touches: TouchList, touchId: number): Touch | null => {
+    for (let i = 0; i < touches.length; i++) {
+      if (touches[i].identifier === touchId) {
+        return touches[i]
+      }
+    }
+    return null
+  }
+
   // Unified drag start handler for mouse and touch
   const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent, tableId: string) => {
     if (viewMode === "preview" || isResizing) return
     
-    // Check if touch started on resize handle - if so, don't start drag
-    if ('touches' in e) {
-      const touch = e.touches[0]
-      const target = document.elementFromPoint(touch.clientX, touch.clientY)
-      if (target && target.closest('[data-resize-handle]')) {
-        return // Let resize handle take precedence
-      }
+    // For touch events, check if this is on a resize handle
+    const target = e.target as HTMLElement
+    if (target.hasAttribute('data-resize-handle') || target.closest('[data-resize-handle]')) {
+      return // Don't start drag if clicking on resize handle
     }
     
     e.preventDefault()
-    e.stopPropagation()
-
+    
     const element = e.currentTarget as HTMLElement
     const containerRect = containerRef.current?.getBoundingClientRect()
     if (!containerRect) return
@@ -219,9 +225,11 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
     if (viewMode === "preview" || isDragging) return
     
     e.preventDefault()
-    e.stopPropagation() // Critical: prevent drag from triggering
+    e.stopPropagation()
 
-    const tableElement = e.currentTarget.parentElement as HTMLElement
+    // Find the table element (parent of resize handle)
+    const resizeHandle = e.currentTarget as HTMLElement
+    const tableElement = resizeHandle.closest('[data-table-id]') as HTMLElement
     if (!tableElement) return
 
     const currentWidth = tableElement.offsetWidth
@@ -253,11 +261,9 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
       touchId
     }
 
-    // Add visual feedback immediately
-    tableElement.style.transition = 'none' // Disable CSS transitions during resize
+    // Add visual feedback
+    tableElement.style.transition = 'none'
     document.body.style.cursor = 'se-resize'
-    
-    // Prevent text selection
     document.body.style.userSelect = 'none'
     document.body.style.webkitUserSelect = 'none'
     document.body.style.touchAction = 'none'
@@ -270,15 +276,17 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
     const dragState = dragStateRef.current
     const resizeState = resizeStateRef.current
 
-    // Get coordinates
-    const coords = getEventCoordinates(e)
-    
     // Handle dragging
     if (dragState.tableId && dragState.element && containerRef.current && !isResizing) {
+      let coords: { clientX: number; clientY: number }
+      
       // For touch events, check if it's the same touch
       if ('touches' in e && dragState.touchId !== null) {
-        const touch = Array.from(e.touches).find(t => t.identifier === dragState.touchId)
+        const touch = getTouchById(e.touches, dragState.touchId)
         if (!touch) return
+        coords = { clientX: touch.clientX, clientY: touch.clientY }
+      } else {
+        coords = getEventCoordinates(e)
       }
 
       // Cancel any pending animation frame
@@ -318,10 +326,15 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
 
     // Handle resizing
     if (resizeState.tableId && resizeState.element && !isDragging) {
+      let coords: { clientX: number; clientY: number }
+      
       // For touch events, check if it's the same touch
       if ('touches' in e && resizeState.touchId !== null) {
-        const touch = Array.from(e.touches).find(t => t.identifier === resizeState.touchId)
+        const touch = getTouchById(e.touches, resizeState.touchId)
         if (!touch) return
+        coords = { clientX: touch.clientX, clientY: touch.clientY }
+      } else {
+        coords = getEventCoordinates(e)
       }
 
       // Cancel any pending animation frame
@@ -334,8 +347,8 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
         const deltaX = coords.clientX - resizeState.startX
         const deltaY = coords.clientY - resizeState.startY
         
-        const newWidth = Math.max(30, resizeState.initialWidth + deltaX)
-        const newHeight = Math.max(20, resizeState.initialHeight + deltaY)
+        const newWidth = Math.max(50, resizeState.initialWidth + deltaX)
+        const newHeight = Math.max(30, resizeState.initialHeight + deltaY)
         
         // Apply size directly to DOM (super fast)
         resizeState.element!.style.width = `${newWidth}px`
@@ -347,9 +360,23 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
   }, [isDragging, isResizing])
 
   // Unified end handler for mouse and touch
-  const handleEnd = useCallback(() => {
+  const handleEnd = useCallback((e?: MouseEvent | TouchEvent) => {
     const dragState = dragStateRef.current
     const resizeState = resizeStateRef.current
+    
+    // For touch events, check if the ended touch matches our tracked touch
+    if (e && 'changedTouches' in e) {
+      let relevantTouch = false
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i]
+        if ((dragState.touchId !== null && touch.identifier === dragState.touchId) ||
+            (resizeState.touchId !== null && touch.identifier === resizeState.touchId)) {
+          relevantTouch = true
+          break
+        }
+      }
+      if (!relevantTouch) return
+    }
     
     // Handle drag completion
     if (dragState.tableId && dragState.element) {
@@ -429,10 +456,10 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
     document.addEventListener('mousemove', handleMove, { passive: false })
     document.addEventListener('mouseup', handleEnd)
     
-    // Touch events
+    // Touch events - using { passive: false } to allow preventDefault
     document.addEventListener('touchmove', handleMove, { passive: false })
-    document.addEventListener('touchend', handleEnd)
-    document.addEventListener('touchcancel', handleEnd)
+    document.addEventListener('touchend', handleEnd, { passive: false })
+    document.addEventListener('touchcancel', handleEnd, { passive: false })
     
     return () => {
       // Mouse events
@@ -457,6 +484,12 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
   // Table click handler
   const handleTableClick = useCallback((e: React.MouseEvent | React.TouchEvent, tableId: string) => {
     e.stopPropagation()
+    
+    // Check if click/touch is on resize handle
+    const target = e.target as HTMLElement
+    if (target.hasAttribute('data-resize-handle') || target.closest('[data-resize-handle]')) {
+      return
+    }
     
     // Only handle selection if not dragging/resizing and in edit mode
     if (!isDragging && !isResizing && viewMode === "edit") {
@@ -702,12 +735,6 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                   onMouseDown={(e) => handleDragStart(e, table.id)}
                   onTouchStart={(e) => handleDragStart(e, table.id)}
                   onClick={(e) => handleTableClick(e, table.id)}
-                  onTouchEnd={(e) => {
-                    // Prevent ghost click on touch devices
-                    if (!isDragging && !isResizing) {
-                      handleTableClick(e, table.id)
-                    }
-                  }}
                 >
                   <div className="text-center h-full flex flex-col justify-center pointer-events-none">
                     <div className="font-bold text-sm mb-1">
@@ -730,43 +757,23 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                       {onTableResize && (
                         <div 
                           data-resize-handle="true"
-                          className="absolute -bottom-3 -right-3 w-8 h-8 md:w-5 md:h-5 bg-blue-500 rounded-full border-2 border-white shadow-lg cursor-se-resize pointer-events-auto hover:bg-blue-600 active:bg-blue-700 transition-colors z-50 touch-none flex items-center justify-center" 
-                          onMouseDown={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            handleResizeStart(e, table.id)
-                          }}
-                          onTouchStart={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            // Add immediate visual feedback for touch
-                            const target = e.currentTarget as HTMLElement
-                            target.style.transform = 'scale(1.1)'
-                            target.style.backgroundColor = '#1d4ed8' // darker blue
-                            setTimeout(() => {
-                              target.style.transform = ''
-                              target.style.backgroundColor = ''
-                            }, 150)
-                            handleResizeStart(e, table.id)
-                          }}
+                          className="absolute -bottom-2 -right-2 w-10 h-10 md:w-6 md:h-6 bg-blue-500 rounded-full border-2 border-white shadow-lg cursor-se-resize hover:bg-blue-600 active:bg-blue-700 transition-colors z-50 touch-none flex items-center justify-center"
                           style={{
-                            // Increase touch target area without affecting visual size
-                            minWidth: '32px',
-                            minHeight: '32px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
+                            // Ensure handle is large enough for touch
+                            touchAction: 'none',
+                            WebkitTouchCallout: 'none',
+                            WebkitUserSelect: 'none'
                           }}
+                          onMouseDown={(e) => handleResizeStart(e, table.id)}
+                          onTouchStart={(e) => handleResizeStart(e, table.id)}
                         >
-                          {/* Visual resize icon for better UX */}
+                          {/* Visual resize icon */}
                           <svg 
-                            className="w-3 h-3 text-white opacity-90 pointer-events-none" 
-                            fill="none" 
-                            stroke="currentColor"
-                            strokeWidth="2.5"
+                            className="w-4 h-4 md:w-3 md:h-3 text-white opacity-90 pointer-events-none" 
+                            fill="currentColor" 
                             viewBox="0 0 24 24"
                           >
-                            <path d="M4 4L20 20M20 4L4 20"/>
+                            <path d="M21,15L15,21V18H11V14H14V17L21,15M3,9L9,3V6H13V10H10V7L3,9Z"/>
                           </svg>
                         </div>
                       )}
