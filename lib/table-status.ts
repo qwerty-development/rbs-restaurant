@@ -397,6 +397,28 @@ export class TableStatusService {
     return TableStatusService.STATUS_TRANSITIONS.filter((t: { from: string }) => t.from === currentStatus)
   }
 
+  // Get all available statuses that can be reached from current status
+  getAllAvailableStatuses(currentStatus: DiningStatus): StatusTransition[] {
+    // Define all possible statuses
+    const allStatuses: DiningStatus[] = [
+      'pending', 'confirmed', 'arrived', 'seated', 'ordered', 
+      'appetizers', 'main_course', 'dessert', 'payment', 'completed',
+      'no_show', 'cancelled_by_user', 'cancelled_by_restaurant'
+    ]
+
+    // Filter out the current status and create transitions
+    return allStatuses
+      .filter(status => status !== currentStatus)
+      .map(status => ({
+        from: currentStatus,
+        to: status,
+        label: status === 'appetizers' || status === 'main_course' ? 
+          status.replace('_', ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') :
+          status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' '),
+        requiresConfirmation: ['no_show', 'cancelled_by_user', 'cancelled_by_restaurant'].includes(status)
+      }))
+  }
+
   // Estimate remaining dining time
   estimateRemainingTime(status: DiningStatus, turnTimeMinutes: number): number {
     const progress = TableStatusService.getDiningProgress(status)

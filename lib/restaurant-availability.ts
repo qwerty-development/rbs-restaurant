@@ -64,7 +64,7 @@ export class RestaurantAvailability {
         .eq('restaurant_id', restaurantId)
         .lte('start_date', dateStr)
         .gte('end_date', dateStr)
-        .single()
+        .maybeSingle()
 
       if (closureError && closureError.code !== 'PGRST116') {
         console.error('Error checking closures:', closureError)
@@ -86,7 +86,7 @@ export class RestaurantAvailability {
         .select('*')
         .eq('restaurant_id', restaurantId)
         .eq('date', dateStr)
-        .single()
+        .maybeSingle()
 
       if (specialError && specialError.code !== 'PGRST116') {
         console.error('Error checking special hours:', specialError)
@@ -138,7 +138,7 @@ export class RestaurantAvailability {
         .select('*')
         .eq('restaurant_id', restaurantId)
         .eq('day_of_week', dayOfWeek)
-        .single()
+        .maybeSingle()
 
       if (regularError && regularError.code !== 'PGRST116') {
         console.error('Error checking regular hours:', regularError)

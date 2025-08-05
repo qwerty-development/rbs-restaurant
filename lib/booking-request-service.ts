@@ -2,6 +2,7 @@
 import { createClient } from "@/lib/supabase/client"
 import { addHours, addMinutes, format, isWithinInterval, parseISO } from "date-fns"
 import { TableAvailabilityService } from "./table-availability"
+import { RestaurantAvailability } from "./restaurant-availability"
 
 interface AcceptanceValidation {
   valid: boolean
@@ -24,10 +25,12 @@ interface AcceptRequestResult {
 export class BookingRequestService {
   private supabase
   private tableService: TableAvailabilityService
+  private availabilityService: RestaurantAvailability
   
   constructor() {
     this.supabase = createClient()
     this.tableService = new TableAvailabilityService()
+    this.availabilityService = new RestaurantAvailability()
   }
 
   async createBookingRequest(data: {
@@ -42,6 +45,7 @@ export class BookingRequestService {
     guestPhone?: string
     turnTimeMinutes?: number
     preApproved?: boolean
+    isWalkIn?: boolean
   }) {
     try {
       // Get restaurant settings with retry logic
@@ -53,7 +57,6 @@ export class BookingRequestService {
           request_expiry_hours,
           auto_decline_enabled,
           booking_window_days,
-          operating_hours,
           max_party_size,
           min_party_size,
           table_turnover_minutes,
@@ -87,19 +90,20 @@ export class BookingRequestService {
         throw new Error(`Bookings can only be made up to ${bookingWindowDays} days in advance`)
       }
 
-      // Validate booking is in the future
-      if (data.bookingTime <= new Date()) {
+      // Validate booking is in the future (except for walk-ins)
+      if (!data.isWalkIn && data.bookingTime <= new Date()) {
         throw new Error("Booking time must be in the future")
       }
 
-      // Validate operating hours
-      const isWithinHours = await this.validateOperatingHours(
+      // Validate restaurant availability (operating hours, special hours, closures)
+      const availability = await this.availabilityService.isRestaurantOpen(
+        data.restaurantId,
         data.bookingTime,
-        restaurant.operating_hours
+        format(data.bookingTime, 'HH:mm')
       )
       
-      if (!isWithinHours.valid) {
-        throw new Error(isWithinHours.reason || "Booking time is outside operating hours")
+      if (!availability.isOpen) {
+        throw new Error(availability.reason || "Restaurant is not available at this time")
       }
 
       // Calculate expiry time for requests
@@ -528,41 +532,6 @@ export class BookingRequestService {
     return alternatives
   }
 
-  private async validateOperatingHours(
-    bookingTime: Date, 
-    operatingHours: any
-  ): Promise<{ valid: boolean; reason?: string }> {
-    if (!operatingHours) {
-      return { valid: true }
-    }
-
-    const dayOfWeek = bookingTime
-      .toLocaleDateString('en-US', { weekday: 'long' })
-      .toLowerCase()
-    const timeStr = format(bookingTime, 'HH:mm')
-    
-    const dayHours = operatingHours[dayOfWeek]
-    
-    if (!dayHours) {
-      return { valid: true }
-    }
-    
-    if (dayHours.closed) {
-      return { 
-        valid: false, 
-        reason: `Restaurant is closed on ${dayOfWeek}s` 
-      }
-    }
-
-    if (timeStr < dayHours.open || timeStr > dayHours.close) {
-      return {
-        valid: false,
-        reason: `Booking time must be between ${dayHours.open} and ${dayHours.close}`
-      }
-    }
-
-    return { valid: true }
-  }
 
   private async generateUniqueConfirmationCode(restaurantId: string): Promise<string> {
     let attempts = 0
