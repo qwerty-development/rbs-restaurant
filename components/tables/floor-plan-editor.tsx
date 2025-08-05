@@ -52,68 +52,46 @@ const TABLE_TYPE_ICONS = {
   private: "🔒",
 }
 
-interface DragState {
-  tableId: string | null
-  element: HTMLElement | null
-  startX: number
-  startY: number
-  offsetX: number
-  offsetY: number
-  initialLeft: number
-  initialTop: number
-  animationId: number | null
-  touchId: number | null
-}
-
-interface ResizeState {
-  tableId: string | null
-  element: HTMLElement | null
-  startX: number
-  startY: number
-  initialWidth: number
-  initialHeight: number
-  animationId: number | null
-  touchId: number | null
-}
-
 export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableResize, onTableDelete }: FloorPlanEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const dragStateRef = useRef<DragState>({
-    tableId: null,
-    element: null,
-    startX: 0,
-    startY: 0,
-    offsetX: 0,
-    offsetY: 0,
-    initialLeft: 0,
-    initialTop: 0,
-    animationId: null,
-    touchId: null
-  })
-  
-  const resizeStateRef = useRef<ResizeState>({
-    tableId: null,
-    element: null,
-    startX: 0,
-    startY: 0,
-    initialWidth: 0,
-    initialHeight: 0,
-    animationId: null,
-    touchId: null
-  })
-  
   const [selectedTable, setSelectedTable] = useState<string | null>(null)
   const [zoom, setZoom] = useState(100)
   const [showGrid, setShowGrid] = useState(true)
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit")
-  const [isDragging, setIsDragging] = useState(false)
-  const [isResizing, setIsResizing] = useState(false)
+  const [activeInteraction, setActiveInteraction] = useState<"none" | "drag" | "resize">("none")
   
-  // Store original positions and sizes for smooth updates
-  const originalPositionsRef = useRef<Record<string, { x: number; y: number }>>({})
-  const finalPositionsRef = useRef<Record<string, { x: number; y: number }>>({})
-  const originalSizesRef = useRef<Record<string, { width: number; height: number }>>({})
-  const finalSizesRef = useRef<Record<string, { width: number; height: number }>>({})
+  // Single state for tracking active operation
+  const interactionRef = useRef<{
+    type: "none" | "drag" | "resize"
+    tableId: string | null
+    element: HTMLElement | null
+    startX: number
+    startY: number
+    initialLeft: number
+    initialTop: number
+    initialWidth: number
+    initialHeight: number
+    offsetX: number
+    offsetY: number
+    touchId: number | null
+  }>({
+    type: "none",
+    tableId: null,
+    element: null,
+    startX: 0,
+    startY: 0,
+    initialLeft: 0,
+    initialTop: 0,
+    initialWidth: 0,
+    initialHeight: 0,
+    offsetX: 0,
+    offsetY: 0,
+    touchId: null
+  })
+  
+  // Store positions and sizes
+  const positionsRef = useRef<Record<string, { x: number; y: number }>>({})
+  const sizesRef = useRef<Record<string, { width: number; height: number }>>({})
 
   // Initialize positions and sizes
   useEffect(() => {
@@ -125,45 +103,16 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
       sizes[table.id] = { width: table.width || 60, height: table.height || 40 }
     })
     
-    originalPositionsRef.current = positions
-    finalPositionsRef.current = { ...positions }
-    originalSizesRef.current = sizes
-    finalSizesRef.current = { ...sizes }
+    positionsRef.current = positions
+    sizesRef.current = sizes
   }, [tables])
 
-  // Helper function to get coordinates from mouse or touch event
-  const getEventCoordinates = (e: MouseEvent | TouchEvent): { clientX: number; clientY: number } => {
-    if ('touches' in e && e.touches.length > 0) {
-      return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }
-    } else if ('changedTouches' in e && e.changedTouches.length > 0) {
-      return { clientX: e.changedTouches[0].clientX, clientY: e.changedTouches[0].clientY }
-    } else if ('clientX' in e) {
-      return { clientX: e.clientX, clientY: e.clientY }
-    }
-    return { clientX: 0, clientY: 0 }
-  }
-
-  // Helper function to get touch by identifier
-  const getTouchById = (touches: TouchList, touchId: number): Touch | null => {
-    for (let i = 0; i < touches.length; i++) {
-      if (touches[i].identifier === touchId) {
-        return touches[i]
-      }
-    }
-    return null
-  }
-
-  // Unified drag start handler for mouse and touch
-  const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent, tableId: string) => {
-    if (viewMode === "preview" || isResizing) return
-    
-    // For touch events, check if this is on a resize handle
-    const target = e.target as HTMLElement
-    if (target.hasAttribute('data-resize-handle') || target.closest('[data-resize-handle]')) {
-      return // Don't start drag if clicking on resize handle
-    }
+  // Start drag operation
+  const startDrag = useCallback((e: React.MouseEvent | React.TouchEvent, tableId: string) => {
+    if (viewMode === "preview" || activeInteraction !== "none") return
     
     e.preventDefault()
+    e.stopPropagation()
     
     const element = e.currentTarget as HTMLElement
     const containerRect = containerRef.current?.getBoundingClientRect()
@@ -171,344 +120,215 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
 
     const elementRect = element.getBoundingClientRect()
     
-    // Get coordinates based on event type
     let clientX: number, clientY: number
     let touchId: number | null = null
     
-    if ('touches' in e && e.touches.length > 0) {
-      clientX = e.touches[0].clientX
-      clientY = e.touches[0].clientY
-      touchId = e.touches[0].identifier
-    } else if ('clientX' in e) {
-      clientX = e.clientX
-      clientY = e.clientY
+    if ('touches' in e) {
+      const touch = e.touches[0]
+      clientX = touch.clientX
+      clientY = touch.clientY
+      touchId = touch.identifier
     } else {
-      return
+      clientX = (e as React.MouseEvent).clientX
+      clientY = (e as React.MouseEvent).clientY
     }
     
-    // Calculate precise offset from touch/mouse to element's top-left
-    const offsetX = clientX - elementRect.left
-    const offsetY = clientY - elementRect.top
-    
-    // Get current position
-    const currentLeft = elementRect.left - containerRect.left
-    const currentTop = elementRect.top - containerRect.top
-
-    dragStateRef.current = {
+    interactionRef.current = {
+      type: "drag",
       tableId,
       element,
       startX: clientX,
       startY: clientY,
-      offsetX,
-      offsetY,
-      initialLeft: currentLeft,
-      initialTop: currentTop,
-      animationId: null,
+      initialLeft: elementRect.left - containerRect.left,
+      initialTop: elementRect.top - containerRect.top,
+      initialWidth: 0,
+      initialHeight: 0,
+      offsetX: clientX - elementRect.left,
+      offsetY: clientY - elementRect.top,
       touchId
     }
-
-    // Add visual feedback immediately
+    
+    setActiveInteraction("drag")
     element.style.cursor = 'grabbing'
     element.style.zIndex = '1000'
-    element.style.transition = 'none' // Disable CSS transitions during drag
-    
-    // Prevent text selection and image dragging
-    document.body.style.userSelect = 'none'
-    document.body.style.webkitUserSelect = 'none'
-    document.body.style.touchAction = 'none'
-    
-    setIsDragging(true)
-  }, [viewMode, isResizing])
+    element.style.transition = 'none'
+  }, [viewMode, activeInteraction])
 
-  // Unified resize start handler for mouse and touch
-  const handleResizeStart = useCallback((e: React.MouseEvent | React.TouchEvent, tableId: string) => {
-    if (viewMode === "preview" || isDragging) return
+  // Start resize operation
+  const startResize = useCallback((e: React.MouseEvent | React.TouchEvent, tableId: string) => {
+    if (viewMode === "preview" || activeInteraction !== "none") return
     
     e.preventDefault()
     e.stopPropagation()
-
-    // Find the table element (parent of resize handle)
-    const resizeHandle = e.currentTarget as HTMLElement
-    const tableElement = resizeHandle.closest('[data-table-id]') as HTMLElement
+    
+    const tableElement = document.querySelector(`[data-table-id="${tableId}"]`) as HTMLElement
     if (!tableElement) return
 
-    const currentWidth = tableElement.offsetWidth
-    const currentHeight = tableElement.offsetHeight
-
-    // Get coordinates based on event type
     let clientX: number, clientY: number
     let touchId: number | null = null
     
-    if ('touches' in e && e.touches.length > 0) {
-      clientX = e.touches[0].clientX
-      clientY = e.touches[0].clientY
-      touchId = e.touches[0].identifier
-    } else if ('clientX' in e) {
-      clientX = e.clientX
-      clientY = e.clientY
+    if ('touches' in e) {
+      const touch = e.touches[0]
+      clientX = touch.clientX
+      clientY = touch.clientY
+      touchId = touch.identifier
     } else {
-      return
+      clientX = (e as React.MouseEvent).clientX
+      clientY = (e as React.MouseEvent).clientY
     }
 
-    resizeStateRef.current = {
+    interactionRef.current = {
+      type: "resize",
       tableId,
       element: tableElement,
       startX: clientX,
       startY: clientY,
-      initialWidth: currentWidth,
-      initialHeight: currentHeight,
-      animationId: null,
-      touchId
-    }
-
-    // Add visual feedback
-    tableElement.style.transition = 'none'
-    document.body.style.cursor = 'se-resize'
-    document.body.style.userSelect = 'none'
-    document.body.style.webkitUserSelect = 'none'
-    document.body.style.touchAction = 'none'
-    
-    setIsResizing(true)
-  }, [viewMode, isDragging])
-
-  // Unified move handler for mouse and touch
-  const handleMove = useCallback((e: MouseEvent | TouchEvent) => {
-    const dragState = dragStateRef.current
-    const resizeState = resizeStateRef.current
-
-    // Handle dragging
-    if (dragState.tableId && dragState.element && containerRef.current && !isResizing) {
-      let coords: { clientX: number; clientY: number }
-      
-      // For touch events, check if it's the same touch
-      if ('touches' in e && dragState.touchId !== null) {
-        const touch = getTouchById(e.touches, dragState.touchId)
-        if (!touch) return
-        coords = { clientX: touch.clientX, clientY: touch.clientY }
-      } else {
-        coords = getEventCoordinates(e)
-      }
-
-      // Cancel any pending animation frame
-      if (dragState.animationId) {
-        cancelAnimationFrame(dragState.animationId)
-      }
-
-      // Use requestAnimationFrame for smooth 60fps updates
-      dragState.animationId = requestAnimationFrame(() => {
-        const containerRect = containerRef.current!.getBoundingClientRect()
-        
-        // Calculate new position based on movement
-        const deltaX = coords.clientX - dragState.startX
-        const deltaY = coords.clientY - dragState.startY
-        
-        const newLeft = dragState.initialLeft + deltaX
-        const newTop = dragState.initialTop + deltaY
-        
-        // Apply boundaries
-        const elementWidth = dragState.element!.offsetWidth
-        const elementHeight = dragState.element!.offsetHeight
-        
-        const boundedLeft = Math.max(0, Math.min(containerRect.width - elementWidth, newLeft))
-        const boundedTop = Math.max(0, Math.min(containerRect.height - elementHeight, newTop))
-        
-        // Apply position directly to DOM (super fast)
-        dragState.element!.style.left = `${boundedLeft}px`
-        dragState.element!.style.top = `${boundedTop}px`
-        
-        // Calculate percentage for final save
-        const percentX = (boundedLeft / containerRect.width) * 100
-        const percentY = (boundedTop / containerRect.height) * 100
-        
-        finalPositionsRef.current[dragState.tableId!] = { x: percentX, y: percentY }
-      })
-    }
-
-    // Handle resizing
-    if (resizeState.tableId && resizeState.element && !isDragging) {
-      let coords: { clientX: number; clientY: number }
-      
-      // For touch events, check if it's the same touch
-      if ('touches' in e && resizeState.touchId !== null) {
-        const touch = getTouchById(e.touches, resizeState.touchId)
-        if (!touch) return
-        coords = { clientX: touch.clientX, clientY: touch.clientY }
-      } else {
-        coords = getEventCoordinates(e)
-      }
-
-      // Cancel any pending animation frame
-      if (resizeState.animationId) {
-        cancelAnimationFrame(resizeState.animationId)
-      }
-
-      // Use requestAnimationFrame for smooth 60fps updates
-      resizeState.animationId = requestAnimationFrame(() => {
-        const deltaX = coords.clientX - resizeState.startX
-        const deltaY = coords.clientY - resizeState.startY
-        
-        const newWidth = Math.max(50, resizeState.initialWidth + deltaX)
-        const newHeight = Math.max(30, resizeState.initialHeight + deltaY)
-        
-        // Apply size directly to DOM (super fast)
-        resizeState.element!.style.width = `${newWidth}px`
-        resizeState.element!.style.height = `${newHeight}px`
-        
-        finalSizesRef.current[resizeState.tableId!] = { width: newWidth, height: newHeight }
-      })
-    }
-  }, [isDragging, isResizing])
-
-  // Unified end handler for mouse and touch
-  const handleEnd = useCallback((e?: MouseEvent | TouchEvent) => {
-    const dragState = dragStateRef.current
-    const resizeState = resizeStateRef.current
-    
-    // For touch events, check if the ended touch matches our tracked touch
-    if (e && 'changedTouches' in e) {
-      let relevantTouch = false
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        const touch = e.changedTouches[i]
-        if ((dragState.touchId !== null && touch.identifier === dragState.touchId) ||
-            (resizeState.touchId !== null && touch.identifier === resizeState.touchId)) {
-          relevantTouch = true
-          break
-        }
-      }
-      if (!relevantTouch) return
-    }
-    
-    // Handle drag completion
-    if (dragState.tableId && dragState.element) {
-      // Re-enable CSS transitions
-      dragState.element.style.transition = ''
-      dragState.element.style.cursor = ''
-      dragState.element.style.zIndex = ''
-      
-      // Save final position to database
-      const finalPos = finalPositionsRef.current[dragState.tableId]
-      if (finalPos) {
-        onTableUpdate(dragState.tableId, finalPos)
-      }
-      
-      // Cancel any pending animation
-      if (dragState.animationId) {
-        cancelAnimationFrame(dragState.animationId)
-      }
-    }
-    
-    // Handle resize completion
-    if (resizeState.tableId && resizeState.element) {
-      // Re-enable CSS transitions
-      resizeState.element.style.transition = ''
-      
-      // Save final size to database
-      const finalSize = finalSizesRef.current[resizeState.tableId]
-      if (finalSize && onTableResize) {
-        onTableResize(resizeState.tableId, finalSize)
-      }
-      
-      // Cancel any pending animation
-      if (resizeState.animationId) {
-        cancelAnimationFrame(resizeState.animationId)
-      }
-    }
-    
-    // Reset drag state
-    dragStateRef.current = {
-      tableId: null,
-      element: null,
-      startX: 0,
-      startY: 0,
-      offsetX: 0,
-      offsetY: 0,
       initialLeft: 0,
       initialTop: 0,
-      animationId: null,
-      touchId: null
+      initialWidth: tableElement.offsetWidth,
+      initialHeight: tableElement.offsetHeight,
+      offsetX: 0,
+      offsetY: 0,
+      touchId
     }
     
-    // Reset resize state
-    resizeStateRef.current = {
+    setActiveInteraction("resize")
+    tableElement.style.transition = 'none'
+    document.body.style.cursor = 'se-resize'
+  }, [viewMode, activeInteraction])
+
+  // Handle move for both drag and resize
+  const handleMove = useCallback((e: MouseEvent | TouchEvent) => {
+    const interaction = interactionRef.current
+    if (interaction.type === "none" || !interaction.element || !containerRef.current) return
+
+    let clientX: number, clientY: number
+    
+    if ('touches' in e) {
+      if (interaction.touchId !== null) {
+        const touch = Array.from(e.touches).find(t => t.identifier === interaction.touchId)
+        if (!touch) return
+        clientX = touch.clientX
+        clientY = touch.clientY
+      } else {
+        return
+      }
+    } else {
+      clientX = (e as MouseEvent).clientX
+      clientY = (e as MouseEvent).clientY
+    }
+
+    if (interaction.type === "drag") {
+      const containerRect = containerRef.current.getBoundingClientRect()
+      const deltaX = clientX - interaction.startX
+      const deltaY = clientY - interaction.startY
+      
+      let newLeft = interaction.initialLeft + deltaX
+      let newTop = interaction.initialTop + deltaY
+      
+      // Apply boundaries
+      const elementWidth = interaction.element.offsetWidth
+      const elementHeight = interaction.element.offsetHeight
+      
+      newLeft = Math.max(0, Math.min(containerRect.width - elementWidth, newLeft))
+      newTop = Math.max(0, Math.min(containerRect.height - elementHeight, newTop))
+      
+      interaction.element.style.left = `${newLeft}px`
+      interaction.element.style.top = `${newTop}px`
+      
+      // Update position reference
+      const percentX = (newLeft / containerRect.width) * 100
+      const percentY = (newTop / containerRect.height) * 100
+      positionsRef.current[interaction.tableId!] = { x: percentX, y: percentY }
+    } 
+    else if (interaction.type === "resize") {
+      const deltaX = clientX - interaction.startX
+      const deltaY = clientY - interaction.startY
+      
+      const newWidth = Math.max(50, interaction.initialWidth + deltaX)
+      const newHeight = Math.max(30, interaction.initialHeight + deltaY)
+      
+      interaction.element.style.width = `${newWidth}px`
+      interaction.element.style.height = `${newHeight}px`
+      
+      // Update size reference
+      sizesRef.current[interaction.tableId!] = { width: newWidth, height: newHeight }
+    }
+  }, [])
+
+  // End interaction
+  const handleEnd = useCallback(() => {
+    const interaction = interactionRef.current
+    
+    if (interaction.type === "drag" && interaction.tableId && interaction.element) {
+      interaction.element.style.cursor = ''
+      interaction.element.style.zIndex = ''
+      interaction.element.style.transition = ''
+      
+      const position = positionsRef.current[interaction.tableId]
+      if (position) {
+        onTableUpdate(interaction.tableId, position)
+      }
+    }
+    else if (interaction.type === "resize" && interaction.tableId && interaction.element) {
+      interaction.element.style.transition = ''
+      
+      const size = sizesRef.current[interaction.tableId]
+      if (size && onTableResize) {
+        onTableResize(interaction.tableId, size)
+      }
+    }
+    
+    // Reset interaction state
+    interactionRef.current = {
+      type: "none",
       tableId: null,
       element: null,
       startX: 0,
       startY: 0,
+      initialLeft: 0,
+      initialTop: 0,
       initialWidth: 0,
       initialHeight: 0,
-      animationId: null,
+      offsetX: 0,
+      offsetY: 0,
       touchId: null
     }
     
-    // Reset body styles
-    document.body.style.userSelect = ''
-    document.body.style.webkitUserSelect = ''
+    setActiveInteraction("none")
     document.body.style.cursor = ''
-    document.body.style.touchAction = ''
-    
-    setIsDragging(false)
-    setIsResizing(false)
   }, [onTableUpdate, onTableResize])
 
-  // Setup global event listeners for both mouse and touch
+  // Setup global event listeners
   useEffect(() => {
-    // Mouse events
-    document.addEventListener('mousemove', handleMove, { passive: false })
-    document.addEventListener('mouseup', handleEnd)
+    const options = { passive: false }
     
-    // Touch events - using { passive: false } to allow preventDefault
-    document.addEventListener('touchmove', handleMove, { passive: false })
-    document.addEventListener('touchend', handleEnd, { passive: false })
-    document.addEventListener('touchcancel', handleEnd, { passive: false })
+    document.addEventListener('mousemove', handleMove, options)
+    document.addEventListener('mouseup', handleEnd)
+    document.addEventListener('touchmove', handleMove, options)
+    document.addEventListener('touchend', handleEnd, options)
+    document.addEventListener('touchcancel', handleEnd, options)
     
     return () => {
-      // Mouse events
       document.removeEventListener('mousemove', handleMove)
       document.removeEventListener('mouseup', handleEnd)
-      
-      // Touch events
       document.removeEventListener('touchmove', handleMove)
       document.removeEventListener('touchend', handleEnd)
       document.removeEventListener('touchcancel', handleEnd)
-      
-      // Clean up any pending animation frames
-      if (dragStateRef.current.animationId) {
-        cancelAnimationFrame(dragStateRef.current.animationId)
-      }
-      if (resizeStateRef.current.animationId) {
-        cancelAnimationFrame(resizeStateRef.current.animationId)
-      }
     }
   }, [handleMove, handleEnd])
 
-  // Table click handler
-  const handleTableClick = useCallback((e: React.MouseEvent | React.TouchEvent, tableId: string) => {
-    e.stopPropagation()
-    
-    // Check if click/touch is on resize handle
-    const target = e.target as HTMLElement
-    if (target.hasAttribute('data-resize-handle') || target.closest('[data-resize-handle]')) {
-      return
-    }
-    
-    // Only handle selection if not dragging/resizing and in edit mode
-    if (!isDragging && !isResizing && viewMode === "edit") {
+  // Handle table selection
+  const handleTableClick = useCallback((tableId: string) => {
+    if (viewMode === "edit" && activeInteraction === "none") {
       setSelectedTable(selectedTable === tableId ? null : tableId)
     }
-  }, [isDragging, isResizing, selectedTable, viewMode])
+  }, [selectedTable, viewMode, activeInteraction])
 
-  // Container click handler
-  const handleContainerClick = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    // Only deselect if clicking directly on container (not on table)
-    if (e.currentTarget === e.target && !isDragging && !isResizing) {
-      setSelectedTable(null)
-    }
-  }, [isDragging, isResizing])
-
-  // Keyboard shortcuts with optimized movement
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!selectedTable || isDragging || isResizing || viewMode === "preview") return
+      if (!selectedTable || activeInteraction !== "none" || viewMode === "preview") return
 
       const step = e.shiftKey ? 5 : 1
       let deltaX = 0, deltaY = 0
@@ -543,7 +363,7 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
       }
 
       if (deltaX !== 0 || deltaY !== 0) {
-        const currentPos = finalPositionsRef.current[selectedTable] || 
+        const currentPos = positionsRef.current[selectedTable] || 
                           { x: tables.find(t => t.id === selectedTable)?.x_position || 0,
                             y: tables.find(t => t.id === selectedTable)?.y_position || 0 }
         
@@ -552,24 +372,14 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
           y: Math.max(0, Math.min(90, currentPos.y + deltaY))
         }
         
-        finalPositionsRef.current[selectedTable] = newPos
-        
-        // Update DOM immediately for visual feedback
-        const element = document.querySelector(`[data-table-id="${selectedTable}"]`) as HTMLElement
-        if (element && containerRef.current) {
-          const containerRect = containerRef.current.getBoundingClientRect()
-          element.style.left = `${(newPos.x / 100) * containerRect.width}px`
-          element.style.top = `${(newPos.y / 100) * containerRect.height}px`
-        }
-        
-        // Save to database
+        positionsRef.current[selectedTable] = newPos
         onTableUpdate(selectedTable, newPos)
       }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [selectedTable, isDragging, isResizing, viewMode, tables, onTableDelete, onTableUpdate])
+  }, [selectedTable, activeInteraction, viewMode, tables, onTableDelete, onTableUpdate])
 
   return (
     <div className="space-y-6">
@@ -580,9 +390,9 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
             <div className="flex items-center gap-2">
               <Grid3X3 className="h-5 w-5" />
               Floor Plan Editor
-              {(isDragging || isResizing) && (
+              {activeInteraction !== "none" && (
                 <Badge variant="secondary" className="text-xs animate-pulse">
-                  {isDragging ? "Moving..." : "Resizing..."}
+                  {activeInteraction === "drag" ? "Moving..." : "Resizing..."}
                 </Badge>
               )}
             </div>
@@ -673,8 +483,11 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
             ref={containerRef}
             className="relative bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden select-none touch-none"
             style={{ height: "700px" }}
-            onClick={handleContainerClick}
-            onTouchEnd={handleContainerClick}
+            onClick={(e) => {
+              if (e.currentTarget === e.target && activeInteraction === "none") {
+                setSelectedTable(null)
+              }
+            }}
           >
             {/* Grid */}
             {showGrid && (
@@ -694,15 +507,12 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
             {tables.filter(t => t.is_active).map((table) => {
               const colors = TABLE_TYPE_COLORS[table.table_type]
               const isSelected = selectedTable === table.id
-              const isBeingDragged = dragStateRef.current.tableId === table.id
-              const isBeingResized = resizeStateRef.current.tableId === table.id
+              const isInteracting = interactionRef.current.tableId === table.id
               
-              // Use final position if available, otherwise use original
-              const position = finalPositionsRef.current[table.id] || 
+              const position = positionsRef.current[table.id] || 
                              { x: table.x_position, y: table.y_position }
               
-              // Use final size if available, otherwise use original
-              const size = finalSizesRef.current[table.id] || 
+              const size = sizesRef.current[table.id] || 
                           { width: table.width || 60, height: table.height || 40 }
               
               return (
@@ -710,13 +520,13 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                   key={table.id}
                   data-table-id={table.id}
                   className={cn(
-                    "absolute border-2 rounded-xl p-3 transition-all duration-150 touch-none",
+                    "absolute border-2 rounded-xl p-3 transition-all duration-150",
                     colors,
-                    viewMode === "edit" && !isBeingDragged && !isBeingResized ? "hover:shadow-md hover:scale-[1.02]" : "",
+                    viewMode === "edit" && !isInteracting ? "hover:shadow-md hover:scale-[1.02]" : "",
                     viewMode === "edit" ? "cursor-move" : "cursor-pointer",
-                    isBeingDragged && "shadow-2xl scale-105 cursor-grabbing",
-                    isBeingResized && "shadow-2xl ring-2 ring-green-400",
-                    isSelected && !isBeingDragged && !isBeingResized && "ring-2 ring-blue-400 shadow-lg z-40"
+                    isInteracting && activeInteraction === "drag" && "shadow-2xl scale-105 cursor-grabbing",
+                    isInteracting && activeInteraction === "resize" && "shadow-2xl ring-2 ring-green-400",
+                    isSelected && !isInteracting && "ring-2 ring-blue-400 shadow-lg z-40"
                   )}
                   style={{
                     left: `${position.x}%`,
@@ -726,15 +536,30 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                     borderRadius: table.shape === "circle" ? "50%" : "12px",
                     transform: `scale(${zoom / 100})`,
                     transformOrigin: "top left",
-                    // Optimize for performance
-                    willChange: viewMode === "edit" ? "transform, left, top, width, height" : "auto",
-                    // Prevent iOS bounce and ensure proper touch handling
+                    touchAction: "none",
                     WebkitTouchCallout: "none",
                     WebkitUserSelect: "none"
                   }}
-                  onMouseDown={(e) => handleDragStart(e, table.id)}
-                  onTouchStart={(e) => handleDragStart(e, table.id)}
-                  onClick={(e) => handleTableClick(e, table.id)}
+                  onMouseDown={(e) => {
+                    if (activeInteraction === "none" && viewMode === "edit") {
+                      startDrag(e, table.id)
+                    }
+                  }}
+                  onTouchStart={(e) => {
+                    if (activeInteraction === "none" && viewMode === "edit") {
+                      // Check if touch is on resize handle first
+                      const touch = e.touches[0]
+                      const target = document.elementFromPoint(touch.clientX, touch.clientY)
+                      if (target && target.hasAttribute('data-resize-handle')) {
+                        return // Let resize handle's onTouchStart handle it
+                      }
+                      startDrag(e, table.id)
+                    }
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleTableClick(table.id)
+                  }}
                 >
                   <div className="text-center h-full flex flex-col justify-center pointer-events-none">
                     <div className="font-bold text-sm mb-1">
@@ -751,25 +576,33 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                   </div>
 
                   {/* Selection indicators */}
-                  {isSelected && viewMode === "edit" && !isBeingDragged && !isBeingResized && (
+                  {isSelected && viewMode === "edit" && !isInteracting && (
                     <>
-                      {/* Resize handle - Enhanced for touch devices */}
+                      {/* Resize handle - Simplified and larger for touch */}
                       {onTableResize && (
                         <div 
                           data-resize-handle="true"
-                          className="absolute -bottom-2 -right-2 w-10 h-10 md:w-6 md:h-6 bg-blue-500 rounded-full border-2 border-white shadow-lg cursor-se-resize hover:bg-blue-600 active:bg-blue-700 transition-colors z-50 touch-none flex items-center justify-center"
+                          className="absolute -bottom-1 -right-1 w-12 h-12 bg-blue-500 rounded-full border-3 border-white shadow-xl cursor-se-resize hover:bg-blue-600 active:bg-blue-700 transition-colors z-[60] flex items-center justify-center"
                           style={{
-                            // Ensure handle is large enough for touch
                             touchAction: 'none',
                             WebkitTouchCallout: 'none',
-                            WebkitUserSelect: 'none'
+                            WebkitUserSelect: 'none',
+                            pointerEvents: 'auto'
                           }}
-                          onMouseDown={(e) => handleResizeStart(e, table.id)}
-                          onTouchStart={(e) => handleResizeStart(e, table.id)}
+                          onMouseDown={(e) => {
+                            e.stopPropagation()
+                            startResize(e, table.id)
+                          }}
+                          onTouchStart={(e) => {
+                            e.stopPropagation()
+                            startResize(e, table.id)
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                          }}
                         >
-                          {/* Visual resize icon */}
                           <svg 
-                            className="w-4 h-4 md:w-3 md:h-3 text-white opacity-90 pointer-events-none" 
+                            className="w-6 h-6 text-white pointer-events-none" 
                             fill="currentColor" 
                             viewBox="0 0 24 24"
                           >
@@ -779,39 +612,39 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                       )}
                       
                       {/* Action buttons */}
-                      <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 flex gap-1 pointer-events-auto">
+                      <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 flex gap-1">
                         <Button 
                           size="sm" 
                           variant="secondary" 
-                          className="h-8 w-8 md:h-7 md:w-7 p-0 shadow-md"
+                          className="h-9 w-9 p-0 shadow-md"
                           onClick={(e) => {
                             e.stopPropagation()
                           }}
                         >
-                          <Settings className="h-4 w-4 md:h-3 md:w-3" />
+                          <Settings className="h-4 w-4" />
                         </Button>
                         <Button 
                           size="sm" 
                           variant="secondary" 
-                          className="h-8 w-8 md:h-7 md:w-7 p-0 shadow-md"
+                          className="h-9 w-9 p-0 shadow-md"
                           onClick={(e) => {
                             e.stopPropagation()
                           }}
                         >
-                          <Copy className="h-4 w-4 md:h-3 md:w-3" />
+                          <Copy className="h-4 w-4" />
                         </Button>
                         {onTableDelete && (
                           <Button 
                             size="sm" 
                             variant="destructive" 
-                            className="h-8 w-8 md:h-7 md:w-7 p-0 shadow-md"
+                            className="h-9 w-9 p-0 shadow-md"
                             onClick={(e) => {
                               e.stopPropagation()
                               onTableDelete(table.id)
                               setSelectedTable(null)
                             }}
                           >
-                            <Trash2 className="h-4 w-4 md:h-3 md:w-3" />
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         )}
                       </div>
@@ -829,11 +662,11 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                     <Move className="h-5 w-5 text-blue-600" />
                     <div>
                       <div className="font-medium text-sm">
-                        {viewMode === "edit" ? "Edit Mode - Drag & Resize!" : "Preview Mode"}
+                        {viewMode === "edit" ? "Edit Mode" : "Preview Mode"}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {viewMode === "edit" 
-                          ? "Drag to move • Drag corner to resize • Tap to select • Arrow keys to nudge" 
+                          ? "Tap to select • Drag to move • Drag blue handle to resize" 
                           : "Read-only view of your floor plan"
                         }
                       </div>
