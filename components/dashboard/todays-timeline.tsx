@@ -36,16 +36,16 @@ export function TodaysTimeline({
   onUpdateStatus,
   customersData = {}
 }: TodaysTimelineProps) {
-  // Filter to only show active bookings (confirmed and pending)
-  const activeBookings = bookings.filter(booking => 
-    ['confirmed', 'pending'].includes(booking.status)
+  // Show ALL bookings for today (past and present) - excluding cancelled
+  const allTodaysBookings = bookings.filter(booking => 
+    !['cancelled_by_user', 'declined_by_restaurant', 'auto_declined'].includes(booking.status)
   ).sort((a, b) => 
     new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime()
   )
 
   // Group bookings by hour
   const bookingsByHour: Record<number, any[]> = {}
-  activeBookings.forEach(booking => {
+  allTodaysBookings.forEach(booking => {
     const hour = new Date(booking.booking_time).getHours()
     if (!bookingsByHour[hour]) bookingsByHour[hour] = []
     bookingsByHour[hour].push(booking)
@@ -70,6 +70,39 @@ export function TodaysTimeline({
           bgColor: 'bg-amber-50 border-amber-200',
           badge: 'bg-amber-100 text-amber-800'
         }
+      case 'arrived':
+        return {
+          icon: Clock,
+          color: 'text-blue-600',
+          bgColor: 'bg-blue-50 border-blue-200',
+          badge: 'bg-blue-100 text-blue-800'
+        }
+      case 'seated':
+      case 'ordered':
+      case 'appetizers':
+      case 'main_course':
+      case 'dessert':
+      case 'payment':
+        return {
+          icon: Users,
+          color: 'text-purple-600',
+          bgColor: 'bg-purple-50 border-purple-200',
+          badge: 'bg-purple-100 text-purple-800'
+        }
+      case 'completed':
+        return {
+          icon: CheckCircle,
+          color: 'text-gray-500',
+          bgColor: 'bg-gray-50 border-gray-300',
+          badge: 'bg-gray-200 text-gray-700'
+        }
+      case 'no_show':
+        return {
+          icon: XCircle,
+          color: 'text-red-600',
+          bgColor: 'bg-red-50 border-red-200',
+          badge: 'bg-red-100 text-red-800'
+        }
       default:
         return {
           icon: AlertCircle,
@@ -81,10 +114,8 @@ export function TodaysTimeline({
   }
 
   const isCurrentlyDining = (booking: any) => {
-    if (booking.status !== 'confirmed') return false
-    const bookingStart = new Date(booking.booking_time)
-    const bookingEnd = addMinutes(bookingStart, booking.turn_time_minutes || 120)
-    return isWithinInterval(currentTime, { start: bookingStart, end: bookingEnd })
+    const diningStatuses = ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+    return diningStatuses.includes(booking.status)
   }
 
   const getTimeUntilBooking = (booking: any) => {
@@ -97,8 +128,8 @@ export function TodaysTimeline({
     return format(bookingTime, 'MMM d')
   }
 
-  // Check if we have any active bookings
-  if (activeBookings.length === 0) {
+  // Check if we have any bookings today
+  if (allTodaysBookings.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -127,22 +158,28 @@ export function TodaysTimeline({
           <div>
             <CardTitle className="text-xl">Today's Timeline</CardTitle>
             <CardDescription className="text-base">
-              {format(currentTime, "EEEE, MMMM d")} • {activeBookings.length} active reservations
+              {format(currentTime, "EEEE, MMMM d")} • {allTodaysBookings.length} total reservations
             </CardDescription>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-sm">
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded-full bg-green-500" />
-                <span>Confirmed</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded-full bg-amber-500" />
-                <span>Pending</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded-full bg-blue-500" />
-                <span>Dining Now</span>
+            <div className="flex items-center gap-3 text-sm">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded-full bg-green-500" />
+                  <span>Confirmed</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded-full bg-amber-500" />
+                  <span>Pending</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded-full bg-purple-500" />
+                  <span>Dining</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded-full bg-gray-500" />
+                  <span>Complete</span>
+                </div>
               </div>
             </div>
           </div>
@@ -248,8 +285,14 @@ export function TodaysTimeline({
                                     <h4 className="text-lg font-semibold text-gray-900 truncate">
                                       {guestName}
                                     </h4>
-                                    <Badge className={cn("text-xs font-medium", statusConfig.badge)}>
-                                      {booking.status === 'pending' ? 'Awaiting Confirmation' : 'Confirmed'}
+                                    <Badge className={cn("text-xs font-medium capitalize", statusConfig.badge)}>
+                                      {booking.status === 'pending' ? 'Awaiting Confirmation' : 
+                                       booking.status === 'confirmed' ? 'Confirmed' :
+                                       booking.status === 'arrived' ? 'Arrived' :
+                                       booking.status === 'seated' ? 'Seated' :
+                                       booking.status === 'completed' ? 'Completed' :
+                                       booking.status === 'no_show' ? 'No Show' :
+                                       booking.status.replace(/_/g, ' ')}
                                     </Badge>
                                     {/* Customer Indicators */}
                                     <div className="flex items-center gap-1">

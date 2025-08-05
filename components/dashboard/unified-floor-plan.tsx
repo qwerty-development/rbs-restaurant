@@ -20,7 +20,6 @@ import {
   Utensils,
   Cake,
   UserCheck,
-  ArrowRight,
   Hand,
   Phone,
   MessageSquare,
@@ -31,14 +30,7 @@ import {
 } from "lucide-react"
 import { format, addMinutes, differenceInMinutes } from "date-fns"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+// Removed dropdown menu imports - using click-to-show for tablets
 import {
   Tooltip,
   TooltipContent,
@@ -114,7 +106,7 @@ export function UnifiedFloorPlan({
   const [selectedTable, setSelectedTable] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [draggedBookingId, setDraggedBookingId] = useState<string | null>(null)
-  const [hoveredTable, setHoveredTable] = useState<string | null>(null)
+  const [activeMenuTable, setActiveMenuTable] = useState<string | null>(null)
   
   const tableStatusService = new TableStatusService()
 
@@ -131,12 +123,17 @@ export function UnifiedFloorPlan({
   }, [restaurantId, currentTime])
 
   const getTableBookingInfo = (table: any) => {
-    const tableBookings = bookings.filter(booking => 
-      booking.tables?.some((t: any) => t.id === table.id) &&
+    // Get all bookings for this table (current, upcoming, and recent)
+    const allTableBookings = bookings.filter(booking => 
+      booking.tables?.some((t: any) => t.id === table.id)
+    )
+
+    // Current active bookings
+    const activeBookings = allTableBookings.filter(booking =>
       ['confirmed', 'arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status)
     )
 
-    const currentBooking = tableBookings.find(booking => {
+    const currentBooking = activeBookings.find(booking => {
       const physicallyPresent = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status)
       if (physicallyPresent) return true
       
@@ -145,13 +142,34 @@ export function UnifiedFloorPlan({
       return currentTime >= bookingStart && currentTime <= bookingEnd
     })
 
-    const upcomingBookings = tableBookings
-      .filter(booking => new Date(booking.booking_time) > currentTime)
+    // Upcoming bookings (next 3)
+    const upcomingBookings = allTableBookings
+      .filter(booking => 
+        new Date(booking.booking_time) > currentTime &&
+        ['confirmed', 'pending'].includes(booking.status)
+      )
       .sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+      .slice(0, 3)
+
+    // Recent history (last 3 completed bookings from today)
+    const todayStart = new Date(currentTime)
+    todayStart.setHours(0, 0, 0, 0)
+    
+    const recentHistory = allTableBookings
+      .filter(booking => {
+        const bookingDate = new Date(booking.booking_time)
+        return bookingDate >= todayStart && 
+               bookingDate < currentTime &&
+               ['completed', 'no_show'].includes(booking.status)
+      })
+      .sort((a, b) => new Date(b.booking_time).getTime() - new Date(a.booking_time).getTime())
+      .slice(0, 3)
 
     return {
       current: currentBooking,
       upcoming: upcomingBookings[0],
+      allUpcoming: upcomingBookings,
+      recentHistory,
       status: tableStatuses.get(table.id)
     }
   }
@@ -190,7 +208,7 @@ export function UnifiedFloorPlan({
   }
 
   const renderTable = (table: any) => {
-    const { current, upcoming, status } = getTableBookingInfo(table)
+    const { current, upcoming, allUpcoming, recentHistory, status } = getTableBookingInfo(table)
     const isOccupied = !!current
     const StatusIcon = current ? STATUS_ICONS[current.status as DiningStatus] : Table2
     const isHighlighted = isTableHighlighted(table, current)
@@ -203,29 +221,48 @@ export function UnifiedFloorPlan({
           <TooltipTrigger asChild>
             <div
               className={cn(
-                "relative rounded-xl border-2 cursor-pointer transition-all hover:shadow-lg",
-                TABLE_TYPE_COLORS[table.table_type] || "bg-card border-border shadow-sm",
-                isOccupied && "ring-2 ring-offset-2 ring-offset-background",
+                "relative rounded-2xl border-3 cursor-pointer transition-all duration-200 hover:shadow-2xl hover:scale-105",
+                TABLE_TYPE_COLORS[table.table_type] || "bg-gradient-to-br from-white to-gray-50 border-gray-300 shadow-lg",
+                isOccupied && "ring-4 ring-offset-4 ring-offset-background shadow-2xl",
                 isOccupied && STATUS_COLORS[current.status as DiningStatus],
-                isDragging && !isOccupied && "border-dashed border-green-500 dark:border-green-400 bg-green-50/50 dark:bg-green-900/20",
-                selectedTable === table.id && "ring-4 ring-primary/50 ring-offset-2 ring-offset-background",
-                isHighlighted && "ring-4 ring-yellow-400 dark:ring-yellow-500 animate-pulse ring-offset-2 ring-offset-background",
-                table.shape === "circle" ? "rounded-full" : "rounded-lg"
+                isDragging && !isOccupied && "border-dashed border-green-500 bg-green-50/70 shadow-green-200/50",
+                selectedTable === table.id && "ring-6 ring-blue-400/60 ring-offset-4 ring-offset-background scale-110",
+                isHighlighted && "ring-6 ring-yellow-400 animate-pulse ring-offset-4 ring-offset-background scale-105",
+                table.shape === "circle" ? "rounded-full" : "rounded-2xl"
               )}
               style={{
                 position: "absolute",
                 left: `${table.x_position}%`,
                 top: `${table.y_position}%`,
-                width: `${(table.width || 120) * 1.2}px`,
-                height: `${(table.height || 100) * 1.2}px`,
-                padding: "12px"
+                width: `${(table.width || 140) * 1.3}px`,
+                height: `${(table.height || 120) * 1.3}px`,
+                padding: "16px"
               }}
               onClick={() => {
                 setSelectedTable(table.id)
-                if (onTableClick) onTableClick(table, { current, upcoming })
+                // Don't open booking details if we're just toggling the menu
+                if (current && !activeMenuTable) {
+                  setActiveMenuTable(table.id)
+                } else if (current && activeMenuTable === table.id) {
+                  setActiveMenuTable(null)
+                } else {
+                  // For empty tables, show upcoming bookings and history
+                  if (onTableClick) onTableClick(table, { 
+                    current, 
+                    upcoming, 
+                    allUpcoming, 
+                    recentHistory,
+                    tableInfo: {
+                      hasUpcoming: allUpcoming.length > 0,
+                      hasHistory: recentHistory.length > 0,
+                      nextBookingTime: allUpcoming[0]?.booking_time,
+                      lastCompletedTime: recentHistory[0]?.booking_time
+                    }
+                  })
+                }
               }}
-              onMouseEnter={() => setHoveredTable(table.id)}
-              onMouseLeave={() => setHoveredTable(null)}
+              onMouseEnter={() => {}} // Remove hover for tablet optimization
+              onMouseLeave={() => {}}
               onDragOver={(e) => {
                 if (!isOccupied) {
                   e.preventDefault()
@@ -243,13 +280,13 @@ export function UnifiedFloorPlan({
                 }
               }}
             >
-              {/* Table header */}
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-1">
-                  <StatusIcon className="h-4 w-4 text-current" />
-                  <span className="font-bold text-base text-foreground">T{table.table_number}</span>
+              {/* Table header - Tablet Optimized */}
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <StatusIcon className="h-5 w-5 text-current" />
+                  <span className="font-bold text-lg text-foreground">T{table.table_number}</span>
                 </div>
-                <Badge variant="outline" className="text-xs px-1 bg-background/50">
+                <Badge variant="outline" className="text-sm px-2 py-1 bg-background/70 font-medium rounded-lg">
                   {table.min_capacity}-{table.max_capacity}
                 </Badge>
               </div>
@@ -257,86 +294,157 @@ export function UnifiedFloorPlan({
               {/* Current booking info */}
               {isOccupied && current ? (
                 <div className="space-y-1.5">
-                  {/* Guest info */}
+                  {/* Guest info - Simplified with icons */}
                   <div>
-                    <p className="font-semibold text-sm truncate text-foreground">
+                    <p className="font-bold text-base truncate text-foreground mb-1">
                       {current.user?.full_name || current.guest_name || 'Guest'}
                     </p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Users className="h-3 w-3" />
-                        {current.party_size}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {minutesSinceArrival}m
-                      </span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {/* Party size with visual indicators */}
+                        <div className={cn(
+                          "flex items-center gap-1 px-2 py-1 rounded-lg transition-colors",
+                          current.party_size > table.max_capacity 
+                            ? "bg-red-100 text-red-800 border border-red-300" 
+                            : "bg-blue-100 text-blue-800 border border-blue-300"
+                        )}>
+                          <Users className="h-4 w-4" />
+                          <span className="font-bold text-sm">{current.party_size}</span>
+                          {current.party_size > table.max_capacity && (
+                            <AlertTriangle className="h-3 w-3 animate-bounce" />
+                          )}
+                        </div>
+                        
+                        {/* Time indicator with urgency colors */}
+                        <div className={cn(
+                          "flex items-center gap-1 px-2 py-1 rounded-lg font-bold text-sm border transition-all",
+                          minutesSinceArrival > (current.turn_time_minutes || 120) 
+                            ? "bg-red-100 text-red-800 border-red-300 animate-pulse" :
+                          minutesSinceArrival > (current.turn_time_minutes || 120) * 0.8 
+                            ? "bg-orange-100 text-orange-800 border-orange-300" :
+                          "bg-green-100 text-green-800 border-green-300"
+                        )}>
+                          <Clock className="h-4 w-4" />
+                          <span>{minutesSinceArrival}m</span>
+                          {minutesSinceArrival > (current.turn_time_minutes || 120) && (
+                            <span className="text-xs">⚠️</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Quick call button with enhanced styling */}
+                      {(current.user?.phone_number || current.guest_phone) && (
+                        <Button
+                          size="sm"
+                          className="h-8 w-8 p-0 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-xl border-2 border-green-300 hover:scale-110 transition-all"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const phone = current.user?.phone_number || current.guest_phone
+                            window.open(`tel:${phone}`, '_self')
+                          }}
+                        >
+                          <Phone className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
 
-                  {/* Progress bar */}
-                  {status?.currentBooking && (
-                    <div>
-                      <Progress 
-                        value={status.currentBooking.progress} 
-                        className="h-1.5"
-                        indicatorClassName={cn(
-                          status.currentBooking.progress > 80 ? "bg-orange-500" :
-                          status.currentBooking.progress > 60 ? "bg-yellow-500" :
-                          status.currentBooking.progress > 40 ? "bg-green-500" :
-                          "bg-blue-500"
-                        )}
-                      />
-                      <div className="flex items-center justify-between mt-1">
-                        <p className="text-xs capitalize font-medium text-foreground">
-                          {current.status.replace(/_/g, ' ')}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {status.currentBooking.progress}%
-                        </p>
-                      </div>
+                  {/* Status indicator with enhanced visual feedback */}
+                  <div className="flex items-center justify-center">
+                    <div className={cn(
+                      "px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-lg border-2 transition-all",
+                      current.status === 'arrived' ? "bg-blue-100 text-blue-800 border-blue-300 animate-pulse" :
+                      current.status === 'seated' ? "bg-purple-100 text-purple-800 border-purple-300" :
+                      current.status === 'ordered' ? "bg-orange-100 text-orange-800 border-orange-300" :
+                      current.status === 'payment' ? "bg-yellow-100 text-yellow-800 border-yellow-300" :
+                      "bg-green-100 text-green-800 border-green-300"
+                    )}>
+                      <StatusIcon className="h-4 w-4" />
+                      <span className="capitalize">{current.status.replace(/_/g, ' ')}</span>
+                      {/* Status emoji indicators */}
+                      {current.status === 'arrived' && <span>👋</span>}
+                      {current.status === 'seated' && <span>🪑</span>}
+                      {current.status === 'ordered' && <span>📝</span>}
+                      {current.status === 'payment' && <span>💳</span>}
                     </div>
-                  )}
+                  </div>
 
-                  {/* Quick actions on hover */}
-                  {hoveredTable === table.id && (
-                    <div className="absolute -bottom-8 left-0 right-0 flex justify-center gap-1 z-50">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button size="sm" variant="secondary" className="h-6 text-xs px-2 shadow-lg bg-card border border-border">
-                            <ArrowRight className="h-3 w-3 mr-1" />
-                            Update
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-48">
-                          {tableStatusService.getValidTransitions(current.status as DiningStatus).map(transition => {
-                            const Icon = STATUS_ICONS[transition.to]
-                            return (
-                              <DropdownMenuItem
-                                key={transition.to}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleStatusTransition(current.id, transition.to)
-                                }}
-                              >
-                                <Icon className="h-4 w-4 mr-2" />
-                                {transition.label}
-                              </DropdownMenuItem>
-                            )
-                          })}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                  {/* Quick actions - Click to Show/Hide for Tablets */}
+                  {activeMenuTable === table.id && (
+                    <div className="absolute -bottom-12 left-0 right-0 flex justify-center gap-2 z-50">
+                      {/* Quick status buttons based on current status */}
+                      {current.status === 'arrived' && (
+                        <Button 
+                          className="h-10 text-sm px-4 shadow-xl bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-xl font-medium"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleStatusTransition(current.id, 'seated')
+                          }}
+                        >
+                          <ChefHat className="h-4 w-4 mr-2" />
+                          Seat Now
+                        </Button>
+                      )}
                       
+                      {current.status === 'seated' && (
+                        <Button 
+                          className="h-10 text-sm px-4 shadow-xl bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-xl font-medium"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleStatusTransition(current.id, 'ordered')
+                          }}
+                        >
+                          <Coffee className="h-4 w-4 mr-2" />
+                          Ordered
+                        </Button>
+                      )}
+                      
+                      {['ordered', 'appetizers', 'main_course', 'dessert'].includes(current.status) && (
+                        <Button 
+                          className="h-10 text-sm px-4 shadow-xl bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 text-white rounded-xl font-medium"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleStatusTransition(current.id, 'payment')
+                          }}
+                        >
+                          <CreditCard className="h-4 w-4 mr-2" />
+                          Check
+                        </Button>
+                      )}
+                      
+                      {current.status === 'payment' && (
+                        <Button 
+                          className="h-10 text-sm px-4 shadow-xl bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl font-medium"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleStatusTransition(current.id, 'completed')
+                          }}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Complete
+                        </Button>
+                      )}
+
+                      {/* Close menu button */}
                       <Button 
-                        size="sm" 
-                        variant="secondary" 
-                        className="h-6 text-xs px-2 shadow-lg bg-card border border-border"
+                        className="h-10 px-3 shadow-xl bg-red-600 hover:bg-red-700 text-white rounded-xl"
                         onClick={(e) => {
                           e.stopPropagation()
+                          setActiveMenuTable(null)
+                        }}
+                      >
+                        ✕
+                      </Button>
+                      
+                      <Button 
+                        className="h-10 px-3 shadow-xl bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setActiveMenuTable(null) // Close menu first
                           if (onTableClick) onTableClick(table, { current, upcoming })
                         }}
                       >
-                        <Eye className="h-3 w-3" />
+                        <Eye className="h-4 w-4" />
                       </Button>
                     </div>
                   )}
@@ -349,14 +457,47 @@ export function UnifiedFloorPlan({
                   >
                     Available
                   </Badge>
+                  
+                  {/* Show next upcoming booking */}
                   {upcoming && (
-                    <div className="text-xs mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                      <p className="font-semibold text-blue-900 dark:text-blue-300">
-                        Next: {format(new Date(upcoming.booking_time), 'h:mm a')}
-                      </p>
-                      <p className="truncate text-blue-700 dark:text-blue-400">
-                        {upcoming.user?.full_name || upcoming.guest_name}
-                      </p>
+                    <div className="text-xs mt-2 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-2 border-blue-200 dark:border-blue-700 rounded-xl shadow-sm">
+                      <div className="flex items-start gap-2">
+                        <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                          <Clock className="h-3 w-3 text-white" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-blue-900 dark:text-blue-200">
+                            📅 {format(new Date(upcoming.booking_time), 'h:mm a')}
+                          </p>
+                          <p className="truncate text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                            <Users className="h-3 w-3" />
+                            {upcoming.user?.full_name || upcoming.guest_name} ({upcoming.party_size})
+                          </p>
+                          <p className="text-blue-600 dark:text-blue-400 mt-1 flex items-center gap-1">
+                            <Timer className="h-3 w-3" />
+                            {differenceInMinutes(new Date(upcoming.booking_time), currentTime)}m away
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Show activity indicators */}
+                  {!upcoming && (
+                    <div className="text-center mt-2 space-y-2">
+                      <div className="w-8 h-8 mx-auto bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                        <span className="text-white text-lg">✓</span>
+                      </div>
+                      
+                      {/* Quick info indicators */}
+                      <div className="flex justify-center gap-2">
+                        {allUpcoming.length > 0 && (
+                          <div className="w-2 h-2 bg-blue-400 rounded-full" title={`${allUpcoming.length} upcoming bookings`} />
+                        )}
+                        {recentHistory.length > 0 && (
+                          <div className="w-2 h-2 bg-gray-400 rounded-full" title={`${recentHistory.length} recent bookings today`} />
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -391,7 +532,10 @@ export function UnifiedFloorPlan({
                   <p>Arrived: {format(bookingTime!, 'h:mm a')}</p>
                   <p>Status: {current.status.replace(/_/g, ' ')}</p>
                   {current.special_requests && (
-                    <p className="italic">Note: {current.special_requests}</p>
+                    <p className="italic text-yellow-200">Note: {current.special_requests}</p>
+                  )}
+                  {(current.user?.phone_number || current.guest_phone) && (
+                    <p className="font-mono text-green-200">📞 {current.user?.phone_number || current.guest_phone}</p>
                   )}
                 </div>
               </div>
@@ -441,24 +585,24 @@ export function UnifiedFloorPlan({
           </p>
         </div>
         
-        {/* Legend */}
+        {/* Legend with better contrast */}
         <div className="flex items-center gap-4 text-xs">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-gradient-to-br from-green-500 to-green-600 shadow-sm" />
-            <span className="text-foreground">Dining</span>
+          <div className="flex items-center gap-2 px-3 py-2 bg-green-800 text-white rounded-lg shadow-md">
+            <div className="w-3 h-3 rounded-full bg-green-400" />
+            <span className="font-medium">🍽️ Dining</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-gradient-to-br from-muted to-muted-foreground shadow-sm" />
-            <span className="text-foreground">Available</span>
+          <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 text-white rounded-lg shadow-md">
+            <div className="w-3 h-3 rounded-full bg-gray-400" />
+            <span className="font-medium">✅ Available</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 shadow-sm" />
-            <span className="text-foreground">Reserved</span>
+          <div className="flex items-center gap-2 px-3 py-2 bg-blue-800 text-white rounded-lg shadow-md">
+            <div className="w-3 h-3 rounded-full bg-blue-400" />
+            <span className="font-medium">📅 Reserved</span>
           </div>
           {searchQuery && (
-            <div className="flex items-center gap-2 ml-2 px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 rounded-full">
-              <div className="w-3 h-3 rounded-full bg-yellow-400 dark:bg-yellow-500 animate-pulse" />
-              <span className="text-foreground">Search Match</span>
+            <div className="flex items-center gap-2 ml-2 px-3 py-2 bg-yellow-600 text-white rounded-full border-2 border-yellow-400 animate-pulse shadow-md">
+              <div className="w-3 h-3 rounded-full bg-yellow-200" />
+              <span className="font-bold">🔍 Found</span>
             </div>
           )}
         </div>

@@ -75,6 +75,9 @@ export function CheckInQueue({
     })
     .sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
 
+  // Already arrived guests waiting for seating
+  const waitingForSeating = bookings.filter(b => b.status === 'arrived')
+  
   // Separate into different categories
   const lateArrivals = arrivalsQueue.filter(b => {
     const minutesUntil = differenceInMinutes(new Date(b.booking_time), currentTime)
@@ -307,7 +310,7 @@ export function CheckInQueue({
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 text-gray-200">
+    <div className="min-h-[600px] h-full flex flex-col bg-gray-900 text-gray-200">
       <Tabs defaultValue="arrivals" className="flex-1 flex flex-col">
         <div className="px-4 pt-4">
           <h3 className="text-lg font-semibold text-gray-100 mb-3">Check-in Management</h3>
@@ -339,8 +342,63 @@ export function CheckInQueue({
         </div>
 
         <TabsContent value="arrivals" className="flex-1 px-4 pb-4 mt-4">
-          <ScrollArea className="h-full">
+          <ScrollArea className="h-[500px]">
             <div className="space-y-4 pr-4">
+              {/* Waiting for seating - TOP PRIORITY */}
+              {waitingForSeating.length > 0 && (
+                <div className="bg-gradient-to-r from-orange-900/30 to-red-900/30 border border-orange-600 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1.5 bg-orange-600 rounded-lg animate-pulse">
+                      <UserCheck className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-bold text-orange-400">WAITING FOR SEATING</h4>
+                      <p className="text-xs text-orange-300">Guests have arrived and need to be seated immediately</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {waitingForSeating.map(booking => (
+                      <div key={booking.id} className="bg-orange-800/30 rounded-lg p-3 border border-orange-600">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold text-white text-lg">
+                              {booking.user?.full_name || booking.guest_name}
+                            </p>
+                            <div className="flex items-center gap-3 text-sm text-orange-200">
+                              <span className="flex items-center gap-1">
+                                <Users className="h-4 w-4" />
+                                {booking.party_size} guests
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-4 w-4" />
+                                {format(new Date(booking.booking_time), 'h:mm a')}
+                              </span>
+                              {(booking.user?.phone_number || booking.guest_phone) && (
+                                <span className="flex items-center gap-1 font-mono">
+                                  <Phone className="h-4 w-4" />
+                                  {booking.user?.phone_number || booking.guest_phone}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            className="bg-orange-600 hover:bg-orange-700 text-white font-medium animate-bounce"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleQuickCheckIn(booking)
+                            }}
+                          >
+                            <UserCheck className="h-4 w-4 mr-1" />
+                            Seat Now
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Late arrivals */}
               {lateArrivals.length > 0 && (
                 <div>

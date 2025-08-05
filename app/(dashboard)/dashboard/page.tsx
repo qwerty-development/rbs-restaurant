@@ -9,6 +9,7 @@ import { UnifiedFloorPlan } from "@/components/dashboard/unified-floor-plan"
 import { CheckInQueue } from "@/components/dashboard/checkin-queue"
 import { PendingRequestsPanel } from "@/components/dashboard/pending-requests-panel"
 import { CriticalAlerts } from "@/components/dashboard/critical-alerts"
+import { TodaysTimeline } from "@/components/dashboard/todays-timeline"
 import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
 import { BookingDetails } from "@/components/bookings/booking-details"
 import { TableAvailabilityService } from "@/lib/table-availability"
@@ -30,10 +31,9 @@ import {
   Timer,
   UserCheck,
   Table2,
-  Keyboard,
-  Volume2,
-  VolumeX,
-  Info
+  Info,
+  Calendar,
+  BarChart3
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -49,8 +49,7 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [quickFilter, setQuickFilter] = useState<"all" | "needs-table" | "dining" | "arriving">("all")
-  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
-  const [soundEnabled, setSoundEnabled] = useState(true)
+  const [showTimeline, setShowTimeline] = useState(false)
   
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -66,55 +65,24 @@ export default function DashboardPage() {
     return () => clearInterval(interval)
   }, [])
 
-  // Keyboard shortcuts
+  // Touch-optimized clear handlers
   useEffect(() => {
+    const handleEscape = () => {
+      setSearchQuery("")
+      setSelectedBooking(null)
+      setShowManualBooking(false)
+    }
+    
+    // Only keep essential escape functionality for modals
     const handleKeyPress = (e: KeyboardEvent) => {
-      // Only handle if no input is focused
-      if (document.activeElement?.tagName === 'INPUT' || 
-          document.activeElement?.tagName === 'TEXTAREA') return
-      
-      switch(e.key.toLowerCase()) {
-        case 'w':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault()
-            setShowManualBooking(true)
-          }
-          break
-        case 'r':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault()
-            refetchBookings()
-          }
-          break
-        case '/':
-          e.preventDefault()
-          const searchInput = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement
-          searchInput?.focus()
-          break
-        case 'escape':
-          setSearchQuery("")
-          setSelectedBooking(null)
-          setShowManualBooking(false)
-          break
-        case '?':
-          if (e.shiftKey) {
-            e.preventDefault()
-            setShowKeyboardShortcuts(!showKeyboardShortcuts)
-          }
-          break
-        case 's':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault()
-            setSoundEnabled(!soundEnabled)
-            toast(soundEnabled ? "Sound notifications disabled" : "Sound notifications enabled")
-          }
-          break
+      if (e.key === 'Escape') {
+        handleEscape()
       }
     }
     
     window.addEventListener('keydown', handleKeyPress)
     return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [showKeyboardShortcuts, soundEnabled])
+  }, [])
 
   // Get restaurant and user ID
   useEffect(() => {
@@ -273,74 +241,7 @@ export default function DashboardPage() {
                       Found {alternativeTables} alternative table{alternativeTables !== 1 ? 's' : ''} and {alternativeTimes} time slot{alternativeTimes !== 1 ? 's' : ''}
                     </p>
                   )}
-                  {/* Keyboard Shortcuts Modal */}
-      <Dialog open={showKeyboardShortcuts} onOpenChange={setShowKeyboardShortcuts}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Keyboard className="h-5 w-5" />
-              Keyboard Shortcuts
-            </DialogTitle>
-            <DialogDescription>
-              Quick keyboard commands to navigate the dashboard efficiently
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-6 py-4">
-            <div>
-              <h4 className="font-semibold mb-3 text-sm text-gray-700">Navigation</h4>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Search</span>
-                  <kbd className="px-2 py-1 bg-gray-400 border border-gray-300 rounded text-xs font-mono">/</kbd>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Clear search/Close dialogs</span>
-                  <kbd className="px-2 py-1 bg-gray-400 border border-gray-300 rounded text-xs font-mono">Esc</kbd>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Show shortcuts</span>
-                  <kbd className="px-2 py-1 bg-gray-400 border border-gray-300 rounded text-xs font-mono">?</kbd>
-                </div>
-              </div>
-            </div>
-            <div>
-              <h4 className="font-semibold mb-3 text-sm text-gray-700">Actions</h4>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Add walk-in</span>
-                  <div className="flex items-center gap-1">
-                    <kbd className="px-2 py-1 bg-gray-400 border border-gray-300 rounded text-xs font-mono">⌘</kbd>
-                    <span className="text-xs">+</span>
-                    <kbd className="px-2 py-1 bg-gray-400 border border-gray-300 rounded text-xs font-mono">W</kbd>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Refresh data</span>
-                  <div className="flex items-center gap-1">
-                    <kbd className="px-2 py-1 bg-gray-400 border border-gray-300 rounded text-xs font-mono">⌘</kbd>
-                    <span className="text-xs">+</span>
-                    <kbd className="px-2 py-1 bg-gray-400 border border-gray-300 rounded text-xs font-mono">R</kbd>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Toggle sound</span>
-                  <div className="flex items-center gap-1">
-                    <kbd className="px-2 py-1 bg-gray-400 border border-gray-300 rounded text-xs font-mono">⌘</kbd>
-                    <span className="text-xs">+</span>
-                    <kbd className="px-2 py-1 bg-gray-400 border border-gray-300 rounded text-xs font-mono">S</kbd>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="pt-4 border-t">
-            <p className="text-xs text-gray-500 text-center">
-              Use <kbd className="px-1.5 py-0.5 bg-gray-400 border border-gray-300 rounded text-xs font-mono">Ctrl</kbd> instead of <kbd className="px-1.5 py-0.5 bg-gray-400 border border-gray-300 rounded text-xs font-mono">⌘</kbd> on Windows/Linux
-            </p>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>,
+                </div>,
                 { duration: 5000 }
               )
             } else {
@@ -534,7 +435,7 @@ export default function DashboardPage() {
     return diningStatuses.includes(booking.status)
   })
 
-  // Calculate stats
+  // Calculate comprehensive stats
   const stats = {
     pendingCount: activeBookings.filter(b => b.status === 'pending').length,
     arrivingSoonCount: activeBookings.filter(booking => {
@@ -550,6 +451,19 @@ export default function DashboardPage() {
       )
       return t.is_active && !isOccupied
     }).length,
+    totalCompleted: todaysBookings.filter(b => b.status === 'completed').length,
+    tablesInUse: currentlyDining.reduce((count, booking) => count + (booking.tables?.length || 0), 0),
+    occupancyRate: Math.round((tables.filter(t => t.is_active).length - tables.filter(t => {
+      const isOccupied = currentlyDining.some(booking => 
+        booking.tables?.some((bt: any) => bt.id === t.id)
+      )
+      return t.is_active && !isOccupied
+    }).length) / tables.filter(t => t.is_active).length * 100),
+    vipCount: activeBookings.filter(b => {
+      const customerData = b.user?.id ? customersData[b.user.id] : null
+      return customerData?.vip_status
+    }).length,
+    needingTables: activeBookings.filter(b => !b.tables || b.tables.length === 0).length
   }
 
   // Filtered bookings based on search and quick filter
@@ -578,11 +492,17 @@ export default function DashboardPage() {
     const phone = (booking.user?.phone_number || booking.guest_phone || '').toLowerCase()
     const tableNumbers = booking.tables?.map((t: any) => `t${t.table_number}`).join(' ').toLowerCase() || ''
     const confirmationCode = (booking.confirmation_code || '').toLowerCase()
+    const status = booking.status.toLowerCase()
+    const partySize = booking.party_size.toString()
+    const specialRequests = (booking.special_requests || '').toLowerCase()
     
     return guestName.includes(query) || 
            phone.includes(query) || 
            tableNumbers.includes(query) ||
-           confirmationCode.includes(query)
+           confirmationCode.includes(query) ||
+           status.includes(query) ||
+           partySize.includes(query) ||
+           specialRequests.includes(query)
   })
 
   if (!restaurantId || !userId) {
@@ -604,159 +524,209 @@ export default function DashboardPage() {
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-slate-900 to-slate-800 text-white shadow-lg px-4 py-3 flex-shrink-0">
-        <div className="flex items-center justify-between">
+      {/* Streamlined Header */}
+      <header className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-lg px-4 py-3 flex-shrink-0 border-b border-slate-700/50">
+        <div className="flex items-center justify-between gap-4">
+          {/* Left Side - Brand & Menu */}
           <div className="flex items-center gap-4">
             <Button
               variant="ghost"
-              size="icon"
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="lg:hidden hover:bg-slate-700"
+              className="lg:hidden hover:bg-slate-700/60 p-2 rounded-lg transition-all"
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-gray-200 bg-clip-text text-transparent">
-                Restaurant Dashboard
-              </h1>
-              <div className="flex items-center gap-3 text-sm text-gray-300">
-                <span>{format(currentTime, "EEEE, MMMM d")}</span>
-                <span className="text-gray-500">•</span>
-                <span className="font-mono tracking-wider text-gray-200">{format(currentTime, "h:mm:ss a")}</span>
+            
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
+                <span className="text-white font-bold text-sm">RH</span>
               </div>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
+                Restaurant Hub
+              </h1>
             </div>
           </div>
-          
+
+          {/* Center - Premium Search Bar */}
+          <div className="flex-1 max-w-2xl mx-8">
+            <div className="relative group">
+              {/* Glow Effect */}
+              <div className="absolute -inset-1 bg-gradient-to-r from-blue-600/30 via-purple-600/30 to-blue-600/30 rounded-2xl blur-lg opacity-0 group-focus-within:opacity-100 transition-all duration-500 animate-pulse" />
+              
+              {/* Main Search Container */}
+              <div className="relative bg-gradient-to-r from-slate-800/90 via-slate-700/90 to-slate-800/90 backdrop-blur-xl rounded-2xl border border-slate-600/50 shadow-xl overflow-hidden group-focus-within:border-blue-400/60 transition-all duration-300">
+                {/* Search Icon */}
+                <div className="absolute left-4 top-1/2 transform -translate-y-1/2 z-10">
+                  <Search className="h-5 w-5 text-slate-400 group-focus-within:text-blue-400 transition-colors duration-300" />
+                </div>
+                
+                {/* Input Field */}
+                <Input
+                  placeholder="Search guests, tables, confirmations..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full h-12 pl-12 pr-20 bg-transparent border-0 text-white placeholder:text-slate-400 focus:ring-0 focus:outline-none text-sm font-medium"
+                />
+                
+                {/* Results Counter */}
+                {searchQuery && (
+                  <div className="absolute right-12 top-1/2 transform -translate-y-1/2">
+                    <div className="flex items-center gap-1.5 bg-blue-600/90 text-white px-2.5 py-1 rounded-lg text-xs font-semibold shadow-lg border border-blue-400/30">
+                      <div className="h-1.5 w-1.5 bg-blue-200 rounded-full animate-pulse" />
+                      {filteredBookings.length}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Clear Button */}
+                {searchQuery && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 h-8 w-8 hover:bg-slate-600/60 rounded-lg transition-all duration-200 group/clear"
+                    onClick={() => setSearchQuery("")}
+                  >
+                    <X className="h-3.5 w-3.5 text-slate-400 group-hover/clear:text-white transition-colors" />
+                  </Button>
+                )}
+              </div>
+              
+              {/* Search Suggestions */}
+              {!searchQuery && (
+                <div className="absolute top-full left-0 right-0 mt-2 opacity-0 group-focus-within:opacity-100 transition-all duration-300 pointer-events-none z-50">
+                  <div className="bg-slate-800/95 backdrop-blur-xl border border-slate-600/50 rounded-xl p-3 shadow-2xl">
+                    <div className="text-xs text-slate-300 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <div className="h-1 w-1 bg-blue-400 rounded-full" />
+                        <span>Guest name, phone number</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-1 w-1 bg-blue-400 rounded-full" />
+                        <span>Table number (T1, T2...)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-1 w-1 bg-blue-400 rounded-full" />
+                        <span>Confirmation code, party size</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Side - Controls */}
           <div className="flex items-center gap-3">
-            {/* Quick Filters */}
-            <div className="hidden md:flex items-center gap-1 bg-slate-700/50 backdrop-blur rounded-lg p-1">
+            {/* Compact Quick Filters */}
+            <div className="flex items-center gap-1 bg-slate-800/60 backdrop-blur-xl rounded-xl p-1 border border-slate-600/40">
               <Button
-                size="sm"
                 variant={quickFilter === "all" ? "secondary" : "ghost"}
+                size="sm"
                 className={cn(
-                  "h-7 px-2 text-xs transition-all",
+                  "px-3 py-2 h-8 text-xs font-semibold rounded-lg transition-all duration-300",
                   quickFilter === "all" 
-                    ? "bg-white text-slate-900 hover:bg-gray-400" 
-                    : "text-gray-300 hover:text-white hover:bg-slate-600"
+                    ? "bg-white text-slate-900 shadow-md" 
+                    : "text-slate-300 hover:text-white hover:bg-slate-600/60"
                 )}
                 onClick={() => setQuickFilter("all")}
               >
                 All
               </Button>
+              
               <Button
-                size="sm"
-                variant={quickFilter === "needs-table" ? "secondary" : "ghost"}
-                className={cn(
-                  "h-7 px-2 text-xs transition-all",
-                  quickFilter === "needs-table" 
-                    ? "bg-red-500 text-white hover:bg-red-600" 
-                    : "text-gray-300 hover:text-white hover:bg-slate-600"
-                )}
-                onClick={() => setQuickFilter("needs-table")}
-              >
-                <Table2 className="h-3 w-3 mr-1" />
-                Needs Table
-              </Button>
-              <Button
-                size="sm"
                 variant={quickFilter === "dining" ? "secondary" : "ghost"}
+                size="sm"
                 className={cn(
-                  "h-7 px-2 text-xs transition-all",
+                  "px-3 py-2 h-8 text-xs font-semibold rounded-lg transition-all duration-300",
                   quickFilter === "dining" 
-                    ? "bg-green-500 text-white hover:bg-green-600" 
-                    : "text-gray-300 hover:text-white hover:bg-slate-600"
+                    ? "bg-emerald-500 text-white shadow-md" 
+                    : "text-slate-300 hover:text-white hover:bg-slate-600/60"
                 )}
                 onClick={() => setQuickFilter("dining")}
               >
-                <Clock className="h-3 w-3 mr-1" />
                 Dining
+                {stats.currentGuests > 0 && (
+                  <span className="ml-1 bg-white/25 text-xs px-1.5 py-0.5 rounded-full font-bold">
+                    {stats.currentGuests}
+                  </span>
+                )}
               </Button>
+              
               <Button
-                size="sm"
                 variant={quickFilter === "arriving" ? "secondary" : "ghost"}
+                size="sm"
                 className={cn(
-                  "h-7 px-2 text-xs transition-all",
+                  "px-3 py-2 h-8 text-xs font-semibold rounded-lg transition-all duration-300",
                   quickFilter === "arriving" 
-                    ? "bg-blue-500 text-white hover:bg-blue-600" 
-                    : "text-gray-300 hover:text-white hover:bg-slate-600"
+                    ? "bg-blue-500 text-white shadow-md" 
+                    : "text-slate-300 hover:text-white hover:bg-slate-600/60"
                 )}
                 onClick={() => setQuickFilter("arriving")}
               >
-                <UserCheck className="h-3 w-3 mr-1" />
                 Arriving
+                {stats.arrivingSoonCount > 0 && (
+                  <span className="ml-1 bg-white/25 text-xs px-1.5 py-0.5 rounded-full font-bold">
+                    {stats.arrivingSoonCount}
+                  </span>
+                )}
               </Button>
             </div>
 
-            {/* Search */}
-            <div className="relative hidden md:block">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search guests, tables... (press /)"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 w-64 bg-slate-700/50 border-slate-600 text-white placeholder:text-gray-400 focus:bg-slate-700 focus:border-slate-500"
-              />
-              {searchQuery && (
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 hover:bg-slate-600"
-                  onClick={() => setSearchQuery("")}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
-
-            {/* Quick stats */}
-            <div className="hidden lg:flex items-center gap-4 px-4 border-l border-slate-600">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-green-400">{stats.currentGuests}</p>
-                <p className="text-xs text-gray-300">Guests</p>
+            {/* Live Stats */}
+            <div className="flex items-center gap-3 bg-slate-800/60 backdrop-blur-xl rounded-xl px-3 py-2 border border-slate-600/40">
+              <div className="flex items-center gap-1.5">
+                <div className="h-2 w-2 bg-emerald-400 rounded-full animate-pulse" />
+                <span className="text-sm font-bold text-emerald-400">{stats.currentGuests}</span>
+                <span className="text-xs text-slate-400">dining</span>
               </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-blue-400">{stats.availableTables}</p>
-                <p className="text-xs text-gray-300">Free Tables</p>
+              
+              <div className="w-px h-4 bg-slate-600" />
+              
+              <div className="flex items-center gap-1.5">
+                <Table2 className="h-3 w-3 text-blue-400" />
+                <span className="text-sm font-bold text-blue-400">{stats.availableTables}</span>
+                <span className="text-xs text-slate-400">free</span>
+              </div>
+              
+              <div className="w-px h-4 bg-slate-600" />
+              
+              <div className="flex items-center gap-1.5">
+                <div className={cn(
+                  "h-2 w-2 rounded-full",
+                  stats.occupancyRate > 80 ? "bg-red-400" : stats.occupancyRate > 60 ? "bg-yellow-400" : "bg-green-400"
+                )} />
+                <span className={cn(
+                  "text-sm font-bold",
+                  stats.occupancyRate > 80 ? "text-red-400" : stats.occupancyRate > 60 ? "text-yellow-400" : "text-green-400"
+                )}>{stats.occupancyRate}%</span>
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="hidden md:flex items-center gap-2">
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2">
               <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                className="text-gray-300 hover:bg-slate-700 hover:text-white"
+                onClick={() => setShowTimeline(!showTimeline)}
+                size="sm"
+                className={cn(
+                  "px-4 py-2 h-9 text-sm font-semibold rounded-xl transition-all duration-300",
+                  showTimeline 
+                    ? "bg-blue-600 hover:bg-blue-700 text-white shadow-lg" 
+                    : "bg-slate-700/80 hover:bg-slate-600 text-slate-200 border border-slate-600/50"
+                )}
               >
-                {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                <BarChart3 className="h-4 w-4 mr-2" />
+                Timeline
               </Button>
+              
               <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowKeyboardShortcuts(true)}
-                className="text-gray-300 hover:bg-slate-700 hover:text-white"
+                onClick={() => setShowManualBooking(true)}
+                size="sm"
+                className="px-4 py-2 h-9 text-sm font-semibold bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white shadow-lg rounded-xl transition-all duration-300 hover:scale-105"
               >
-                <Keyboard className="h-4 w-4" />
+                <UserPlus className="h-4 w-4 mr-2" />
+                New Guest
               </Button>
             </div>
-            
-            <Button
-              onClick={() => setShowManualBooking(true)}
-              className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white shadow-lg"
-            >
-              <UserPlus className="h-4 w-4 mr-2" />
-              Walk-in
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => refetchBookings()}
-              className="border-slate-600 text-gray-300 hover:bg-slate-700 hover:text-white"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-        
           </div>
         </div>
       </header>
@@ -795,24 +765,62 @@ export default function DashboardPage() {
           />
         </main>
 
-        {/* Sidebar */}
+        {/* Optimized Sidebar - Cleaner Layout */}
         <aside className={cn(
-          "bg-gradient-to-b from-white to-gray-500 border-l shadow-xl flex flex-col transition-all duration-300",
+          "bg-gradient-to-br from-white via-gray-50 to-blue-50/30 border-l border-gray-200 shadow-xl flex flex-col transition-all duration-300",
           sidebarCollapsed ? "w-0 overflow-hidden" : "w-96",
           "absolute lg:relative inset-y-0 right-0 z-40"
         )}>
           {/* Mobile close button */}
           <Button
             variant="ghost"
-            size="icon"
             onClick={() => setSidebarCollapsed(true)}
-            className="lg:hidden absolute top-2 right-2 z-50 hover:bg-gray-400"
+            className="lg:hidden absolute top-3 right-3 z-50 hover:bg-gray-100 p-2 rounded-lg"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </Button>
 
+          {/* Compact Operations Header */}
+          <div className="flex-shrink-0 p-4 border-b border-gray-200 bg-gradient-to-r from-white to-gray-50">
+            {/* Key Metrics Grid */}
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <div className={cn(
+                "text-center p-2.5 rounded-lg border transition-all",
+                stats.pendingCount > 0 ? "bg-red-50 border-red-200 shadow-sm animate-pulse" : "bg-gray-50 border-gray-200"
+              )}>
+                <p className="text-lg font-bold text-red-600">{stats.pendingCount}</p>
+                <p className="text-xs text-red-500 font-medium">Pending</p>
+              </div>
+              <div className={cn(
+                "text-center p-2.5 rounded-lg border transition-all",
+                stats.awaitingCheckIn > 0 ? "bg-orange-50 border-orange-200 shadow-sm animate-pulse" : "bg-gray-50 border-gray-200"
+              )}>
+                <p className="text-lg font-bold text-orange-600">{stats.awaitingCheckIn}</p>
+                <p className="text-xs text-orange-500 font-medium">Check-in</p>
+              </div>
+            </div>
+            
+            {/* Secondary Stats */}
+            <div className="flex gap-2 text-xs">
+              <div className="flex-1 text-center p-2 bg-green-50 rounded border border-green-200">
+                <p className="font-bold text-green-700">{stats.totalCompleted}</p>
+                <p className="text-green-600">Completed</p>
+              </div>
+              <div className="flex-1 text-center p-2 bg-blue-50 rounded border border-blue-200">
+                <p className="font-bold text-blue-700">{stats.tablesInUse}</p>
+                <p className="text-blue-600">In Use</p>
+              </div>
+              {stats.vipCount > 0 && (
+                <div className="flex-1 text-center p-2 bg-yellow-50 rounded border border-yellow-200">
+                  <p className="font-bold text-yellow-700">{stats.vipCount}</p>
+                  <p className="text-yellow-600">VIP</p>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="flex-1 overflow-y-auto">
-            {/* Pending Requests - Priority */}
+            {/* Priority Sections */}
             {stats.pendingCount > 0 && (
               <div className="pending-requests">
                 <PendingRequestsPanel
@@ -825,7 +833,7 @@ export default function DashboardPage() {
             )}
 
             {/* Check-in Queue */}
-            <div className="border-t">
+            <div className="border-t border-gray-200">
               <CheckInQueue
                 bookings={activeBookings}
                 tables={tables}
@@ -838,81 +846,118 @@ export default function DashboardPage() {
             </div>
           </div>
           
-          {/* Quick Stats Footer */}
-          <div className="p-4 border-t bg-gradient-to-b from-gray-50 to-white">
-            <h4 className="text-sm font-semibold text-gray-700 mb-3">Today's Performance</h4>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-green-50 rounded-lg p-3 border border-green-200">
-                <p className="text-2xl font-bold text-green-700">{stats.currentGuests}</p>
-                <p className="text-xs text-green-600 font-medium">Current Guests</p>
+          {/* Minimal Footer */}
+          <div className="flex-shrink-0 p-3 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <Clock className="h-3 w-3" />
+                <span>{format(currentTime, "h:mm a")}</span>
               </div>
-              <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                <p className="text-2xl font-bold text-blue-700">{todaysBookings.filter(b => b.status === 'completed').length}</p>
-                <p className="text-xs text-blue-600 font-medium">Completed Today</p>
-              </div>
-              <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
-                <p className="text-2xl font-bold text-orange-700">
-                  {Math.round((tables.filter(t => t.is_active).length - stats.availableTables) / tables.filter(t => t.is_active).length * 100)}%
-                </p>
-                <p className="text-xs text-orange-600 font-medium">Occupancy Rate</p>
-              </div>
-              <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
-                <p className="text-2xl font-bold text-purple-700">
-                  {activeBookings.filter(b => !b.tables || b.tables.length === 0).length}
-                </p>
-                <p className="text-xs text-purple-600 font-medium">Need Tables</p>
-              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => refetchBookings()}
+                className="h-7 px-3 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors duration-200"
+              >
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Refresh
+              </Button>
             </div>
           </div>
         </aside>
       </div>
 
-      {/* Floating Action Buttons for Critical Actions */}
+      {/* Refined Floating Action Hub */}
       {(stats.awaitingCheckIn > 0 || stats.pendingCount > 0) && (
         <div className="fixed bottom-6 right-6 z-50">
           <div className="flex flex-col gap-3">
             {stats.pendingCount > 0 && (
-              <Button
-                size="lg"
-                className="rounded-full shadow-2xl bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white animate-bounce px-6"
-                onClick={() => {
-                  // Scroll to pending requests
-                  document.querySelector('.pending-requests')?.scrollIntoView({ behavior: 'smooth' })
-                }}
-              >
-                <Timer className="h-5 w-5 mr-2" />
-                {stats.pendingCount} Pending
-              </Button>
+              <div className="relative group">
+                <div className="absolute inset-0 bg-red-500 rounded-2xl blur-lg opacity-30 group-hover:opacity-50 transition-opacity animate-pulse" />
+                <Button
+                  size="lg"
+                  className="relative rounded-2xl shadow-xl bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white px-6 py-3 h-14 text-sm font-bold border border-red-400/50 transition-all duration-300 hover:scale-105"
+                  onClick={() => {
+                    document.querySelector('.pending-requests')?.scrollIntoView({ behavior: 'smooth' })
+                  }}
+                >
+                  <Timer className="h-5 w-5 mr-2" />
+                  <div className="flex flex-col items-start">
+                    <span className="text-xs opacity-90">Pending</span>
+                    <span className="text-lg font-black">{stats.pendingCount}</span>
+                  </div>
+                  <div className="absolute -top-1 -right-1 h-5 w-5 bg-yellow-400 text-red-900 rounded-full flex items-center justify-center text-xs font-black animate-bounce">
+                    !
+                  </div>
+                </Button>
+              </div>
             )}
             
             {stats.awaitingCheckIn > 0 && (
-              <Button
-                size="lg"
-                className="rounded-full shadow-2xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-700 hover:to-orange-600 text-white px-6"
-                onClick={() => {
-                  const awaitingBooking = todaysBookings.find(b => b.status === 'arrived')
-                  if (awaitingBooking) {
-                    handleCheckIn(awaitingBooking.id)
-                  }
-                }}
-              >
-                <UserCheck className="h-5 w-5 mr-2" />
-                Check-in ({stats.awaitingCheckIn})
-              </Button>
+              <div className="relative group">
+                <div className="absolute inset-0 bg-orange-500 rounded-2xl blur-lg opacity-30 group-hover:opacity-50 transition-opacity" />
+                <Button
+                  size="lg"
+                  className="relative rounded-2xl shadow-xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-700 hover:to-orange-600 text-white px-6 py-3 h-14 text-sm font-bold border border-orange-400/50 transition-all duration-300 hover:scale-105"
+                  onClick={() => {
+                    const awaitingBooking = todaysBookings.find(b => b.status === 'arrived')
+                    if (awaitingBooking) {
+                      handleCheckIn(awaitingBooking.id)
+                    }
+                  }}
+                >
+                  <UserCheck className="h-5 w-5 mr-2" />
+                  <div className="flex flex-col items-start">
+                    <span className="text-xs opacity-90">Check-in</span>
+                    <span className="text-lg font-black">{stats.awaitingCheckIn}</span>
+                  </div>
+                </Button>
+              </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Modals */}
+      {/* Modals - Streamlined */}
+      {/* Timeline View Modal */}
+      <Dialog open={showTimeline} onOpenChange={setShowTimeline}>
+        <DialogContent className="max-w-6xl w-full h-[90vh] flex flex-col p-0">
+          <div className="flex-shrink-0 px-6 py-4 border-b bg-white">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-lg">
+                <BarChart3 className="h-5 w-5 text-blue-600" />
+                Timeline View
+              </DialogTitle>
+              <DialogDescription>
+                Complete overview of today's reservations and activity
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <TodaysTimeline
+              bookings={todaysBookings}
+              currentTime={currentTime}
+              onSelectBooking={setSelectedBooking}
+              onUpdateStatus={(bookingId, status) => 
+                updateBookingMutation.mutate({ bookingId, updates: { status } })
+              }
+              customersData={customersData}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Manual Booking Modal */}
       <Dialog open={showManualBooking} onOpenChange={setShowManualBooking}>
-        <DialogContent className="max-w-4xl w-full h-[95vh] flex flex-col p-0">
-          <div className="flex-shrink-0 px-6 py-4 border-b">
+        <DialogContent className="max-w-3xl w-full h-[90vh] flex flex-col p-0">
+          <div className="flex-shrink-0 px-6 py-4 border-b bg-white">
             <DialogHeader>
-              <DialogTitle>Add Booking</DialogTitle>
+              <DialogTitle className="flex items-center gap-2 text-lg">
+                <UserPlus className="h-5 w-5 text-emerald-600" />
+                Add New Booking
+              </DialogTitle>
               <DialogDescription>
-                Create a booking for walk-in guests or phone reservations
+                Create reservation for walk-ins or phone bookings
               </DialogDescription>
             </DialogHeader>
           </div>
@@ -944,14 +989,17 @@ export default function DashboardPage() {
 
       {/* Check-in Table Selection Dialog */}
       <Dialog open={showCheckInDialog} onOpenChange={setShowCheckInDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Select Table for Check-in</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Table2 className="h-5 w-5 text-blue-600" />
+              Select Table
+            </DialogTitle>
             <DialogDescription>
-              Choose an available table for this guest
+              Choose an available table for check-in
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-3 gap-3 py-4">
+          <div className="grid grid-cols-3 gap-2 py-4">
             {tables
               .filter(table => {
                 const isOccupied = currentlyDining.some(booking => 
@@ -963,6 +1011,8 @@ export default function DashboardPage() {
                 <Button
                   key={table.id}
                   variant="outline"
+                  size="sm"
+                  className="h-12 flex flex-col gap-1"
                   onClick={() => {
                     if (checkInBookingId) {
                       handleCheckIn(checkInBookingId, [table.id])
@@ -971,7 +1021,8 @@ export default function DashboardPage() {
                     }
                   }}
                 >
-                  T{table.table_number} ({table.capacity})
+                  <span className="font-bold">T{table.table_number}</span>
+                  <span className="text-xs text-gray-500">{table.capacity} seats</span>
                 </Button>
               ))}
           </div>
@@ -984,7 +1035,7 @@ export default function DashboardPage() {
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                No tables are currently available. All tables are either occupied or reserved.
+                No tables available. All tables are occupied or reserved.
               </AlertDescription>
             </Alert>
           )}
