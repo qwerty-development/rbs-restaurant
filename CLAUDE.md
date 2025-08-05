@@ -1,65 +1,38 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Commands
+- `npm run dev` - Development server (Turbopack)
+- `npm run build` - Production build
+- `npm start` - Production server
+- `npm run lint` - Lint code
 
-## Development Commands
+## Tech Stack
+- **Framework:** Next.js 15+ App Router
+- **Language:** TypeScript (strict)
+- **Database:** Supabase PostgreSQL
+- **Auth:** Supabase Auth + role-based access (`restaurant_staff`)
+- **UI:** Tailwind CSS + shadcn/ui + Radix
+- **State:** React Query for server state
 
-- **Development server:** `npm run dev` (uses Turbopack for faster builds)
-- **Build:** `npm run build`
-- **Production server:** `npm start`
-- **Lint:** `npm run lint`
+## Key Architecture
+- **Routes:** `app/(auth)/`, `app/(dashboard)/`, `app/api/`
+- **Auth:** Middleware + layout double verification
+- **DB Schema:** Always check `db/schema.sql` as source of truth
+- **Types:** `types/index.ts` for comprehensive TypeScript interfaces
+- **Clients:** Separate Supabase clients for browser/server
+- **Components:** Feature-based organization (bookings, customers, etc.)
 
-## Architecture Overview
+## Critical Rules - DO NOT VIOLATE
+- **NEVER create mock/simplified components** - fix existing code
+- **NEVER replace complex components** - debug and fix root cause
+- **ALWAYS work with existing codebase** - no new simplified alternatives
+- **ALWAYS add explicit TypeScript types** to all parameters/returns
+- **Fix all linter/TypeScript errors immediately**
+- **When in doubt, always ask first**
 
-### Tech Stack
-- **Framework:** Next.js 15+ with App Router
-- **Language:** TypeScript
-- **Database:** Supabase (PostgreSQL)
-- **Authentication:** Supabase Auth with role-based access control
-- **Styling:** Tailwind CSS with shadcn/ui components
-- **State Management:** React Query (@tanstack/react-query) for server state
-- **UI Components:** Radix UI primitives via shadcn/ui
-
-### Database Architecture
-The system uses Supabase with a comprehensive restaurant management schema including:
-- **Core entities:** restaurants, profiles, bookings, restaurant_tables
-- **Staff management:** restaurant_staff with role-based permissions (owner/manager/staff)
-- **Advanced features:** table combinations, loyalty rules, VIP users, reviews with replies
-- **Availability system:** restaurant_hours, restaurant_special_hours, restaurant_closures
-
-### Authentication & Authorization
-- **Authentication:** Supabase Auth handles user authentication
-- **Authorization:** Role-based access through `restaurant_staff` table
-- **Middleware:** `/middleware.ts` protects dashboard routes and verifies staff access
-- **Layout protection:** Dashboard layout (`app/(dashboard)/layout.tsx`) enforces authentication and staff verification
-
-### Route Structure
-- **Auth routes:** `app/(auth)/` - login, register, password reset
-- **Dashboard routes:** `app/(dashboard)/` - main restaurant management interface
-- **API routes:** `app/api/` - webhook handlers and auth callbacks
-
-### Key Architectural Patterns
-1. **Server-side auth verification:** Both middleware and layout verify authentication
-2. **Type-safe database queries:** Comprehensive TypeScript interfaces in `types/index.ts`
-3. **Reusable hooks:** Custom hooks in `lib/hooks/` for auth, bookings, and restaurant data
-4. **Component organization:** Feature-based components (bookings, customers, dashboard, etc.)
-5. **Supabase client patterns:** Separate clients for browser (`lib/supabase/client.ts`) and server-side operations
-
-### State Management Strategy
-- Server state managed via React Query hooks
-- Local component state with React hooks
-- Authentication state through Supabase auth context
-- No global client-side state management library needed
-
-### Database Relationships
-- Restaurants have staff, tables, bookings, menus, offers, and reviews
-- Bookings can be linked to users or be guest bookings (guest_name, guest_email, guest_phone)
-- Tables support combinations for larger parties
-- Loyalty system with points and rules
-- VIP users get extended booking privileges
-
-### Component Architecture
-- **Layout components:** Sidebar, Header, MobileNav with role-based rendering
-- **Feature components:** Organized by domain (bookings, customers, dashboard, etc.)
-- **UI components:** shadcn/ui components in `components/ui/`
-- **Forms:** React Hook Form with Zod validation
+## Best Practices
+- Use existing Supabase client patterns and type definitions
+- Implement proper error boundaries and user feedback
+- Leverage React Query for efficient data fetching
+- Follow WCAG accessibility guidelines
+- Never expose sensitive data or bypass auth checks

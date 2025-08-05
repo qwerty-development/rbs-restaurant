@@ -147,6 +147,15 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
   const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent, tableId: string) => {
     if (viewMode === "preview" || isResizing) return
     
+    // Check if touch started on resize handle - if so, don't start drag
+    if ('touches' in e) {
+      const touch = e.touches[0]
+      const target = document.elementFromPoint(touch.clientX, touch.clientY)
+      if (target && target.closest('[data-resize-handle]')) {
+        return // Let resize handle take precedence
+      }
+    }
+    
     e.preventDefault()
     e.stopPropagation()
 
@@ -717,13 +726,49 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                   {/* Selection indicators */}
                   {isSelected && viewMode === "edit" && !isBeingDragged && !isBeingResized && (
                     <>
-                      {/* Resize handle - Now with touch support */}
+                      {/* Resize handle - Enhanced for touch devices */}
                       {onTableResize && (
                         <div 
-                          className="absolute -bottom-2 -right-2 w-6 h-6 md:w-4 md:h-4 bg-blue-500 rounded-full border-2 border-white shadow-md cursor-se-resize pointer-events-auto hover:bg-blue-600 transition-colors z-50 touch-none" 
-                          onMouseDown={(e) => handleResizeStart(e, table.id)}
-                          onTouchStart={(e) => handleResizeStart(e, table.id)}
-                        />
+                          data-resize-handle="true"
+                          className="absolute -bottom-3 -right-3 w-8 h-8 md:w-5 md:h-5 bg-blue-500 rounded-full border-2 border-white shadow-lg cursor-se-resize pointer-events-auto hover:bg-blue-600 active:bg-blue-700 transition-colors z-50 touch-none flex items-center justify-center" 
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            handleResizeStart(e, table.id)
+                          }}
+                          onTouchStart={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            // Add immediate visual feedback for touch
+                            const target = e.currentTarget as HTMLElement
+                            target.style.transform = 'scale(1.1)'
+                            target.style.backgroundColor = '#1d4ed8' // darker blue
+                            setTimeout(() => {
+                              target.style.transform = ''
+                              target.style.backgroundColor = ''
+                            }, 150)
+                            handleResizeStart(e, table.id)
+                          }}
+                          style={{
+                            // Increase touch target area without affecting visual size
+                            minWidth: '32px',
+                            minHeight: '32px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          {/* Visual resize icon for better UX */}
+                          <svg 
+                            className="w-3 h-3 text-white opacity-90 pointer-events-none" 
+                            fill="none" 
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M4 4L20 20M20 4L4 20"/>
+                          </svg>
+                        </div>
                       )}
                       
                       {/* Action buttons */}
