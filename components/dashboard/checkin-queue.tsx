@@ -250,7 +250,7 @@ export function CheckInQueue({
       user_id: selectedCustomer?.user_id || null,
       guest_name: selectedCustomer 
         ? (selectedCustomer.profile?.full_name || selectedCustomer.guest_name)
-        : (walkInData.guestName || `Walk-in ${format(currentTime, 'HH:mm')}`),
+        : (walkInData.guestName.trim() || `Walk-in ${format(currentTime, 'HH:mm')}`),
       guest_phone: selectedCustomer 
         ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
         : walkInData.guestPhone,

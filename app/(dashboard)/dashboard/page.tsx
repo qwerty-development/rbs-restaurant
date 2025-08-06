@@ -365,9 +365,17 @@ export default function DashboardPage() {
       const bookingTime = new Date(bookingData.booking_time)
       const isWalkIn = bookingData.status === 'arrived' || bookingTime <= new Date()
       
+      // For walk-ins with selected customers, we need special handling
+      let finalUserId = user.id // Default to staff user
+      
+      if (bookingData.customer_id && bookingData.user_id) {
+        // If the selected customer has a user_id, use that
+        finalUserId = bookingData.user_id
+      }
+      
       const result = await requestService.createBookingRequest({
         restaurantId,
-        userId: user.id,
+        userId: finalUserId,
         bookingTime,
         partySize: bookingData.party_size,
         turnTimeMinutes: bookingData.turn_time_minutes || 120,
@@ -381,6 +389,38 @@ export default function DashboardPage() {
       })
 
       const booking = result.booking
+
+      // If we have a customer_id from a selected customer, link the booking to that customer
+      if (bookingData.customer_id) {
+        
+        // Update the restaurant customer's stats
+        const { error: updateError } = await supabase
+          .rpc('increment_customer_bookings', {
+            customer_id: bookingData.customer_id,
+            visit_time: bookingTime.toISOString()
+          })
+        
+        // If RPC doesn't exist, fall back to manual increment
+        if (updateError) {
+          // Get current total_bookings and increment
+          const { data: currentCustomer } = await supabase
+            .from("restaurant_customers")
+            .select("total_bookings")
+            .eq("id", bookingData.customer_id)
+            .single()
+          
+          if (currentCustomer) {
+            await supabase
+              .from("restaurant_customers")
+              .update({
+                total_bookings: (currentCustomer.total_bookings || 0) + 1,
+                last_visit: bookingTime.toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .eq("id", bookingData.customer_id)
+          }
+        }
+      }
 
       if (bookingData.table_ids && bookingData.table_ids.length > 0 && booking.status !== 'pending') {
         const tableAssignments = bookingData.table_ids.map((tableId: string) => ({
