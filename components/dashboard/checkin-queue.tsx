@@ -1,43 +1,64 @@
 // components/dashboard/checkin-queue.tsx
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import { format, differenceInMinutes } from "date-fns"
-import { useQuery } from "@tanstack/react-query"
+import { format, differenceInMinutes, addMinutes } from "date-fns"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
+import { useTableCombinations } from "@/lib/hooks/use-table-combinations"
 import { 
   UserCheck, 
   Clock, 
-  Users, 
   Table2,
-  Phone,
   AlertCircle,
   Timer,
   UserPlus,
-  MessageSquare,
-  Sparkles,
-  Ban,
-  Search,
-  X,
-  Star
+  Crown,
+  ArrowLeftRight,
+  CheckCircle,
+  AlertTriangle,
+  GitMerge,
+  Unlock
 } from "lucide-react"
 import { toast } from "react-hot-toast"
-
+import { Alert, AlertDescription } from "@/components/ui/alert"
 const TABLE_TYPE_COLORS: Record<string, string> = {
-  booth: "bg-blue-900 text-blue-100",
-  window: "bg-emerald-900 text-emerald-100",
-  patio: "bg-amber-900 text-amber-100",
-  standard: "bg-yellow-900 text-yellow-100",
-  bar: "bg-purple-900 text-purple-100",
-  private: "bg-rose-900 text-rose-100",
+  booth: "bg-gradient-to-br from-blue-900 to-blue-800 text-blue-100 border-blue-700",
+  window: "bg-gradient-to-br from-emerald-900 to-emerald-800 text-emerald-100 border-emerald-700",
+  patio: "bg-gradient-to-br from-amber-900 to-amber-800 text-amber-100 border-amber-700",
+  standard: "bg-gradient-to-br from-yellow-900 to-yellow-800 text-yellow-100 border-yellow-700",
+  bar: "bg-gradient-to-br from-purple-900 to-purple-800 text-purple-100 border-purple-700",
+  private: "bg-gradient-to-br from-rose-900 to-rose-800 text-rose-100 border-rose-700",
+}
+
+// Enhanced interfaces
+interface TableSwapOption {
+  type: 'empty' | 'swap' | 'future-swap' | 'combination'
+  tables: any[]
+  targetBooking?: any
+  combinationId?: string
+  isPredefined?: boolean
+  warnings: string[]
+  benefits: string[]
+  confidence: number // 0-100 confidence score
+}
+
+interface SmartSuggestion {
+  id: string
+  type: 'table' | 'time' | 'combination' | 'swap'
+  title: string
+  description: string
+  icon: any
+  priority: 'high' | 'medium' | 'low'
+  action: () => void
 }
 
 interface CheckInQueueProps {
@@ -46,8 +67,8 @@ interface CheckInQueueProps {
   currentTime: Date
   restaurantId: string
   onCheckIn: (bookingId: string, tableIds: string[]) => void
-  onQuickSeat: (guestData: any, tableIds:string[]) => void
-  onTableSwitch?: (bookingId: string, newTableIds: string[]) => void
+  onQuickSeat: (guestData: any, tableIds: string[]) => void
+  onTableSwitch?: (bookingId: string, newTableIds: string[], swapBookingId?: string) => void
   customersData?: Record<string, any>
   onSelectBooking?: (booking: any) => void
 }
@@ -63,6 +84,7 @@ export function CheckInQueue({
   customersData = {},
   onSelectBooking
 }: CheckInQueueProps) {
+  // Enhanced state management
   const [selectedTableIds, setSelectedTableIds] = useState<string[]>([])
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
   const [customerSearch, setCustomerSearch] = useState("")
@@ -70,28 +92,45 @@ export function CheckInQueue({
   const [walkInData, setWalkInData] = useState({
     guestName: "",
     guestPhone: "",
-    partySize: 2
+    partySize: 2,
+    estimatedDuration: 120,
+    preferences: [] as string[]
   })
+  
+  // Enhanced table switch modal with swap options
   const [tableSwitchModal, setTableSwitchModal] = useState<{
     show: boolean
     booking?: any
     originalTables: any[]
     selectedNewTableIds: string[]
-  }>({ show: false, originalTables: [], selectedNewTableIds: [] })
+    swapOptions: TableSwapOption[]
+    selectedOption?: TableSwapOption
+    confirmationStep: boolean
+  }>({ 
+    show: false, 
+    originalTables: [], 
+    selectedNewTableIds: [],
+    swapOptions: [],
+    confirmationStep: false
+  })
+
+  // Advanced settings
+  const [advancedMode, setAdvancedMode] = useState(false)
+  const [autoSuggestEnabled, setAutoSuggestEnabled] = useState(true)
+  const [showDetailedInfo, setShowDetailedInfo] = useState(false)
 
   const supabase = createClient()
+  const queryClient = useQueryClient()
 
-  // Fetch customers for search
+  // Fetch table combinations with enhanced filtering
+  const { data: tableCombinations = [], isLoading: combinationsLoading } = useTableCombinations(restaurantId)
+
+  // Enhanced customer search with caching
   const { data: customers, error: customersError, isLoading: customersLoading } = useQuery({
     queryKey: ["restaurant-customers-walkin", restaurantId, customerSearch],
     queryFn: async () => {
-      if (!customerSearch.trim()) return []
-      if (!restaurantId) {
-        console.error("Restaurant ID is required for customer search")
-        throw new Error("Restaurant ID is required")
-      }
-      
-      console.log("Searching for walk-in customers with:", customerSearch, "in restaurant:", restaurantId)
+      if (!customerSearch.trim() || customerSearch.length < 1) return []
+      if (!restaurantId) throw new Error("Restaurant ID is required")
       
       const { data, error } = await supabase
         .from("restaurant_customers")
@@ -101,249 +140,381 @@ export function CheckInQueue({
             id,
             full_name,
             phone_number,
-            avatar_url
+            avatar_url,
+            allergies,
+            favorite_cuisines
           )
         `)
         .eq("restaurant_id", restaurantId)
         .or(`guest_name.ilike.%${customerSearch}%,guest_email.ilike.%${customerSearch}%,guest_phone.ilike.%${customerSearch}%`)
         .limit(10)
-        .order("last_visit", { ascending: false })
+        .order("vip_status", { ascending: false })
+        .order("total_bookings", { ascending: false })
 
-      if (error) {
-        console.error("Walk-in customer search error:", error)
-        throw error
-      }
-      
-      console.log("Walk-in customer search results:", data)
+      if (error) throw error
       return data || []
     },
     enabled: customerSearch.length >= 1 && !!restaurantId,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   })
 
-  // Handle customer selection
-  const handleCustomerSelect = (customer: any) => {
-    setSelectedCustomer(customer)
-    setCustomerSearch(customer.profile?.full_name || customer.guest_name || "")
-    setShowCustomerDropdown(false)
+  // Enhanced table swap options calculator with perfect logic
+  const calculateSwapOptions = useCallback((booking: any, targetTableIds: string[]): TableSwapOption[] => {
+    const options: TableSwapOption[] = []
+    const targetTables = targetTableIds.map(id => tables.find(t => t.id === id)).filter(Boolean)
+    const currentTables = booking.tables || []
     
-    // Auto-fill walk-in form fields
-    setWalkInData({
-      guestName: customer.profile?.full_name || customer.guest_name || "",
-      guestPhone: customer.profile?.phone_number || customer.guest_phone || "",
-      partySize: walkInData.partySize // Keep existing party size
-    })
-  }
+    if (targetTables.length === 0) return options
+    
+    // Helper function to get all bookings at specific tables
+    const getBookingsAtTables = (tableIds: string[]) => {
+      return bookings.filter(b => {
+        if (b.id === booking.id) return false
+        return b.tables?.some((t: any) => tableIds.includes(t.id))
+      })
+    }
+    
+    // Helper function to check if booking is physically present
+    const isPhysicallyPresent = (b: any) => {
+      const presentStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+      return presentStatuses.includes(b.status)
+    }
+    
+    // Helper function to check if booking is future confirmed
+    const isFutureConfirmed = (b: any) => {
+      return b.status === 'confirmed' && new Date(b.booking_time) > currentTime
+    }
+    
+    // Get all bookings at target tables
+    const targetBookings = getBookingsAtTables(targetTableIds)
+    const physicallyPresentBookings = targetBookings.filter(isPhysicallyPresent)
+    const futureBookings = targetBookings.filter(isFutureConfirmed)
+    
+    // Option 1: Direct move to empty tables
+    if (targetBookings.length === 0) {
+      options.push({
+        type: 'empty',
+        tables: targetTables,
+        warnings: [],
+        benefits: ['Tables are completely free', 'No conflicts or disruptions'],
+        confidence: 100
+      })
+    }
+    
+    // Option 2: Move to tables with only future bookings (bump future bookings)
+    else if (physicallyPresentBookings.length === 0 && futureBookings.length > 0) {
+      const warnings = futureBookings.map(b => 
+        `Will bump ${b.user?.full_name || b.guest_name} (${format(new Date(b.booking_time), 'h:mm a')})`
+      )
+      
+      options.push({
+        type: 'empty',
+        tables: targetTables,
+        targetBooking: futureBookings[0], // For reference
+        warnings,
+        benefits: ['Tables available now', 'Future bookings will be reassigned'],
+        confidence: 75
+      })
+    }
+    
+    // Option 3: Swap with single physically present booking
+    else if (physicallyPresentBookings.length === 1) {
+      const targetBooking = physicallyPresentBookings[0]
+      
+      // Check if our current tables can accommodate the target booking
+      const currentTablesCapacity = currentTables.reduce((sum: number, t: any) => sum + (t.max_capacity || 0), 0)
+      const canAccommodateTarget = currentTablesCapacity >= (targetBooking.party_size || 1)
+      
+      if (canAccommodateTarget && currentTables.length > 0) {
+        // Check if current tables are free for the target booking
+        const currentTableIds = currentTables.map((t: any) => t.id)
+        const conflictingBookings = getBookingsAtTables(currentTableIds)
+          .filter(b => b.id !== targetBooking.id)
+        
+        if (conflictingBookings.length === 0) {
+          options.push({
+            type: 'swap',
+            tables: targetTables,
+            targetBooking,
+            warnings: [`Will swap tables with ${targetBooking.user?.full_name || targetBooking.guest_name}`],
+            benefits: [
+              'Clean table swap - both parties get suitable tables',
+              'No one needs to wait or be bumped'
+            ],
+            confidence: 90
+          })
+        }
+      }
+      
+      // Also offer option to bump the target booking if they're not seated yet
+      if (!['seated', 'ordered', 'appetizers', 'main_course', 'dessert'].includes(targetBooking.status)) {
+        options.push({
+          type: 'empty',
+          tables: targetTables,
+          targetBooking,
+          warnings: [`Will reassign ${targetBooking.user?.full_name || targetBooking.guest_name} to another table`],
+          benefits: ['Get desired tables immediately', 'Other party will be accommodated elsewhere'],
+          confidence: 60
+        })
+      }
+    }
+    
+    // Option 4: Handle multiple bookings at target tables
+    else if (physicallyPresentBookings.length > 1) {
+      // This is complex - offer to bump all if none are actively dining
+      const activeDiners = physicallyPresentBookings.filter(b => 
+        ['ordered', 'appetizers', 'main_course', 'dessert'].includes(b.status)
+      )
+      
+      if (activeDiners.length === 0) {
+        options.push({
+          type: 'empty',
+          tables: targetTables,
+          warnings: [
+            `Will reassign ${physicallyPresentBookings.length} bookings to other tables`,
+            'This may cause delays for affected parties'
+          ],
+          benefits: ['Get desired tables', 'All affected parties will be reseated'],
+          confidence: 30
+        })
+      }
+    }
+    
+    // Option 5: Predefined combinations for large parties
+    if (booking.party_size > 4) {
+      tableCombinations.forEach((combo: any) => {
+        const primaryTable = tables.find(t => t.id === combo.primary_table_id)
+        const secondaryTable = tables.find(t => t.id === combo.secondary_table_id)
+        
+        if (!primaryTable || !secondaryTable) return
+        
+        const comboTableIds = [combo.primary_table_id, combo.secondary_table_id]
+        const comboBookings = getBookingsAtTables(comboTableIds)
+        const comboPresentBookings = comboBookings.filter(isPhysicallyPresent)
+        
+        if (comboPresentBookings.length === 0 && combo.combined_capacity >= booking.party_size) {
+          const comboFutureBookings = comboBookings.filter(isFutureConfirmed)
+          
+          options.push({
+            type: 'combination',
+            tables: [primaryTable, secondaryTable],
+            combinationId: combo.id,
+            isPredefined: true,
+            warnings: comboFutureBookings.length > 0 
+              ? [`Will bump ${comboFutureBookings.length} future booking(s)`]
+              : [],
+            benefits: [
+              'Restaurant-approved combination',
+              `Perfect for party of ${booking.party_size}`,
+              'Optimized table layout'
+            ],
+            confidence: 95
+          })
+        }
+      })
+    }
+    
+    return options.sort((a, b) => b.confidence - a.confidence)
+  }, [bookings, tables, tableCombinations, currentTime])
 
-  const handleClearCustomer = () => {
-    setSelectedCustomer(null)
-    setCustomerSearch("")
-    setWalkInData({
-      guestName: "",
-      guestPhone: "",
-      partySize: 2
+  // Generate smart suggestions
+  const generateSmartSuggestions = useCallback((booking: any): SmartSuggestion[] => {
+    const suggestions: SmartSuggestion[] = []
+    
+    // Check if tables are needed
+    if (!booking.tables || booking.tables.length === 0) {
+      // Find best available tables
+      const availableTables = tables.filter(table => {
+        if (!table.is_active) return false
+        const isOccupied = bookings.some(b => {
+          const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+          return occupiedStatuses.includes(b.status) && 
+                 b.tables?.some((t: any) => t.id === table.id)
+        })
+        return !isOccupied && table.max_capacity >= booking.party_size
+      })
+      
+      if (availableTables.length > 0) {
+        const bestTable = availableTables.sort((a, b) => {
+          const aDiff = Math.abs(a.max_capacity - booking.party_size)
+          const bDiff = Math.abs(b.max_capacity - booking.party_size)
+          return aDiff - bDiff
+        })[0]
+        
+        suggestions.push({
+          id: 'assign-best-table',
+          type: 'table',
+          title: `Assign Table ${bestTable.table_number}`,
+          description: `Perfect fit for party of ${booking.party_size} (${bestTable.min_capacity}-${bestTable.max_capacity} seats)`,
+          icon: Table2,
+          priority: 'high',
+          action: () => {
+            setSelectedTableIds([bestTable.id])
+            handleQuickCheckIn(booking)
+          }
+        })
+      }
+    }
+    
+    // Check for VIP status
+    const customerData = booking.user?.id ? customersData[booking.user.id] : null
+    if (customerData?.vip_status) {
+      suggestions.push({
+        id: 'vip-priority',
+        type: 'table',
+        title: 'VIP Priority Seating',
+        description: 'Prioritize best available table for VIP guest',
+        icon: Crown,
+        priority: 'high',
+        action: () => {
+          // Find premium tables
+          const premiumTables = tables.filter(t => 
+            ['booth', 'window', 'private'].includes(t.table_type) && 
+            t.is_active
+          )
+          if (premiumTables.length > 0) {
+            handleOpenEnhancedTableSwitch(booking, premiumTables)
+          }
+        }
+      })
+    }
+    
+    return suggestions.sort((a, b) => {
+      const priorityOrder = { high: 0, medium: 1, low: 2 }
+      return priorityOrder[a.priority] - priorityOrder[b.priority]
     })
-  }
-  
-  // Filter arrivals (confirmed bookings within -30 to +60 minutes)
-  const arrivalsQueue = bookings
-    .filter(booking => {
+  }, [tables, bookings, customersData])
+
+  // Filter and categorize bookings
+  const categorizedBookings = useMemo(() => {
+    const arrivals = bookings.filter(booking => {
       const bookingTime = new Date(booking.booking_time)
       const minutesUntil = differenceInMinutes(bookingTime, currentTime)
-      return (
-        booking.status === 'confirmed' && 
-        minutesUntil >= -30 &&
-        minutesUntil <= 60
-      )
-    })
-    .sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+      return booking.status === 'confirmed' && 
+             minutesUntil >= -30 && minutesUntil <= 60
+    }).sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
 
-  // Already arrived guests waiting for seating
-  const waitingForSeating = bookings.filter(b => b.status === 'arrived')
-  
-  // Separate into different categories
-  const lateArrivals = arrivalsQueue.filter(b => {
-    const minutesUntil = differenceInMinutes(new Date(b.booking_time), currentTime)
-    return minutesUntil < -15
-  })
-
-  const currentArrivals = arrivalsQueue.filter(b => {
-    const minutesUntil = differenceInMinutes(new Date(b.booking_time), currentTime)
-    return minutesUntil >= -15 && minutesUntil <= 15
-  })
-
-  const upcomingArrivals = arrivalsQueue.filter(b => {
-    const minutesUntil = differenceInMinutes(new Date(b.booking_time), currentTime)
-    return minutesUntil > 15
-  })
-
-  // Get available tables (only truly available ones - not occupied and no upcoming reservations)
-  const getAvailableTables = () => {
-    return tables.filter(table => {
-      if (!table.is_active) return false
-      
-      // Check if table is currently occupied
-      const isOccupied = bookings.some(booking => {
-        const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
-        return occupiedStatuses.includes(booking.status) && 
-               booking.tables?.some((t: any) => t.id === table.id)
+    return {
+      waitingForSeating: bookings.filter(b => b.status === 'arrived'),
+      lateArrivals: arrivals.filter(b => {
+        const minutesUntil = differenceInMinutes(new Date(b.booking_time), currentTime)
+        return minutesUntil < -15
+      }),
+      currentArrivals: arrivals.filter(b => {
+        const minutesUntil = differenceInMinutes(new Date(b.booking_time), currentTime)
+        return minutesUntil >= -15 && minutesUntil <= 15
+      }),
+      upcomingArrivals: arrivals.filter(b => {
+        const minutesUntil = differenceInMinutes(new Date(b.booking_time), currentTime)
+        return minutesUntil > 15
+      }),
+      needingTables: bookings.filter(b => 
+        b.status === 'confirmed' && (!b.tables || b.tables.length === 0)
+      ),
+      vipArrivals: arrivals.filter(b => {
+        const customerData = b.user?.id ? customersData[b.user.id] : null
+        return customerData?.vip_status
       })
-      
-      // Check for upcoming reservations within next 2 hours
-      const hasUpcomingReservation = bookings.some(booking => {
-        const bookingTime = new Date(booking.booking_time)
-        const timeDiff = differenceInMinutes(bookingTime, currentTime)
-        return booking.status === 'confirmed' && 
-               timeDiff > 0 && timeDiff <= 120 &&
-               booking.tables?.some((t: any) => t.id === table.id)
-      })
-      
-      return !isOccupied && !hasUpcomingReservation
-    })
-  }
+    }
+  }, [bookings, currentTime, customersData])
 
-  // Get ALL tables (for walk-in selection with visual indicators)
-  const getAllTablesWithStatus = () => {
-    return tables.filter(t => t.is_active).map(table => {
+  // Get available and occupied tables with detailed status
+  const tableStatus = useMemo(() => {
+    return tables.map(table => {
       const occupyingBooking = bookings.find(booking => {
         const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
         return occupiedStatuses.includes(booking.status) && 
                booking.tables?.some((t: any) => t.id === table.id)
       })
       
+      const upcomingBookings = bookings.filter(booking => {
+        const bookingTime = new Date(booking.booking_time)
+        const timeDiff = differenceInMinutes(bookingTime, currentTime)
+        return booking.status === 'confirmed' && 
+               timeDiff > 0 && timeDiff <= 120 &&
+               booking.tables?.some((t: any) => t.id === table.id)
+      }).sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+      
+      const nextAvailable = occupyingBooking 
+        ? addMinutes(currentTime, occupyingBooking.turn_time_minutes || 120)
+        : upcomingBookings.length > 0 
+          ? new Date(upcomingBookings[0].booking_time)
+          : null
+      
       return {
         ...table,
         isOccupied: !!occupyingBooking,
-        occupiedBy: occupyingBooking?.user?.full_name || occupyingBooking?.guest_name || null
+        occupyingBooking,
+        upcomingBookings,
+        nextAvailable,
+        availabilityScore: !occupyingBooking && upcomingBookings.length === 0 ? 100 :
+                          !occupyingBooking && upcomingBookings.length > 0 ? 50 : 0
       }
     })
-  }
+  }, [tables, bookings, currentTime])
 
-  const availableTables = getAvailableTables()
+  const availableTables = tableStatus.filter(t => t.is_active && !t.isOccupied)
 
-  // Find table combinations for large parties
-  const findTableCombinations = (partySize: number) => {
-    const combinations: Array<{
-      tables: any[]
-      totalCapacity: number
-      tableNumbers: number[]
-      efficiency: number
-    }> = []
-
-    // Helper function to generate combinations
-    const generateCombinations = (tables: any[], size: number): any[][] => {
-      if (size === 1) return tables.map(t => [t])
-      if (size > tables.length) return []
-      
-      const result: any[][] = []
-      for (let i = 0; i <= tables.length - size; i++) {
-        const head = tables[i]
-        const tailCombinations = generateCombinations(tables.slice(i + 1), size - 1)
-        tailCombinations.forEach(tail => result.push([head, ...tail]))
-      }
-      return result
-    }
-
-    // Generate combinations of 2, 3, and 4 tables
-    for (let size = 2; size <= Math.min(4, availableTables.length); size++) {
-      const combos = generateCombinations(availableTables, size)
-      
-      combos.forEach(combo => {
-        const totalCapacity = combo.reduce((sum, table) => sum + table.max_capacity, 0)
-        
-        // Only include combinations that can accommodate the party
-        if (totalCapacity >= partySize) {
-          combinations.push({
-            tables: combo,
-            totalCapacity,
-            tableNumbers: combo.map(t => t.table_number).sort((a, b) => a - b),
-            efficiency: totalCapacity / size // Prefer combinations with higher capacity per table
-          })
-        }
-      })
-    }
-
-    // Sort by: 1. Fewer tables first, 2. Higher efficiency
-    return combinations.sort((a, b) => {
-      if (a.tables.length !== b.tables.length) {
-        return a.tables.length - b.tables.length
-      }
-      return b.efficiency - a.efficiency
-    }).slice(0, 6) // Show top 6 combinations
-  }
-
-  // Check if party size requires table combinations
-  const requiresCombination = walkInData.partySize > Math.max(...availableTables.map(t => t.max_capacity), 0)
-  const suggestedCombinations = requiresCombination ? findTableCombinations(walkInData.partySize) : []
-
-  // Check if a booking can be checked in (for button state)
-  const canCheckIn = (booking: any) => {
-    const hasTable = booking.tables && booking.tables.length > 0
+  // Enhanced handlers
+  const handleCustomerSelect = (customer: any) => {
+    setSelectedCustomer(customer)
+    setCustomerSearch(customer.profile?.full_name || customer.guest_name || "")
+    setShowCustomerDropdown(false)
     
-    if (!hasTable) {
-      // No table assigned - can check in if tables are selected
-      return selectedTableIds.length > 0
-    }
-    
-    // Has table - check if all tables are still available
-    return booking.tables.every((table: any) => {
-      const isOccupied = bookings.some(otherBooking => {
-        if (otherBooking.id === booking.id) return false // Exclude current booking
-        const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
-        return occupiedStatuses.includes(otherBooking.status) && 
-               otherBooking.tables?.some((t: any) => t.id === table.id)
-      })
-      return !isOccupied && table.is_active
+    setWalkInData({
+      guestName: customer.profile?.full_name || customer.guest_name || "",
+      guestPhone: customer.profile?.phone_number || customer.guest_phone || "",
+      partySize: walkInData.partySize,
+      estimatedDuration: customer.average_party_size > 4 ? 150 : 120,
+      preferences: customer.preferred_table_types || []
     })
-  }
-
-  const getBookingStatus = (booking: any) => {
-    const bookingTime = new Date(booking.booking_time)
-    const minutesUntil = differenceInMinutes(bookingTime, currentTime)
     
-    if (minutesUntil < -15) {
-      return { 
-        label: "Late", 
-        subLabel: `${Math.abs(minutesUntil)}m late`,
-        color: "text-red-400", 
-        bgColor: "bg-gradient-to-br from-red-900/50 to-red-800/30 border-red-700", 
-        icon: AlertCircle,
-        pulseAnimation: true
-      }
-    } else if (minutesUntil < 0) {
-      return { 
-        label: "Now", 
-        subLabel: "Ready to check-in",
-        color: "text-blue-400", 
-        bgColor: "bg-gradient-to-br from-blue-900/50 to-blue-800/30 border-blue-700", 
-        icon: UserCheck,
-        pulseAnimation: true
-      }
-    } else if (minutesUntil <= 15) {
-      return { 
-        label: `${minutesUntil}m`, 
-        subLabel: "Arriving soon",
-        color: "text-green-400", 
-        bgColor: "bg-gradient-to-br from-green-900/50 to-green-800/30 border-green-700", 
-        icon: Timer,
-        pulseAnimation: false
-      }
-    } else {
-      return { 
-        label: `${minutesUntil}m`, 
-        subLabel: "Upcoming",
-        color: "text-gray-400", 
-        bgColor: "bg-gradient-to-br from-gray-800/50 to-gray-700/30 border-gray-600", 
-        icon: Clock,
-        pulseAnimation: false
-      }
+    // Show VIP toast
+    if (customer.vip_status) {
+      toast.success(
+        <div className="flex items-center gap-2">
+          <Crown className="h-4 w-4 text-yellow-500" />
+          <span>VIP Customer Selected</span>
+        </div>,
+        { duration: 3000 }
+      )
     }
   }
 
   const handleQuickCheckIn = (booking: any) => {
     const hasTable = booking.tables && booking.tables.length > 0
+    
     if (hasTable) {
-      // Don't show success toast here - let the parent handle it after validation
-      onCheckIn(booking.id, booking.tables.map((t: any) => t.id))
+      // Check if tables are still available
+      const tablesAvailable = booking.tables.every((table: any) => {
+        const status = tableStatus.find(t => t.id === table.id)
+        return status && !status.isOccupied
+      })
+      
+      if (tablesAvailable) {
+        onCheckIn(booking.id, booking.tables.map((t: any) => t.id))
+      } else {
+        // Tables occupied - suggest alternatives
+        const suggestions = generateSmartSuggestions(booking)
+        if (suggestions.length > 0) {
+          toast.error(
+            <div>
+              <p className="font-medium">Tables occupied</p>
+              <p className="text-sm mt-1">{suggestions[0].description}</p>
+              <Button 
+                size="sm" 
+                className="mt-2"
+                onClick={suggestions[0].action}
+              >
+                {suggestions[0].title}
+              </Button>
+            </div>,
+            { duration: 5000 }
+          )
+        } else {
+          handleOpenEnhancedTableSwitch(booking)
+        }
+      }
     } else {
       if (selectedTableIds.length === 0) {
         toast.error("Please select a table first")
@@ -354,25 +525,178 @@ export function CheckInQueue({
     }
   }
 
-  const handleOpenTableSwitch = (booking: any) => {
+  const handleOpenEnhancedTableSwitch = (booking: any, suggestedTables?: any[]) => {
+    // If suggested tables provided, calculate options for those specific tables
+    // Otherwise, find all possible options across all available tables
+    let swapOptions: TableSwapOption[] = []
+    
+    if (suggestedTables && suggestedTables.length > 0) {
+      swapOptions = calculateSwapOptions(booking, suggestedTables.map(t => t.id))
+    } else {
+      // Find all possible table combinations that could work
+      const availableTables = tables.filter(t => t.is_active)
+      const suitableTables = availableTables.filter(t => t.max_capacity >= booking.party_size)
+      
+      // Generate options for individual suitable tables
+      suitableTables.forEach(table => {
+        const options = calculateSwapOptions(booking, [table.id])
+        swapOptions.push(...options)
+      })
+      
+      // For larger parties, also consider combinations
+      if (booking.party_size > 4) {
+        suitableTables.forEach(table1 => {
+          suitableTables.forEach(table2 => {
+            if (table1.id !== table2.id && 
+                (table1.max_capacity + table2.max_capacity) >= booking.party_size) {
+              const options = calculateSwapOptions(booking, [table1.id, table2.id])
+              swapOptions.push(...options)
+            }
+          })
+        })
+      }
+      
+      // Remove duplicates and sort by confidence
+      swapOptions = swapOptions
+        .filter((option, index, arr) => 
+          arr.findIndex(o => 
+            o.type === option.type && 
+            JSON.stringify(o.tables.map(t => t.id).sort()) === JSON.stringify(option.tables.map(t => t.id).sort())
+          ) === index
+        )
+        .sort((a, b) => b.confidence - a.confidence)
+        .slice(0, 10) // Limit to top 10 options
+    }
+    
     setTableSwitchModal({
       show: true,
       booking,
       originalTables: booking.tables || [],
-      selectedNewTableIds: []
+      selectedNewTableIds: [],
+      swapOptions,
+      selectedOption: swapOptions[0] || undefined,
+      confirmationStep: false
     })
   }
 
-  const handleTableSwitchConfirm = () => {
-    if (!tableSwitchModal.booking || tableSwitchModal.selectedNewTableIds.length === 0) {
-      toast.error("Please select at least one table")
-      return
-    }
-
-    if (onTableSwitch) {
-      onTableSwitch(tableSwitchModal.booking.id, tableSwitchModal.selectedNewTableIds)
-      setTableSwitchModal({ show: false, originalTables: [], selectedNewTableIds: [] })
-      toast.success("Table switch initiated")
+  const handleTableSwitchConfirm = async () => {
+    const { booking, selectedOption, selectedNewTableIds } = tableSwitchModal
+    
+    if (!booking || !onTableSwitch) return
+    
+    try {
+      if (selectedOption) {
+        if (selectedOption.type === 'swap' && selectedOption.targetBooking) {
+          // TRUE TABLE SWAP: Both bookings exchange tables atomically
+          const currentTableIds = booking.tables?.map((t: any) => t.id) || []
+          const targetTableIds = selectedOption.tables.map(t => t.id)
+          const targetBooking = selectedOption.targetBooking
+          
+          // Perform atomic swap - both bookings get reassigned simultaneously
+          await Promise.all([
+            onTableSwitch(booking.id, targetTableIds),
+            onTableSwitch(targetBooking.id, currentTableIds)
+          ])
+          
+          toast.success(
+            <div>
+              <p className="font-medium">Tables Swapped Successfully</p>
+              <p className="text-sm mt-1">
+                {booking.user?.full_name || booking.guest_name} → Tables {selectedOption.tables.map(t => t.table_number).join(', ')}
+              </p>
+              <p className="text-sm">
+                {targetBooking.user?.full_name || targetBooking.guest_name} → Tables {currentTableIds.map((id: any) => tables.find(t => t.id === id)?.table_number).join(', ')}
+              </p>
+            </div>,
+            { duration: 5000 }
+          )
+        }
+        
+        else if (selectedOption.type === 'empty' && selectedOption.targetBooking) {
+          // BUMP OTHER BOOKING: Move target booking away, then assign tables to current booking
+          const targetBooking = selectedOption.targetBooking
+          const targetTableIds = selectedOption.tables.map(t => t.id)
+          
+          // First, remove table assignment from the booking being bumped
+          await onTableSwitch(targetBooking.id, [])
+          
+          // Then assign the tables to our booking
+          await onTableSwitch(booking.id, targetTableIds)
+          
+          toast.success(
+            <div>
+              <p className="font-medium">Tables Reassigned</p>
+              <p className="text-sm mt-1">
+                {booking.user?.full_name || booking.guest_name} → Tables {selectedOption.tables.map(t => t.table_number).join(', ')}
+              </p>
+              <p className="text-sm text-orange-300">
+                {targetBooking.user?.full_name || targetBooking.guest_name} needs new table assignment
+              </p>
+            </div>,
+            { duration: 5000 }
+          )
+        }
+        
+        else if (selectedOption.type === 'combination') {
+          // COMBINATION ASSIGNMENT: Use predefined table combination
+          const targetTableIds = selectedOption.tables.map(t => t.id)
+          
+          // If there are future bookings at these tables, bump them first
+          if (selectedOption.targetBooking) {
+            await onTableSwitch(selectedOption.targetBooking.id, [])
+          }
+          
+          await onTableSwitch(booking.id, targetTableIds)
+          
+          toast.success(
+            <div>
+              <p className="font-medium">Table Combination Assigned</p>
+              <p className="text-sm mt-1">
+                {booking.user?.full_name || booking.guest_name} → Tables {selectedOption.tables.map(t => t.table_number).join(', ')}
+              </p>
+            </div>
+          )
+        }
+        
+        else {
+          // SIMPLE MOVE: Just assign new tables (tables are empty)
+          await onTableSwitch(booking.id, selectedOption.tables.map(t => t.id))
+          
+          toast.success(
+            <div>
+              <p className="font-medium">Tables Assigned</p>
+              <p className="text-sm mt-1">
+                {booking.user?.full_name || booking.guest_name} → Tables {selectedOption.tables.map(t => t.table_number).join(', ')}
+              </p>
+            </div>
+          )
+        }
+      }
+      
+      else if (selectedNewTableIds.length > 0) {
+        // MANUAL SELECTION: User manually picked tables
+        await onTableSwitch(booking.id, selectedNewTableIds)
+        
+        const tableNumbers = selectedNewTableIds
+          .map(id => tables.find(t => t.id === id)?.table_number)
+          .filter(Boolean)
+          .join(', ')
+        
+        toast.success(`Tables ${tableNumbers} assigned to ${booking.user?.full_name || booking.guest_name}`)
+      }
+      
+      // Close modal
+      setTableSwitchModal({ 
+        show: false, 
+        originalTables: [], 
+        selectedNewTableIds: [],
+        swapOptions: [],
+        confirmationStep: false
+      })
+      
+    } catch (error) {
+      console.error("Table switch error:", error)
+      toast.error("Failed to switch tables. Please try again.")
     }
   }
 
@@ -395,172 +719,183 @@ export function CheckInQueue({
       party_size: walkInData.partySize,
       table_ids: selectedTableIds,
       booking_time: currentTime.toISOString(),
-      turn_time_minutes: 120,
-      status: 'arrived'
+      turn_time_minutes: walkInData.estimatedDuration,
+      status: 'arrived',
+      table_preferences: walkInData.preferences
     }
 
     onQuickSeat(walkInBooking, selectedTableIds)
-    toast.success(`Walk-in guest ${walkInBooking.guest_name} seated`)
+    
+    const tableNumbers = selectedTableIds
+      .map(id => tableStatus.find(t => t.id === id)?.table_number)
+      .filter(Boolean)
+      .join(', ')
+    
+    toast.success(
+      <div>
+        <p className="font-medium">Walk-in Seated</p>
+        <p className="text-sm mt-1">{walkInBooking.guest_name} → Table {tableNumbers}</p>
+      </div>,
+      { duration: 3000 }
+    )
     
     // Reset form
-    setWalkInData({ guestName: "", guestPhone: "", partySize: 2 })
+    setWalkInData({ guestName: "", guestPhone: "", partySize: 2, estimatedDuration: 120, preferences: [] })
     setSelectedTableIds([])
     setSelectedCustomer(null)
     setCustomerSearch("")
   }
 
-  const renderBookingCard = (booking: any) => {
+  const getBookingStatus = (booking: any) => {
+    const bookingTime = new Date(booking.booking_time)
+    const minutesUntil = differenceInMinutes(bookingTime, currentTime)
+    
+    if (minutesUntil < -15) {
+      return { 
+        label: "Late", 
+        subLabel: `${Math.abs(minutesUntil)}m late`,
+        color: "text-red-400", 
+        bgColor: "bg-gradient-to-br from-red-900/50 to-red-800/30 border-red-700", 
+        icon: AlertCircle,
+        pulseAnimation: true,
+        priority: 1
+      }
+    } else if (minutesUntil < 0) {
+      return { 
+        label: "Now", 
+        subLabel: "Ready to check-in",
+        color: "text-blue-400", 
+        bgColor: "bg-gradient-to-br from-blue-900/50 to-blue-800/30 border-blue-700", 
+        icon: UserCheck,
+        pulseAnimation: true,
+        priority: 2
+      }
+    } else if (minutesUntil <= 15) {
+      return { 
+        label: `${minutesUntil}m`, 
+        subLabel: "Arriving soon",
+        color: "text-green-400", 
+        bgColor: "bg-gradient-to-br from-green-900/50 to-green-800/30 border-green-700", 
+        icon: Timer,
+        pulseAnimation: false,
+        priority: 3
+      }
+    } else {
+      return { 
+        label: `${minutesUntil}m`, 
+        subLabel: "Upcoming",
+        color: "text-gray-400", 
+        bgColor: "bg-gradient-to-br from-gray-800/50 to-gray-700/30 border-gray-600", 
+        icon: Clock,
+        pulseAnimation: false,
+        priority: 4
+      }
+    }
+  }
+
+  const renderEnhancedBookingCard = (booking: any) => {
     const status = getBookingStatus(booking)
     const StatusIcon = status.icon
     const hasTable = booking.tables && booking.tables.length > 0
     const customerData = booking.user?.id ? customersData[booking.user.id] : null
+    
+    const canCheckInDirectly = hasTable && booking.tables.every((table: any) => {
+      const tableInfo = tableStatus.find(t => t.id === table.id)
+      return tableInfo && !tableInfo.isOccupied
+    })
 
     return (
       <div
         key={booking.id}
         className={cn(
-          "p-4 rounded-xl border-2 cursor-pointer transition-all shadow-md",
+          "relative p-3 rounded-lg border cursor-pointer transition-colors",
           status.bgColor,
-          "hover:shadow-xl hover:scale-[1.02]",
-          status.pulseAnimation && "animate-pulse"
+          "hover:border-gray-400"
         )}
         onClick={() => onSelectBooking?.(booking)}
       >
-        <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            {/* Status badge */}
-            <div className="flex items-center gap-2 mb-2">
-              <div className={cn("p-1.5 rounded-lg bg-black/20", status.pulseAnimation && "animate-bounce")}>
-                <StatusIcon className={cn("h-4 w-4", status.color)} />
-              </div>
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            {/* Status and guest name */}
+            <div className="flex items-center gap-3 mb-2">
+              <StatusIcon className={cn("h-4 w-4", status.color)} />
               <div>
-                <p className="text-xs font-medium text-gray-400">{status.subLabel}</p>
-                <p className={cn("text-sm font-bold", status.color)}>{status.label}</p>
+                <p className="font-medium text-gray-100">
+                  {booking.user?.full_name || booking.guest_name || 'Guest'}
+                </p>
+                <p className="text-xs text-gray-400">{status.subLabel}</p>
               </div>
-            </div>
-
-            {/* Guest info */}
-            <div className="mb-2">
-              <p className="font-semibold text-lg text-gray-100">
-                {booking.user?.full_name || booking.guest_name || 'Guest'}
-              </p>
-              <div className="flex items-center gap-2 mt-1">
+              
+              {/* Essential badges only */}
+              <div className="flex items-center gap-1 ml-auto">
                 {customerData?.vip_status && (
-                  <Badge className="text-xs px-2 py-0.5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white border-yellow-700">
-                    <Sparkles className="h-3 w-3 mr-1" />
+                  <Badge className="text-xs px-1.5 py-0.5 bg-yellow-600 text-white">
                     VIP
                   </Badge>
                 )}
                 {customerData?.blacklisted && (
-                  <Badge variant="destructive" className="text-xs px-2 py-0.5 animate-pulse">
-                    <Ban className="h-3 w-3 mr-1" />
+                  <Badge variant="destructive" className="text-xs px-1.5 py-0.5">
                     Alert
                   </Badge>
                 )}
               </div>
             </div>
 
-            {/* Booking details */}
-            <div className="grid grid-cols-3 gap-3 text-sm">
-              <div className="flex items-center gap-1.5">
-                <Clock className="h-4 w-4 text-gray-500" />
-                <span className="font-medium text-gray-300">{format(new Date(booking.booking_time), 'h:mm a')}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Users className="h-4 w-4 text-gray-500" />
-                <span className="font-medium text-gray-300">{booking.party_size} guests</span>
-              </div>
-              {hasTable ? (
-                <div className="flex items-center gap-1.5">
-                  <Table2 className="h-4 w-4 text-green-500" />
-                  <span className="font-medium text-green-400">T{booking.tables.map((t: any) => t.table_number).join(", ")}</span>
-                </div>
-              ) : (
-                <Badge variant="destructive" className="text-xs justify-center">
-                  <AlertCircle className="h-3 w-3 mr-1" />
-                  No table
-                </Badge>
+            {/* Essential booking details */}
+            <div className="flex items-center gap-4 text-sm text-gray-300">
+              <span>{format(new Date(booking.booking_time), 'h:mm a')}</span>
+              <span>{booking.party_size} guests</span>
+              {hasTable && (
+                <span className="text-green-400">
+                  T{booking.tables.map((t: any) => t.table_number).join(", ")}
+                </span>
               )}
             </div>
 
-            {/* Special requests or alerts */}
-            {(booking.special_requests || customerData?.blacklisted) && (
-              <div className="mt-3 space-y-2">
-                {booking.special_requests && (
-                  <div className="p-2 bg-black/20 rounded-lg">
-                    <p className="text-xs text-gray-300 flex items-start gap-1.5">
-                      <MessageSquare className="h-3 w-3 mt-0.5 flex-shrink-0 text-gray-500" />
-                      {booking.special_requests}
-                    </p>
-                  </div>
-                )}
-                {customerData?.blacklisted && customerData?.blacklist_reason && (
-                  <div className="p-2 bg-red-900/50 rounded-lg border border-red-700">
-                    <p className="text-xs text-red-400 flex items-start gap-1.5 font-medium">
-                      <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                      {customerData.blacklist_reason}
-                    </p>
-                  </div>
-                )}
+            {/* Special requests - only if critical */}
+            {customerData?.blacklisted && customerData?.blacklist_reason && (
+              <div className="mt-2 p-2 bg-red-900/30 rounded text-xs text-red-400">
+                {customerData.blacklist_reason}
               </div>
             )}
           </div>
 
-          {/* Check-in button or Switch Table option */}
-          <div className="ml-3 flex gap-2">
-            {canCheckIn(booking) ? (
+          {/* Simplified action button */}
+          <div className="ml-4">
+            {canCheckInDirectly ? (
               <Button
                 size="sm"
-                variant={hasTable ? "default" : "outline"}
                 onClick={(e) => {
                   e.stopPropagation()
                   handleQuickCheckIn(booking)
                 }}
-                className={cn(
-                  "shadow-lg transition-all",
-                  hasTable 
-                    ? "bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white" 
-                    : "border-2 border-red-500 text-red-400 hover:bg-red-900/50"
-                )}
+                className="bg-green-600 hover:bg-green-700 text-white"
               >
-                <UserCheck className="h-4 w-4 mr-1.5" />
-               
+                Check-in
               </Button>
             ) : hasTable ? (
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled
-                  className="opacity-50 cursor-not-allowed bg-gray-700 border-gray-600 text-gray-500"
-                  title="Table is occupied"
-                >
-                  <UserCheck className="h-4 w-4 mr-1.5" />
-            
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleOpenTableSwitch(booking)
-                  }}
-                  className="border-2 border-blue-500 text-blue-400 hover:bg-blue-900/50 shadow-lg"
-                >
-                  <Table2 className="h-4 w-4 mr-1.5" />
-                
-                </Button>
-              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleOpenEnhancedTableSwitch(booking)
+                }}
+                className="border-blue-500 text-blue-400 hover:bg-blue-900/30"
+              >
+                Switch
+              </Button>
             ) : (
               <Button
                 size="sm"
                 variant="outline"
-                disabled
-                className="opacity-50 cursor-not-allowed bg-gray-700 border-gray-600 text-gray-500"
-                title="Select a table first"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleOpenEnhancedTableSwitch(booking)
+                }}
+                className="border-amber-500 text-amber-400 hover:bg-amber-900/30"
               >
-                <UserCheck className="h-4 w-4 mr-1.5" />
-                Assign Table
+                Assign
               </Button>
             )}
           </div>
@@ -570,175 +905,100 @@ export function CheckInQueue({
   }
 
   return (
-    <div className="min-h-[600px] h-full flex flex-col bg-gray-900 text-gray-200">
-      <Tabs defaultValue="arrivals" className="flex-1 flex flex-col">
-        <div className="px-4 pt-4">
-          <h3 className="text-lg font-semibold text-gray-100 mb-3">Check-in Management</h3>
-          <TabsList className="grid w-full grid-cols-2 bg-gray-800">
-            <TabsTrigger value="arrivals" className="relative data-[state=active]:bg-gray-950 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-400">
-              <div className="flex items-center gap-2">
-                <UserCheck className="h-4 w-4" />
-                <span>Arrivals</span>
-                {arrivalsQueue.length > 0 && (
-                  <Badge 
-                    variant="secondary" 
-                    className={cn(
-                      "ml-1 h-5 px-1.5 text-xs",
-                      lateArrivals.length > 0 ? "bg-red-800 text-red-100" : "bg-blue-800 text-blue-100"
-                    )}
-                  >
-                    {arrivalsQueue.length}
-                  </Badge>
-                )}
+    <div className="min-h-[600px] h-full flex flex-col bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900 text-gray-200">
+      {/* Simplified Header */}
+      <div className="px-4 py-3 border-b border-gray-800">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-100">Check-in Queue</h3>
+          
+          {/* Essential stats only */}
+          <div className="flex items-center gap-3 text-sm">
+            {categorizedBookings.waitingForSeating.length > 0 && (
+              <div className="flex items-center gap-1 text-orange-400">
+                <span className="font-medium">{categorizedBookings.waitingForSeating.length} waiting</span>
               </div>
-            </TabsTrigger>
-            <TabsTrigger value="walkin" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-400">
-              <div className="flex items-center gap-2">
-                <UserPlus className="h-4 w-4" />
-                <span>Walk-in</span>
+            )}
+            {categorizedBookings.vipArrivals.length > 0 && (
+              <div className="flex items-center gap-1 text-yellow-400">
+                <Crown className="h-3 w-3" />
+                <span className="font-medium">{categorizedBookings.vipArrivals.length}</span>
               </div>
-            </TabsTrigger>
-          </TabsList>
+            )}
+            <div className="flex items-center gap-1 text-gray-400">
+              <Table2 className="h-3 w-3" />
+              <span>{availableTables.length} available</span>
+            </div>
+          </div>
         </div>
+      </div>
+
+      <Tabs defaultValue="arrivals" className="flex-1 flex flex-col">
+        <TabsList className="mx-4 mt-3 grid w-[calc(100%-2rem)] grid-cols-2 bg-gray-800">
+          <TabsTrigger value="arrivals" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white">
+            Arrivals
+            {(categorizedBookings.lateArrivals.length + 
+              categorizedBookings.currentArrivals.length + 
+              categorizedBookings.upcomingArrivals.length) > 0 && (
+              <Badge className="ml-2 px-1.5 py-0.5 text-xs bg-blue-600">
+                {categorizedBookings.lateArrivals.length + 
+                 categorizedBookings.currentArrivals.length + 
+                 categorizedBookings.upcomingArrivals.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="walkin" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white">
+            Walk-in
+          </TabsTrigger>
+        </TabsList>
 
         <TabsContent value="arrivals" className="flex-1 px-4 pb-4 mt-4">
           <ScrollArea className="h-[500px]">
-            <div className="space-y-4 pr-4">
-              {/* Waiting for seating - TOP PRIORITY */}
-              {waitingForSeating.length > 0 && (
-                <div className="bg-gradient-to-r from-orange-900/30 to-red-900/30 border border-orange-600 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1.5 bg-orange-600 rounded-lg animate-pulse">
-                      <UserCheck className="h-5 w-5 text-white" />
-                    </div>
-                    <div>
-                      <h4 className="text-lg font-bold text-orange-400">WAITING FOR SEATING</h4>
-                      <p className="text-xs text-orange-300">Guests have arrived and need to be seated immediately</p>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    {waitingForSeating.map(booking => (
-                      <div key={booking.id} className="bg-orange-800/30 rounded-lg p-3 border border-orange-600">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-semibold text-white text-lg">
-                              {booking.user?.full_name || booking.guest_name}
-                            </p>
-                            <div className="flex items-center gap-3 text-sm text-orange-200">
-                              <span className="flex items-center gap-1">
-                                <Users className="h-4 w-4" />
-                                {booking.party_size} guests
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Clock className="h-4 w-4" />
-                                {format(new Date(booking.booking_time), 'h:mm a')}
-                              </span>
-                              {(booking.user?.phone_number || booking.guest_phone) && (
-                                <span className="flex items-center gap-1 font-mono">
-                                  <Phone className="h-4 w-4" />
-                                  {booking.user?.phone_number || booking.guest_phone}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            {canCheckIn(booking) ? (
-                              <Button
-                                size="sm"
-                                className="bg-orange-600 hover:bg-orange-700 text-white font-medium animate-bounce"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleQuickCheckIn(booking)
-                                }}
-                              >
-                                <UserCheck className="h-4 w-4 mr-1" />
-                                Seat Now
-                              </Button>
-                            ) : (
-                              <>
-                                <Button
-                                  size="sm"
-                                  disabled
-                                  className="bg-gray-700 border-gray-600 text-gray-500 opacity-50 cursor-not-allowed font-medium"
-                                  title="Table is occupied"
-                                >
-                                  <UserCheck className="h-4 w-4 mr-1" />
-                                  Seat Now
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleOpenTableSwitch(booking)
-                                  }}
-                                  className="border-2 border-blue-500 text-blue-400 hover:bg-blue-900/50 font-medium"
-                                >
-                                  <Table2 className="h-4 w-4 mr-1" />
-                                  Switch
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+            <div className="space-y-3 pr-4">
+              {/* Waiting for seating - highest priority */}
+              {categorizedBookings.waitingForSeating.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-orange-400 border-b border-orange-800 pb-1">
+                    Waiting for Seating
+                  </h4>
+                  {categorizedBookings.waitingForSeating.map(renderEnhancedBookingCard)}
                 </div>
               )}
 
-              {/* Late arrivals */}
-              {lateArrivals.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1 bg-red-800/50 rounded">
-                      <AlertCircle className="h-4 w-4 text-red-400" />
-                    </div>
-                    <h4 className="text-sm font-semibold text-red-400">Late Arrivals ({lateArrivals.length})</h4>
-                  </div>
-                  <div className="space-y-3">
-                    {lateArrivals.map(renderBookingCard)}
-                  </div>
+              {/* VIP Arrivals */}
+              {categorizedBookings.vipArrivals.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-yellow-400 border-b border-yellow-800 pb-1">
+                    VIP Guests
+                  </h4>
+                  {categorizedBookings.vipArrivals.map(renderEnhancedBookingCard)}
                 </div>
               )}
 
-              {/* Current window */}
-              {currentArrivals.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1 bg-blue-800/50 rounded">
-                      <UserCheck className="h-4 w-4 text-blue-400" />
-                    </div>
-                    <h4 className="text-sm font-semibold text-blue-400">Check-in Now ({currentArrivals.length})</h4>
-                  </div>
-                  <div className="space-y-3">
-                    {currentArrivals.map(renderBookingCard)}
-                  </div>
+              {/* All other arrivals combined */}
+              {[...categorizedBookings.lateArrivals, ...categorizedBookings.currentArrivals, ...categorizedBookings.upcomingArrivals].length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-gray-400 border-b border-gray-700 pb-1">
+                    Arrivals
+                  </h4>
+                  {[...categorizedBookings.lateArrivals, ...categorizedBookings.currentArrivals, ...categorizedBookings.upcomingArrivals]
+                    .sort((a, b) => {
+                      const aMinutes = differenceInMinutes(new Date(a.booking_time), currentTime)
+                      const bMinutes = differenceInMinutes(new Date(b.booking_time), currentTime)
+                      return aMinutes - bMinutes
+                    })
+                    .map(renderEnhancedBookingCard)
+                  }
                 </div>
               )}
 
-              {/* Upcoming */}
-              {upcomingArrivals.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1 bg-gray-700/50 rounded">
-                      <Clock className="h-4 w-4 text-gray-400" />
-                    </div>
-                    <h4 className="text-sm font-semibold text-gray-400">Arriving Soon ({upcomingArrivals.length})</h4>
-                  </div>
-                  <div className="space-y-3">
-                    {upcomingArrivals.map(renderBookingCard)}
-                  </div>
-                </div>
-              )}
-
-              {arrivalsQueue.length === 0 && (
-                <div className="text-center py-16">
-                  <div className="p-4 bg-gray-800 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
-                    <UserCheck className="h-10 w-10 text-gray-500" />
-                  </div>
-                  <p className="text-sm text-gray-400 font-medium">No arrivals in the next hour</p>
-                  <p className="text-xs text-gray-500 mt-1">Check back later for upcoming reservations</p>
+              {/* Empty state */}
+              {(categorizedBookings.lateArrivals.length + 
+                categorizedBookings.currentArrivals.length + 
+                categorizedBookings.upcomingArrivals.length +
+                categorizedBookings.waitingForSeating.length) === 0 && (
+                <div className="text-center py-12">
+                  <UserCheck className="h-8 w-8 text-gray-500 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">No arrivals in the next hour</p>
                 </div>
               )}
             </div>
@@ -748,489 +1008,192 @@ export function CheckInQueue({
         <TabsContent value="walkin" className="flex-1 px-4 pb-4 mt-4">
           <div className="space-y-4">
             {/* Available tables summary */}
-            <div className="p-3 bg-gradient-to-r from-blue-900/50 to-indigo-900/50 rounded-lg border border-blue-700">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Table2 className="h-5 w-5 text-blue-400" />
-                  <span className="font-medium text-blue-200">{availableTables.length} tables available</span>
-                </div>
-                <span className="text-sm text-blue-300">
-                  Total capacity: {availableTables.reduce((sum, t) => sum + t.max_capacity, 0)} guests
+            <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-300">
+                  {availableTables.length} tables available
+                </span>
+                <span className="text-gray-400">
+                  Capacity: {availableTables.reduce((sum, t) => sum + t.max_capacity, 0)}
                 </span>
               </div>
             </div>
 
-            {/* Walk-in form */}
-            <div className="space-y-4 bg-gray-800/30 p-4 rounded-xl border border-gray-700/50 shadow-sm backdrop-blur-sm">
-              {/* Customer Search */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium text-gray-300">Search Existing Customer (Optional)</Label>
-                {!restaurantId && (
-                  <div className="p-3 bg-red-900/50 rounded-lg border border-red-700">
-                    <p className="text-sm text-red-400">Customer search unavailable - Restaurant ID missing</p>
-                  </div>
-                )}
+            {/* Simplified walk-in form */}
+            <div className="space-y-4 bg-gray-800/30 p-4 rounded-lg border border-gray-700">
+              {/* Customer search */}
+              <div>
+                <Label className="text-sm text-gray-300 mb-2 block">
+                  Search Customer (Optional)
+                </Label>
                 <div className="relative">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-                    <Input
-                      placeholder={restaurantId ? "Search customers by name, email, or phone..." : "Restaurant ID required for search"}
-                      value={customerSearch}
-                      onChange={(e) => {
-                        setCustomerSearch(e.target.value)
-                        setShowCustomerDropdown(true)
-                      }}
-                      onFocus={() => setShowCustomerDropdown(customerSearch.length >= 1)}
-                      onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
-                      disabled={!restaurantId}
-                      className="h-10 pl-10 bg-gray-900 border-gray-700 text-white placeholder:text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                    {selectedCustomer && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 p-0 text-gray-400 hover:text-white"
-                        onClick={handleClearCustomer}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
+                  <Input
+                    placeholder="Search by name or phone..."
+                    value={customerSearch}
+                    onChange={(e) => {
+                      setCustomerSearch(e.target.value)
+                      setShowCustomerDropdown(true)
+                    }}
+                    onFocus={() => setShowCustomerDropdown(customerSearch.length >= 1)}
+                    onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
+                    className="bg-gray-900 border-gray-700 text-white"
+                  />
                   
                   {/* Customer dropdown */}
-                  {showCustomerDropdown && customerSearch.length >= 1 && (
-                    <div className="absolute z-50 w-full mt-1 bg-gray-900 border border-gray-700 rounded-md shadow-lg max-h-48 overflow-y-auto">
-                      {customersLoading && (
-                        <div className="p-3">
-                          <p className="text-sm text-gray-400">Searching customers...</p>
+                  {showCustomerDropdown && customerSearch.length >= 1 && customers && customers.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-gray-900 border border-gray-700 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                      {customers.map((customer) => (
+                        <div
+                          key={customer.id}
+                          className="p-2 hover:bg-gray-800 cursor-pointer text-sm"
+                          onClick={() => handleCustomerSelect(customer)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-white">
+                              {customer.profile?.full_name || customer.guest_name || 'Guest'}
+                            </span>
+                            {customer.vip_status && (
+                              <Badge className="text-xs px-1.5 py-0.5 bg-yellow-600">
+                                VIP
+                              </Badge>
+                            )}
+                          </div>
                         </div>
-                      )}
-                      
-                      {customersError && (
-                        <div className="p-3">
-                          <p className="text-sm text-red-400">Error: {customersError.message}</p>
-                        </div>
-                      )}
-                      
-                      {!customersLoading && !customersError && customers && customers.length > 0 && (
-                        <>
-                          {customers.map((customer) => (
-                            <div
-                              key={customer.id}
-                              className="flex items-center gap-3 p-3 hover:bg-gray-800 cursor-pointer border-b border-gray-700 last:border-b-0"
-                              onClick={() => handleCustomerSelect(customer)}
-                            >
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <p className="font-medium text-white">
-                                    {customer.profile?.full_name || customer.guest_name || 'Guest'}
-                                  </p>
-                                  {customer.vip_status && (
-                                    <Badge className="text-xs px-2 py-0.5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white">
-                                      <Star className="h-3 w-3 mr-1" />
-                                      VIP
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="text-sm text-gray-400">
-                                  {customer.guest_email && <span>{customer.guest_email}</span>}
-                                  {customer.guest_email && (customer.profile?.phone_number || customer.guest_phone) && <span> • </span>}
-                                  {(customer.profile?.phone_number || customer.guest_phone) && (
-                                    <span>{customer.profile?.phone_number || customer.guest_phone}</span>
-                                  )}
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                  {customer.total_bookings} bookings
-                                  {customer.last_visit && (
-                                    <span> • Last: {format(new Date(customer.last_visit), 'MMM d')}</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </>
-                      )}
-                      
-                      {!customersLoading && !customersError && customers && customers.length === 0 && (
-                        <div className="p-3">
-                          <p className="text-sm text-gray-400">No customers found matching "{customerSearch}"</p>
-                        </div>
-                      )}
+                      ))}
                     </div>
                   )}
                 </div>
                 
-                {/* Selected customer display */}
+                {/* Selected customer */}
                 {selectedCustomer && (
-                  <div className="p-3 bg-blue-900/30 rounded-lg border border-blue-700">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <UserCheck className="h-4 w-4 text-blue-400" />
-                        <span className="text-sm font-medium text-blue-300">Selected:</span>
-                        <span className="text-white font-medium">{selectedCustomer.profile?.full_name || selectedCustomer.guest_name}</span>
-                        {selectedCustomer.vip_status && (
-                          <Badge className="text-xs px-2 py-0.5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white">
-                            <Star className="h-3 w-3 mr-1" />
-                            VIP
-                          </Badge>
-                        )}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleClearCustomer}
-                        className="text-gray-400 hover:text-white"
-                      >
-                        Clear
-                      </Button>
-                    </div>
+                  <div className="mt-2 p-2 bg-blue-900/30 rounded text-sm">
+                    <span className="text-blue-300">Selected: </span>
+                    <span className="text-white font-medium">
+                      {selectedCustomer.profile?.full_name || selectedCustomer.guest_name}
+                    </span>
                   </div>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* Basic details */}
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <Label htmlFor="guest-name" className="text-sm font-medium text-gray-300 mb-2 block">
-                    Guest Name {selectedCustomer && <span className="text-blue-400 text-xs">(Auto-filled)</span>}
-                  </Label>
+                  <Label className="text-sm text-gray-300 mb-1 block">Name</Label>
                   <Input
-                    id="guest-name"
                     value={walkInData.guestName}
                     onChange={(e) => setWalkInData(prev => ({ ...prev, guestName: e.target.value }))}
-                    placeholder={selectedCustomer ? "Auto-filled from selected customer" : "Optional"}
+                    placeholder="Optional"
                     disabled={!!selectedCustomer}
-                    className="h-10 bg-gray-900/50 border-gray-600 text-white placeholder:text-gray-400 disabled:opacity-60 focus:border-blue-500 transition-colors"
+                    className="bg-gray-900/50 border-gray-600 text-white"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="guest-phone" className="text-sm font-medium text-gray-300 mb-2 block">
-                    Phone Number {selectedCustomer && <span className="text-blue-400 text-xs">(Auto-filled)</span>}
-                  </Label>
+                  <Label className="text-sm text-gray-300 mb-1 block">Phone</Label>
                   <Input
-                    id="guest-phone"
-                    type="tel"
                     value={walkInData.guestPhone}
                     onChange={(e) => setWalkInData(prev => ({ ...prev, guestPhone: e.target.value }))}
-                    placeholder={selectedCustomer ? "Auto-filled from selected customer" : "Optional"}
+                    placeholder="Optional"
                     disabled={!!selectedCustomer}
-                    className="h-10 bg-gray-900/50 border-gray-600 text-white placeholder:text-gray-400 disabled:opacity-60 focus:border-blue-500 transition-colors"
+                    className="bg-gray-900/50 border-gray-600 text-white"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4">
                 <div>
-                  <Label htmlFor="party-size" className="text-sm font-medium text-gray-300 mb-2 block">Party Size</Label>
+                  <Label className="text-sm text-gray-300 mb-1 block">Party Size</Label>
                   <Input
-                    id="party-size"
                     type="number"
                     min="1"
                     max="20"
                     value={walkInData.partySize}
                     onChange={(e) => setWalkInData(prev => ({ ...prev, partySize: parseInt(e.target.value) || 1 }))}
-                    className="h-10 bg-gray-900/50 border-gray-600 text-white focus:border-blue-500 transition-colors"
+                    className="bg-gray-900/50 border-gray-600 text-white"
                   />
                 </div>
               </div>
 
-              {/* Table Combinations for Large Parties */}
-              {requiresCombination && suggestedCombinations.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-amber-400" />
-                    <Label className="text-sm font-medium text-amber-300">Suggested Table Combinations</Label>
-                    <Badge variant="outline" className="text-xs border-amber-500 text-amber-400">
-                      Large Party
-                    </Badge>
-                  </div>
-                  <div className="p-3 bg-amber-900/20 border border-amber-700/50 rounded-lg">
-                    <p className="text-xs text-amber-300 mb-3">
-                      Party of {walkInData.partySize} requires multiple tables. Here are the best combinations:
-                    </p>
-                    <div className="grid grid-cols-1 gap-2">
-                      {suggestedCombinations.map((combination, index) => {
-                        const isSelected = combination.tables.every(table => 
-                          selectedTableIds.includes(table.id)
-                        ) && selectedTableIds.length === combination.tables.length
-                        
-                        return (
-                          <Button
-                            key={index}
-                            variant={isSelected ? "default" : "outline"}
-                            size="sm"
-                            className={cn(
-                              "h-auto py-3 px-3 justify-start text-left transition-all",
-                              isSelected 
-                                ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-500" 
-                                : "border-amber-600/50 text-amber-200 hover:bg-amber-900/30 hover:border-amber-500"
-                            )}
-                            onClick={() => {
-                              if (isSelected) {
-                                // Deselect combination
-                                setSelectedTableIds([])
-                              } else {
-                                // Select entire combination
-                                setSelectedTableIds(combination.tables.map(t => t.id))
-                              }
-                            }}
-                          >
-                            <div className="flex items-center justify-between w-full">
-                              <div className="flex items-center gap-2">
-                                <div className="flex gap-1">
-                                  {combination.tables.map(table => {
-                                    const tableTypeColor = TABLE_TYPE_COLORS[table.table_type] || "bg-gray-700 text-gray-200"
-                                    return (
-                                      <div 
-                                        key={table.id}
-                                        className={cn("w-5 h-5 rounded flex items-center justify-center text-xs font-bold", tableTypeColor)}
-                                      >
-                                        {table.table_number}
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                                <span className="text-sm font-medium">
-                                  Tables {combination.tableNumbers.join(", ")}
-                                </span>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-xs opacity-90">
-                                  {combination.totalCapacity} seats total
-                                </p>
-                                <p className="text-xs opacity-75">
-                                  {combination.tables.length} tables
-                                </p>
-                              </div>
-                            </div>
-                          </Button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* No combinations available for large party */}
-              {requiresCombination && suggestedCombinations.length === 0 && (
-                <div className="p-3 bg-red-900/20 border border-red-700/50 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertCircle className="h-4 w-4 text-red-400" />
-                    <p className="text-sm font-medium text-red-300">No Available Table Combinations</p>
-                  </div>
-                  <p className="text-xs text-red-400">
-                    Unable to accommodate party of {walkInData.partySize} guests. No combination of available tables provides sufficient capacity.
-                  </p>
-                  <p className="text-xs text-red-300 mt-1">
-                    Consider reducing party size or waiting for larger tables to become available.
-                  </p>
-                </div>
-              )}
-
-              {/* Single large table notification */}
-              {walkInData.partySize > 8 && !requiresCombination && (
-                <div className="p-3 bg-green-900/20 border border-green-700/50 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <UserCheck className="h-4 w-4 text-green-400" />
-                    <p className="text-sm text-green-300">
-                      Great! We have tables that can accommodate your party of {walkInData.partySize}.
-                    </p>
-                  </div>
-                </div>
-              )}
-
               {/* Table selection */}
               <div>
-                <Label className="text-sm font-medium text-gray-300 mb-3 block">
-                  {requiresCombination ? "Individual Table Selection (or use combinations above)" : "Select Table(s)"}
+                <Label className="text-sm text-gray-300 mb-2 block">
+                  Select Table
                 </Label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-                  {getAllTablesWithStatus().map(table => {
-                    const isSelected = selectedTableIds.includes(table.id)
-                    const fitsParty = table.max_capacity >= walkInData.partySize && !table.isOccupied
-                    const tooSmall = table.max_capacity < walkInData.partySize
-                    const tooLarge = table.min_capacity > walkInData.partySize * 1.5
-                    const tableTypeColor = TABLE_TYPE_COLORS[table.table_type] || "bg-gray-700 text-gray-200"
-                    
-                    // Check if table is part of any suggested combination
-                    const partOfCombination = suggestedCombinations.some(combo => 
-                      combo.tables.some(t => t.id === table.id)
-                    )
-                    
-                    // Check for upcoming reservations
-                    const upcomingReservation = bookings.find(booking => {
-                      const bookingTime = new Date(booking.booking_time)
-                      const timeDiff = differenceInMinutes(bookingTime, currentTime)
-                      return booking.status === 'confirmed' && 
-                             timeDiff > 0 && timeDiff <= 120 &&
-                             booking.tables?.some((t: any) => t.id === table.id)
-                    })
-
-                    return (
-                      <Button
-                        key={table.id}
-                        size="sm"
-                        variant={isSelected ? "default" : "outline"}
-                        className={cn(
-                          "h-auto py-2 px-2 transition-all border relative group",
-                          isSelected 
-                            ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md border-blue-500" 
-                            : cn(
-                                "bg-gray-800/50 border-gray-600 text-gray-300",
-                                !table.isOccupied && fitsParty && !tooLarge ? "hover:bg-gray-700/50 hover:border-blue-400 hover:shadow-sm" : "",
-                                table.isOccupied && "opacity-40 cursor-not-allowed border-red-500/50 bg-red-900/10",
-                                tooSmall && !table.isOccupied && "opacity-50 cursor-not-allowed border-red-500/50 bg-red-900/10",
-                                tooLarge && !tooSmall && !table.isOccupied && "border-amber-500/50 bg-amber-900/10",
-                                upcomingReservation && !table.isOccupied && "border-orange-500/50 bg-orange-900/10",
-                                partOfCombination && !isSelected && !table.isOccupied && "border-amber-400/70 bg-amber-900/20"
-                              )
-                        )}
-                        disabled={tooSmall || table.isOccupied}
-                        onClick={() => {
-                          if (tooSmall || table.isOccupied) return
-                          setSelectedTableIds(prev => 
-                            prev.includes(table.id)
-                              ? prev.filter(id => id !== table.id)
-                              : [...prev, table.id]
-                          )
-                        }}
-                      >
-                        <div className="text-center w-full">
-                          <div className={cn("w-6 h-6 rounded mb-1 mx-auto flex items-center justify-center text-xs relative", tableTypeColor)}>
-                            <span className="font-bold">{table.table_number}</span>
-                            {partOfCombination && !isSelected && !table.isOccupied && (
-                              <div className="absolute -top-1 -right-1 w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div>
-                            )}
+                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
+                  {tableStatus
+                    .filter(table => table.is_active && !table.isOccupied)
+                    .map(table => {
+                      const isSelected = selectedTableIds.includes(table.id)
+                      const fitsParty = table.max_capacity >= walkInData.partySize
+                      
+                      return (
+                        <Button
+                          key={table.id}
+                          size="sm"
+                          variant={isSelected ? "default" : "outline"}
+                          className={cn(
+                            "h-12 transition-colors",
+                            isSelected 
+                              ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                              : cn(
+                                  "bg-gray-800/50 border-gray-600 text-gray-300 hover:bg-gray-700/50",
+                                  !fitsParty && "opacity-50"
+                                )
+                          )}
+                          onClick={() => {
+                            setSelectedTableIds(prev => 
+                              prev.includes(table.id)
+                                ? prev.filter(id => id !== table.id)
+                                : [...prev, table.id]
+                            )
+                          }}
+                        >
+                          <div className="text-center">
+                            <div className="font-bold">{table.table_number}</div>
+                            <div className="text-xs opacity-75">
+                              {table.max_capacity}
+                            </div>
                           </div>
-                          <p className="text-xs opacity-90 leading-tight">
-                            {table.min_capacity}-{table.max_capacity}
-                          </p>
-                          
-                          {/* Status indicators */}
-                          {table.isOccupied && (
-                            <div className="mt-1">
-                              <span className="inline-block px-1 py-0.5 bg-red-500/20 text-red-400 rounded text-xs">
-                                Occupied
-                              </span>
-                              {table.occupiedBy && (
-                                <p className="text-xs text-red-300 mt-0.5 truncate">
-                                  {table.occupiedBy}
-                                </p>
-                              )}
-                            </div>
-                          )}
-                          {!table.isOccupied && tooSmall && (
-                            <div className="mt-1">
-                              <span className="inline-block px-1 py-0.5 bg-red-500/20 text-red-400 rounded text-xs">
-                                Too small
-                              </span>
-                            </div>
-                          )}
-                          {!table.isOccupied && tooLarge && !tooSmall && (
-                            <div className="mt-1">
-                              <span className="inline-block px-1 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs">
-                                Large
-                              </span>
-                            </div>
-                          )}
-                          {!table.isOccupied && upcomingReservation && (
-                            <div className="mt-1">
-                              <span className="inline-block px-1 py-0.5 bg-orange-500/20 text-orange-400 rounded text-xs">
-                                {format(new Date(upcomingReservation.booking_time), 'h:mm')}
-                              </span>
-                            </div>
-                          )}
-                          {partOfCombination && !isSelected && !table.isOccupied && !tooSmall && (
-                            <div className="mt-1">
-                              <span className="inline-block px-1 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs">
-                                Combo
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </Button>
-                    )
-                  })}
-                </div>
-                
-                {/* Compact Legend */}
-                <div className="flex items-center justify-center gap-4 mt-3 text-xs text-gray-400">
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-red-500 rounded-full opacity-60"></div>
-                    <span>Occupied</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-amber-500 rounded-full opacity-60"></div>
-                    <span>Large</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-orange-500 rounded-full opacity-60"></div>
-                    <span>Reserved</span>
-                  </div>
-                  {requiresCombination && (
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div>
-                      <span>Combo</span>
-                    </div>
-                  )}
+                        </Button>
+                      )
+                    })}
                 </div>
               </div>
 
               {/* Seat button */}
               <Button
-                className={cn(
-                  "w-full h-12 text-base font-medium shadow-lg transition-all",
-                  selectedTableIds.length > 0
-                    ? "bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white"
-                    : "bg-gray-700 text-gray-500 cursor-not-allowed"
-                )}
+                className="w-full h-11 font-medium bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-500"
                 onClick={handleWalkIn}
                 disabled={selectedTableIds.length === 0}
               >
-                <UserPlus className="h-5 w-5 mr-2" />
-                {selectedTableIds.length > 0 ? (
-                  <>
-                    {selectedTableIds.length > 1 ? (
-                      `Seat Walk-in at ${selectedTableIds.length} Tables (${selectedTableIds.map(id => {
-                        const table = getAllTablesWithStatus().find(t => t.id === id)
-                        return table ? table.table_number : ''
-                      }).join(', ')}) - ${selectedTableIds.reduce((total, id) => {
-                        const table = getAllTablesWithStatus().find(t => t.id === id)
-                        return total + (table ? table.max_capacity : 0)
-                      }, 0)} seats`
-                    ) : (
-                      `Seat Walk-in Guest at Table ${selectedTableIds.map(id => {
-                        const table = getAllTablesWithStatus().find(t => t.id === id)
-                        return table ? table.table_number : ''
-                      }).join(', ')}`
-                    )}
-                  </>
-                ) : (
-                  requiresCombination && suggestedCombinations.length === 0 
-                    ? 'No Available Combinations for Large Party'
-                    : 'Select a Table to Continue'
-                )}
+                {selectedTableIds.length > 0 
+                  ? `Seat at Table ${selectedTableIds.map(id => 
+                      tableStatus.find(t => t.id === id)?.table_number
+                    ).join(', ')}`
+                  : 'Select a Table'
+                }
               </Button>
             </div>
           </div>
         </TabsContent>
       </Tabs>
 
-      {/* Table Switch Modal */}
+      {/* Enhanced Table Switch Modal */}
       <Dialog open={tableSwitchModal.show} onOpenChange={(open) => 
-        !open && setTableSwitchModal({ show: false, originalTables: [], selectedNewTableIds: [] })
+        !open && setTableSwitchModal({ 
+          show: false, 
+          originalTables: [], 
+          selectedNewTableIds: [],
+          swapOptions: [],
+          confirmationStep: false
+        })
       }>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-blue-600">
-              <Table2 className="h-5 w-5" />
-              Switch Table Assignment
+              <ArrowLeftRight className="h-5 w-5" />
+              Smart Table Management
             </DialogTitle>
             <DialogDescription>
               {tableSwitchModal.booking && (
                 <>
-                  Select new table(s) for <span className="font-semibold">
+                  Managing tables for <span className="font-semibold">
                     {tableSwitchModal.booking.user?.full_name || tableSwitchModal.booking.guest_name}
                   </span> (Party of {tableSwitchModal.booking.party_size})
                 </>
@@ -1238,143 +1201,198 @@ export function CheckInQueue({
             </DialogDescription>
           </DialogHeader>
 
-          {tableSwitchModal.booking && (
+          {tableSwitchModal.booking && !tableSwitchModal.confirmationStep && (
             <div className="space-y-4 py-4">
-              {/* Current table assignment */}
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                <h4 className="font-medium text-red-800 mb-2">Current Assignment (Occupied):</h4>
-                <div className="flex gap-2">
-                  {tableSwitchModal.originalTables.map(table => (
-                    <Badge key={table.id} variant="destructive" className="text-xs">
-                      T{table.table_number}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-
-              {/* Available tables selection - Only shows tables that are:
-                   1. Active
-                   2. Not currently occupied by other bookings
-                   3. Don't have confirmed reservations in the next 2 hours
-                   4. Exclude current booking's tables (can switch back to same tables)
-              */}
-              <div>
-                <Label className="text-sm font-medium text-gray-700 mb-3 block">
-                  Select New Table(s) - Only Available Tables Shown
-                </Label>
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 max-h-60 overflow-y-auto">
-                  {tables.filter(table => {
-                    // Only show active tables
-                    if (!table.is_active) return false
-                    
-                    // Check if table is currently occupied
-                    const isCurrentlyOccupied = bookings.some(booking => {
-                      const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
-                      return occupiedStatuses.includes(booking.status) && 
-                             booking.tables?.some((t: any) => t.id === table.id) &&
-                             booking.id !== tableSwitchModal.booking.id // Exclude the current booking being switched
-                    })
-                    
-                    // Check for upcoming reservations within next 2 hours
-                    const hasUpcomingReservation = bookings.some(booking => {
-                      if (booking.id === tableSwitchModal.booking.id) return false // Allow switching to tables from same booking
-                      const bookingTime = new Date(booking.booking_time)
-                      const timeDiff = differenceInMinutes(bookingTime, currentTime)
-                      return booking.status === 'confirmed' && 
-                             timeDiff > 0 && timeDiff <= 120 &&
-                             booking.tables?.some((t: any) => t.id === table.id)
-                    })
-                    
-                    // Table must not be occupied and must not have upcoming reservations
-                    return !isCurrentlyOccupied && !hasUpcomingReservation
-                  }).map(table => {
-                    const isSelected = tableSwitchModal.selectedNewTableIds.includes(table.id)
-                    const fitsParty = table.max_capacity >= tableSwitchModal.booking.party_size
-                    const tooSmall = table.max_capacity < tableSwitchModal.booking.party_size
-                    const tableTypeColor = TABLE_TYPE_COLORS[table.table_type] || "bg-gray-100"
-
-                    return (
-                      <Button
-                        key={table.id}
-                        size="sm"
-                        variant={isSelected ? "default" : "outline"}
-                        disabled={tooSmall}
-                        className={cn(
-                          "h-auto py-3 px-2 transition-all",
-                          isSelected 
-                            ? "bg-blue-600 hover:bg-blue-700 text-white border-blue-500" 
-                            : cn(
-                                "hover:border-blue-400",
-                                tooSmall && "opacity-50 cursor-not-allowed border-red-300 bg-red-50"
-                              )
-                        )}
-                        onClick={() => {
-                          if (tooSmall) return
-                          setTableSwitchModal(prev => ({
-                            ...prev,
-                            selectedNewTableIds: prev.selectedNewTableIds.includes(table.id)
-                              ? prev.selectedNewTableIds.filter(id => id !== table.id)
-                              : [...prev.selectedNewTableIds, table.id]
-                          }))
-                        }}
-                      >
-                        <div className="text-center">
-                          <div className={cn("w-6 h-6 rounded mb-1 mx-auto flex items-center justify-center text-xs font-bold", tableTypeColor)}>
-                            {table.table_number}
-                          </div>
-                          <p className="text-xs">
-                            {table.min_capacity}-{table.max_capacity}
-                          </p>
-                          {tooSmall && (
-                            <p className="text-xs text-red-500 mt-1">Too small</p>
-                          )}
-                        </div>
-                      </Button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Selected tables summary */}
-              {tableSwitchModal.selectedNewTableIds.length > 0 && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <h4 className="font-medium text-blue-800 mb-2">New Assignment:</h4>
+              {/* Current assignment */}
+              {tableSwitchModal.originalTables.length > 0 && (
+                <div className="p-3 bg-gray-100 border border-gray-300 rounded-lg">
+                  <h4 className="font-medium text-gray-700 mb-2">Current Tables:</h4>
                   <div className="flex gap-2">
-                    {tableSwitchModal.selectedNewTableIds.map(tableId => {
-                      const table = tables.find(t => t.id === tableId)
-                      return table ? (
-                        <Badge key={tableId} className="bg-blue-600 text-white text-xs">
-                          T{table.table_number}
-                        </Badge>
-                      ) : null
-                    })}
+                    {tableSwitchModal.originalTables.map(table => (
+                      <Badge key={table.id} variant="secondary">
+                        Table {table.table_number}
+                      </Badge>
+                    ))}
                   </div>
-                  <p className="text-sm text-blue-700 mt-2">
-                    Total capacity: {tableSwitchModal.selectedNewTableIds
-                      .map(id => tables.find(t => t.id === id)?.max_capacity || 0)
-                      .reduce((sum, cap) => sum + cap, 0)} seats
-                  </p>
                 </div>
               )}
+
+              {/* Smart swap options */}
+              {tableSwitchModal.swapOptions.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-medium text-gray-700">Recommended Options:</h4>
+                  {tableSwitchModal.swapOptions.map((option, index) => (
+                    <div
+                      key={index}
+                      className={cn(
+                        "p-4 rounded-lg border-2 cursor-pointer transition-all",
+                        tableSwitchModal.selectedOption === option
+                          ? "border-blue-500 bg-blue-50"
+                          : "border-gray-300 hover:border-gray-400"
+                      )}
+                      onClick={() => setTableSwitchModal(prev => ({ 
+                        ...prev, 
+                        selectedOption: option 
+                      }))}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            {option.type === 'empty' && <Unlock className="h-4 w-4 text-green-600" />}
+                            {option.type === 'swap' && <ArrowLeftRight className="h-4 w-4 text-blue-600" />}
+                            {option.type === 'combination' && <GitMerge className="h-4 w-4 text-purple-600" />}
+                            <span className="font-medium">
+                              {option.type === 'empty' && (option.targetBooking ? 'Reassign Tables' : 'Direct Assignment')}
+                              {option.type === 'swap' && 'True Table Swap'}
+                              {option.type === 'combination' && 'Table Combination'}
+                            </span>
+                            {option.isPredefined && (
+                              <Badge className="text-xs bg-purple-600 text-white">
+                                Approved
+                              </Badge>
+                            )}
+                          </div>
+                          
+                          <div className="text-sm text-gray-600 mb-2">
+                            Tables: {option.tables.map(t => t.table_number).join(', ')}
+                          </div>
+                          
+                          {option.benefits.length > 0 && (
+                            <div className="space-y-1 mb-2">
+                              {option.benefits.map((benefit, i) => (
+                                <div key={i} className="flex items-start gap-1.5 text-xs text-green-700">
+                                  <CheckCircle className="h-3 w-3 mt-0.5" />
+                                  <span>{benefit}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          
+                          {option.warnings.length > 0 && (
+                            <div className="space-y-1">
+                              {option.warnings.map((warning, i) => (
+                                <div key={i} className="flex items-start gap-1.5 text-xs text-amber-700">
+                                  <AlertTriangle className="h-3 w-3 mt-0.5" />
+                                  <span>{warning}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="ml-4">
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-gray-700">
+                              {option.confidence}%
+                            </div>
+                            <div className="text-xs text-gray-500">Confidence</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Manual table selection */}
+              <div>
+                <h4 className="font-medium text-gray-700 mb-3">Or Select Manually:</h4>
+                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
+                  {tableStatus
+                    .filter(t => t.is_active && !t.isOccupied)
+                    .map(table => {
+                      const isSelected = tableSwitchModal.selectedNewTableIds.includes(table.id)
+                      return (
+                        <Button
+                          key={table.id}
+                          size="sm"
+                          variant={isSelected ? "default" : "outline"}
+                          className="h-auto py-2"
+                          onClick={() => {
+                            setTableSwitchModal(prev => ({
+                              ...prev,
+                              selectedNewTableIds: isSelected
+                                ? prev.selectedNewTableIds.filter(id => id !== table.id)
+                                : [...prev.selectedNewTableIds, table.id],
+                              selectedOption: undefined
+                            }))
+                          }}
+                        >
+                          <div className="text-center">
+                            <div className="font-bold">T{table.table_number}</div>
+                            <div className="text-xs">{table.max_capacity}</div>
+                          </div>
+                        </Button>
+                      )
+                    })}
+                </div>
+              </div>
             </div>
           )}
 
-          <div className="flex gap-3 pt-4">
+          {/* Confirmation step */}
+          {tableSwitchModal.confirmationStep && tableSwitchModal.selectedOption && (
+            <div className="py-4">
+              <Alert className="mb-4">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  {tableSwitchModal.selectedOption.type === 'swap' 
+                    ? 'This will swap tables between two active bookings. Both parties will be notified.'
+                    : 'Please confirm the table assignment.'}
+                </AlertDescription>
+              </Alert>
+              
+              <div className="space-y-3">
+                <div className="p-3 bg-gray-100 rounded-lg">
+                  <p className="text-sm font-medium text-gray-700">Action Summary:</p>
+                  <div className="mt-2 space-y-1 text-sm text-gray-600">
+                    {tableSwitchModal.selectedOption.benefits.map((benefit, i) => (
+                      <div key={i}>• {benefit}</div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setTableSwitchModal({ show: false, originalTables: [], selectedNewTableIds: [] })}
-              className="flex-1"
+              onClick={() => setTableSwitchModal({ 
+                show: false, 
+                originalTables: [], 
+                selectedNewTableIds: [],
+                swapOptions: [],
+                confirmationStep: false
+              })}
             >
               Cancel
             </Button>
-            <Button
-              onClick={handleTableSwitchConfirm}
-              disabled={tableSwitchModal.selectedNewTableIds.length === 0}
-              className="flex-1 bg-blue-600 hover:bg-blue-700"
-            >
-              Switch Tables
-            </Button>
-          </div>
+            
+            {!tableSwitchModal.confirmationStep ? (
+              <Button
+                onClick={() => {
+                  if (tableSwitchModal.selectedOption) {
+                    setTableSwitchModal(prev => ({ ...prev, confirmationStep: true }))
+                  } else if (tableSwitchModal.selectedNewTableIds.length > 0) {
+                    handleTableSwitchConfirm()
+                  }
+                }}
+                disabled={!tableSwitchModal.selectedOption && tableSwitchModal.selectedNewTableIds.length === 0}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {tableSwitchModal.selectedOption ? 'Review' : 'Assign Tables'}
+              </Button>
+            ) : (
+              <Button
+                onClick={handleTableSwitchConfirm}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Confirm Changes
+              </Button>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -615,56 +615,7 @@ export function UnifiedFloorPlan({
         >
           {tables.filter(t => t.is_active).map(renderTable)}
           
-          {/* Unassigned bookings floating panel */}
-          <div className="absolute top-4 right-4 bg-card/95 backdrop-blur-sm rounded-xl p-4 border-2 border-red-200 dark:border-red-800 shadow-2xl max-w-xs">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-sm text-red-800 dark:text-red-300">Needs Table Assignment</h3>
-              <Badge variant="destructive" className="text-xs">
-                {bookings.filter(b => b.status === 'confirmed' && (!b.tables || b.tables.length === 0)).length}
-              </Badge>
-            </div>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {bookings
-                .filter(b => b.status === 'confirmed' && (!b.tables || b.tables.length === 0))
-                .map(booking => {
-                  const bookingTime = new Date(booking.booking_time)
-                  const minutesUntil = differenceInMinutes(bookingTime, currentTime)
-                  const isUrgent = minutesUntil < 30
-                  
-                  return (
-                    <div 
-                      key={booking.id}
-                      className={cn(
-                        "text-xs p-3 rounded-lg border-2 cursor-pointer transition-all hover:scale-[1.02]",
-                        isUrgent 
-                          ? "bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 hover:bg-red-100 dark:hover:bg-red-900/30 shadow-md" 
-                          : "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-700 hover:bg-orange-100 dark:hover:bg-orange-900/30"
-                      )}
-                      onClick={() => onTableClick && onTableClick(null, { current: booking })}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <p className="font-semibold text-foreground">{booking.user?.full_name || booking.guest_name}</p>
-                          <p className="text-muted-foreground mt-1">
-                            {format(bookingTime, 'h:mm a')} • {booking.party_size} guests
-                          </p>
-                          {isUrgent && (
-                            <p className="text-red-600 dark:text-red-400 font-medium mt-1 flex items-center gap-1">
-                              <AlertCircle className="h-3 w-3" />
-                              {minutesUntil > 0 ? `${minutesUntil}m until arrival` : 'Past arrival time'}
-                            </p>
-                          )}
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </div>
-                  )
-                })}
-              {bookings.filter(b => b.status === 'confirmed' && (!b.tables || b.tables.length === 0)).length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-4">All bookings assigned ✓</p>
-              )}
-            </div>
-          </div>
+        
         </div>
       </div>
     </Card>
