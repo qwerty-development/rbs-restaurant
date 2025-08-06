@@ -176,15 +176,28 @@ export function CheckInQueue({
     return minutesUntil > 15
   })
 
-  // Get available tables (only truly available ones)
+  // Get available tables (only truly available ones - not occupied and no upcoming reservations)
   const getAvailableTables = () => {
     return tables.filter(table => {
+      if (!table.is_active) return false
+      
+      // Check if table is currently occupied
       const isOccupied = bookings.some(booking => {
         const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
         return occupiedStatuses.includes(booking.status) && 
                booking.tables?.some((t: any) => t.id === table.id)
       })
-      return !isOccupied && table.is_active
+      
+      // Check for upcoming reservations within next 2 hours
+      const hasUpcomingReservation = bookings.some(booking => {
+        const bookingTime = new Date(booking.booking_time)
+        const timeDiff = differenceInMinutes(bookingTime, currentTime)
+        return booking.status === 'confirmed' && 
+               timeDiff > 0 && timeDiff <= 120 &&
+               booking.tables?.some((t: any) => t.id === table.id)
+      })
+      
+      return !isOccupied && !hasUpcomingReservation
     })
   }
 
@@ -206,6 +219,61 @@ export function CheckInQueue({
   }
 
   const availableTables = getAvailableTables()
+
+  // Find table combinations for large parties
+  const findTableCombinations = (partySize: number) => {
+    const combinations: Array<{
+      tables: any[]
+      totalCapacity: number
+      tableNumbers: number[]
+      efficiency: number
+    }> = []
+
+    // Helper function to generate combinations
+    const generateCombinations = (tables: any[], size: number): any[][] => {
+      if (size === 1) return tables.map(t => [t])
+      if (size > tables.length) return []
+      
+      const result: any[][] = []
+      for (let i = 0; i <= tables.length - size; i++) {
+        const head = tables[i]
+        const tailCombinations = generateCombinations(tables.slice(i + 1), size - 1)
+        tailCombinations.forEach(tail => result.push([head, ...tail]))
+      }
+      return result
+    }
+
+    // Generate combinations of 2, 3, and 4 tables
+    for (let size = 2; size <= Math.min(4, availableTables.length); size++) {
+      const combos = generateCombinations(availableTables, size)
+      
+      combos.forEach(combo => {
+        const totalCapacity = combo.reduce((sum, table) => sum + table.max_capacity, 0)
+        
+        // Only include combinations that can accommodate the party
+        if (totalCapacity >= partySize) {
+          combinations.push({
+            tables: combo,
+            totalCapacity,
+            tableNumbers: combo.map(t => t.table_number).sort((a, b) => a - b),
+            efficiency: totalCapacity / size // Prefer combinations with higher capacity per table
+          })
+        }
+      })
+    }
+
+    // Sort by: 1. Fewer tables first, 2. Higher efficiency
+    return combinations.sort((a, b) => {
+      if (a.tables.length !== b.tables.length) {
+        return a.tables.length - b.tables.length
+      }
+      return b.efficiency - a.efficiency
+    }).slice(0, 6) // Show top 6 combinations
+  }
+
+  // Check if party size requires table combinations
+  const requiresCombination = walkInData.partySize > Math.max(...availableTables.map(t => t.max_capacity), 0)
+  const suggestedCombinations = requiresCombination ? findTableCombinations(walkInData.partySize) : []
 
   // Check if a booking can be checked in (for button state)
   const canCheckIn = (booking: any) => {
@@ -837,6 +905,23 @@ export function CheckInQueue({
                   />
                 </div>
                 <div>
+                  <Label htmlFor="guest-phone" className="text-sm font-medium text-gray-300 mb-2 block">
+                    Phone Number {selectedCustomer && <span className="text-blue-400 text-xs">(Auto-filled)</span>}
+                  </Label>
+                  <Input
+                    id="guest-phone"
+                    type="tel"
+                    value={walkInData.guestPhone}
+                    onChange={(e) => setWalkInData(prev => ({ ...prev, guestPhone: e.target.value }))}
+                    placeholder={selectedCustomer ? "Auto-filled from selected customer" : "Optional"}
+                    disabled={!!selectedCustomer}
+                    className="h-10 bg-gray-900/50 border-gray-600 text-white placeholder:text-gray-400 disabled:opacity-60 focus:border-blue-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <div>
                   <Label htmlFor="party-size" className="text-sm font-medium text-gray-300 mb-2 block">Party Size</Label>
                   <Input
                     id="party-size"
@@ -850,11 +935,116 @@ export function CheckInQueue({
                 </div>
               </div>
 
-            
+              {/* Table Combinations for Large Parties */}
+              {requiresCombination && suggestedCombinations.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-amber-400" />
+                    <Label className="text-sm font-medium text-amber-300">Suggested Table Combinations</Label>
+                    <Badge variant="outline" className="text-xs border-amber-500 text-amber-400">
+                      Large Party
+                    </Badge>
+                  </div>
+                  <div className="p-3 bg-amber-900/20 border border-amber-700/50 rounded-lg">
+                    <p className="text-xs text-amber-300 mb-3">
+                      Party of {walkInData.partySize} requires multiple tables. Here are the best combinations:
+                    </p>
+                    <div className="grid grid-cols-1 gap-2">
+                      {suggestedCombinations.map((combination, index) => {
+                        const isSelected = combination.tables.every(table => 
+                          selectedTableIds.includes(table.id)
+                        ) && selectedTableIds.length === combination.tables.length
+                        
+                        return (
+                          <Button
+                            key={index}
+                            variant={isSelected ? "default" : "outline"}
+                            size="sm"
+                            className={cn(
+                              "h-auto py-3 px-3 justify-start text-left transition-all",
+                              isSelected 
+                                ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-500" 
+                                : "border-amber-600/50 text-amber-200 hover:bg-amber-900/30 hover:border-amber-500"
+                            )}
+                            onClick={() => {
+                              if (isSelected) {
+                                // Deselect combination
+                                setSelectedTableIds([])
+                              } else {
+                                // Select entire combination
+                                setSelectedTableIds(combination.tables.map(t => t.id))
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-between w-full">
+                              <div className="flex items-center gap-2">
+                                <div className="flex gap-1">
+                                  {combination.tables.map(table => {
+                                    const tableTypeColor = TABLE_TYPE_COLORS[table.table_type] || "bg-gray-700 text-gray-200"
+                                    return (
+                                      <div 
+                                        key={table.id}
+                                        className={cn("w-5 h-5 rounded flex items-center justify-center text-xs font-bold", tableTypeColor)}
+                                      >
+                                        {table.table_number}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                                <span className="text-sm font-medium">
+                                  Tables {combination.tableNumbers.join(", ")}
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs opacity-90">
+                                  {combination.totalCapacity} seats total
+                                </p>
+                                <p className="text-xs opacity-75">
+                                  {combination.tables.length} tables
+                                </p>
+                              </div>
+                            </div>
+                          </Button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* No combinations available for large party */}
+              {requiresCombination && suggestedCombinations.length === 0 && (
+                <div className="p-3 bg-red-900/20 border border-red-700/50 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="h-4 w-4 text-red-400" />
+                    <p className="text-sm font-medium text-red-300">No Available Table Combinations</p>
+                  </div>
+                  <p className="text-xs text-red-400">
+                    Unable to accommodate party of {walkInData.partySize} guests. No combination of available tables provides sufficient capacity.
+                  </p>
+                  <p className="text-xs text-red-300 mt-1">
+                    Consider reducing party size or waiting for larger tables to become available.
+                  </p>
+                </div>
+              )}
+
+              {/* Single large table notification */}
+              {walkInData.partySize > 8 && !requiresCombination && (
+                <div className="p-3 bg-green-900/20 border border-green-700/50 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="h-4 w-4 text-green-400" />
+                    <p className="text-sm text-green-300">
+                      Great! We have tables that can accommodate your party of {walkInData.partySize}.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Table selection */}
               <div>
-                <Label className="text-sm font-medium text-gray-300 mb-3 block">Select Table(s)</Label>
+                <Label className="text-sm font-medium text-gray-300 mb-3 block">
+                  {requiresCombination ? "Individual Table Selection (or use combinations above)" : "Select Table(s)"}
+                </Label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
                   {getAllTablesWithStatus().map(table => {
                     const isSelected = selectedTableIds.includes(table.id)
@@ -862,6 +1052,11 @@ export function CheckInQueue({
                     const tooSmall = table.max_capacity < walkInData.partySize
                     const tooLarge = table.min_capacity > walkInData.partySize * 1.5
                     const tableTypeColor = TABLE_TYPE_COLORS[table.table_type] || "bg-gray-700 text-gray-200"
+                    
+                    // Check if table is part of any suggested combination
+                    const partOfCombination = suggestedCombinations.some(combo => 
+                      combo.tables.some(t => t.id === table.id)
+                    )
                     
                     // Check for upcoming reservations
                     const upcomingReservation = bookings.find(booking => {
@@ -887,7 +1082,8 @@ export function CheckInQueue({
                                 table.isOccupied && "opacity-40 cursor-not-allowed border-red-500/50 bg-red-900/10",
                                 tooSmall && !table.isOccupied && "opacity-50 cursor-not-allowed border-red-500/50 bg-red-900/10",
                                 tooLarge && !tooSmall && !table.isOccupied && "border-amber-500/50 bg-amber-900/10",
-                                upcomingReservation && !table.isOccupied && "border-orange-500/50 bg-orange-900/10"
+                                upcomingReservation && !table.isOccupied && "border-orange-500/50 bg-orange-900/10",
+                                partOfCombination && !isSelected && !table.isOccupied && "border-amber-400/70 bg-amber-900/20"
                               )
                         )}
                         disabled={tooSmall || table.isOccupied}
@@ -901,8 +1097,11 @@ export function CheckInQueue({
                         }}
                       >
                         <div className="text-center w-full">
-                          <div className={cn("w-6 h-6 rounded mb-1 mx-auto flex items-center justify-center text-xs", tableTypeColor)}>
+                          <div className={cn("w-6 h-6 rounded mb-1 mx-auto flex items-center justify-center text-xs relative", tableTypeColor)}>
                             <span className="font-bold">{table.table_number}</span>
+                            {partOfCombination && !isSelected && !table.isOccupied && (
+                              <div className="absolute -top-1 -right-1 w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div>
+                            )}
                           </div>
                           <p className="text-xs opacity-90 leading-tight">
                             {table.min_capacity}-{table.max_capacity}
@@ -942,6 +1141,13 @@ export function CheckInQueue({
                               </span>
                             </div>
                           )}
+                          {partOfCombination && !isSelected && !table.isOccupied && !tooSmall && (
+                            <div className="mt-1">
+                              <span className="inline-block px-1 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs">
+                                Combo
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </Button>
                     )
@@ -962,6 +1168,12 @@ export function CheckInQueue({
                     <div className="w-2 h-2 bg-orange-500 rounded-full opacity-60"></div>
                     <span>Reserved</span>
                   </div>
+                  {requiresCombination && (
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div>
+                      <span>Combo</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -977,13 +1189,28 @@ export function CheckInQueue({
                 disabled={selectedTableIds.length === 0}
               >
                 <UserPlus className="h-5 w-5 mr-2" />
-                {selectedTableIds.length > 0 
-                  ? `Seat Walk-in Guest at Table${selectedTableIds.length > 1 ? 's' : ''} ${selectedTableIds.map(id => {
-                      const table = availableTables.find(t => t.id === id)
-                      return table ? table.table_number : ''
-                    }).join(', ')}`
-                  : 'Select a Table to Continue'
-                }
+                {selectedTableIds.length > 0 ? (
+                  <>
+                    {selectedTableIds.length > 1 ? (
+                      `Seat Walk-in at ${selectedTableIds.length} Tables (${selectedTableIds.map(id => {
+                        const table = getAllTablesWithStatus().find(t => t.id === id)
+                        return table ? table.table_number : ''
+                      }).join(', ')}) - ${selectedTableIds.reduce((total, id) => {
+                        const table = getAllTablesWithStatus().find(t => t.id === id)
+                        return total + (table ? table.max_capacity : 0)
+                      }, 0)} seats`
+                    ) : (
+                      `Seat Walk-in Guest at Table ${selectedTableIds.map(id => {
+                        const table = getAllTablesWithStatus().find(t => t.id === id)
+                        return table ? table.table_number : ''
+                      }).join(', ')}`
+                    )}
+                  </>
+                ) : (
+                  requiresCombination && suggestedCombinations.length === 0 
+                    ? 'No Available Combinations for Large Party'
+                    : 'Select a Table to Continue'
+                )}
               </Button>
             </div>
           </div>
@@ -1025,14 +1252,30 @@ export function CheckInQueue({
                 </div>
               </div>
 
-              {/* Available tables selection */}
+              {/* Available tables selection - Only shows tables that are:
+                   1. Active
+                   2. Not currently occupied by other bookings
+                   3. Don't have confirmed reservations in the next 2 hours
+                   4. Exclude current booking's tables (can switch back to same tables)
+              */}
               <div>
                 <Label className="text-sm font-medium text-gray-700 mb-3 block">
                   Select New Table(s) - Only Available Tables Shown
                 </Label>
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 max-h-60 overflow-y-auto">
-                  {availableTables.filter(table => {
-                    // Additional filtering for table switching - exclude tables with upcoming reservations within next 2 hours
+                  {tables.filter(table => {
+                    // Only show active tables
+                    if (!table.is_active) return false
+                    
+                    // Check if table is currently occupied
+                    const isCurrentlyOccupied = bookings.some(booking => {
+                      const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+                      return occupiedStatuses.includes(booking.status) && 
+                             booking.tables?.some((t: any) => t.id === table.id) &&
+                             booking.id !== tableSwitchModal.booking.id // Exclude the current booking being switched
+                    })
+                    
+                    // Check for upcoming reservations within next 2 hours
                     const hasUpcomingReservation = bookings.some(booking => {
                       if (booking.id === tableSwitchModal.booking.id) return false // Allow switching to tables from same booking
                       const bookingTime = new Date(booking.booking_time)
@@ -1041,7 +1284,9 @@ export function CheckInQueue({
                              timeDiff > 0 && timeDiff <= 120 &&
                              booking.tables?.some((t: any) => t.id === table.id)
                     })
-                    return !hasUpcomingReservation
+                    
+                    // Table must not be occupied and must not have upcoming reservations
+                    return !isCurrentlyOccupied && !hasUpcomingReservation
                   }).map(table => {
                     const isSelected = tableSwitchModal.selectedNewTableIds.includes(table.id)
                     const fitsParty = table.max_capacity >= tableSwitchModal.booking.party_size
