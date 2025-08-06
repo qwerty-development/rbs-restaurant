@@ -33,7 +33,8 @@ import {
   Table2,
   Info,
   Calendar,
-  BarChart3
+  BarChart3,
+  AlertTriangle
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -50,12 +51,93 @@ export default function DashboardPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [quickFilter, setQuickFilter] = useState<"all" | "needs-table" | "dining" | "arriving">("all")
   const [showTimeline, setShowTimeline] = useState(false)
+  const [confirmationDialog, setConfirmationDialog] = useState<{
+    show: boolean
+    booking?: any
+    tableIds?: string[]
+    warnings: string[]
+    onConfirm: () => void
+  }>({ show: false, warnings: [], onConfirm: () => {} })
   
   const supabase = createClient()
   const queryClient = useQueryClient()
   const tableService = new TableAvailabilityService()
   const statusService = new TableStatusService()
   const requestService = new BookingRequestService()
+
+  // Comprehensive table availability validation
+  const validateTableAvailability = (tableIds: string[], bookingId: string, partySize: number): { valid: boolean; errors: string[]; warnings: string[] } => {
+    const errors: string[] = []
+    const warnings: string[] = []
+
+    if (!tableIds || tableIds.length === 0) {
+      errors.push("No tables selected")
+      return { valid: false, errors, warnings }
+    }
+
+    for (const tableId of tableIds) {
+      const table = tables.find(t => t.id === tableId)
+      if (!table) {
+        errors.push(`Table not found`)
+        continue
+      }
+
+      // Check if table is active
+      if (!table.is_active) {
+        errors.push(`Table ${table.table_number} is not active`)
+        continue
+      }
+
+      // Check if table is currently occupied
+      const isOccupied = todaysBookings.some(booking => {
+        if (booking.id === bookingId) return false // Exclude current booking
+        const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+        return occupiedStatuses.includes(booking.status) && 
+               booking.tables?.some((t: any) => t.id === tableId)
+      })
+
+      if (isOccupied) {
+        const occupyingBooking = todaysBookings.find(booking => 
+          booking.id !== bookingId &&
+          ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status) && 
+          booking.tables?.some((t: any) => t.id === tableId)
+        )
+        const guestName = occupyingBooking?.user?.full_name || occupyingBooking?.guest_name || 'Unknown'
+        errors.push(`Table ${table.table_number} is occupied by ${guestName}`)
+        continue
+      }
+
+      // Check upcoming reservations (within next 2 hours)
+      const upcomingBooking = todaysBookings.find(booking => {
+        if (booking.id === bookingId) return false
+        const bookingTime = new Date(booking.booking_time)
+        const timeDiff = differenceInMinutes(bookingTime, currentTime)
+        return booking.status === 'confirmed' && 
+               timeDiff > 0 && timeDiff <= 120 &&
+               booking.tables?.some((t: any) => t.id === tableId)
+      })
+
+      if (upcomingBooking) {
+        const bookingTime = format(new Date(upcomingBooking.booking_time), 'h:mm a')
+        const guestName = upcomingBooking.user?.full_name || upcomingBooking.guest_name || 'Unknown'
+        warnings.push(`Table ${table.table_number} has reservation at ${bookingTime} for ${guestName}`)
+      }
+    }
+
+    // Check total capacity vs party size
+    const totalCapacity = tableIds
+      .map(id => tables.find(t => t.id === id))
+      .filter(Boolean)
+      .reduce((sum, table) => sum + (table?.max_capacity || 0), 0)
+
+    if (totalCapacity < partySize) {
+      errors.push(`Selected tables can seat ${totalCapacity} but party size is ${partySize}`)
+    } else if (totalCapacity > partySize * 1.5) {
+      warnings.push(`Selected tables can seat ${totalCapacity} which may be too large for party of ${partySize}`)
+    }
+
+    return { valid: errors.length === 0, errors, warnings }
+  }
 
   // Update current time every second
   useEffect(() => {
@@ -309,7 +391,10 @@ export default function DashboardPage() {
   const handleCheckIn = async (bookingId: string, tableIds?: string[]) => {
     try {
       const booking = todaysBookings.find(b => b.id === bookingId)
-      if (!booking) return
+      if (!booking) {
+        toast.error("Booking not found")
+        return
+      }
 
       const finalTableIds = tableIds || booking.tables?.map((t: any) => t.id) || []
       
@@ -319,13 +404,82 @@ export default function DashboardPage() {
         return
       }
 
-      await statusService.checkInBooking(bookingId, finalTableIds, userId)
-      queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
-     
-      toast.success("Guest checked in successfully")
+      // Validate table availability
+      const validation = validateTableAvailability(finalTableIds, bookingId, booking.party_size)
+      
+      if (!validation.valid) {
+        // Show errors
+        validation.errors.forEach(error => toast.error(error))
+        return
+      }
+
+      // Show warnings and ask for confirmation if any exist
+      if (validation.warnings.length > 0) {
+        setConfirmationDialog({
+          show: true,
+          booking,
+          tableIds: finalTableIds,
+          warnings: validation.warnings,
+          onConfirm: async () => {
+            setConfirmationDialog({ show: false, warnings: [], onConfirm: () => {} })
+            await proceedWithCheckIn(booking, finalTableIds)
+          }
+        })
+        return
+      }
+
+      await proceedWithCheckIn(booking, finalTableIds)
     } catch (error) {
-  
+      console.error("Check-in error:", error)
       toast.error("Failed to check in guest")
+    }
+  }
+
+  // Separate function to handle the actual check-in process
+  const proceedWithCheckIn = async (booking: any, finalTableIds: string[]) => {
+    try {
+      // If booking is already 'arrived' (waiting for seating), seat them directly
+      if (booking.status === 'arrived') {
+        // Ensure table assignments exist if provided
+        if (finalTableIds.length > 0 && (!booking.tables || booking.tables.length === 0)) {
+          const tableAssignments = finalTableIds.map((tableId: string) => ({
+            booking_id: booking.id,
+            table_id: tableId
+          }))
+          
+          const { error: tableError } = await supabase
+            .from("booking_tables")
+            .insert(tableAssignments)
+            
+          if (tableError) {
+            console.error("Table assignment error:", tableError)
+            toast.error("Failed to assign tables")
+            return
+          }
+        }
+        
+        await statusService.updateBookingStatus(booking.id, 'seated', userId)
+        
+        // Success message with table info
+        const tableNumbers = finalTableIds
+          .map((id: string) => tables.find(t => t.id === id)?.table_number)
+          .filter(Boolean)
+          .join(', ')
+        toast.success(`Guest seated at Table ${tableNumbers}`)
+      } else {
+        // For other statuses, use the standard check-in flow
+        await statusService.checkInBooking(booking.id, finalTableIds, userId)
+        toast.success("Guest checked in successfully")
+      }
+
+      // Force immediate refresh of bookings data
+      await queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+      
+      // Force refetch to ensure UI updates immediately
+      await refetchBookings()
+    } catch (error) {
+      console.error("Proceed check-in error:", error)
+      toast.error("Failed to complete check-in")
     }
   }
 
@@ -333,25 +487,37 @@ export default function DashboardPage() {
   const handleTableSwitch = async (bookingId: string, newTableIds: string[]) => {
     try {
       const booking = todaysBookings.find(b => b.id === bookingId)
-      if (!booking) return
-
-      const availability = await tableService.checkTableAvailability(
-        restaurantId,
-        newTableIds,
-        new Date(booking.booking_time),
-        booking.turn_time_minutes || 120,
-        bookingId
-      )
-
-      if (!availability.available) {
-        toast.error("Selected tables are not available")
+      if (!booking) {
+        toast.error("Booking not found")
         return
       }
 
+      // Use our comprehensive validation
+      const validation = validateTableAvailability(newTableIds, bookingId, booking.party_size)
+      
+      if (!validation.valid) {
+        validation.errors.forEach(error => toast.error(error))
+        return
+      }
+
+      // Show warnings but allow proceeding
+      if (validation.warnings.length > 0) {
+        validation.warnings.forEach(warning => toast.error(warning, { 
+          duration: 4000,
+          style: { backgroundColor: '#f59e0b', color: 'white' } 
+        }))
+      }
+
       await statusService.switchTables(bookingId, newTableIds, userId, "Table switch requested")
-      queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
-      toast.success("Table switched successfully")
+      await queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+      
+      const tableNumbers = newTableIds
+        .map((id: string) => tables.find(t => t.id === id)?.table_number)
+        .filter(Boolean)
+        .join(', ')
+      toast.success(`Table switched to ${tableNumbers}`)
     } catch (error) {
+      console.error("Table switch error:", error)
       toast.error("Failed to switch tables")
     }
   }
@@ -456,6 +622,22 @@ export default function DashboardPage() {
   })
 
   const handleQuickSeat = (guestData: any, tableIds: string[]) => {
+    // Validate table availability for walk-in
+    const validation = validateTableAvailability(tableIds, '', guestData.party_size)
+    
+    if (!validation.valid) {
+      validation.errors.forEach(error => toast.error(error))
+      return
+    }
+
+    // Show warnings but allow proceeding
+    if (validation.warnings.length > 0) {
+      validation.warnings.forEach(warning => toast.error(warning, { 
+        duration: 4000,
+        style: { backgroundColor: '#f59e0b', color: 'white' } 
+      }))
+    }
+
     const bookingData = {
       ...guestData,
       booking_time: new Date().toISOString(),
@@ -880,6 +1062,7 @@ export default function DashboardPage() {
                 currentTime={currentTime}
                 onCheckIn={handleCheckIn}
                 onQuickSeat={handleQuickSeat}
+                onTableSwitch={handleTableSwitch}
                 customersData={customersData}
                 onSelectBooking={setSelectedBooking}
                 restaurantId={restaurantId}
@@ -960,6 +1143,46 @@ export default function DashboardPage() {
       )}
 
       {/* Modals - Streamlined */}
+      {/* Confirmation Dialog for Warnings */}
+      <Dialog open={confirmationDialog.show} onOpenChange={(open) => 
+        !open && setConfirmationDialog({ show: false, warnings: [], onConfirm: () => {} })
+      }>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="h-5 w-5" />
+              Confirm Seating
+            </DialogTitle>
+            <DialogDescription className="text-gray-600">
+              Please review these concerns before seating the guest:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-4">
+            {confirmationDialog.warnings.map((warning, index) => (
+              <div key={index} className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-600" />
+                <p className="text-sm text-amber-800 leading-relaxed">{warning}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setConfirmationDialog({ show: false, warnings: [], onConfirm: () => {} })}
+              className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmationDialog.onConfirm}
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
+            >
+              Seat Anyway
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Timeline View Modal */}
       <Dialog open={showTimeline} onOpenChange={setShowTimeline}>
         <DialogContent className="max-w-6xl w-full h-[90vh] flex flex-col p-0">

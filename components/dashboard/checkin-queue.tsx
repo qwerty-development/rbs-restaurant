@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { format, differenceInMinutes } from "date-fns"
 import { useQuery } from "@tanstack/react-query"
@@ -46,6 +47,7 @@ interface CheckInQueueProps {
   restaurantId: string
   onCheckIn: (bookingId: string, tableIds: string[]) => void
   onQuickSeat: (guestData: any, tableIds:string[]) => void
+  onTableSwitch?: (bookingId: string, newTableIds: string[]) => void
   customersData?: Record<string, any>
   onSelectBooking?: (booking: any) => void
 }
@@ -57,6 +59,7 @@ export function CheckInQueue({
   restaurantId,
   onCheckIn,
   onQuickSeat,
+  onTableSwitch,
   customersData = {},
   onSelectBooking
 }: CheckInQueueProps) {
@@ -69,6 +72,12 @@ export function CheckInQueue({
     guestPhone: "",
     partySize: 2
   })
+  const [tableSwitchModal, setTableSwitchModal] = useState<{
+    show: boolean
+    booking?: any
+    originalTables: any[]
+    selectedNewTableIds: string[]
+  }>({ show: false, originalTables: [], selectedNewTableIds: [] })
 
   const supabase = createClient()
 
@@ -167,7 +176,7 @@ export function CheckInQueue({
     return minutesUntil > 15
   })
 
-  // Get available tables
+  // Get available tables (only truly available ones)
   const getAvailableTables = () => {
     return tables.filter(table => {
       const isOccupied = bookings.some(booking => {
@@ -179,7 +188,45 @@ export function CheckInQueue({
     })
   }
 
+  // Get ALL tables (for walk-in selection with visual indicators)
+  const getAllTablesWithStatus = () => {
+    return tables.filter(t => t.is_active).map(table => {
+      const occupyingBooking = bookings.find(booking => {
+        const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+        return occupiedStatuses.includes(booking.status) && 
+               booking.tables?.some((t: any) => t.id === table.id)
+      })
+      
+      return {
+        ...table,
+        isOccupied: !!occupyingBooking,
+        occupiedBy: occupyingBooking?.user?.full_name || occupyingBooking?.guest_name || null
+      }
+    })
+  }
+
   const availableTables = getAvailableTables()
+
+  // Check if a booking can be checked in (for button state)
+  const canCheckIn = (booking: any) => {
+    const hasTable = booking.tables && booking.tables.length > 0
+    
+    if (!hasTable) {
+      // No table assigned - can check in if tables are selected
+      return selectedTableIds.length > 0
+    }
+    
+    // Has table - check if all tables are still available
+    return booking.tables.every((table: any) => {
+      const isOccupied = bookings.some(otherBooking => {
+        if (otherBooking.id === booking.id) return false // Exclude current booking
+        const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+        return occupiedStatuses.includes(otherBooking.status) && 
+               otherBooking.tables?.some((t: any) => t.id === table.id)
+      })
+      return !isOccupied && table.is_active
+    })
+  }
 
   const getBookingStatus = (booking: any) => {
     const bookingTime = new Date(booking.booking_time)
@@ -227,8 +274,8 @@ export function CheckInQueue({
   const handleQuickCheckIn = (booking: any) => {
     const hasTable = booking.tables && booking.tables.length > 0
     if (hasTable) {
+      // Don't show success toast here - let the parent handle it after validation
       onCheckIn(booking.id, booking.tables.map((t: any) => t.id))
-      toast.success(`Checked in ${booking.user?.full_name || booking.guest_name}`)
     } else {
       if (selectedTableIds.length === 0) {
         toast.error("Please select a table first")
@@ -236,6 +283,28 @@ export function CheckInQueue({
       }
       onCheckIn(booking.id, selectedTableIds)
       setSelectedTableIds([])
+    }
+  }
+
+  const handleOpenTableSwitch = (booking: any) => {
+    setTableSwitchModal({
+      show: true,
+      booking,
+      originalTables: booking.tables || [],
+      selectedNewTableIds: []
+    })
+  }
+
+  const handleTableSwitchConfirm = () => {
+    if (!tableSwitchModal.booking || tableSwitchModal.selectedNewTableIds.length === 0) {
+      toast.error("Please select at least one table")
+      return
+    }
+
+    if (onTableSwitch) {
+      onTableSwitch(tableSwitchModal.booking.id, tableSwitchModal.selectedNewTableIds)
+      setTableSwitchModal({ show: false, originalTables: [], selectedNewTableIds: [] })
+      toast.success("Table switch initiated")
     }
   }
 
@@ -369,24 +438,64 @@ export function CheckInQueue({
             )}
           </div>
 
-          {/* Check-in button */}
-          <Button
-            size="sm"
-            variant={hasTable ? "default" : "outline"}
-            onClick={(e) => {
-              e.stopPropagation()
-              handleQuickCheckIn(booking)
-            }}
-            className={cn(
-              "ml-3 shadow-lg",
-              hasTable 
-                ? "bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white" 
-                : "border-2 border-red-500 text-red-400 hover:bg-red-900/50"
+          {/* Check-in button or Switch Table option */}
+          <div className="ml-3 flex gap-2">
+            {canCheckIn(booking) ? (
+              <Button
+                size="sm"
+                variant={hasTable ? "default" : "outline"}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleQuickCheckIn(booking)
+                }}
+                className={cn(
+                  "shadow-lg transition-all",
+                  hasTable 
+                    ? "bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white" 
+                    : "border-2 border-red-500 text-red-400 hover:bg-red-900/50"
+                )}
+              >
+                <UserCheck className="h-4 w-4 mr-1.5" />
+               
+              </Button>
+            ) : hasTable ? (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled
+                  className="opacity-50 cursor-not-allowed bg-gray-700 border-gray-600 text-gray-500"
+                  title="Table is occupied"
+                >
+                  <UserCheck className="h-4 w-4 mr-1.5" />
+            
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleOpenTableSwitch(booking)
+                  }}
+                  className="border-2 border-blue-500 text-blue-400 hover:bg-blue-900/50 shadow-lg"
+                >
+                  <Table2 className="h-4 w-4 mr-1.5" />
+                
+                </Button>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled
+                className="opacity-50 cursor-not-allowed bg-gray-700 border-gray-600 text-gray-500"
+                title="Select a table first"
+              >
+                <UserCheck className="h-4 w-4 mr-1.5" />
+                Assign Table
+              </Button>
             )}
-          >
-            <UserCheck className="h-4 w-4 mr-1.5" />
-            {hasTable ? 'Check-in' : 'Assign Table'}
-          </Button>
+          </div>
         </div>
       </div>
     )
@@ -464,17 +573,45 @@ export function CheckInQueue({
                               )}
                             </div>
                           </div>
-                          <Button
-                            size="sm"
-                            className="bg-orange-600 hover:bg-orange-700 text-white font-medium animate-bounce"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleQuickCheckIn(booking)
-                            }}
-                          >
-                            <UserCheck className="h-4 w-4 mr-1" />
-                            Seat Now
-                          </Button>
+                          <div className="flex gap-2">
+                            {canCheckIn(booking) ? (
+                              <Button
+                                size="sm"
+                                className="bg-orange-600 hover:bg-orange-700 text-white font-medium animate-bounce"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleQuickCheckIn(booking)
+                                }}
+                              >
+                                <UserCheck className="h-4 w-4 mr-1" />
+                                Seat Now
+                              </Button>
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  disabled
+                                  className="bg-gray-700 border-gray-600 text-gray-500 opacity-50 cursor-not-allowed font-medium"
+                                  title="Table is occupied"
+                                >
+                                  <UserCheck className="h-4 w-4 mr-1" />
+                                  Seat Now
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleOpenTableSwitch(booking)
+                                  }}
+                                  className="border-2 border-blue-500 text-blue-400 hover:bg-blue-900/50 font-medium"
+                                >
+                                  <Table2 className="h-4 w-4 mr-1" />
+                                  Switch
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -556,7 +693,7 @@ export function CheckInQueue({
             </div>
 
             {/* Walk-in form */}
-            <div className="space-y-4 bg-gray-800/50 p-4 rounded-lg border border-gray-700 shadow-sm">
+            <div className="space-y-4 bg-gray-800/30 p-4 rounded-xl border border-gray-700/50 shadow-sm backdrop-blur-sm">
               {/* Customer Search */}
               <div className="space-y-3">
                 <Label className="text-sm font-medium text-gray-300">Search Existing Customer (Optional)</Label>
@@ -687,8 +824,8 @@ export function CheckInQueue({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="guest-name" className="text-sm font-medium text-gray-300">
-                    Guest Name {selectedCustomer && <span className="text-blue-400">(Auto-filled)</span>}
+                  <Label htmlFor="guest-name" className="text-sm font-medium text-gray-300 mb-2 block">
+                    Guest Name {selectedCustomer && <span className="text-blue-400 text-xs">(Auto-filled)</span>}
                   </Label>
                   <Input
                     id="guest-name"
@@ -696,11 +833,11 @@ export function CheckInQueue({
                     onChange={(e) => setWalkInData(prev => ({ ...prev, guestName: e.target.value }))}
                     placeholder={selectedCustomer ? "Auto-filled from selected customer" : "Optional"}
                     disabled={!!selectedCustomer}
-                    className="h-10 mt-1 bg-gray-900 border-gray-700 text-white placeholder:text-gray-500 disabled:opacity-50"
+                    className="h-10 bg-gray-900/50 border-gray-600 text-white placeholder:text-gray-400 disabled:opacity-60 focus:border-blue-500 transition-colors"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="party-size" className="text-sm font-medium text-gray-300">Party Size</Label>
+                  <Label htmlFor="party-size" className="text-sm font-medium text-gray-300 mb-2 block">Party Size</Label>
                   <Input
                     id="party-size"
                     type="number"
@@ -708,7 +845,7 @@ export function CheckInQueue({
                     max="20"
                     value={walkInData.partySize}
                     onChange={(e) => setWalkInData(prev => ({ ...prev, partySize: parseInt(e.target.value) || 1 }))}
-                    className="h-10 mt-1 bg-gray-900 border-gray-700 text-white"
+                    className="h-10 bg-gray-900/50 border-gray-600 text-white focus:border-blue-500 transition-colors"
                   />
                 </div>
               </div>
@@ -718,11 +855,22 @@ export function CheckInQueue({
               {/* Table selection */}
               <div>
                 <Label className="text-sm font-medium text-gray-300 mb-3 block">Select Table(s)</Label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                  {availableTables.map(table => {
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                  {getAllTablesWithStatus().map(table => {
                     const isSelected = selectedTableIds.includes(table.id)
-                    const fitsParty = table.max_capacity >= walkInData.partySize
+                    const fitsParty = table.max_capacity >= walkInData.partySize && !table.isOccupied
+                    const tooSmall = table.max_capacity < walkInData.partySize
+                    const tooLarge = table.min_capacity > walkInData.partySize * 1.5
                     const tableTypeColor = TABLE_TYPE_COLORS[table.table_type] || "bg-gray-700 text-gray-200"
+                    
+                    // Check for upcoming reservations
+                    const upcomingReservation = bookings.find(booking => {
+                      const bookingTime = new Date(booking.booking_time)
+                      const timeDiff = differenceInMinutes(bookingTime, currentTime)
+                      return booking.status === 'confirmed' && 
+                             timeDiff > 0 && timeDiff <= 120 &&
+                             booking.tables?.some((t: any) => t.id === table.id)
+                    })
 
                     return (
                       <Button
@@ -730,18 +878,21 @@ export function CheckInQueue({
                         size="sm"
                         variant={isSelected ? "default" : "outline"}
                         className={cn(
-                          "h-auto py-3 px-3 transition-all border",
+                          "h-auto py-2 px-2 transition-all border relative group",
                           isSelected 
-                            ? "bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg scale-105 border-blue-400" 
+                            ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md border-blue-500" 
                             : cn(
-                                "bg-gray-800 border-gray-700 hover:border-blue-500 text-gray-300",
-                                "hover:scale-105",
-                                fitsParty ? "hover:bg-gray-700" : "opacity-50 cursor-not-allowed"
+                                "bg-gray-800/50 border-gray-600 text-gray-300",
+                                !table.isOccupied && fitsParty && !tooLarge ? "hover:bg-gray-700/50 hover:border-blue-400 hover:shadow-sm" : "",
+                                table.isOccupied && "opacity-40 cursor-not-allowed border-red-500/50 bg-red-900/10",
+                                tooSmall && !table.isOccupied && "opacity-50 cursor-not-allowed border-red-500/50 bg-red-900/10",
+                                tooLarge && !tooSmall && !table.isOccupied && "border-amber-500/50 bg-amber-900/10",
+                                upcomingReservation && !table.isOccupied && "border-orange-500/50 bg-orange-900/10"
                               )
                         )}
-                        disabled={!fitsParty}
+                        disabled={tooSmall || table.isOccupied}
                         onClick={() => {
-                          if (!fitsParty) return
+                          if (tooSmall || table.isOccupied) return
                           setSelectedTableIds(prev => 
                             prev.includes(table.id)
                               ? prev.filter(id => id !== table.id)
@@ -749,16 +900,68 @@ export function CheckInQueue({
                           )
                         }}
                       >
-                        <div className="text-center">
-                          <div className={cn("w-8 h-8 rounded-lg mb-2 mx-auto flex items-center justify-center", tableTypeColor)}>
-                            <Table2 className="h-4 w-4" />
+                        <div className="text-center w-full">
+                          <div className={cn("w-6 h-6 rounded mb-1 mx-auto flex items-center justify-center text-xs", tableTypeColor)}>
+                            <span className="font-bold">{table.table_number}</span>
                           </div>
-                          <p className="font-semibold">T{table.table_number}</p>
-                          <p className="text-xs opacity-80">{table.min_capacity}-{table.max_capacity} seats</p>
+                          <p className="text-xs opacity-90 leading-tight">
+                            {table.min_capacity}-{table.max_capacity}
+                          </p>
+                          
+                          {/* Status indicators */}
+                          {table.isOccupied && (
+                            <div className="mt-1">
+                              <span className="inline-block px-1 py-0.5 bg-red-500/20 text-red-400 rounded text-xs">
+                                Occupied
+                              </span>
+                              {table.occupiedBy && (
+                                <p className="text-xs text-red-300 mt-0.5 truncate">
+                                  {table.occupiedBy}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                          {!table.isOccupied && tooSmall && (
+                            <div className="mt-1">
+                              <span className="inline-block px-1 py-0.5 bg-red-500/20 text-red-400 rounded text-xs">
+                                Too small
+                              </span>
+                            </div>
+                          )}
+                          {!table.isOccupied && tooLarge && !tooSmall && (
+                            <div className="mt-1">
+                              <span className="inline-block px-1 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs">
+                                Large
+                              </span>
+                            </div>
+                          )}
+                          {!table.isOccupied && upcomingReservation && (
+                            <div className="mt-1">
+                              <span className="inline-block px-1 py-0.5 bg-orange-500/20 text-orange-400 rounded text-xs">
+                                {format(new Date(upcomingReservation.booking_time), 'h:mm')}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </Button>
                     )
                   })}
+                </div>
+                
+                {/* Compact Legend */}
+                <div className="flex items-center justify-center gap-4 mt-3 text-xs text-gray-400">
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-red-500 rounded-full opacity-60"></div>
+                    <span>Occupied</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-amber-500 rounded-full opacity-60"></div>
+                    <span>Large</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-orange-500 rounded-full opacity-60"></div>
+                    <span>Reserved</span>
+                  </div>
                 </div>
               </div>
 
@@ -786,6 +989,149 @@ export function CheckInQueue({
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Table Switch Modal */}
+      <Dialog open={tableSwitchModal.show} onOpenChange={(open) => 
+        !open && setTableSwitchModal({ show: false, originalTables: [], selectedNewTableIds: [] })
+      }>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-blue-600">
+              <Table2 className="h-5 w-5" />
+              Switch Table Assignment
+            </DialogTitle>
+            <DialogDescription>
+              {tableSwitchModal.booking && (
+                <>
+                  Select new table(s) for <span className="font-semibold">
+                    {tableSwitchModal.booking.user?.full_name || tableSwitchModal.booking.guest_name}
+                  </span> (Party of {tableSwitchModal.booking.party_size})
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {tableSwitchModal.booking && (
+            <div className="space-y-4 py-4">
+              {/* Current table assignment */}
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <h4 className="font-medium text-red-800 mb-2">Current Assignment (Occupied):</h4>
+                <div className="flex gap-2">
+                  {tableSwitchModal.originalTables.map(table => (
+                    <Badge key={table.id} variant="destructive" className="text-xs">
+                      T{table.table_number}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              {/* Available tables selection */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700 mb-3 block">
+                  Select New Table(s) - Only Available Tables Shown
+                </Label>
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 max-h-60 overflow-y-auto">
+                  {availableTables.filter(table => {
+                    // Additional filtering for table switching - exclude tables with upcoming reservations within next 2 hours
+                    const hasUpcomingReservation = bookings.some(booking => {
+                      if (booking.id === tableSwitchModal.booking.id) return false // Allow switching to tables from same booking
+                      const bookingTime = new Date(booking.booking_time)
+                      const timeDiff = differenceInMinutes(bookingTime, currentTime)
+                      return booking.status === 'confirmed' && 
+                             timeDiff > 0 && timeDiff <= 120 &&
+                             booking.tables?.some((t: any) => t.id === table.id)
+                    })
+                    return !hasUpcomingReservation
+                  }).map(table => {
+                    const isSelected = tableSwitchModal.selectedNewTableIds.includes(table.id)
+                    const fitsParty = table.max_capacity >= tableSwitchModal.booking.party_size
+                    const tooSmall = table.max_capacity < tableSwitchModal.booking.party_size
+                    const tableTypeColor = TABLE_TYPE_COLORS[table.table_type] || "bg-gray-100"
+
+                    return (
+                      <Button
+                        key={table.id}
+                        size="sm"
+                        variant={isSelected ? "default" : "outline"}
+                        disabled={tooSmall}
+                        className={cn(
+                          "h-auto py-3 px-2 transition-all",
+                          isSelected 
+                            ? "bg-blue-600 hover:bg-blue-700 text-white border-blue-500" 
+                            : cn(
+                                "hover:border-blue-400",
+                                tooSmall && "opacity-50 cursor-not-allowed border-red-300 bg-red-50"
+                              )
+                        )}
+                        onClick={() => {
+                          if (tooSmall) return
+                          setTableSwitchModal(prev => ({
+                            ...prev,
+                            selectedNewTableIds: prev.selectedNewTableIds.includes(table.id)
+                              ? prev.selectedNewTableIds.filter(id => id !== table.id)
+                              : [...prev.selectedNewTableIds, table.id]
+                          }))
+                        }}
+                      >
+                        <div className="text-center">
+                          <div className={cn("w-6 h-6 rounded mb-1 mx-auto flex items-center justify-center text-xs font-bold", tableTypeColor)}>
+                            {table.table_number}
+                          </div>
+                          <p className="text-xs">
+                            {table.min_capacity}-{table.max_capacity}
+                          </p>
+                          {tooSmall && (
+                            <p className="text-xs text-red-500 mt-1">Too small</p>
+                          )}
+                        </div>
+                      </Button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Selected tables summary */}
+              {tableSwitchModal.selectedNewTableIds.length > 0 && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h4 className="font-medium text-blue-800 mb-2">New Assignment:</h4>
+                  <div className="flex gap-2">
+                    {tableSwitchModal.selectedNewTableIds.map(tableId => {
+                      const table = tables.find(t => t.id === tableId)
+                      return table ? (
+                        <Badge key={tableId} className="bg-blue-600 text-white text-xs">
+                          T{table.table_number}
+                        </Badge>
+                      ) : null
+                    })}
+                  </div>
+                  <p className="text-sm text-blue-700 mt-2">
+                    Total capacity: {tableSwitchModal.selectedNewTableIds
+                      .map(id => tables.find(t => t.id === id)?.max_capacity || 0)
+                      .reduce((sum, cap) => sum + cap, 0)} seats
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setTableSwitchModal({ show: false, originalTables: [], selectedNewTableIds: [] })}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleTableSwitchConfirm}
+              disabled={tableSwitchModal.selectedNewTableIds.length === 0}
+              className="flex-1 bg-blue-600 hover:bg-blue-700"
+            >
+              Switch Tables
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
