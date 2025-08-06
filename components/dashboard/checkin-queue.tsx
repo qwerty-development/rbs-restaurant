@@ -2,7 +2,6 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +10,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { format, differenceInMinutes } from "date-fns"
+import { useQuery } from "@tanstack/react-query"
+import { createClient } from "@/lib/supabase/client"
 import { 
   UserCheck, 
   Clock, 
@@ -21,9 +22,11 @@ import {
   Timer,
   UserPlus,
   MessageSquare,
-  ChevronRight,
   Sparkles,
-  Ban
+  Ban,
+  Search,
+  X,
+  Star
 } from "lucide-react"
 import { toast } from "react-hot-toast"
 
@@ -40,6 +43,7 @@ interface CheckInQueueProps {
   bookings: any[]
   tables: any[]
   currentTime: Date
+  restaurantId: string
   onCheckIn: (bookingId: string, tableIds: string[]) => void
   onQuickSeat: (guestData: any, tableIds:string[]) => void
   customersData?: Record<string, any>
@@ -50,17 +54,86 @@ export function CheckInQueue({
   bookings,
   tables,
   currentTime,
+  restaurantId,
   onCheckIn,
   onQuickSeat,
   customersData = {},
   onSelectBooking
 }: CheckInQueueProps) {
   const [selectedTableIds, setSelectedTableIds] = useState<string[]>([])
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
+  const [customerSearch, setCustomerSearch] = useState("")
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const [walkInData, setWalkInData] = useState({
     guestName: "",
     guestPhone: "",
     partySize: 2
   })
+
+  const supabase = createClient()
+
+  // Fetch customers for search
+  const { data: customers, error: customersError, isLoading: customersLoading } = useQuery({
+    queryKey: ["restaurant-customers-walkin", restaurantId, customerSearch],
+    queryFn: async () => {
+      if (!customerSearch.trim()) return []
+      if (!restaurantId) {
+        console.error("Restaurant ID is required for customer search")
+        throw new Error("Restaurant ID is required")
+      }
+      
+      console.log("Searching for walk-in customers with:", customerSearch, "in restaurant:", restaurantId)
+      
+      const { data, error } = await supabase
+        .from("restaurant_customers")
+        .select(`
+          *,
+          profile:profiles!restaurant_customers_user_id_fkey(
+            id,
+            full_name,
+            phone_number,
+            avatar_url
+          )
+        `)
+        .eq("restaurant_id", restaurantId)
+        .or(`guest_name.ilike.%${customerSearch}%,guest_email.ilike.%${customerSearch}%,guest_phone.ilike.%${customerSearch}%`)
+        .limit(10)
+        .order("last_visit", { ascending: false })
+
+      if (error) {
+        console.error("Walk-in customer search error:", error)
+        throw error
+      }
+      
+      console.log("Walk-in customer search results:", data)
+      return data || []
+    },
+    enabled: customerSearch.length >= 1 && !!restaurantId,
+  })
+
+  // Handle customer selection
+  const handleCustomerSelect = (customer: any) => {
+    setSelectedCustomer(customer)
+    setCustomerSearch(customer.profile?.full_name || customer.guest_name || "")
+    setShowCustomerDropdown(false)
+    
+    // Auto-fill walk-in form fields
+    setWalkInData({
+      guestName: customer.profile?.full_name || customer.guest_name || "",
+      guestPhone: customer.profile?.phone_number || customer.guest_phone || "",
+      partySize: walkInData.partySize // Keep existing party size
+    })
+  }
+
+  const handleClearCustomer = () => {
+    setSelectedCustomer(null)
+    setCustomerSearch("")
+    setWalkInData({
+      guestName: "",
+      guestPhone: "",
+      partySize: 2
+    })
+  }
   
   // Filter arrivals (confirmed bookings within -30 to +60 minutes)
   const arrivalsQueue = bookings
@@ -151,17 +224,17 @@ export function CheckInQueue({
     }
   }
 
-  const handleQuickCheckIn = async (booking: any) => {
+  const handleQuickCheckIn = (booking: any) => {
     const hasTable = booking.tables && booking.tables.length > 0
     if (hasTable) {
-      await onCheckIn(booking.id, booking.tables.map((t: any) => t.id))
+      onCheckIn(booking.id, booking.tables.map((t: any) => t.id))
       toast.success(`Checked in ${booking.user?.full_name || booking.guest_name}`)
     } else {
       if (selectedTableIds.length === 0) {
         toast.error("Please select a table first")
         return
       }
-      await onCheckIn(booking.id, selectedTableIds)
+      onCheckIn(booking.id, selectedTableIds)
       setSelectedTableIds([])
     }
   }
@@ -173,8 +246,15 @@ export function CheckInQueue({
     }
 
     const walkInBooking = {
-      guest_name: walkInData.guestName || `Walk-in ${format(currentTime, 'HH:mm')}`,
-      guest_phone: walkInData.guestPhone,
+      customer_id: selectedCustomer?.id || null,
+      user_id: selectedCustomer?.user_id || null,
+      guest_name: selectedCustomer 
+        ? (selectedCustomer.profile?.full_name || selectedCustomer.guest_name)
+        : (walkInData.guestName || `Walk-in ${format(currentTime, 'HH:mm')}`),
+      guest_phone: selectedCustomer 
+        ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
+        : walkInData.guestPhone,
+      guest_email: selectedCustomer?.guest_email || null,
       party_size: walkInData.partySize,
       table_ids: selectedTableIds,
       booking_time: currentTime.toISOString(),
@@ -183,10 +263,13 @@ export function CheckInQueue({
     }
 
     onQuickSeat(walkInBooking, selectedTableIds)
-    toast.success("Walk-in guest seated")
+    toast.success(`Walk-in guest ${walkInBooking.guest_name} seated`)
     
+    // Reset form
     setWalkInData({ guestName: "", guestPhone: "", partySize: 2 })
     setSelectedTableIds([])
+    setSelectedCustomer(null)
+    setCustomerSearch("")
   }
 
   const renderBookingCard = (booking: any) => {
@@ -474,15 +557,146 @@ export function CheckInQueue({
 
             {/* Walk-in form */}
             <div className="space-y-4 bg-gray-800/50 p-4 rounded-lg border border-gray-700 shadow-sm">
+              {/* Customer Search */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-gray-300">Search Existing Customer (Optional)</Label>
+                {!restaurantId && (
+                  <div className="p-3 bg-red-900/50 rounded-lg border border-red-700">
+                    <p className="text-sm text-red-400">Customer search unavailable - Restaurant ID missing</p>
+                  </div>
+                )}
+                <div className="relative">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+                    <Input
+                      placeholder={restaurantId ? "Search customers by name, email, or phone..." : "Restaurant ID required for search"}
+                      value={customerSearch}
+                      onChange={(e) => {
+                        setCustomerSearch(e.target.value)
+                        setShowCustomerDropdown(true)
+                      }}
+                      onFocus={() => setShowCustomerDropdown(customerSearch.length >= 1)}
+                      onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
+                      disabled={!restaurantId}
+                      className="h-10 pl-10 bg-gray-900 border-gray-700 text-white placeholder:text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                    {selectedCustomer && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 p-0 text-gray-400 hover:text-white"
+                        onClick={handleClearCustomer}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {/* Customer dropdown */}
+                  {showCustomerDropdown && customerSearch.length >= 1 && (
+                    <div className="absolute z-50 w-full mt-1 bg-gray-900 border border-gray-700 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                      {customersLoading && (
+                        <div className="p-3">
+                          <p className="text-sm text-gray-400">Searching customers...</p>
+                        </div>
+                      )}
+                      
+                      {customersError && (
+                        <div className="p-3">
+                          <p className="text-sm text-red-400">Error: {customersError.message}</p>
+                        </div>
+                      )}
+                      
+                      {!customersLoading && !customersError && customers && customers.length > 0 && (
+                        <>
+                          {customers.map((customer) => (
+                            <div
+                              key={customer.id}
+                              className="flex items-center gap-3 p-3 hover:bg-gray-800 cursor-pointer border-b border-gray-700 last:border-b-0"
+                              onClick={() => handleCustomerSelect(customer)}
+                            >
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium text-white">
+                                    {customer.profile?.full_name || customer.guest_name || 'Guest'}
+                                  </p>
+                                  {customer.vip_status && (
+                                    <Badge className="text-xs px-2 py-0.5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white">
+                                      <Star className="h-3 w-3 mr-1" />
+                                      VIP
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="text-sm text-gray-400">
+                                  {customer.guest_email && <span>{customer.guest_email}</span>}
+                                  {customer.guest_email && (customer.profile?.phone_number || customer.guest_phone) && <span> • </span>}
+                                  {(customer.profile?.phone_number || customer.guest_phone) && (
+                                    <span>{customer.profile?.phone_number || customer.guest_phone}</span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {customer.total_bookings} bookings
+                                  {customer.last_visit && (
+                                    <span> • Last: {format(new Date(customer.last_visit), 'MMM d')}</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      
+                      {!customersLoading && !customersError && customers && customers.length === 0 && (
+                        <div className="p-3">
+                          <p className="text-sm text-gray-400">No customers found matching "{customerSearch}"</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Selected customer display */}
+                {selectedCustomer && (
+                  <div className="p-3 bg-blue-900/30 rounded-lg border border-blue-700">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="h-4 w-4 text-blue-400" />
+                        <span className="text-sm font-medium text-blue-300">Selected:</span>
+                        <span className="text-white font-medium">{selectedCustomer.profile?.full_name || selectedCustomer.guest_name}</span>
+                        {selectedCustomer.vip_status && (
+                          <Badge className="text-xs px-2 py-0.5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white">
+                            <Star className="h-3 w-3 mr-1" />
+                            VIP
+                          </Badge>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleClearCustomer}
+                        className="text-gray-400 hover:text-white"
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="guest-name" className="text-sm font-medium text-gray-300">Guest Name</Label>
+                  <Label htmlFor="guest-name" className="text-sm font-medium text-gray-300">
+                    Guest Name {selectedCustomer && <span className="text-blue-400">(Auto-filled)</span>}
+                  </Label>
                   <Input
                     id="guest-name"
                     value={walkInData.guestName}
                     onChange={(e) => setWalkInData(prev => ({ ...prev, guestName: e.target.value }))}
-                    placeholder="Optional"
-                    className="h-10 mt-1 bg-gray-900 border-gray-700 text-white placeholder:text-gray-500"
+                    placeholder={selectedCustomer ? "Auto-filled from selected customer" : "Optional"}
+                    disabled={!!selectedCustomer}
+                    className="h-10 mt-1 bg-gray-900 border-gray-700 text-white placeholder:text-gray-500 disabled:opacity-50"
                   />
                 </div>
                 <div>
@@ -498,6 +712,8 @@ export function CheckInQueue({
                   />
                 </div>
               </div>
+
+            
 
               {/* Table selection */}
               <div>

@@ -37,13 +37,18 @@ import {
   AlertCircle, 
   Table2,
   RefreshCw,
-  Users
+  Users,
+  Search,
+  X,
+  Star,
+  UserCheck
 } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 // Updated form schema with proper null handling
 const formSchema = z.object({
+  customer_id: z.string().optional(),
   guest_name: z.string().optional(),
   guest_email: z.string().optional(),
   guest_phone: z.string().optional(),
@@ -76,6 +81,9 @@ export function ManualBookingForm({
 }: ManualBookingFormProps) {
   const [selectedTables, setSelectedTables] = useState<string[]>([])
   const [checkingAvailability, setCheckingAvailability] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
+  const [customerSearch, setCustomerSearch] = useState("")
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const supabase = createClient()
   const tableService = new TableAvailabilityService()
   const availabilityService = new RestaurantAvailability()
@@ -116,6 +124,41 @@ export function ManualBookingForm({
       if (error) throw error
       return data
     },
+  })
+
+  // Fetch customers for search
+  const { data: customers, error: customersError, isLoading: customersLoading } = useQuery({
+    queryKey: ["restaurant-customers", restaurantId, customerSearch],
+    queryFn: async () => {
+      if (!customerSearch.trim()) return []
+      
+      console.log("Searching for customers with:", customerSearch)
+      
+      const { data, error } = await supabase
+        .from("restaurant_customers")
+        .select(`
+          *,
+          profile:profiles!restaurant_customers_user_id_fkey(
+            id,
+            full_name,
+            phone_number,
+            avatar_url
+          )
+        `)
+        .eq("restaurant_id", restaurantId)
+        .or(`guest_name.ilike.%${customerSearch}%,guest_email.ilike.%${customerSearch}%,guest_phone.ilike.%${customerSearch}%`)
+        .limit(10)
+        .order("last_visit", { ascending: false })
+
+      if (error) {
+        console.error("Customer search error:", error)
+        throw error
+      }
+      
+      console.log("Customer search results:", data)
+      return data || []
+    },
+    enabled: customerSearch.length >= 1,
   })
 
   // Check restaurant availability when date/time changes
@@ -232,6 +275,36 @@ export function ManualBookingForm({
     enabled: !!bookingDate && !!bookingTime,
   })
 
+  // Handle customer selection
+  const handleCustomerSelect = (customer: any) => {
+    setSelectedCustomer(customer)
+    setCustomerSearch(customer.profile?.full_name || customer.guest_name || "")
+    setShowCustomerDropdown(false)
+    
+    // Auto-fill form fields if guest customer
+    if (!customer.user_id) {
+      setValue("guest_name", customer.guest_name || "")
+      setValue("guest_email", customer.guest_email || "")
+      setValue("guest_phone", customer.guest_phone || "")
+    } else {
+      // Clear guest fields for registered customers
+      setValue("guest_name", "")
+      setValue("guest_email", "")
+      setValue("guest_phone", "")
+    }
+    
+    setValue("customer_id", customer.id)
+  }
+
+  const handleClearCustomer = () => {
+    setSelectedCustomer(null)
+    setCustomerSearch("")
+    setValue("customer_id", "")
+    setValue("guest_name", "")
+    setValue("guest_email", "")
+    setValue("guest_phone", "")
+  }
+
   // Fixed handleFormSubmit function with proper null handling
   const handleFormSubmit: SubmitHandler<FormData> = (data: FormData): void => {
     // Validate table selection
@@ -304,9 +377,15 @@ export function ManualBookingForm({
     // FIXED: Convert empty strings to null to avoid unique constraint violations
     const processedData = {
       ...data,
-      guest_name: data.guest_name?.trim() || `Anonymous Guest ${format(new Date(), 'HH:mm')}`,
-      guest_phone: data.guest_phone ? data.guest_phone.trim() : null,
-      guest_email: data.guest_email ? data.guest_email.trim() : null,
+      customer_id: selectedCustomer?.id || null,
+      user_id: selectedCustomer?.user_id || null,
+      guest_name: selectedCustomer 
+        ? (selectedCustomer.profile?.full_name || selectedCustomer.guest_name)
+        : (data.guest_name?.trim() || `Anonymous Guest ${format(new Date(), 'HH:mm')}`),
+      guest_phone: selectedCustomer 
+        ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
+        : (data.guest_phone ? data.guest_phone.trim() : null),
+      guest_email: selectedCustomer?.guest_email || (data.guest_email ? data.guest_email.trim() : null),
       booking_time: bookingDateTime.toISOString(),
       table_ids: selectedTables,
     }
@@ -393,17 +472,157 @@ export function ManualBookingForm({
   return (
     <ScrollArea className="h-[80vh] pr-4">
       <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+        {/* Customer Search */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold">Customer Selection (Optional)</h3>
+          <p className="text-sm text-muted-foreground">
+            Search for an existing customer or leave blank to create a new booking
+          </p>
+          
+          <div className="relative">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search customers by name, email, or phone..."
+                value={customerSearch}
+                onChange={(e) => {
+                  setCustomerSearch(e.target.value)
+                  setShowCustomerDropdown(true)
+                }}
+                onFocus={() => setShowCustomerDropdown(customerSearch.length >= 1)}
+                onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
+                className="pl-10"
+                disabled={isLoading}
+              />
+              {selectedCustomer && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 p-0"
+                  onClick={handleClearCustomer}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+            
+            {/* Customer dropdown */}
+            {showCustomerDropdown && customerSearch.length >= 1 && (
+              <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                {customersLoading && (
+                  <div className="p-3">
+                    <p className="text-sm text-muted-foreground">Searching customers...</p>
+                  </div>
+                )}
+                
+                {customersError && (
+                  <div className="p-3">
+                    <p className="text-sm text-red-600">Error searching customers: {customersError.message}</p>
+                  </div>
+                )}
+                
+                {!customersLoading && !customersError && customers && customers.length > 0 && (
+                  <>
+                    {customers.map((customer) => (
+                      <div
+                        key={customer.id}
+                        className="flex items-center gap-3 p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"
+                        onClick={() => handleCustomerSelect(customer)}
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">
+                              {customer.profile?.full_name || customer.guest_name || 'Guest'}
+                            </p>
+                            {customer.vip_status && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Star className="h-3 w-3 mr-1" />
+                                VIP
+                              </Badge>
+                            )}
+                            {customer.user_id && (
+                              <Badge variant="outline" className="text-xs">
+                                <UserCheck className="h-3 w-3 mr-1" />
+                                Registered
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {customer.guest_email && <span>{customer.guest_email}</span>}
+                            {customer.guest_email && (customer.profile?.phone_number || customer.guest_phone) && <span> • </span>}
+                            {(customer.profile?.phone_number || customer.guest_phone) && (
+                              <span>{customer.profile?.phone_number || customer.guest_phone}</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {customer.total_bookings} bookings
+                            {customer.last_visit && (
+                              <span> • Last visit: {format(new Date(customer.last_visit), 'MMM d, yyyy')}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+                
+                {!customersLoading && !customersError && customers && customers.length === 0 && (
+                  <div className="p-3">
+                    <p className="text-sm text-muted-foreground">No customers found matching "{customerSearch}"</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {/* Selected customer display */}
+          {selectedCustomer && (
+            <div className="p-3 bg-muted/50 rounded-lg border">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="h-4 w-4 text-primary" />
+                  <span className="font-medium">Selected Customer:</span>
+                  <span>{selectedCustomer.profile?.full_name || selectedCustomer.guest_name}</span>
+                  {selectedCustomer.vip_status && (
+                    <Badge variant="secondary" className="text-xs">
+                      <Star className="h-3 w-3 mr-1" />
+                      VIP
+                    </Badge>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearCustomer}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+          )}
+          
+
+        </div>
+
         {/* Guest Information */}
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Guest Information (Optional)</h3>
+          <h3 className="text-lg font-semibold">
+            {selectedCustomer ? 'Guest Information (Auto-filled)' : 'Guest Information (Optional)'}
+          </h3>
         
           <div>
             <Label htmlFor="guest_name">Guest Name (Optional)</Label>
             <Input
               id="guest_name"
-              placeholder="Enter guest name or leave blank for anonymous"
+              placeholder={selectedCustomer ? "Auto-filled from selected customer" : "Enter guest name or leave blank for anonymous"}
               {...register("guest_name")}
-              disabled={isLoading}
+              disabled={isLoading || !!selectedCustomer}
+              value={selectedCustomer 
+                ? (selectedCustomer.profile?.full_name || selectedCustomer.guest_name || "")
+                : watch("guest_name") || ""
+              }
             />
             {errors.guest_name && (
               <p className="text-sm text-red-600 mt-1">{errors.guest_name.message}</p>
@@ -416,9 +635,13 @@ export function ManualBookingForm({
               <Input
                 id="guest_phone"
                 type="tel"
-                placeholder="Enter phone number"
+                placeholder={selectedCustomer ? "Auto-filled from selected customer" : "Enter phone number"}
                 {...register("guest_phone")}
-                disabled={isLoading}
+                disabled={isLoading || !!selectedCustomer}
+                value={selectedCustomer 
+                  ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone || "")
+                  : watch("guest_phone") || ""
+                }
               />
               {errors.guest_phone && (
                 <p className="text-sm text-red-600 mt-1">{errors.guest_phone.message}</p>
@@ -430,9 +653,13 @@ export function ManualBookingForm({
               <Input
                 id="guest_email"
                 type="email"
-                placeholder="Enter email address"
+                placeholder={selectedCustomer ? "Auto-filled from selected customer" : "Enter email address"}
                 {...register("guest_email")}
-                disabled={isLoading}
+                disabled={isLoading || !!selectedCustomer}
+                value={selectedCustomer 
+                  ? (selectedCustomer.guest_email || "")
+                  : watch("guest_email") || ""
+                }
               />
               {errors.guest_email && (
                 <p className="text-sm text-red-600 mt-1">{errors.guest_email.message}</p>
@@ -467,7 +694,6 @@ export function ManualBookingForm({
                     mode="single"
                     selected={bookingDate}
                     onSelect={(date) => date && setValue("booking_date", date)}
-                    initialFocus
                     disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                   />
                 </PopoverContent>

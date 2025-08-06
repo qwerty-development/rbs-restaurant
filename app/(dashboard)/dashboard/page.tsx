@@ -842,6 +842,7 @@ export default function DashboardPage() {
                 onQuickSeat={handleQuickSeat}
                 customersData={customersData}
                 onSelectBooking={setSelectedBooking}
+                restaurantId={restaurantId}
               />
             </div>
           </div>
