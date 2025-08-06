@@ -132,20 +132,21 @@ export class RestaurantAvailability {
         return result
       }
 
-      // Check regular hours
+      // Check regular hours (support multiple shifts per day)
       const { data: regularHours, error: regularError } = await this.supabase
         .from('restaurant_hours')
         .select('*')
         .eq('restaurant_id', restaurantId)
         .eq('day_of_week', dayOfWeek)
-        .maybeSingle()
+        .eq('is_open', true)
+        .order('open_time')
 
-      if (regularError && regularError.code !== 'PGRST116') {
+      if (regularError) {
         console.error('Error checking regular hours:', regularError)
         throw new Error('Failed to check restaurant availability')
       }
 
-      if (!regularHours || !regularHours.is_open) {
+      if (!regularHours || regularHours.length === 0) {
         const result = {
           isOpen: false,
           reason: 'Closed today'
@@ -154,29 +155,45 @@ export class RestaurantAvailability {
         return result
       }
 
-      // If time is provided, check if it's within regular hours
-      if (time && regularHours.open_time && regularHours.close_time) {
-        const isWithinHours = this.isTimeWithinRange(
-          time,
-          regularHours.open_time,
-          regularHours.close_time
-        )
-        const result = {
-          isOpen: isWithinHours,
-          hours: {
-            open: regularHours.open_time,
-            close: regularHours.close_time
+      // If time is provided, check if it's within any of the shifts
+      if (time) {
+        for (const shift of regularHours) {
+          if (shift.open_time && shift.close_time) {
+            const isWithinHours = this.isTimeWithinRange(
+              time,
+              shift.open_time,
+              shift.close_time
+            )
+            if (isWithinHours) {
+              const result = {
+                isOpen: true,
+                hours: {
+                  open: shift.open_time,
+                  close: shift.close_time
+                }
+              }
+              this.cache.set(cacheKey, { data: result, timestamp: Date.now() })
+              return result
+            }
           }
+        }
+        
+        // Time doesn't fall within any shift
+        const result = {
+          isOpen: false,
+          reason: 'Restaurant is closed at this time'
         }
         this.cache.set(cacheKey, { data: result, timestamp: Date.now() })
         return result
       }
 
+      // If no specific time, return first shift hours
+      const firstShift = regularHours[0]
       const result = {
         isOpen: true,
-        hours: regularHours.open_time && regularHours.close_time ? {
-          open: regularHours.open_time,
-          close: regularHours.close_time
+        hours: firstShift.open_time && firstShift.close_time ? {
+          open: firstShift.open_time,
+          close: firstShift.close_time
         } : undefined
       }
       this.cache.set(cacheKey, { data: result, timestamp: Date.now() })
@@ -207,7 +224,7 @@ export class RestaurantAvailability {
   }
 
   /**
-   * Get available time slots for a specific date
+   * Get available time slots for a specific date (supports multiple shifts)
    */
   async getAvailableTimeSlots(
     restaurantId: string,
@@ -215,44 +232,89 @@ export class RestaurantAvailability {
     partySize: number,
     slotDuration: number = 30 // minutes
   ): Promise<string[]> {
-    const availability = await this.isRestaurantOpen(restaurantId, date)
-    
-    if (!availability.isOpen || !availability.hours) {
+    const dateStr = format(date, 'yyyy-MM-dd')
+    const dayOfWeek = format(date, 'EEEE').toLowerCase()
+
+    try {
+      // Check for closures and special hours first
+      const [closures, specialHours] = await Promise.all([
+        this.supabase
+          .from('restaurant_closures')
+          .select('*')
+          .eq('restaurant_id', restaurantId)
+          .lte('start_date', dateStr)
+          .gte('end_date', dateStr)
+          .maybeSingle(),
+        this.supabase
+          .from('restaurant_special_hours')
+          .select('*')
+          .eq('restaurant_id', restaurantId)
+          .eq('date', dateStr)
+          .maybeSingle()
+      ])
+
+      if (closures.data) return []
+      if (specialHours.data?.is_closed) return []
+
+      let shifts: Array<{ open_time: string; close_time: string }> = []
+
+      if (specialHours.data && !specialHours.data.is_closed && specialHours.data.open_time && specialHours.data.close_time) {
+        // Use special hours
+        shifts = [{ open_time: specialHours.data.open_time, close_time: specialHours.data.close_time }]
+      } else {
+        // Get all regular hour shifts for this day
+        const { data: regularHours } = await this.supabase
+          .from('restaurant_hours')
+          .select('*')
+          .eq('restaurant_id', restaurantId)
+          .eq('day_of_week', dayOfWeek)
+          .eq('is_open', true)
+          .order('open_time')
+
+        shifts = regularHours?.filter(h => h.open_time && h.close_time)
+          .map(h => ({ open_time: h.open_time!, close_time: h.close_time! })) || []
+      }
+
+      if (shifts.length === 0) return []
+
+      const slots: string[] = []
+      const mealDuration = 90 // Assume 90 minutes for a meal
+
+      // Generate slots for all shifts
+      for (const shift of shifts) {
+        const [openHour, openMin] = shift.open_time.split(':').map(Number)
+        const [closeHour, closeMin] = shift.close_time.split(':').map(Number)
+
+        const startMinutes = openHour * 60 + openMin
+        const endMinutes = closeHour * 60 + closeMin
+
+        for (let minutes = startMinutes; minutes < endMinutes; minutes += slotDuration) {
+          if (minutes + mealDuration <= endMinutes) {
+            const hour = Math.floor(minutes / 60)
+            const min = minutes % 60
+            const timeStr = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`
+            slots.push(timeStr)
+          }
+        }
+      }
+
+      return [...new Set(slots)].sort() // Remove duplicates and sort
+    } catch (error) {
+      console.error('Error getting available time slots:', error)
       return []
     }
-
-    const slots: string[] = []
-    const [openHour, openMin] = availability.hours.open.split(':').map(Number)
-    const [closeHour, closeMin] = availability.hours.close.split(':').map(Number)
-
-    const startMinutes = openHour * 60 + openMin
-    const endMinutes = closeHour * 60 + closeMin
-
-    // Generate slots
-    for (let minutes = startMinutes; minutes < endMinutes; minutes += slotDuration) {
-      const hour = Math.floor(minutes / 60)
-      const min = minutes % 60
-      const timeStr = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`
-      
-      // Check if there's enough time before closing for a typical meal
-      const mealDuration = 90 // Assume 90 minutes for a meal
-      if (minutes + mealDuration <= endMinutes) {
-        slots.push(timeStr)
-      }
-    }
-
-    return slots
   }
 
   /**
-   * Get restaurant hours for a week
+   * Get restaurant hours for a week (supports multiple shifts per day)
    */
   async getWeeklyHours(restaurantId: string): Promise<RestaurantHours[]> {
     const { data, error } = await this.supabase
       .from('restaurant_hours')
       .select('*')
       .eq('restaurant_id', restaurantId)
-      .order('day_of_week')
+      .order('day_of_week', { ascending: true })
+      .order('open_time', { ascending: true })
 
     if (error) {
       console.error('Error fetching weekly hours:', error)
@@ -260,6 +322,23 @@ export class RestaurantAvailability {
     }
 
     return data || []
+  }
+
+  /**
+   * Get restaurant shifts grouped by day
+   */
+  async getWeeklyShifts(restaurantId: string): Promise<Record<string, RestaurantHours[]>> {
+    const hours = await this.getWeeklyHours(restaurantId)
+    const shiftsByDay: Record<string, RestaurantHours[]> = {}
+
+    for (const hour of hours) {
+      if (!shiftsByDay[hour.day_of_week]) {
+        shiftsByDay[hour.day_of_week] = []
+      }
+      shiftsByDay[hour.day_of_week].push(hour)
+    }
+
+    return shiftsByDay
   }
 
   /**

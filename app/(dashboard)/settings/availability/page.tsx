@@ -60,43 +60,23 @@ interface Closure {
   reason: string
 }
 
-// Regular hours schema
+// Schema for a single shift
+const shiftSchema = z.object({
+  id: z.string().optional(),
+  is_open: z.boolean(),
+  open_time: z.string().optional(),
+  close_time: z.string().optional(),
+})
+
+// Regular hours schema - now supports multiple shifts per day
 const regularHoursSchema = z.object({
-  monday: z.object({
-    is_open: z.boolean(),
-    open_time: z.string().optional(),
-    close_time: z.string().optional(),
-  }),
-  tuesday: z.object({
-    is_open: z.boolean(),
-    open_time: z.string().optional(),
-    close_time: z.string().optional(),
-  }),
-  wednesday: z.object({
-    is_open: z.boolean(),
-    open_time: z.string().optional(),
-    close_time: z.string().optional(),
-  }),
-  thursday: z.object({
-    is_open: z.boolean(),
-    open_time: z.string().optional(),
-    close_time: z.string().optional(),
-  }),
-  friday: z.object({
-    is_open: z.boolean(),
-    open_time: z.string().optional(),
-    close_time: z.string().optional(),
-  }),
-  saturday: z.object({
-    is_open: z.boolean(),
-    open_time: z.string().optional(),
-    close_time: z.string().optional(),
-  }),
-  sunday: z.object({
-    is_open: z.boolean(),
-    open_time: z.string().optional(),
-    close_time: z.string().optional(),
-  }),
+  monday: z.array(shiftSchema),
+  tuesday: z.array(shiftSchema),
+  wednesday: z.array(shiftSchema),
+  thursday: z.array(shiftSchema),
+  friday: z.array(shiftSchema),
+  saturday: z.array(shiftSchema),
+  sunday: z.array(shiftSchema),
 })
 
 // Special hours schema
@@ -188,17 +168,17 @@ export default function EnhancedAvailabilitySettingsPage() {
     enabled: !!restaurantId,
   })
 
-  // Regular hours form
+  // Regular hours form - with default single shift per day
   const regularHoursForm = useForm<RegularHoursFormData>({
     resolver: zodResolver(regularHoursSchema),
     defaultValues: {
-      monday: { is_open: true, open_time: "09:00", close_time: "22:00" },
-      tuesday: { is_open: true, open_time: "09:00", close_time: "22:00" },
-      wednesday: { is_open: true, open_time: "09:00", close_time: "22:00" },
-      thursday: { is_open: true, open_time: "09:00", close_time: "22:00" },
-      friday: { is_open: true, open_time: "09:00", close_time: "22:00" },
-      saturday: { is_open: true, open_time: "09:00", close_time: "22:00" },
-      sunday: { is_open: true, open_time: "09:00", close_time: "22:00" },
+      monday: [{ is_open: true, open_time: "09:00", close_time: "22:00" }],
+      tuesday: [{ is_open: true, open_time: "09:00", close_time: "22:00" }],
+      wednesday: [{ is_open: true, open_time: "09:00", close_time: "22:00" }],
+      thursday: [{ is_open: true, open_time: "09:00", close_time: "22:00" }],
+      friday: [{ is_open: true, open_time: "09:00", close_time: "22:00" }],
+      saturday: [{ is_open: true, open_time: "09:00", close_time: "22:00" }],
+      sunday: [{ is_open: true, open_time: "09:00", close_time: "22:00" }],
     },
   })
 
@@ -223,11 +203,17 @@ export default function EnhancedAvailabilitySettingsPage() {
       const formData: any = {}
       
       DAYS_OF_WEEK.forEach(day => {
-        const dayHours = availabilityData.regularHours.find(h => h.day_of_week === day)
-        formData[day] = {
-          is_open: dayHours?.is_open ?? true,
-          open_time: dayHours?.open_time || "09:00",
-          close_time: dayHours?.close_time || "22:00",
+        const dayShifts = availabilityData.regularHours.filter(h => h.day_of_week === day)
+        if (dayShifts.length > 0) {
+          formData[day] = dayShifts.map(shift => ({
+            id: shift.id,
+            is_open: shift.is_open,
+            open_time: shift.open_time || "09:00",
+            close_time: shift.close_time || "22:00",
+          }))
+        } else {
+          // Default closed day
+          formData[day] = [{ is_open: false, open_time: "09:00", close_time: "22:00" }]
         }
       })
       
@@ -235,28 +221,41 @@ export default function EnhancedAvailabilitySettingsPage() {
     }
   }, [availabilityData, regularHoursForm])
 
-  // Update regular hours mutation
+  // Update regular hours mutation - handles multiple shifts
   const updateRegularHoursMutation = useMutation({
     mutationFn: async (data: RegularHoursFormData) => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
-      const updates = DAYS_OF_WEEK.map(day => ({
-        restaurant_id: restaurantId,
-        day_of_week: day,
-        is_open: data[day].is_open,
-        open_time: data[day].is_open ? data[day].open_time : null,
-        close_time: data[day].is_open ? data[day].close_time : null,
-      }))
+      // First, delete all existing hours for this restaurant
+      const { error: deleteError } = await supabase
+        .from("restaurant_hours")
+        .delete()
+        .eq("restaurant_id", restaurantId)
 
-      for (const update of updates) {
-        const { error } = await supabase
-          .from("restaurant_hours")
-          .upsert(update, {
-            onConflict: "restaurant_id,day_of_week",
+      if (deleteError) throw deleteError
+
+      // Then insert all new shifts
+      const allShifts: any[] = []
+      
+      DAYS_OF_WEEK.forEach(day => {
+        data[day].forEach(shift => {
+          allShifts.push({
+            restaurant_id: restaurantId,
+            day_of_week: day,
+            is_open: shift.is_open,
+            open_time: shift.is_open ? shift.open_time : null,
+            close_time: shift.is_open ? shift.close_time : null,
           })
+        })
+      })
 
-        if (error) throw error
+      if (allShifts.length > 0) {
+        const { error: insertError } = await supabase
+          .from("restaurant_hours")
+          .insert(allShifts)
+
+        if (insertError) throw insertError
       }
     },
     onSuccess: () => {
@@ -395,83 +394,118 @@ export default function EnhancedAvailabilitySettingsPage() {
             <CardHeader>
               <CardTitle>Regular Operating Hours</CardTitle>
               <CardDescription>
-                Set your standard weekly operating hours.
+                Set your standard weekly operating hours. You can add multiple shifts per day (e.g., lunch and dinner service).
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Form {...regularHoursForm}>
-                <form onSubmit={regularHoursForm.handleSubmit((data) => updateRegularHoursMutation.mutate(data))} className="space-y-6">
-                  {DAYS_OF_WEEK.map((day) => (
-                    <div key={day} className="grid grid-cols-12 gap-4 items-center">
-                      <div className="col-span-3">
-                        <FormLabel className="capitalize">{day}</FormLabel>
-                      </div>
-                      
-                      <div className="col-span-2">
-                        <FormField
-                          control={regularHoursForm.control}
-                          name={`${day}.is_open`}
-                          render={({ field }) => (
-                            <FormItem className="flex items-center space-x-2">
-                              <FormControl>
-                                <Switch
-                                  checked={field.value}
-                                  onCheckedChange={field.onChange}
+                <form onSubmit={regularHoursForm.handleSubmit((data) => updateRegularHoursMutation.mutate(data))} className="space-y-8">
+                  {DAYS_OF_WEEK.map((day) => {
+                    const shifts = regularHoursForm.watch(day) || []
+                    return (
+                      <div key={day} className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-lg font-medium capitalize">{day}</h3>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const currentShifts = regularHoursForm.getValues(day)
+                              regularHoursForm.setValue(day, [
+                                ...currentShifts,
+                                { is_open: true, open_time: "17:00", close_time: "23:00" }
+                              ])
+                            }}
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add Shift
+                          </Button>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          {shifts.map((_, shiftIndex) => (
+                            <div key={shiftIndex} className="flex items-center gap-4 p-4 border rounded-lg">
+                              <div className="flex items-center space-x-2">
+                                <FormField
+                                  control={regularHoursForm.control}
+                                  name={`${day}.${shiftIndex}.is_open`}
+                                  render={({ field }) => (
+                                    <FormItem className="flex items-center space-x-2">
+                                      <FormControl>
+                                        <Switch
+                                          checked={field.value}
+                                          onCheckedChange={field.onChange}
+                                        />
+                                      </FormControl>
+                                      <FormLabel className="!mt-0">
+                                        {field.value ? "Open" : "Closed"}
+                                      </FormLabel>
+                                    </FormItem>
+                                  )}
                                 />
-                              </FormControl>
-                              <FormLabel className="!mt-0">
-                                {field.value ? "Open" : "Closed"}
-                              </FormLabel>
-                            </FormItem>
-                          )}
-                        />
+                              </div>
+
+                              {shifts[shiftIndex]?.is_open && (
+                                <>
+                                  <FormField
+                                    control={regularHoursForm.control}
+                                    name={`${day}.${shiftIndex}.open_time`}
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormControl>
+                                          <Input
+                                            type="time"
+                                            {...field}
+                                            className="w-32"
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  <span className="text-muted-foreground">to</span>
+
+                                  <FormField
+                                    control={regularHoursForm.control}
+                                    name={`${day}.${shiftIndex}.close_time`}
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormControl>
+                                          <Input
+                                            type="time"
+                                            {...field}
+                                            className="w-32"
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                </>
+                              )}
+
+                              {shifts.length > 1 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    const currentShifts = regularHoursForm.getValues(day)
+                                    const newShifts = currentShifts.filter((_, i) => i !== shiftIndex)
+                                    regularHoursForm.setValue(day, newShifts)
+                                  }}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-
-                      {regularHoursForm.watch(`${day}.is_open`) && (
-                        <>
-                          <div className="col-span-3">
-                            <FormField
-                              control={regularHoursForm.control}
-                              name={`${day}.open_time`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormControl>
-                                    <Input
-                                      type="time"
-                                      {...field}
-                                      className="w-full"
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                          </div>
-
-                          <div className="col-span-1 text-center">to</div>
-
-                          <div className="col-span-3">
-                            <FormField
-                              control={regularHoursForm.control}
-                              name={`${day}.close_time`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormControl>
-                                    <Input
-                                      type="time"
-                                      {...field}
-                                      className="w-full"
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
+                    )
+                  })}
 
                   <Button
                     type="submit"
