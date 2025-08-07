@@ -163,7 +163,12 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
       return // Don't start drag if clicking on resize handle
     }
     
-    e.preventDefault()
+    // Only prevent default for actual drag operations, not for scrolling
+    if ('touches' in e && e.touches.length === 1) {
+      e.preventDefault()
+    } else if ('clientX' in e) {
+      e.preventDefault()
+    }
     
     const element = e.currentTarget as HTMLElement
     const containerRect = containerRef.current?.getBoundingClientRect()
@@ -212,10 +217,11 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
     element.style.zIndex = '1000'
     element.style.transition = 'none' // Disable CSS transitions during drag
     
-    // Prevent text selection and image dragging
+    // Prevent text selection and image dragging, but allow scrolling
     document.body.style.userSelect = 'none'
     document.body.style.webkitUserSelect = 'none'
-    document.body.style.touchAction = 'none'
+    // Only disable touch action on the dragged element, not the entire body
+    element.style.touchAction = 'none'
     
     setIsDragging(true)
   }, [viewMode, isResizing])
@@ -232,8 +238,9 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
     const tableElement = resizeHandle.closest('[data-table-id]') as HTMLElement
     if (!tableElement) return
 
-    const currentWidth = tableElement.offsetWidth
-    const currentHeight = tableElement.offsetHeight
+    // Get current dimensions more accurately
+    const currentWidth = tableElement.offsetWidth / (zoom / 100)
+    const currentHeight = tableElement.offsetHeight / (zoom / 100)
 
     // Get coordinates based on event type
     let clientX: number, clientY: number
@@ -266,7 +273,14 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
     document.body.style.cursor = 'se-resize'
     document.body.style.userSelect = 'none'
     document.body.style.webkitUserSelect = 'none'
-    document.body.style.touchAction = 'none'
+    // Only disable touch action on the resized element, not the entire body
+    tableElement.style.touchAction = 'none'
+    
+    // Add resize indicator class for better visual feedback
+    tableElement.classList.add('resize-active')
+    
+    // Temporarily increase z-index for better touch interaction
+    tableElement.style.zIndex = '1001'
     
     setIsResizing(true)
   }, [viewMode, isDragging])
@@ -347,8 +361,13 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
         const deltaX = coords.clientX - resizeState.startX
         const deltaY = coords.clientY - resizeState.startY
         
-        const newWidth = Math.max(50, resizeState.initialWidth + deltaX)
-        const newHeight = Math.max(30, resizeState.initialHeight + deltaY)
+        // Account for zoom level in resize calculations
+        const scaledDeltaX = deltaX / (zoom / 100)
+        const scaledDeltaY = deltaY / (zoom / 100)
+        
+        // Calculate new dimensions with minimum sizes
+        const newWidth = Math.max(40, resizeState.initialWidth + scaledDeltaX)
+        const newHeight = Math.max(30, resizeState.initialHeight + scaledDeltaY)
         
         // Apply size directly to DOM (super fast)
         resizeState.element!.style.width = `${newWidth}px`
@@ -357,7 +376,7 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
         finalSizesRef.current[resizeState.tableId!] = { width: newWidth, height: newHeight }
       })
     }
-  }, [isDragging, isResizing])
+  }, [isDragging, isResizing, zoom])
 
   // Unified end handler for mouse and touch
   const handleEnd = useCallback((e?: MouseEvent | TouchEvent) => {
@@ -384,6 +403,7 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
       dragState.element.style.transition = ''
       dragState.element.style.cursor = ''
       dragState.element.style.zIndex = ''
+      dragState.element.style.touchAction = ''
       
       // Save final position to database
       const finalPos = finalPositionsRef.current[dragState.tableId]
@@ -401,6 +421,11 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
     if (resizeState.tableId && resizeState.element) {
       // Re-enable CSS transitions
       resizeState.element.style.transition = ''
+      resizeState.element.style.touchAction = ''
+      resizeState.element.style.zIndex = ''
+      
+      // Remove resize indicator class
+      resizeState.element.classList.remove('resize-active')
       
       // Save final size to database
       const finalSize = finalSizesRef.current[resizeState.tableId]
@@ -444,7 +469,6 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
     document.body.style.userSelect = ''
     document.body.style.webkitUserSelect = ''
     document.body.style.cursor = ''
-    document.body.style.touchAction = ''
     
     setIsDragging(false)
     setIsResizing(false)
@@ -671,8 +695,12 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
         <CardContent className="p-0">
           <div
             ref={containerRef}
-            className="relative bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden select-none touch-none"
-            style={{ height: "700px" }}
+            className="relative bg-gradient-to-br from-slate-50 to-slate-100 overflow-auto select-none"
+            style={{ 
+              height: "700px",
+              touchAction: "pan-x pan-y",
+              WebkitOverflowScrolling: "touch"
+            }}
             onClick={handleContainerClick}
             onTouchEnd={handleContainerClick}
           >
@@ -710,12 +738,12 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                   key={table.id}
                   data-table-id={table.id}
                   className={cn(
-                    "absolute border-2 rounded-xl p-3 transition-all duration-150 touch-none",
+                    "absolute border-2 rounded-xl p-3 transition-all duration-150",
                     colors,
                     viewMode === "edit" && !isBeingDragged && !isBeingResized ? "hover:shadow-md hover:scale-[1.02]" : "",
                     viewMode === "edit" ? "cursor-move" : "cursor-pointer",
                     isBeingDragged && "shadow-2xl scale-105 cursor-grabbing",
-                    isBeingResized && "shadow-2xl ring-2 ring-green-400",
+                    isBeingResized && "shadow-2xl ring-4 ring-green-400 ring-opacity-75 scale-[1.02]",
                     isSelected && !isBeingDragged && !isBeingResized && "ring-2 ring-blue-400 shadow-lg z-40"
                   )}
                   style={{
@@ -730,7 +758,9 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                     willChange: viewMode === "edit" ? "transform, left, top, width, height" : "auto",
                     // Prevent iOS bounce and ensure proper touch handling
                     WebkitTouchCallout: "none",
-                    WebkitUserSelect: "none"
+                    WebkitUserSelect: "none",
+                    // Allow natural scrolling unless this table is being dragged/resized
+                    touchAction: isBeingDragged || isBeingResized ? "none" : "auto"
                   }}
                   onMouseDown={(e) => handleDragStart(e, table.id)}
                   onTouchStart={(e) => handleDragStart(e, table.id)}
@@ -757,23 +787,30 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                       {onTableResize && (
                         <div 
                           data-resize-handle="true"
-                          className="absolute -bottom-2 -right-2 w-10 h-10 md:w-6 md:h-6 bg-blue-500 rounded-full border-2 border-white shadow-lg cursor-se-resize hover:bg-blue-600 active:bg-blue-700 transition-colors z-50 touch-none flex items-center justify-center"
+                          className="absolute bg-green-500 rounded-full border-2 border-white shadow-lg cursor-se-resize hover:bg-green-600 active:bg-green-700 transition-all duration-150 z-50 flex items-center justify-center w-12 h-12 md:w-7 md:h-7"
                           style={{
-                            // Ensure handle is large enough for touch
+                            // Position handle at bottom-right corner with better spacing
+                            bottom: '-8px',
+                            right: '-8px',
+                            // Ensure handle is touchable and responsive
                             touchAction: 'none',
                             WebkitTouchCallout: 'none',
-                            WebkitUserSelect: 'none'
+                            WebkitUserSelect: 'none',
+                            // Better transform origin for scaling
+                            transformOrigin: 'center'
                           }}
                           onMouseDown={(e) => handleResizeStart(e, table.id)}
                           onTouchStart={(e) => handleResizeStart(e, table.id)}
                         >
-                          {/* Visual resize icon */}
+                          {/* Visual resize icon - clearer for touch */}
                           <svg 
-                            className="w-4 h-4 md:w-3 md:h-3 text-white opacity-90 pointer-events-none" 
+                            className="text-white opacity-95 pointer-events-none" 
+                            width="20"
+                            height="20"
                             fill="currentColor" 
                             viewBox="0 0 24 24"
                           >
-                            <path d="M21,15L15,21V18H11V14H14V17L21,15M3,9L9,3V6H13V10H10V7L3,9Z"/>
+                            <path d="M13,21H21V13H19V17.59L13.41,12L12,13.41L17.59,19H13V21M3,3V11H5V6.41L10.59,12L12,10.59L6.41,5H11V3H3Z"/>
                           </svg>
                         </div>
                       )}
