@@ -746,31 +746,32 @@ export default function DashboardPage() {
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Streamlined Header */}
-      <header className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-lg px-4 py-3 flex-shrink-0 border-b border-slate-700/50">
-        <div className="flex items-center justify-between gap-4">
+      {/* Streamlined Header - Optimized for tablets */}
+      <header className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-lg px-3 md:px-4 py-2 md:py-3 flex-shrink-0 border-b border-slate-700/50">
+        <div className="flex items-center justify-between gap-2 md:gap-3 lg:gap-4">
           {/* Left Side - Brand & Menu */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-3 lg:gap-4">
             <Button
               variant="ghost"
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="lg:hidden hover:bg-slate-700/60 p-2 rounded-lg transition-all"
+              className="md:hidden hover:bg-slate-700/60 p-1.5 md:p-2 rounded-lg transition-all touch-manipulation"
+              title="Toggle Operations Panel"
             >
-              <Menu className="h-5 w-5" />
+              <Menu className="h-4 w-4 md:h-5 md:w-5" />
             </Button>
             
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-sm">RH</span>
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="w-6 h-6 md:w-8 md:h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
+                <span className="text-white font-bold text-xs md:text-sm">RH</span>
               </div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
+              <h1 className="text-base md:text-lg lg:text-xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent hidden sm:block">
                 Restaurant Hub
               </h1>
             </div>
           </div>
 
           {/* Center - Premium Search Bar */}
-          <div className="flex-1 max-w-2xl mx-8">
+          <div className="flex-1 max-w-xl md:max-w-2xl mx-2 md:mx-4 lg:mx-8">
             <div className="relative group">
               {/* Glow Effect */}
               <div className="absolute -inset-1 bg-gradient-to-r from-blue-600/30 via-purple-600/30 to-blue-600/30 rounded-2xl blur-lg opacity-0 group-focus-within:opacity-100 transition-all duration-500 animate-pulse" />
@@ -787,7 +788,7 @@ export default function DashboardPage() {
                   placeholder="Search guests, tables, confirmations..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-12 pl-12 pr-20 bg-transparent border-0 text-white placeholder:text-slate-400 focus:ring-0 focus:outline-none text-sm font-medium"
+                  className="w-full h-10 md:h-12 pl-10 md:pl-12 pr-16 md:pr-20 bg-transparent border-0 text-white placeholder:text-slate-400 focus:ring-0 focus:outline-none text-xs md:text-sm font-medium"
                 />
                 
                 {/* Results Counter */}
@@ -838,14 +839,14 @@ export default function DashboardPage() {
           </div>
 
           {/* Right Side - Controls */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 md:gap-2 lg:gap-3">
             {/* Compact Quick Filters */}
-            <div className="flex items-center gap-1 bg-slate-800/60 backdrop-blur-xl rounded-xl p-1 border border-slate-600/40">
+            <div className="hidden sm:flex items-center gap-1 bg-slate-800/60 backdrop-blur-xl rounded-xl p-0.5 md:p-1 border border-slate-600/40">
               <Button
                 variant={quickFilter === "all" ? "secondary" : "ghost"}
                 size="sm"
                 className={cn(
-                  "px-3 py-2 h-8 text-xs font-semibold rounded-lg transition-all duration-300",
+                  "px-2 md:px-3 py-1.5 md:py-2 h-7 md:h-8 text-xs font-semibold rounded-lg transition-all duration-300 touch-manipulation",
                   quickFilter === "all" 
                     ? "bg-white text-slate-900 shadow-md" 
                     : "text-slate-300 hover:text-white hover:bg-slate-600/60"
@@ -895,7 +896,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Live Stats */}
-            <div className="flex items-center gap-3 bg-slate-800/60 backdrop-blur-xl rounded-xl px-3 py-2 border border-slate-600/40">
+            <div className="hidden md:flex items-center gap-2 lg:gap-3 bg-slate-800/60 backdrop-blur-xl rounded-xl px-2 md:px-3 py-1.5 md:py-2 border border-slate-600/40">
               <div className="flex items-center gap-1.5">
                 <div className="h-2 w-2 bg-emerald-400 rounded-full animate-pulse" />
                 <span className="text-sm font-bold text-emerald-400">{stats.currentGuests}</span>
@@ -925,28 +926,28 @@ export default function DashboardPage() {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 md:gap-2">
               <Button
                 onClick={() => setShowTimeline(!showTimeline)}
                 size="sm"
                 className={cn(
-                  "px-4 py-2 h-9 text-sm font-semibold rounded-xl transition-all duration-300",
+                  "px-2 md:px-3 lg:px-4 py-1.5 md:py-2 h-8 md:h-9 text-xs md:text-sm font-semibold rounded-xl transition-all duration-300 touch-manipulation",
                   showTimeline 
                     ? "bg-blue-600 hover:bg-blue-700 text-white shadow-lg" 
                     : "bg-slate-700/80 hover:bg-slate-600 text-slate-200 border border-slate-600/50"
                 )}
               >
-                <BarChart3 className="h-4 w-4 mr-2" />
-                Timeline
+                <BarChart3 className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2" />
+                <span className="hidden sm:inline">Timeline</span>
               </Button>
               
               <Button
                 onClick={() => setShowManualBooking(true)}
                 size="sm"
-                className="px-4 py-2 h-9 text-sm font-semibold bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white shadow-lg rounded-xl transition-all duration-300 hover:scale-105"
+                className="px-2 md:px-3 lg:px-4 py-1.5 md:py-2 h-8 md:h-9 text-xs md:text-sm font-semibold bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white shadow-lg rounded-xl transition-all duration-300 hover:scale-105 touch-manipulation"
               >
-                <UserPlus className="h-4 w-4 mr-2" />
-                New Guest
+                <UserPlus className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2" />
+                <span className="hidden sm:inline">New Guest</span>
               </Button>
             </div>
           </div>
@@ -964,7 +965,7 @@ export default function DashboardPage() {
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Main Area - Floor Plan */}
-        <main className="flex-1 p-4 overflow-auto">
+        <main className="flex-1 p-2 md:p-3 lg:p-4 overflow-auto">
           <UnifiedFloorPlan
             tables={tables}
             bookings={filteredBookings}
@@ -987,30 +988,30 @@ export default function DashboardPage() {
           />
         </main>
 
-        {/* Optimized Sidebar - Cleaner Layout */}
+        {/* Optimized Sidebar - Cleaner Layout for Tablets */}
         <aside className={cn(
           "bg-gradient-to-br from-white via-gray-50 to-blue-50/30 border-l border-gray-200 shadow-xl flex flex-col transition-all duration-300",
-          sidebarCollapsed ? "w-0 overflow-hidden" : "w-96",
-          "absolute lg:relative inset-y-0 right-0 z-40"
+          sidebarCollapsed ? "w-0 overflow-hidden" : "w-80 md:w-84 lg:w-96",
+          "absolute md:relative inset-y-0 right-0 z-40"
         )}>
           {/* Mobile close button */}
           <Button
             variant="ghost"
             onClick={() => setSidebarCollapsed(true)}
-            className="lg:hidden absolute top-3 right-3 z-50 hover:bg-gray-100 p-2 rounded-lg"
+            className="md:hidden absolute top-2 md:top-3 right-2 md:right-3 z-50 hover:bg-gray-100 p-1.5 md:p-2 rounded-lg touch-manipulation"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3 w-3 md:h-4 md:w-4" />
           </Button>
 
           {/* Compact Operations Header */}
-          <div className="flex-shrink-0 p-4 border-b border-gray-200 bg-gradient-to-r from-white to-gray-50">
+          <div className="flex-shrink-0 p-3 md:p-4 border-b border-gray-200 bg-gradient-to-r from-white to-gray-50">
             {/* Key Metrics Grid */}
-            <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="grid grid-cols-2 gap-1.5 md:gap-2 mb-2 md:mb-3">
               <div className={cn(
-                "text-center p-2.5 rounded-lg border transition-all",
+                "text-center p-2 md:p-2.5 rounded-lg border transition-all",
                 stats.pendingCount > 0 ? "bg-red-50 border-red-200 shadow-sm animate-pulse" : "bg-gray-50 border-gray-200"
               )}>
-                <p className="text-lg font-bold text-red-600">{stats.pendingCount}</p>
+                <p className="text-base md:text-lg font-bold text-red-600">{stats.pendingCount}</p>
                 <p className="text-xs text-red-500 font-medium">Pending</p>
               </div>
               <div className={cn(
@@ -1023,7 +1024,7 @@ export default function DashboardPage() {
             </div>
             
             {/* Secondary Stats */}
-            <div className="flex gap-2 text-xs">
+            <div className="flex gap-1.5 md:gap-2 text-xs">
               <div className="flex-1 text-center p-2 bg-green-50 rounded border border-green-200">
                 <p className="font-bold text-green-700">{stats.totalCompleted}</p>
                 <p className="text-green-600">Completed</p>
@@ -1071,20 +1072,20 @@ export default function DashboardPage() {
           </div>
           
           {/* Minimal Footer */}
-          <div className="flex-shrink-0 p-3 border-t border-gray-200 bg-gray-50">
+          <div className="flex-shrink-0 p-2 md:p-3 border-t border-gray-200 bg-gray-50">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs text-gray-500">
+              <div className="flex items-center gap-1.5 md:gap-2 text-xs text-gray-500">
                 <Clock className="h-3 w-3" />
-                <span>{format(currentTime, "h:mm a")}</span>
+                <span className="text-xs">{format(currentTime, "h:mm a")}</span>
               </div>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => refetchBookings()}
-                className="h-7 px-3 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors duration-200"
+                className="h-6 md:h-7 px-2 md:px-3 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors duration-200 touch-manipulation"
               >
-                <RefreshCw className="h-3 w-3 mr-1" />
-                Refresh
+                <RefreshCw className="h-3 w-3 mr-0.5 md:mr-1" />
+                <span className="hidden sm:inline">Refresh</span>
               </Button>
             </div>
           </div>

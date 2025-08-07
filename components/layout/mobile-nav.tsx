@@ -152,41 +152,41 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
 
   return (
     <>
-      {/* Mobile Header */}
+      {/* Mobile Header - Optimized for small tablets */}
       <header className="sticky top-0 z-50 w-full border-b bg-background">
-        <div className="flex h-16 items-center px-4">
+        <div className="flex h-12 sm:h-14 md:h-16 items-center px-3 sm:px-4">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setIsOpen(true)}
-            className="lg:hidden"
+            className="md:hidden h-8 w-8 sm:h-9 sm:w-9 touch-manipulation"
           >
-            <Menu className="h-6 w-6" />
+            <Menu className="h-5 w-5 sm:h-6 sm:w-6" />
             <span className="sr-only">Toggle navigation menu</span>
           </Button>
           
-          <div className="ml-4">
-            <h1 className="text-lg font-semibold">{restaurant.name}</h1>
+          <div className="ml-3 sm:ml-4">
+            <h1 className="text-base sm:text-lg font-semibold truncate">{restaurant.name}</h1>
           </div>
         </div>
       </header>
 
-      {/* Mobile Navigation Sheet */}
+      {/* Mobile Navigation Sheet - Optimized for tablets */}
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetContent side="left" className="w-[280px] p-0">
-          <SheetHeader className="p-4 border-b">
+        <SheetContent side="left" className="w-[260px] sm:w-[280px] p-0">
+          <SheetHeader className="p-3 sm:p-4 border-b">
             <SheetTitle className="text-left">
               <div>
-                <div className="font-semibold">{restaurant.name}</div>
-                <div className="text-sm text-muted-foreground capitalize">{role}</div>
+                <div className="font-semibold text-sm sm:text-base">{restaurant.name}</div>
+                <div className="text-xs sm:text-sm text-muted-foreground capitalize">{role}</div>
               </div>
             </SheetTitle>
           </SheetHeader>
 
-          <div className="flex flex-col h-[calc(100vh-5rem)]">
+          <div className="flex flex-col h-[calc(100vh-4rem)] sm:h-[calc(100vh-5rem)]">
             {/* Navigation Items */}
-            <nav className="flex-1 overflow-y-auto px-2 py-4">
-              <div className="space-y-1">
+            <nav className="flex-1 overflow-y-auto px-1.5 sm:px-2 py-3 sm:py-4">
+              <div className="space-y-0.5 sm:space-y-1">
                 {filteredNavItems.map((item) => {
                   const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
                   return (
@@ -195,14 +195,14 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
                       href={item.href}
                       onClick={() => setIsOpen(false)}
                       className={cn(
-                        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                        "flex items-center gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-2.5 sm:py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation",
                         isActive
                           ? "bg-accent text-accent-foreground"
                           : "text-foreground hover:bg-accent/50"
                       )}
                     >
-                      <item.icon className="h-5 w-5" />
-                      <span>{item.title}</span>
+                      <item.icon className="h-4 w-4 sm:h-5 sm:w-5" />
+                      <span className="text-xs sm:text-sm">{item.title}</span>
                     </Link>
                   )
                 })}
@@ -210,7 +210,7 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
             </nav>
 
             {/* Bottom Items */}
-            <div className="border-t p-2 space-y-1">
+            <div className="border-t p-1.5 sm:p-2 space-y-0.5 sm:space-y-1">
               {filteredBottomItems.map((item) => {
                 const isActive = pathname === item.href
                 return (
@@ -219,14 +219,14 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
                     href={item.href}
                     onClick={() => setIsOpen(false)}
                     className={cn(
-                      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                      "flex items-center gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-2.5 sm:py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation",
                       isActive
                         ? "bg-accent text-accent-foreground"
                         : "text-foreground hover:bg-accent/50"
                     )}
                   >
-                    <item.icon className="h-5 w-5" />
-                    <span>{item.title}</span>
+                    <item.icon className="h-4 w-4 sm:h-5 sm:w-5" />
+                    <span className="text-xs sm:text-sm">{item.title}</span>
                   </Link>
                 )
               })}
@@ -234,10 +234,10 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
               <Button
                 variant="ghost"
                 onClick={handleSignOut}
-                className="w-full justify-start gap-3"
+                className="w-full justify-start gap-2.5 sm:gap-3 py-2.5 sm:py-2 h-auto touch-manipulation"
               >
-                <LogOut className="h-5 w-5" />
-                <span>Sign Out</span>
+                <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="text-xs sm:text-sm">Sign Out</span>
               </Button>
             </div>
           </div>

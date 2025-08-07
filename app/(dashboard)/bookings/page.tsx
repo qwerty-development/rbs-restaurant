@@ -607,15 +607,7 @@ export default function BookingsPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {/* Auto-refresh toggle */}
-          <Button
-            variant={autoRefresh ? "default" : "outline"}
-            size="sm"
-            onClick={() => setAutoRefresh(!autoRefresh)}
-          >
-            <Zap className={`mr-2 h-4 w-4 ${autoRefresh ? 'animate-pulse' : ''}`} />
-            Auto-refresh
-          </Button>
-          
+
           {/* Manual refresh */}
           <Button variant="outline" size="sm" onClick={handleRefresh}>
             <RefreshCw className="mr-2 h-4 w-4" />
