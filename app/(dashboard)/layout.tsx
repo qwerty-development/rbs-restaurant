@@ -58,9 +58,7 @@ export default async function DashboardLayout({
         {/* Main Content - Full height optimization without header */}
         <div className="transition-all duration-200 ease-out md:ml-16">
           <main className="min-h-screen">
-            <div className="px-3 sm:px-4 md:px-5 lg:px-8 py-4 md:py-6 lg:py-8">
-              {children}
-            </div>
+            {children}
           </main>
         </div>
       </div>

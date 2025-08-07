@@ -905,17 +905,17 @@ export function CheckInQueue({
   }
 
   return (
-    <div className="min-h-[600px] h-full flex flex-col bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900 text-gray-200">
-      {/* Simplified Header */}
-      <div className="px-4 py-3 border-b border-gray-800">
+    <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900 text-gray-200">
+      {/* Simplified Header - More Compact */}
+      <div className="px-3 py-2 border-b border-gray-800">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-100">Check-in Queue</h3>
+          <h3 className="text-sm font-semibold text-gray-100">Check-in Queue</h3>
           
           {/* Essential stats only */}
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-2 text-xs">
             {categorizedBookings.waitingForSeating.length > 0 && (
               <div className="flex items-center gap-1 text-orange-400">
-                <span className="font-medium">{categorizedBookings.waitingForSeating.length} waiting</span>
+                <span className="font-medium">{categorizedBookings.waitingForSeating.length}</span>
               </div>
             )}
             {categorizedBookings.vipArrivals.length > 0 && (
@@ -926,38 +926,38 @@ export function CheckInQueue({
             )}
             <div className="flex items-center gap-1 text-gray-400">
               <Table2 className="h-3 w-3" />
-              <span>{availableTables.length} available</span>
+              <span>{availableTables.length}</span>
             </div>
           </div>
         </div>
       </div>
 
       <Tabs defaultValue="arrivals" className="flex-1 flex flex-col">
-        <TabsList className="mx-4 mt-3 grid w-[calc(100%-2rem)] grid-cols-2 bg-gray-800">
-          <TabsTrigger value="arrivals" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white">
+        <TabsList className="mx-2 mt-2 grid w-[calc(100%-1rem)] grid-cols-2 bg-gray-800 h-8">
+          <TabsTrigger value="arrivals" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs">
             Arrivals
             {(categorizedBookings.lateArrivals.length + 
               categorizedBookings.currentArrivals.length + 
               categorizedBookings.upcomingArrivals.length) > 0 && (
-              <Badge className="ml-2 px-1.5 py-0.5 text-xs bg-blue-600">
+              <Badge className="ml-1 px-1 py-0 text-xs bg-blue-600">
                 {categorizedBookings.lateArrivals.length + 
                  categorizedBookings.currentArrivals.length + 
                  categorizedBookings.upcomingArrivals.length}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="walkin" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white">
+          <TabsTrigger value="walkin" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs">
             Walk-in
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="arrivals" className="flex-1 px-4 pb-4 mt-4">
-          <ScrollArea className="h-[500px]">
-            <div className="space-y-3 pr-4">
+        <TabsContent value="arrivals" className="flex-1 px-2 pb-2 mt-2">
+          <ScrollArea className="h-[calc(100vh-200px)]">
+            <div className="space-y-2 pr-2">
               {/* Waiting for seating - highest priority */}
               {categorizedBookings.waitingForSeating.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium text-orange-400 border-b border-orange-800 pb-1">
+                <div className="space-y-1">
+                  <h4 className="text-xs font-medium text-orange-400 border-b border-orange-800 pb-1">
                     Waiting for Seating
                   </h4>
                   {categorizedBookings.waitingForSeating.map(renderEnhancedBookingCard)}
@@ -966,8 +966,8 @@ export function CheckInQueue({
 
               {/* VIP Arrivals */}
               {categorizedBookings.vipArrivals.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium text-yellow-400 border-b border-yellow-800 pb-1">
+                <div className="space-y-1">
+                  <h4 className="text-xs font-medium text-yellow-400 border-b border-yellow-800 pb-1">
                     VIP Guests
                   </h4>
                   {categorizedBookings.vipArrivals.map(renderEnhancedBookingCard)}
@@ -976,8 +976,8 @@ export function CheckInQueue({
 
               {/* All other arrivals combined */}
               {[...categorizedBookings.lateArrivals, ...categorizedBookings.currentArrivals, ...categorizedBookings.upcomingArrivals].length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium text-gray-400 border-b border-gray-700 pb-1">
+                <div className="space-y-1">
+                  <h4 className="text-xs font-medium text-gray-400 border-b border-gray-700 pb-1">
                     Arrivals
                   </h4>
                   {[...categorizedBookings.lateArrivals, ...categorizedBookings.currentArrivals, ...categorizedBookings.upcomingArrivals]
@@ -996,8 +996,8 @@ export function CheckInQueue({
                 categorizedBookings.currentArrivals.length + 
                 categorizedBookings.upcomingArrivals.length +
                 categorizedBookings.waitingForSeating.length) === 0 && (
-                <div className="text-center py-12">
-                  <UserCheck className="h-8 w-8 text-gray-500 mx-auto mb-2" />
+                <div className="text-center py-8">
+                  <UserCheck className="h-6 w-6 text-gray-500 mx-auto mb-2" />
                   <p className="text-sm text-gray-400">No arrivals in the next hour</p>
                 </div>
               )}
@@ -1005,25 +1005,25 @@ export function CheckInQueue({
           </ScrollArea>
         </TabsContent>
 
-        <TabsContent value="walkin" className="flex-1 px-4 pb-4 mt-4">
-          <div className="space-y-4">
+        <TabsContent value="walkin" className="flex-1 px-2 pb-2 mt-2">
+          <div className="space-y-3">
             {/* Available tables summary */}
-            <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700">
-              <div className="flex items-center justify-between text-sm">
+            <div className="p-2 bg-gray-800/50 rounded-lg border border-gray-700">
+              <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-300">
                   {availableTables.length} tables available
                 </span>
                 <span className="text-gray-400">
-                  Capacity: {availableTables.reduce((sum, t) => sum + t.max_capacity, 0)}
+                  Cap: {availableTables.reduce((sum, t) => sum + t.max_capacity, 0)}
                 </span>
               </div>
             </div>
 
             {/* Simplified walk-in form */}
-            <div className="space-y-4 bg-gray-800/30 p-4 rounded-lg border border-gray-700">
+            <div className="space-y-3 bg-gray-800/30 p-3 rounded-lg border border-gray-700">
               {/* Customer search */}
               <div>
-                <Label className="text-sm text-gray-300 mb-2 block">
+                <Label className="text-xs text-gray-300 mb-1 block">
                   Search Customer (Optional)
                 </Label>
                 <div className="relative">
@@ -1036,16 +1036,16 @@ export function CheckInQueue({
                     }}
                     onFocus={() => setShowCustomerDropdown(customerSearch.length >= 1)}
                     onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
-                    className="bg-gray-900 border-gray-700 text-white"
+                    className="bg-gray-900 border-gray-700 text-white text-xs h-8"
                   />
                   
                   {/* Customer dropdown */}
                   {showCustomerDropdown && customerSearch.length >= 1 && customers && customers.length > 0 && (
-                    <div className="absolute z-50 w-full mt-1 bg-gray-900 border border-gray-700 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                    <div className="absolute z-50 w-full mt-1 bg-gray-900 border border-gray-700 rounded-md shadow-lg max-h-32 overflow-y-auto">
                       {customers.map((customer) => (
                         <div
                           key={customer.id}
-                          className="p-2 hover:bg-gray-800 cursor-pointer text-sm"
+                          className="p-2 hover:bg-gray-800 cursor-pointer text-xs"
                           onClick={() => handleCustomerSelect(customer)}
                         >
                           <div className="flex items-center justify-between">
@@ -1098,7 +1098,7 @@ export function CheckInQueue({
                   />
                 </div>
                 <div>
-                  <Label className="text-sm text-gray-300 mb-1 block">Party Size</Label>
+                  <Label className="text-sm text-gray-300 mb-1 block">Size</Label>
                   <Input
                     type="number"
                     min="1"
@@ -1113,47 +1113,120 @@ export function CheckInQueue({
               {/* Table selection */}
               <div>
                 <Label className="text-sm text-gray-300 mb-2 block">
-                  Select Table
+                  Select Table - {availableTables.length} available
                 </Label>
-                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
-                  {tableStatus
-                    .filter(table => table.is_active && !table.isOccupied)
-                    .map(table => {
-                      const isSelected = selectedTableIds.includes(table.id)
-                      const fitsParty = table.max_capacity >= walkInData.partySize
-                      
-                      return (
-                        <Button
-                          key={table.id}
-                          size="sm"
-                          variant={isSelected ? "default" : "outline"}
-                          className={cn(
-                            "h-12 transition-colors",
-                            isSelected 
-                              ? "bg-blue-600 hover:bg-blue-700 text-white" 
-                              : cn(
-                                  "bg-gray-800/50 border-gray-600 text-gray-300 hover:bg-gray-700/50",
-                                  !fitsParty && "opacity-50"
+                <ScrollArea className="h-64 pr-2">
+                  <div className="grid grid-cols-3 gap-3">
+                    {tableStatus
+                      .filter(table => table.is_active)
+                      .sort((a, b) => {
+                        // Sort by availability first, then by table number
+                        if (a.isOccupied !== b.isOccupied) {
+                          return a.isOccupied ? 1 : -1
+                        }
+                        return a.table_number - b.table_number
+                      })
+                      .map(table => {
+                        const isSelected = selectedTableIds.includes(table.id)
+                        const isAvailable = !table.isOccupied
+                        const fitsParty = table.max_capacity >= walkInData.partySize
+                        const canSelect = isAvailable && fitsParty
+                        
+                        // Get next booking info
+                        const nextBooking = table.upcomingBookings?.[0]
+                        const nextBookingTime = nextBooking ? format(new Date(nextBooking.booking_time), 'h:mm a') : null
+                        const minutesUntilNext = nextBooking ? differenceInMinutes(new Date(nextBooking.booking_time), currentTime) : null
+                        
+                        // Current occupant info
+                        const currentGuest = table.occupyingBooking 
+                          ? (table.occupyingBooking.user?.full_name || table.occupyingBooking.guest_name || 'Guest')
+                          : null
+                        
+                        // Determine table status
+                        let statusColor = "border-gray-600"
+                        let statusText = "Available"
+                        let statusIcon = <CheckCircle className="h-3 w-3 text-green-400" />
+                        let bgColor = "bg-gray-800/50"
+                        
+                        if (table.isOccupied) {
+                          statusColor = "border-red-500"
+                          statusText = "Occupied"
+                          statusIcon = <UserCheck className="h-3 w-3 text-red-400" />
+                          bgColor = "bg-red-900/20"
+                        } else if (!fitsParty) {
+                          statusColor = "border-orange-500"
+                          statusText = "Too Small"
+                          statusIcon = <AlertTriangle className="h-3 w-3 text-orange-400" />
+                          bgColor = "bg-orange-900/20"
+                        } else if (nextBooking && minutesUntilNext! <= 60) {
+                          statusColor = "border-yellow-500"
+                          statusText = `Next: ${nextBookingTime}`
+                          statusIcon = <Clock className="h-3 w-3 text-yellow-400" />
+                          bgColor = "bg-yellow-900/20"
+                        } else {
+                          statusColor = "border-green-500"
+                          statusText = "Available"
+                          statusIcon = <CheckCircle className="h-3 w-3 text-green-400" />
+                          bgColor = "bg-green-900/20"
+                        }
+                        
+                        if (isSelected) {
+                          statusColor = "border-blue-500"
+                          bgColor = "bg-blue-900/30"
+                        }
+                        
+                        return (
+                          <Button
+                            key={table.id}
+                            size="sm"
+                            variant="outline"
+                            disabled={!canSelect}
+                            className={cn(
+                              "h-16 p-2 transition-all duration-200 hover:scale-105 relative",
+                              bgColor,
+                              statusColor,
+                              canSelect && "hover:bg-gray-700/50 cursor-pointer",
+                              !canSelect && "opacity-60 cursor-not-allowed",
+                              isSelected && "ring-2 ring-blue-400 ring-offset-1 ring-offset-gray-900"
+                            )}
+                            onClick={() => {
+                              if (canSelect) {
+                                setSelectedTableIds(prev => 
+                                  prev.includes(table.id)
+                                    ? prev.filter(id => id !== table.id)
+                                    : [...prev, table.id]
                                 )
-                          )}
-                          onClick={() => {
-                            setSelectedTableIds(prev => 
-                              prev.includes(table.id)
-                                ? prev.filter(id => id !== table.id)
-                                : [...prev, table.id]
-                            )
-                          }}
-                        >
-                          <div className="text-center">
-                            <div className="font-bold">{table.table_number}</div>
-                            <div className="text-xs opacity-75">
-                              {table.max_capacity}
+                              }
+                            }}
+                          >
+                            <div className="w-full h-full flex flex-col items-center justify-center">
+                              {/* Table number - main focus */}
+                              <div className="font-bold text-lg text-white">
+                                T{table.table_number}
+                              </div>
+                              
+                              {/* Capacity */}
+                              <div className="text-xs text-gray-400">
+                                {table.max_capacity}p
+                              </div>
+                              
+                              {/* Status icon - top right corner */}
+                              <div className="absolute top-1 right-1">
+                                {statusIcon}
+                              </div>
+                              
+                              {/* Next booking time - bottom if needed */}
+                              {!table.isOccupied && nextBooking && minutesUntilNext! <= 60 && (
+                                <div className="absolute bottom-1 left-1 text-xs text-yellow-300">
+                                  {minutesUntilNext! > 0 ? `${minutesUntilNext}m` : 'now'}
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        </Button>
-                      )
-                    })}
-                </div>
+                          </Button>
+                        )
+                      })}
+                  </div>
+                </ScrollArea>
               </div>
 
               {/* Seat button */}
