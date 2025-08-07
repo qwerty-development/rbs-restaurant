@@ -5,22 +5,14 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Slider } from "@/components/ui/slider"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { 
   Move, 
-  Save, 
-  RotateCw, 
   ZoomIn, 
   ZoomOut, 
   Grid3X3, 
   Settings, 
-  Maximize, 
-  Minimize,
-  Eye,
-  EyeOff,
   Copy,
   Trash2
 } from "lucide-react"
@@ -28,7 +20,6 @@ import type { RestaurantTable } from "@/types"
 
 interface FloorPlanEditorProps {
   tables: RestaurantTable[]
-  floorPlanId?: string
   onTableUpdate: (tableId: string, position: { x: number; y: number }) => void
   onTableResize?: (tableId: string, dimensions: { width: number; height: number }) => void
   onTableDelete?: (tableId: string) => void
@@ -76,7 +67,7 @@ interface ResizeState {
   touchId: number | null
 }
 
-export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableResize, onTableDelete }: FloorPlanEditorProps) {
+export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableDelete }: FloorPlanEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const dragStateRef = useRef<DragState>({
     tableId: null,
@@ -106,6 +97,7 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
   const [zoom, setZoom] = useState(100)
   const [showGrid, setShowGrid] = useState(true)
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit")
+  const [editMode, setEditMode] = useState<"move" | "resize">("move")
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   
@@ -156,6 +148,9 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
   // Unified drag start handler for mouse and touch
   const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent, tableId: string) => {
     if (viewMode === "preview" || isResizing) return
+    
+    // Only allow dragging in move mode
+    if (editMode !== "move") return
     
     // For touch events, check if this is on a resize handle
     const target = e.target as HTMLElement
@@ -219,16 +214,18 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
     
     // Prevent text selection and image dragging, but allow scrolling
     document.body.style.userSelect = 'none'
-    document.body.style.webkitUserSelect = 'none'
     // Only disable touch action on the dragged element, not the entire body
     element.style.touchAction = 'none'
     
     setIsDragging(true)
-  }, [viewMode, isResizing])
+  }, [viewMode, isResizing, editMode])
 
   // Unified resize start handler for mouse and touch
   const handleResizeStart = useCallback((e: React.MouseEvent | React.TouchEvent, tableId: string) => {
     if (viewMode === "preview" || isDragging) return
+    
+    // Only allow resizing in resize mode
+    if (editMode !== "resize") return
     
     e.preventDefault()
     e.stopPropagation()
@@ -272,7 +269,6 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
     tableElement.style.transition = 'none'
     document.body.style.cursor = 'se-resize'
     document.body.style.userSelect = 'none'
-    document.body.style.webkitUserSelect = 'none'
     // Only disable touch action on the resized element, not the entire body
     tableElement.style.touchAction = 'none'
     
@@ -283,7 +279,7 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
     tableElement.style.zIndex = '1001'
     
     setIsResizing(true)
-  }, [viewMode, isDragging])
+  }, [viewMode, isDragging, editMode])
 
   // Unified move handler for mouse and touch
   const handleMove = useCallback((e: MouseEvent | TouchEvent) => {
@@ -467,7 +463,6 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
     
     // Reset body styles
     document.body.style.userSelect = ''
-    document.body.style.webkitUserSelect = ''
     document.body.style.cursor = ''
     
     setIsDragging(false)
@@ -515,11 +510,11 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
       return
     }
     
-    // Only handle selection if not dragging/resizing and in edit mode
-    if (!isDragging && !isResizing && viewMode === "edit") {
+    // Always allow selection in edit mode (both move and resize modes)
+    if (viewMode === "edit") {
       setSelectedTable(selectedTable === tableId ? null : tableId)
     }
-  }, [isDragging, isResizing, selectedTable, viewMode])
+  }, [selectedTable, viewMode])
 
   // Container click handler
   const handleContainerClick = useCallback((e: React.MouseEvent | React.TouchEvent) => {
@@ -614,15 +609,39 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
               <Badge variant="outline" className="text-xs">
                 {tables.filter(t => t.is_active).length} Tables
               </Badge>
-              <Select value={viewMode} onValueChange={(value: "edit" | "preview") => setViewMode(value)}>
-                <SelectTrigger className="w-24">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="edit">Edit</SelectItem>
-                  <SelectItem value="preview">Preview</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select value={viewMode} onValueChange={(value: "edit" | "preview") => setViewMode(value)}>
+                  <SelectTrigger className="w-24">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="edit">Edit</SelectItem>
+                    <SelectItem value="preview">Preview</SelectItem>
+                  </SelectContent>
+                </Select>
+                {viewMode === "edit" && (
+                  <div className="flex items-center bg-slate-400 rounded-md p-1">
+                    <Button
+                      variant={editMode === "move" ? "default" : "ghost"}
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => setEditMode("move")}
+                    >
+                      <Move className="h-3 w-3 mr-1" />
+                      Move
+                    </Button>
+                    <Button
+                      variant={editMode === "resize" ? "default" : "ghost"}
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => setEditMode("resize")}
+                    >
+                      <Settings className="h-3 w-3 mr-1" />
+                      Resize
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           </CardTitle>
         </CardHeader>
@@ -695,11 +714,11 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
         <CardContent className="p-0">
           <div
             ref={containerRef}
-            className="relative bg-gradient-to-br from-slate-50 to-slate-100 overflow-auto select-none"
+            className="relative bg-gradient-to-br from-slate-50 to-slate-100 overflow-hidden select-none"
             style={{ 
               height: "700px",
-              touchAction: "pan-x pan-y",
-              WebkitOverflowScrolling: "touch"
+              width: "100%",
+              position: "relative"
             }}
             onClick={handleContainerClick}
             onTouchEnd={handleContainerClick}
@@ -741,7 +760,9 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                     "absolute border-2 rounded-xl p-3 transition-all duration-150",
                     colors,
                     viewMode === "edit" && !isBeingDragged && !isBeingResized ? "hover:shadow-md hover:scale-[1.02]" : "",
-                    viewMode === "edit" ? "cursor-move" : "cursor-pointer",
+                    viewMode === "edit" && editMode === "move" ? "cursor-move" : "",
+                    viewMode === "edit" && editMode === "resize" ? "cursor-crosshair" : "",
+                    viewMode === "preview" ? "cursor-pointer" : "",
                     isBeingDragged && "shadow-2xl scale-105 cursor-grabbing",
                     isBeingResized && "shadow-2xl ring-4 ring-green-400 ring-opacity-75 scale-[1.02]",
                     isSelected && !isBeingDragged && !isBeingResized && "ring-2 ring-blue-400 shadow-lg z-40"
@@ -757,13 +778,21 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                     // Optimize for performance
                     willChange: viewMode === "edit" ? "transform, left, top, width, height" : "auto",
                     // Prevent iOS bounce and ensure proper touch handling
-                    WebkitTouchCallout: "none",
-                    WebkitUserSelect: "none",
                     // Allow natural scrolling unless this table is being dragged/resized
                     touchAction: isBeingDragged || isBeingResized ? "none" : "auto"
                   }}
-                  onMouseDown={(e) => handleDragStart(e, table.id)}
-                  onTouchStart={(e) => handleDragStart(e, table.id)}
+                  onMouseDown={(e) => {
+                    if (editMode === "move") {
+                      handleDragStart(e, table.id)
+                    }
+                    // In resize mode, let onClick handle the selection
+                  }}
+                  onTouchStart={(e) => {
+                    if (editMode === "move") {
+                      handleDragStart(e, table.id)
+                    }
+                    // In resize mode, let onClick handle the selection
+                  }}
                   onClick={(e) => handleTableClick(e, table.id)}
                 >
                   <div className="text-center h-full flex flex-col justify-center pointer-events-none">
@@ -783,8 +812,8 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                   {/* Selection indicators */}
                   {isSelected && viewMode === "edit" && !isBeingDragged && !isBeingResized && (
                     <>
-                      {/* Resize handle - Enhanced for touch devices */}
-                      {onTableResize && (
+                      {/* Resize handle - Enhanced for touch devices - Only show in resize mode */}
+                      {onTableResize && editMode === "resize" && (
                         <div 
                           data-resize-handle="true"
                           className="absolute bg-green-500 rounded-full border-2 border-white shadow-lg cursor-se-resize hover:bg-green-600 active:bg-green-700 transition-all duration-150 z-50 flex items-center justify-center w-12 h-12 md:w-7 md:h-7"
@@ -794,8 +823,6 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                             right: '-8px',
                             // Ensure handle is touchable and responsive
                             touchAction: 'none',
-                            WebkitTouchCallout: 'none',
-                            WebkitUserSelect: 'none',
                             // Better transform origin for scaling
                             transformOrigin: 'center'
                           }}
@@ -866,11 +893,13 @@ export function FloorPlanEditor({ tables, floorPlanId, onTableUpdate, onTableRes
                     <Move className="h-5 w-5 text-blue-600" />
                     <div>
                       <div className="font-medium text-sm">
-                        {viewMode === "edit" ? "Edit Mode - Drag & Resize!" : "Preview Mode"}
+                        {viewMode === "edit" ? `${editMode === "move" ? "Move Mode" : "Resize Mode"}` : "Preview Mode"}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {viewMode === "edit" 
-                          ? "Drag to move • Drag corner to resize • Tap to select • Arrow keys to nudge" 
+                          ? editMode === "move" 
+                            ? "Drag tables to move • Tap to select • Arrow keys to nudge • Switch to Resize mode to resize" 
+                            : "Tap table to select • Drag green handle to resize • Switch to Move mode to move tables"
                           : "Read-only view of your floor plan"
                         }
                       </div>

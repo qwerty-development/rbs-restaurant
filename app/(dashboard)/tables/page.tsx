@@ -460,7 +460,6 @@ export default function TablesPage() {
               ) : (
                 <FloorPlanEditor
                   tables={tables || []}
-                  floorPlanId={selectedFloorPlan}
                   onTableUpdate={handleTableUpdate}
                   onTableResize={handleTableResize}
                   onTableDelete={handleTableDelete}
