@@ -215,7 +215,7 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
       
       <aside 
         className={cn(
-          "flex flex-col h-screen bg-sidebar/98 backdrop-blur-xl border-r border-sidebar-border transition-all duration-200 ease-out group fixed inset-y-0 left-0",
+          "flex flex-col h-screen bg-sidebar/98 backdrop-blur-xl border-r border-sidebar-border transition-all duration-200 ease-out group fixed inset-y-0 left-0 overflow-hidden",
           // Always fixed position to prevent layout jumps
           // Collapsed: narrow width, normal z-index
           // Expanded: wider width, higher z-index
@@ -249,8 +249,8 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
         </Button>
       </div>
 
-      {/* Navigation - Optimized for tablets */}
-      <ScrollArea className="flex-1 px-1.5 md:px-2 py-3 md:py-4">
+      {/* Navigation - Optimized for tablets with proper scrolling */}
+      <ScrollArea className="flex-1 px-1.5 md:px-2 py-3 md:py-4 overflow-y-auto">
         <nav className="space-y-0.5 md:space-y-1">
           {filteredNavItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
@@ -260,7 +260,7 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
                 href={item.href}
                 onClick={() => {
                   // Auto-collapse sidebar on navigation for better UX on tablets
-                  if (window.innerWidth < 1024 && !isCollapsed) {
+                  if (window.innerWidth < 768 && !isCollapsed) {
                     setIsCollapsed(true)
                   }
                 }}
@@ -297,7 +297,7 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
               href={item.href}
               onClick={() => {
                 // Auto-collapse sidebar on navigation for better UX on tablets
-                if (window.innerWidth < 1024 && !isCollapsed) {
+                if (window.innerWidth < 768 && !isCollapsed) {
                   setIsCollapsed(true)
                 }
               }}

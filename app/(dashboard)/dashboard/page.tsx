@@ -869,7 +869,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Check-in Queue - Wider sidebar for better tablet layout */}
-        <div className="w-[28rem] border-l border-gray-700 bg-gray-900 flex flex-col">
+        <div className="w-[35rem] border-l border-gray-700 bg-gray-900 flex flex-col">
           {/* Pending Requests Section */}
           {stats.pendingCount > 0 && (
             <div className="border-b border-gray-700">

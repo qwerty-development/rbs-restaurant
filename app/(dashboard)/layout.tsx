@@ -37,8 +37,8 @@ export default async function DashboardLayout({
   return (
     <SidebarProvider>
       <div className="min-h-screen bg-background relative">
-        {/* Sidebar Container - Always positioned, smooth transitions */}
-        <div className="hidden md:block fixed inset-y-0 left-0 z-30">
+        {/* Sidebar Container - Show on tablets and up */}
+        <div className="hidden sm:block fixed inset-y-0 left-0 z-30">
           <Sidebar 
             restaurant={staffData.restaurant}
             role={staffData.role}
@@ -46,8 +46,8 @@ export default async function DashboardLayout({
           />
         </div>
 
-        {/* Mobile Navigation - Show on small tablets and phones */}
-        <div className="md:hidden">
+        {/* Mobile Navigation - Show on phones only */}
+        <div className="sm:hidden">
           <MobileNav 
             restaurant={staffData.restaurant}
             role={staffData.role}
@@ -56,7 +56,7 @@ export default async function DashboardLayout({
         </div>
 
         {/* Main Content - Full height optimization without header */}
-        <div className="transition-all duration-200 ease-out md:ml-16">
+        <div className="transition-all duration-200 ease-out sm:ml-16">
           <main className="min-h-screen">
             {children}
           </main>

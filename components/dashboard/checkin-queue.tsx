@@ -808,7 +808,7 @@ export function CheckInQueue({
       <div
         key={booking.id}
         className={cn(
-          "relative p-3 rounded-lg border cursor-pointer transition-colors",
+          "relative p-2 rounded-lg border cursor-pointer transition-colors",
           status.bgColor,
           "hover:border-gray-400"
         )}
@@ -905,9 +905,9 @@ export function CheckInQueue({
   }
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900 text-gray-200">
+    <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900 text-gray-200 overflow-hidden">
       {/* Simplified Header - More Compact */}
-      <div className="px-3 py-2 border-b border-gray-800">
+      <div className="px-2 py-1.5 border-b border-gray-800">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-100">Check-in Queue</h3>
           
@@ -932,8 +932,8 @@ export function CheckInQueue({
         </div>
       </div>
 
-      <Tabs defaultValue="arrivals" className="flex-1 flex flex-col">
-        <TabsList className="mx-2 mt-2 grid w-[calc(100%-1rem)] grid-cols-2 bg-gray-800 h-8">
+      <Tabs defaultValue="arrivals" className="flex-1 flex flex-col min-h-0">
+        <TabsList className="mx-2 mt-1 grid w-[calc(100%-1rem)] grid-cols-2 bg-gray-800 h-8">
           <TabsTrigger value="arrivals" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs">
             Arrivals
             {(categorizedBookings.lateArrivals.length + 
@@ -951,9 +951,9 @@ export function CheckInQueue({
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="arrivals" className="flex-1 px-2 pb-2 mt-2">
-          <ScrollArea className="h-[calc(100vh-200px)]">
-            <div className="space-y-2 pr-2">
+        <TabsContent value="arrivals" className="flex-1 px-2 pb-1 mt-1 min-h-0">
+          <ScrollArea className="h-full max-h-[calc(100vh-12rem)] sm:max-h-[calc(100vh-10rem)] md:max-h-[calc(100vh-8rem)]">
+            <div className="space-y-1 pr-2">
               {/* Waiting for seating - highest priority */}
               {categorizedBookings.waitingForSeating.length > 0 && (
                 <div className="space-y-1">
@@ -1005,8 +1005,9 @@ export function CheckInQueue({
           </ScrollArea>
         </TabsContent>
 
-        <TabsContent value="walkin" className="flex-1 px-2 pb-2 mt-2">
-          <div className="space-y-3">
+        <TabsContent value="walkin" className="flex-1 px-2 pb-1 mt-1 min-h-0">
+          <ScrollArea className="h-full max-h-[calc(100vh-12rem)] sm:max-h-[calc(100vh-10rem)] md:max-h-[calc(100vh-8rem)]">
+            <div className="space-y-2 pr-2">
             {/* Available tables summary */}
             <div className="p-2 bg-gray-800/50 rounded-lg border border-gray-700">
               <div className="flex items-center justify-between text-xs">
@@ -1020,7 +1021,7 @@ export function CheckInQueue({
             </div>
 
             {/* Simplified walk-in form */}
-            <div className="space-y-3 bg-gray-800/30 p-3 rounded-lg border border-gray-700">
+            <div className="space-y-2 bg-gray-800/30 p-2 rounded-lg border border-gray-700">
               {/* Customer search */}
               <div>
                 <Label className="text-xs text-gray-300 mb-1 block">
@@ -1076,7 +1077,7 @@ export function CheckInQueue({
               </div>
 
               {/* Basic details */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2">
                 <div>
                   <Label className="text-sm text-gray-300 mb-1 block">Name</Label>
                   <Input
@@ -1098,7 +1099,7 @@ export function CheckInQueue({
                   />
                 </div>
                 <div>
-                  <Label className="text-sm text-gray-300 mb-1 block">Size</Label>
+                  <Label className="text-sm text-gray-300 mb-1 block">Party Size</Label>
                   <Input
                     type="number"
                     min="1"
@@ -1115,8 +1116,7 @@ export function CheckInQueue({
                 <Label className="text-sm text-gray-300 mb-2 block">
                   Select Table - {availableTables.length} available
                 </Label>
-                <ScrollArea className="h-64 pr-2">
-                  <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-2">
                     {tableStatus
                       .filter(table => table.is_active)
                       .sort((a, b) => {
@@ -1134,38 +1134,27 @@ export function CheckInQueue({
                         
                         // Get next booking info
                         const nextBooking = table.upcomingBookings?.[0]
-                        const nextBookingTime = nextBooking ? format(new Date(nextBooking.booking_time), 'h:mm a') : null
                         const minutesUntilNext = nextBooking ? differenceInMinutes(new Date(nextBooking.booking_time), currentTime) : null
-                        
-                        // Current occupant info
-                        const currentGuest = table.occupyingBooking 
-                          ? (table.occupyingBooking.user?.full_name || table.occupyingBooking.guest_name || 'Guest')
-                          : null
                         
                         // Determine table status
                         let statusColor = "border-gray-600"
-                        let statusText = "Available"
                         let statusIcon = <CheckCircle className="h-3 w-3 text-green-400" />
                         let bgColor = "bg-gray-800/50"
                         
                         if (table.isOccupied) {
                           statusColor = "border-red-500"
-                          statusText = "Occupied"
                           statusIcon = <UserCheck className="h-3 w-3 text-red-400" />
                           bgColor = "bg-red-900/20"
                         } else if (!fitsParty) {
                           statusColor = "border-orange-500"
-                          statusText = "Too Small"
                           statusIcon = <AlertTriangle className="h-3 w-3 text-orange-400" />
                           bgColor = "bg-orange-900/20"
                         } else if (nextBooking && minutesUntilNext! <= 60) {
                           statusColor = "border-yellow-500"
-                          statusText = `Next: ${nextBookingTime}`
                           statusIcon = <Clock className="h-3 w-3 text-yellow-400" />
                           bgColor = "bg-yellow-900/20"
                         } else {
                           statusColor = "border-green-500"
-                          statusText = "Available"
                           statusIcon = <CheckCircle className="h-3 w-3 text-green-400" />
                           bgColor = "bg-green-900/20"
                         }
@@ -1225,8 +1214,7 @@ export function CheckInQueue({
                           </Button>
                         )
                       })}
-                  </div>
-                </ScrollArea>
+                </div>
               </div>
 
               {/* Seat button */}
@@ -1243,7 +1231,8 @@ export function CheckInQueue({
                 }
               </Button>
             </div>
-          </div>
+            </div>
+          </ScrollArea>
         </TabsContent>
       </Tabs>
 

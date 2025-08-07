@@ -778,40 +778,7 @@ export default function BookingsPage() {
                 <span className="hidden tablet:inline">Analytics</span>
               </Button>
               
-              {/* Smart Controls */}
-              <div className="flex gap-2">
-                <Button
-                  variant={soundEnabled ? "default" : "outline"}
-                  size="default"
-                  onClick={() => {
-                    setSoundEnabled(!soundEnabled)
-                    toast.success(soundEnabled ? 'Sound disabled 🔇' : 'Sound enabled 🔊')
-                  }}
-                  className="min-h-touch-lg shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105 active:scale-95"
-                  title="Toggle sound notifications"
-                >
-                  {soundEnabled ? 
-                    <Volume2 className="h-5 w-5" /> : 
-                    <VolumeX className="h-5 w-5" />
-                  }
-                </Button>
-                
-                <Button
-                  variant="outline"
-                  size="default"
-                  onClick={() => {
-                    setAutoRefresh(!autoRefresh)
-                    toast.success(autoRefresh ? 'Auto-refresh paused ⏸️' : 'Auto-refresh enabled ▶️')
-                  }}
-                  className="min-h-touch-lg shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105 active:scale-95"
-                  title="Toggle auto-refresh"
-                >
-                  {autoRefresh ? 
-                    <Timer className="h-5 w-5" /> : 
-                    <Timer className="h-5 w-5 opacity-50" />
-                  }
-                </Button>
-              </div>
+        
 
           {/* Bulk actions */}
           {selectedBookings.length > 0 && (
