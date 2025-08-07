@@ -58,7 +58,7 @@ export const customerUtils = {
       .eq('restaurant_id', restaurantId)
 
     if (email) {
-      query = query.or(`guest_email.eq.${email},profiles.email.eq.${email}`)
+      query = query.eq('guest_email', email)
     } else if (phone) {
       query = query.or(`guest_phone.eq.${phone},profiles.phone_number.eq.${phone}`)
     } else {
@@ -230,7 +230,7 @@ export const customerUtils = {
     phone?: string
   } {
     return {
-      email: customer.profile?.email || customer.guest_email,
+      email: customer.guest_email, // Only guest bookings have email stored locally
       phone: customer.profile?.phone_number || customer.guest_phone
     }
   },

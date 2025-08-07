@@ -120,12 +120,14 @@ class RestaurantAuth {
   // Add staff member
   async addStaffMember(restaurantId: string, staffData: AddStaffMemberData, createdBy: string): Promise<void> {
     try {
-      // Check if user with email already exists
-      const { data: existingUser } = await this.supabase
-        .from('profiles')
-        .select('id, email')
-        .eq('email', staffData.email)
-        .single()
+      // Check if user with email already exists in auth.users
+      const { data: authUsers, error: authError } = await this.supabase.auth.admin.listUsers()
+      
+      if (authError) {
+        throw new Error('Failed to check existing users')
+      }
+      
+      const existingUser = authUsers.users.find(user => user.email === staffData.email)
 
       let userId: string
 
@@ -168,8 +170,7 @@ class RestaurantAuth {
           .insert({
             id: userId,
             full_name: staffData.fullName,
-            phone_number: staffData.phoneNumber,
-            email: staffData.email
+            phone_number: staffData.phoneNumber
           })
 
         if (profileError) {

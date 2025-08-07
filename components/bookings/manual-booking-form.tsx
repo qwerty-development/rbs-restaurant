@@ -70,6 +70,15 @@ interface ManualBookingFormProps {
   onCancel: () => void
   isLoading: boolean
   currentBookings?: any[] // Add current bookings to check occupancy
+  prefillData?: {
+    guest_name?: string
+    guest_email?: string
+    guest_phone?: string
+    booking_date?: Date
+    booking_time?: string
+    party_size?: number
+    user?: any
+  }
 }
 
 export function ManualBookingForm({
@@ -77,16 +86,27 @@ export function ManualBookingForm({
   onSubmit,
   onCancel,
   isLoading,
-  currentBookings = []
+  currentBookings = [],
+  prefillData
 }: ManualBookingFormProps) {
   const [selectedTables, setSelectedTables] = useState<string[]>([])
   const [checkingAvailability, setCheckingAvailability] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
   const [customerSearch, setCustomerSearch] = useState("")
+  const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState("")
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const supabase = createClient()
   const tableService = new TableAvailabilityService()
   const availabilityService = new RestaurantAvailability()
+
+  // Debounce customer search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedCustomerSearch(customerSearch)
+    }, 300) // 300ms delay
+
+    return () => clearTimeout(timer)
+  }, [customerSearch])
 
   const {
     register,
@@ -97,11 +117,14 @@ export function ManualBookingForm({
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      party_size: 2,
+      guest_name: prefillData?.guest_name || "",
+      guest_email: prefillData?.guest_email || "",
+      guest_phone: prefillData?.guest_phone || "",
+      party_size: prefillData?.party_size || 2,
       turn_time_minutes: 120,
       status: "confirmed",
-      booking_date: new Date(),
-      booking_time: format(new Date(), "HH:mm"),
+      booking_date: prefillData?.booking_date || new Date(),
+      booking_time: prefillData?.booking_time || format(new Date(), "HH:mm"),
     },
   })
 
@@ -109,6 +132,20 @@ export function ManualBookingForm({
   const bookingTime = watch("booking_time")
   const partySize = watch("party_size")
   const turnTime = watch("turn_time_minutes")
+
+  // Set prefilled customer if provided
+  useEffect(() => {
+    if (prefillData?.user) {
+      setSelectedCustomer({
+        user_id: prefillData.user.id,
+        guest_name: prefillData.user.full_name,
+        guest_phone: prefillData.user.phone_number,
+        guest_email: prefillData.user.email || "",
+        profile: prefillData.user
+      })
+      setCustomerSearch(prefillData.user.full_name || "")
+    }
+  }, [prefillData])
 
   // Fetch all tables
   const { data: allTables } = useQuery({
@@ -128,11 +165,11 @@ export function ManualBookingForm({
 
   // Fetch customers for search
   const { data: customers, error: customersError, isLoading: customersLoading } = useQuery({
-    queryKey: ["restaurant-customers", restaurantId, customerSearch],
+    queryKey: ["restaurant-customers", restaurantId, debouncedCustomerSearch],
     queryFn: async () => {
-      if (!customerSearch.trim()) return []
+      if (!debouncedCustomerSearch.trim() || debouncedCustomerSearch.length < 2) return []
       
-      console.log("Searching for customers with:", customerSearch)
+      console.log("Searching for customers with:", debouncedCustomerSearch)
       
       const { data, error } = await supabase
         .from("restaurant_customers")
@@ -146,7 +183,7 @@ export function ManualBookingForm({
           )
         `)
         .eq("restaurant_id", restaurantId)
-        .or(`guest_name.ilike.%${customerSearch}%,guest_email.ilike.%${customerSearch}%,guest_phone.ilike.%${customerSearch}%`)
+        .or(`guest_name.ilike.%${debouncedCustomerSearch}%,guest_email.ilike.%${debouncedCustomerSearch}%,guest_phone.ilike.%${debouncedCustomerSearch}%`)
         .limit(10)
         .order("last_visit", { ascending: false })
 
@@ -158,7 +195,7 @@ export function ManualBookingForm({
       console.log("Customer search results:", data)
       return data || []
     },
-    enabled: customerSearch.length >= 1,
+    enabled: debouncedCustomerSearch.length >= 2 && !!restaurantId,
   })
 
   // Check restaurant availability when date/time changes
@@ -170,11 +207,23 @@ export function ManualBookingForm({
       bookingTime
     ],
     queryFn: async () => {
-      if (!bookingDate || !bookingTime) return null
+      if (!bookingDate || !bookingTime || !restaurantId) return null
+
+      // Validate date
+      if (isNaN(bookingDate.getTime())) {
+        console.warn("Invalid booking date provided")
+        return null
+      }
 
       const [hours, minutes] = bookingTime.split(":")
       const bookingDateTime = new Date(bookingDate)
       bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+
+      // Validate the constructed datetime
+      if (isNaN(bookingDateTime.getTime())) {
+        console.warn("Invalid booking datetime constructed")
+        return null
+      }
 
       return await availabilityService.isRestaurantOpen(
         restaurantId,
@@ -182,7 +231,7 @@ export function ManualBookingForm({
         bookingTime
       )
     },
-    enabled: !!bookingDate && !!bookingTime,
+    enabled: !!bookingDate && !!bookingTime && !!restaurantId,
   })
 
   // Check availability when date/time/tables change
@@ -195,11 +244,23 @@ export function ManualBookingForm({
       turnTime
     ],
     queryFn: async () => {
-      if (!bookingDate || !bookingTime || selectedTables.length === 0) return null
+      if (!bookingDate || !bookingTime || selectedTables.length === 0 || !restaurantId) return null
+
+      // Validate date
+      if (isNaN(bookingDate.getTime())) {
+        console.warn("Invalid booking date for availability check")
+        return null
+      }
 
       const [hours, minutes] = bookingTime.split(":")
       const bookingDateTime = new Date(bookingDate)
       bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+
+      // Validate the constructed datetime
+      if (isNaN(bookingDateTime.getTime())) {
+        console.warn("Invalid booking datetime for availability check")
+        return null
+      }
 
       return await tableService.checkTableAvailability(
         restaurantId,
@@ -208,13 +269,19 @@ export function ManualBookingForm({
         turnTime
       )
     },
-    enabled: selectedTables.length > 0,
+    enabled: selectedTables.length > 0 && !!bookingDate && !!bookingTime && !!restaurantId,
   })
 
   // Auto-suggest optimal tables
   const suggestTables = async () => {
-    if (!bookingDate || !bookingTime) {
+    if (!bookingDate || !bookingTime || !restaurantId) {
       toast.error("Please select date and time first")
+      return
+    }
+
+    // Validate date
+    if (isNaN(bookingDate.getTime())) {
+      toast.error("Invalid date selected")
       return
     }
 
@@ -223,6 +290,12 @@ export function ManualBookingForm({
       const [hours, minutes] = bookingTime.split(":")
       const bookingDateTime = new Date(bookingDate)
       bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+
+      // Validate the constructed datetime
+      if (isNaN(bookingDateTime.getTime())) {
+        toast.error("Invalid time selected")
+        return
+      }
 
       const optimal = await tableService.getOptimalTableAssignment(
         restaurantId,
@@ -259,11 +332,23 @@ export function ManualBookingForm({
       turnTime
     ],
     queryFn: async () => {
-      if (!bookingDate || !bookingTime) return null
+      if (!bookingDate || !bookingTime || !restaurantId) return null
+
+      // Validate date
+      if (isNaN(bookingDate.getTime())) {
+        console.warn("Invalid booking date for available tables")
+        return null
+      }
 
       const [hours, minutes] = bookingTime.split(":")
       const bookingDateTime = new Date(bookingDate)
       bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+
+      // Validate the constructed datetime
+      if (isNaN(bookingDateTime.getTime())) {
+        console.warn("Invalid booking datetime for available tables")
+        return null
+      }
 
       return await tableService.getAvailableTablesForSlot(
         restaurantId,
@@ -272,7 +357,7 @@ export function ManualBookingForm({
         turnTime
       )
     },
-    enabled: !!bookingDate && !!bookingTime,
+    enabled: !!bookingDate && !!bookingTime && !!restaurantId,
   })
 
   // Handle customer selection
@@ -483,13 +568,13 @@ export function ManualBookingForm({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search customers by name, email, or phone..."
+                placeholder="Search customers by name, email, or phone (min 2 characters)..."
                 value={customerSearch}
                 onChange={(e) => {
                   setCustomerSearch(e.target.value)
-                  setShowCustomerDropdown(true)
+                  setShowCustomerDropdown(e.target.value.length >= 2)
                 }}
-                onFocus={() => setShowCustomerDropdown(customerSearch.length >= 1)}
+                onFocus={() => setShowCustomerDropdown(customerSearch.length >= 2)}
                 onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
                 className="pl-10"
                 disabled={isLoading}
@@ -508,7 +593,7 @@ export function ManualBookingForm({
             </div>
             
             {/* Customer dropdown */}
-            {showCustomerDropdown && customerSearch.length >= 1 && (
+            {showCustomerDropdown && customerSearch.length >= 2 && (
               <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg max-h-60 overflow-y-auto">
                 {customersLoading && (
                   <div className="p-3">

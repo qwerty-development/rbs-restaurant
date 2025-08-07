@@ -22,7 +22,8 @@ import {
   ChevronRight,
   LogOut,
   Crown,
-  User
+  User,
+  Clock
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -85,6 +86,12 @@ const navigationItems = [
     href: '/analytics',
     icon: BarChart3,
     permission: 'analytics.view',
+  },
+  {
+    title: 'Waiting List',
+    href: '/waitlist',
+    icon: Clock,
+    permission: 'bookings.view',
   },
   {
     title: 'Reviews',

@@ -123,7 +123,6 @@ export interface Restaurant {
   }
   
   export interface Profile {
-    email: any;
     id: string;
     full_name: string;
     phone_number?: string;
@@ -351,4 +350,19 @@ export interface Restaurant {
     created_by: string
     // Relations
     created_by_user?: Profile
+  }
+
+  export interface WaitlistEntry {
+    id: string
+    user_id: string
+    restaurant_id: string
+    desired_date: string
+    desired_time_range: string
+    party_size: number
+    created_at: string
+    status: 'active' | 'notified' | 'booked' | 'expired'
+    table_type: 'any' | 'booth' | 'window' | 'patio' | 'standard' | 'bar' | 'private'
+    // Relations
+    user?: Profile
+    restaurant?: Restaurant
   }
