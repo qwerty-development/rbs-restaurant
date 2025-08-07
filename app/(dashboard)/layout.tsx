@@ -2,7 +2,6 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { Sidebar } from "@/components/layout/sidebar"
-import { Header } from "@/components/layout/header"
 import { MobileNav } from "@/components/layout/mobile-nav"
 import { SidebarProvider } from "@/lib/contexts/sidebar-context"
 
@@ -56,15 +55,10 @@ export default async function DashboardLayout({
           />
         </div>
 
-        {/* Main Content - Smooth margin transition */}
+        {/* Main Content - Full height optimization without header */}
         <div className="transition-all duration-200 ease-out md:ml-16">
-          <Header 
-            restaurant={staffData.restaurant}
-            user={user}
-            role={staffData.role}
-          />
-          <main className="py-3 md:py-4 lg:py-6">
-            <div className="px-3 sm:px-4 md:px-5 lg:px-8">
+          <main className="min-h-screen">
+            <div className="px-3 sm:px-4 md:px-5 lg:px-8 py-4 md:py-6 lg:py-8">
               {children}
             </div>
           </main>

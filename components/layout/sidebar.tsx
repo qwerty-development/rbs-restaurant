@@ -24,7 +24,8 @@ import {
   LogOut,
   Crown,
   User,
-  Clock
+  Clock,
+  Bell
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -133,6 +134,13 @@ const navigationItems = [
 ]
 
 const bottomNavigationItems = [
+  {
+    title: 'Notifications',
+    href: '/notifications',
+    icon: Bell,
+    permission: null, // Always visible
+    badge: 3, // Notification count
+  },
   {
     title: 'Help & Support',
     href: '/help',
@@ -294,7 +302,7 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
                 }
               }}
               className={cn(
-                "flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ease-out touch-manipulation",
+                "flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ease-out touch-manipulation relative",
                 isActive
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
@@ -302,7 +310,14 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
               )}
               title={isCollapsed ? item.title : undefined}
             >
-              <item.icon className="h-4 w-4 md:h-5 md:w-5 shrink-0" />
+              <div className="relative">
+                <item.icon className="h-4 w-4 md:h-5 md:w-5 shrink-0" />
+                {(item as any).badge && (item as any).badge > 0 && (
+                  <span className="absolute -right-1 -top-1 h-3 w-3 md:h-3.5 md:w-3.5 rounded-full bg-red-600 text-[8px] md:text-[9px] font-medium text-white flex items-center justify-center">
+                    {(item as any).badge}
+                  </span>
+                )}
+              </div>
               <span className={cn(
                 "text-xs md:text-sm transition-all duration-200 ease-out whitespace-nowrap",
                 isCollapsed ? "opacity-0 w-0" : "opacity-100 w-auto ml-3"
