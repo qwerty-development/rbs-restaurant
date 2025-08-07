@@ -69,6 +69,37 @@ export default function WaitlistPage() {
   const [showBookingForm, setShowBookingForm] = useState(false)
   const [selectedWaitlistEntry, setSelectedWaitlistEntry] = useState<WaitlistEntry | null>(null)
   
+  // Status history for undo functionality
+  const [statusHistory, setStatusHistory] = useState<Record<string, string>>({})
+  const [undoTimers, setUndoTimers] = useState<Record<string, NodeJS.Timeout>>({})
+  
+  // Clear undo history after 5 minutes
+  const clearUndoAfterDelay = (entryId: string) => {
+    // Clear existing timer if any
+    if (undoTimers[entryId]) {
+      clearTimeout(undoTimers[entryId])
+    }
+    
+    // Set new timer
+    const timer = setTimeout(() => {
+      setStatusHistory(prev => {
+        const newHistory = { ...prev }
+        delete newHistory[entryId]
+        return newHistory
+      })
+      setUndoTimers(prev => {
+        const newTimers = { ...prev }
+        delete newTimers[entryId]
+        return newTimers
+      })
+    }, 5 * 60 * 1000) // 5 minutes
+    
+    setUndoTimers(prev => ({
+      ...prev,
+      [entryId]: timer
+    }))
+  }
+  
   // Filters
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -186,6 +217,13 @@ export default function WaitlistPage() {
     }
   }, [restaurantId])
 
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(undoTimers).forEach(timer => clearTimeout(timer))
+    }
+  }, [])
+
   const loadWaitlistEntries = async (restaurantId: string) => {
     try {
       setLoading(true)
@@ -225,6 +263,10 @@ export default function WaitlistPage() {
       }
 
       setWaitlistEntries(data || [])
+      // Clear status history and timers when refreshing data
+      Object.values(undoTimers).forEach(timer => clearTimeout(timer))
+      setUndoTimers({})
+      setStatusHistory({})
     } catch (error) {
       console.error('Error loading waitlist:', error)
       toast.error('Failed to load waiting list')
@@ -235,6 +277,18 @@ export default function WaitlistPage() {
 
   const updateWaitlistStatus = async (entryId: string, newStatus: string) => {
     try {
+      // Store current status in history before updating
+      const currentEntry = waitlistEntries.find(entry => entry.id === entryId)
+      if (currentEntry) {
+        setStatusHistory(prev => ({
+          ...prev,
+          [entryId]: currentEntry.status
+        }))
+        
+        // Set timer to clear undo after 5 minutes
+        clearUndoAfterDelay(entryId)
+      }
+
       const { error } = await supabase
         .from('waitlist')
         .update({ status: newStatus })
@@ -256,10 +310,69 @@ export default function WaitlistPage() {
         )
       )
 
-      toast.success('Status updated successfully')
+      toast.success(
+        `Status updated to ${newStatus}. ${['notified', 'booked'].includes(newStatus) ? 'You can undo this action if needed.' : ''}`,
+        {
+          duration: 5000, // Show for 5 seconds for undo actions
+          icon: ['notified', 'booked'].includes(newStatus) ? '↩️' : '✅'
+        }
+      )
     } catch (error) {
       console.error('Error updating waitlist status:', error)
       toast.error('Failed to update status')
+    }
+  }
+
+  const undoStatusChange = async (entryId: string) => {
+    try {
+      const previousStatus = statusHistory[entryId]
+      if (!previousStatus) {
+        toast.error('No previous status to restore')
+        return
+      }
+
+      const { error } = await supabase
+        .from('waitlist')
+        .update({ status: previousStatus })
+        .eq('id', entryId)
+        .eq('restaurant_id', restaurantId)
+
+      if (error) {
+        console.error('Error undoing status change:', error)
+        toast.error('Failed to undo status change')
+        return
+      }
+
+      // Update local state
+      setWaitlistEntries(prev => 
+        prev.map(entry => 
+          entry.id === entryId 
+            ? { ...entry, status: previousStatus as any }
+            : entry
+        )
+      )
+
+      // Remove from history as it's been undone
+      setStatusHistory(prev => {
+        const newHistory = { ...prev }
+        delete newHistory[entryId]
+        return newHistory
+      })
+      
+      // Clear the timer
+      if (undoTimers[entryId]) {
+        clearTimeout(undoTimers[entryId])
+        setUndoTimers(prev => {
+          const newTimers = { ...prev }
+          delete newTimers[entryId]
+          return newTimers
+        })
+      }
+
+      toast.success(`Status restored to ${previousStatus}`)
+    } catch (error) {
+      console.error('Error undoing status change:', error)
+      toast.error('Failed to undo status change')
     }
   }
 
@@ -360,9 +473,29 @@ export default function WaitlistPage() {
         <div>
           <h1 className="text-3xl font-bold">Waiting List</h1>
           <p className="text-muted-foreground">
-            Manage customer waiting list for your restaurant
+            Manage customer waiting list for your restaurant. 
+            {Object.keys(statusHistory).length > 0 && (
+              <span className="text-orange-600 font-medium">
+                {' '}• {Object.keys(statusHistory).length} recent change{Object.keys(statusHistory).length !== 1 ? 's' : ''} can be undone
+              </span>
+            )}
           </p>
         </div>
+        {Object.keys(statusHistory).length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              // Clear all timers
+              Object.values(undoTimers).forEach(timer => clearTimeout(timer))
+              setUndoTimers({})
+              setStatusHistory({})
+            }}
+            className="text-orange-700 border-orange-200 hover:bg-orange-50"
+          >
+            Clear Undo History
+          </Button>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -491,6 +624,8 @@ export default function WaitlistPage() {
                   entry={entry}
                   onStatusUpdate={updateWaitlistStatus}
                   onCreateBooking={handleCreateBooking}
+                  previousStatus={statusHistory[entry.id]}
+                  onUndo={undoStatusChange}
                 />
               ))}
             </div>

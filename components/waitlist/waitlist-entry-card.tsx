@@ -12,7 +12,9 @@ import {
   XCircle,
   MoreVertical,
   User,
-  CalendarPlus
+  CalendarPlus,
+  Undo2,
+  AlertTriangle
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -33,9 +35,12 @@ interface WaitlistEntryCardProps {
   entry: WaitlistEntry
   onStatusUpdate: (entryId: string, newStatus: string) => Promise<void>
   onCreateBooking?: (entry: WaitlistEntry) => void
+  previousStatus?: string // Track previous status for undo functionality
+  onUndo?: (entryId: string) => Promise<void>
+  undoExpiresAt?: number // Timestamp when undo expires
 }
 
-export function WaitlistEntryCard({ entry, onStatusUpdate, onCreateBooking }: WaitlistEntryCardProps) {
+export function WaitlistEntryCard({ entry, onStatusUpdate, onCreateBooking, previousStatus, onUndo }: WaitlistEntryCardProps) {
   const [isUpdating, setIsUpdating] = useState(false)
 
   const handleStatusUpdate = async (newStatus: string) => {
@@ -47,6 +52,36 @@ export function WaitlistEntryCard({ entry, onStatusUpdate, onCreateBooking }: Wa
     }
   }
 
+  const handleUndo = async () => {
+    if (onUndo) {
+      setIsUpdating(true)
+      try {
+        await onUndo(entry.id)
+      } finally {
+        setIsUpdating(false)
+      }
+    }
+  }
+
+  const canUndo = previousStatus && previousStatus !== entry.status && 
+                  ['notified', 'booked'].includes(entry.status) &&
+                  ['active', 'notified'].includes(previousStatus) && // Only allow undo from these states
+                  onUndo
+
+  const getUndoText = () => {
+    if (!previousStatus) return ''
+    switch (previousStatus) {
+      case 'active': return 'Back to Active'
+      case 'notified': return 'Back to Notified'
+      default: return 'Undo'
+    }
+  }
+
+  const getStatusChangeDescription = () => {
+    if (!canUndo || !previousStatus) return ''
+    return `Changed from "${previousStatus}" to "${entry.status}"`
+  }
+
   const handleCreateBooking = () => {
     if (onCreateBooking) {
       onCreateBooking(entry)
@@ -54,8 +89,26 @@ export function WaitlistEntryCard({ entry, onStatusUpdate, onCreateBooking }: Wa
   }
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className={`hover:shadow-md transition-shadow ${canUndo ? 'ring-2 ring-orange-200 bg-orange-50/30' : ''}`}>
       <CardContent className="p-6">
+        {canUndo && (
+          <div className="mb-4 p-2 bg-orange-100 border border-orange-200 rounded-md flex items-center justify-between">
+            <div className="flex items-center text-sm text-orange-800">
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              {getStatusChangeDescription()}. You can undo this action.
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleUndo}
+              disabled={isUpdating}
+              className="text-orange-700 hover:bg-orange-200 h-6 px-2"
+            >
+              <Undo2 className="h-3 w-3 mr-1" />
+              Undo
+            </Button>
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Avatar className="h-12 w-12">
@@ -104,6 +157,20 @@ export function WaitlistEntryCard({ entry, onStatusUpdate, onCreateBooking }: Wa
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            {/* Undo Button - Show for recently changed statuses */}
+            {canUndo && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleUndo}
+                disabled={isUpdating}
+                className="border-orange-200 text-orange-700 hover:bg-orange-50"
+              >
+                <Undo2 className="h-4 w-4 mr-2" />
+                {getUndoText()}
+              </Button>
+            )}
+
             {/* Quick Action Buttons */}
             {entry.status === 'active' && (
               <>
@@ -144,6 +211,12 @@ export function WaitlistEntryCard({ entry, onStatusUpdate, onCreateBooking }: Wa
                 </Button>
               </>
             )}
+            {entry.status === 'booked' && canUndo && (
+              <div className="text-sm text-green-600 flex items-center">
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Successfully booked
+              </div>
+            )}
             
             {/* More Actions Dropdown */}
             <DropdownMenu>
@@ -155,6 +228,16 @@ export function WaitlistEntryCard({ entry, onStatusUpdate, onCreateBooking }: Wa
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                
+                {canUndo && (
+                  <>
+                    <DropdownMenuItem onClick={handleUndo} className="text-orange-700">
+                      <Undo2 className="h-4 w-4 mr-2" />
+                      {getUndoText()}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 
                 {onCreateBooking && !['booked', 'expired'].includes(entry.status) && (
                   <DropdownMenuItem onClick={handleCreateBooking}>
