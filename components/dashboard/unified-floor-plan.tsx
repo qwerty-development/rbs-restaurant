@@ -1,7 +1,7 @@
 // components/dashboard/unified-floor-plan.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -90,7 +90,7 @@ const TABLE_TYPE_COLORS: Record<string, string> = {
   private: "bg-gradient-to-br from-rose-50 to-rose-100 dark:from-rose-950/50 dark:to-rose-900/30 border-rose-300 dark:border-rose-700 shadow-rose-200/30 dark:shadow-rose-900/20",
 }
 
-export function UnifiedFloorPlan({ 
+export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({ 
   tables, 
   bookings, 
   currentTime,
@@ -107,6 +107,9 @@ export function UnifiedFloorPlan({
   const [isDragging, setIsDragging] = useState(false)
   const [draggedBookingId, setDraggedBookingId] = useState<string | null>(null)
   const [activeMenuTable, setActiveMenuTable] = useState<string | null>(null)
+  const [hoveredTable, setHoveredTable] = useState<string | null>(null)
+  const [loadingTransition, setLoadingTransition] = useState<string | null>(null)
+  const floorPlanRef = useRef<HTMLDivElement>(null)
   
   const tableStatusService = new TableStatusService()
 
@@ -121,6 +124,39 @@ export function UnifiedFloorPlan({
     const interval = setInterval(loadStatuses, 30000)
     return () => clearInterval(interval)
   }, [restaurantId, currentTime])
+
+  // Click outside to deselect
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (floorPlanRef.current && !floorPlanRef.current.contains(event.target as Node)) {
+        setSelectedTable(null)
+        setActiveMenuTable(null)
+      }
+    }
+
+    if (selectedTable) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [selectedTable])
+
+  // Keyboard navigation support
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedTable(null)
+        setActiveMenuTable(null)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
 
   const getTableBookingInfo = (table: any) => {
     // Get all bookings for this table (current, upcoming, and recent)
@@ -174,24 +210,27 @@ export function UnifiedFloorPlan({
     }
   }
 
-  const handleTableDrop = (tableId: string) => {
+  const handleTableDrop = useCallback((tableId: string) => {
     if (draggedBookingId && onTableSwitch) {
       onTableSwitch(draggedBookingId, [tableId])
       setDraggedBookingId(null)
       setIsDragging(false)
     }
-  }
+  }, [draggedBookingId, onTableSwitch])
 
-  const handleStatusTransition = async (bookingId: string, newStatus: DiningStatus) => {
+  const handleStatusTransition = useCallback(async (bookingId: string, newStatus: DiningStatus) => {
     try {
+      setLoadingTransition(bookingId)
       await tableStatusService.updateBookingStatus(bookingId, newStatus, userId)
       if (onStatusUpdate) {
         onStatusUpdate(bookingId, newStatus)
       }
     } catch (error) {
       console.error('Status update error:', error)
+    } finally {
+      setLoadingTransition(null)
     }
-  }
+  }, [onStatusUpdate, userId, tableStatusService])
 
   // Highlight tables based on search
   const isTableHighlighted = (table: any, booking: any) => {
@@ -208,7 +247,7 @@ export function UnifiedFloorPlan({
   }
 
   const renderTable = (table: any) => {
-    const { current, upcoming, allUpcoming, recentHistory, status } = getTableBookingInfo(table)
+    const { current, upcoming, allUpcoming, recentHistory } = getTableBookingInfo(table)
     const isOccupied = !!current
     const StatusIcon = current ? STATUS_ICONS[current.status as DiningStatus] : Table2
     const isHighlighted = isTableHighlighted(table, current)
@@ -220,15 +259,30 @@ export function UnifiedFloorPlan({
         <Tooltip>
           <TooltipTrigger asChild>
             <div
+              role="button"
+              tabIndex={0}
+              aria-label={`Table ${table.table_number}, capacity ${table.min_capacity}-${table.max_capacity}${current ? `, occupied by ${current.user?.full_name || current.guest_name || 'Guest'}, status: ${current.status.replace(/_/g, ' ')}` : ', available'}`}
               className={cn(
-                "relative rounded-2xl border-3 cursor-pointer transition-all duration-200 hover:shadow-2xl hover:scale-105",
+                "relative rounded-2xl border-3 cursor-pointer transition-all duration-300 ease-out focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-offset-2",
                 TABLE_TYPE_COLORS[table.table_type] || "bg-gradient-to-br from-white to-gray-50 border-gray-300 shadow-lg",
-                isOccupied && "ring-4 ring-offset-4 ring-offset-background shadow-2xl",
+                // Occupied table styling
+                isOccupied && "ring-4 ring-offset-2 ring-offset-background shadow-xl",
                 isOccupied && STATUS_COLORS[current.status as DiningStatus],
+                // Hover effects with better feedback
+                hoveredTable === table.id && !isOccupied && "shadow-xl scale-102 ring-2 ring-blue-400/50 ring-offset-2",
+                hoveredTable === table.id && isOccupied && "shadow-2xl scale-102 brightness-110",
+                // Loading state
+                loadingTransition === current?.id && "animate-pulse ring-4 ring-yellow-400 ring-offset-2",
+                // Selection state
+                selectedTable === table.id && "ring-4 ring-blue-500 ring-offset-2 ring-offset-background scale-105 shadow-2xl",
+                // Search highlighting
+                isHighlighted && "ring-4 ring-yellow-400 animate-pulse ring-offset-2 ring-offset-background",
+                // Drag states
                 isDragging && !isOccupied && "border-dashed border-green-500 bg-green-50/70 shadow-green-200/50",
-                selectedTable === table.id && "ring-6 ring-blue-400/60 ring-offset-4 ring-offset-background scale-110",
-                isHighlighted && "ring-6 ring-yellow-400 animate-pulse ring-offset-4 ring-offset-background scale-105",
-                table.shape === "circle" ? "rounded-full" : "rounded-2xl"
+                // Shape
+                table.shape === "circle" ? "rounded-full" : "rounded-2xl",
+                // Interactive states
+                "transform-gpu will-change-transform"
               )}
               style={{
                 position: "absolute",
@@ -239,30 +293,62 @@ export function UnifiedFloorPlan({
                 padding: "16px"
               }}
               onClick={() => {
-                setSelectedTable(table.id)
-                // Don't open booking details if we're just toggling the menu
-                if (current && !activeMenuTable) {
-                  setActiveMenuTable(table.id)
-                } else if (current && activeMenuTable === table.id) {
+                // Simple click-to-toggle selection
+                if (selectedTable === table.id) {
+                  setSelectedTable(null)
                   setActiveMenuTable(null)
                 } else {
-                  // For empty tables, show upcoming bookings and history
-                  if (onTableClick) onTableClick(table, { 
-                    current, 
-                    upcoming, 
-                    allUpcoming, 
-                    recentHistory,
-                    tableInfo: {
-                      hasUpcoming: allUpcoming.length > 0,
-                      hasHistory: recentHistory.length > 0,
-                      nextBookingTime: allUpcoming[0]?.booking_time,
-                      lastCompletedTime: recentHistory[0]?.booking_time
-                    }
-                  })
+                  setSelectedTable(table.id)
+                  // Auto-show menu for occupied tables
+                  if (current) {
+                    setActiveMenuTable(table.id)
+                  } else {
+                    // For empty tables, show details immediately
+                    if (onTableClick) onTableClick(table, { 
+                      current, 
+                      upcoming, 
+                      allUpcoming, 
+                      recentHistory,
+                      tableInfo: {
+                        hasUpcoming: allUpcoming.length > 0,
+                        hasHistory: recentHistory.length > 0,
+                        nextBookingTime: allUpcoming[0]?.booking_time,
+                        lastCompletedTime: recentHistory[0]?.booking_time
+                      }
+                    })
+                  }
                 }
               }}
-              onMouseEnter={() => {}} // Remove hover for tablet optimization
-              onMouseLeave={() => {}}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  // Trigger same logic as click
+                  if (selectedTable === table.id) {
+                    setSelectedTable(null)
+                    setActiveMenuTable(null)
+                  } else {
+                    setSelectedTable(table.id)
+                    if (current) {
+                      setActiveMenuTable(table.id)
+                    } else if (onTableClick) {
+                      onTableClick(table, { 
+                        current, 
+                        upcoming, 
+                        allUpcoming, 
+                        recentHistory,
+                        tableInfo: {
+                          hasUpcoming: allUpcoming.length > 0,
+                          hasHistory: recentHistory.length > 0,
+                          nextBookingTime: allUpcoming[0]?.booking_time,
+                          lastCompletedTime: recentHistory[0]?.booking_time
+                        }
+                      })
+                    }
+                  }
+                }
+              }}
+              onMouseEnter={() => setHoveredTable(table.id)}
+              onMouseLeave={() => setHoveredTable(null)}
               onDragOver={(e) => {
                 if (!isOccupied) {
                   e.preventDefault()
@@ -303,40 +389,41 @@ export function UnifiedFloorPlan({
                       <div className="flex items-center gap-3">
                         {/* Party size with visual indicators */}
                         <div className={cn(
-                          "flex items-center gap-1 px-2 py-1 rounded-lg transition-colors",
+                          "flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all duration-200 shadow-sm",
                           current.party_size > table.max_capacity 
-                            ? "bg-red-100 text-red-800 border border-red-300" 
-                            : "bg-blue-100 text-blue-800 border border-blue-300"
+                            ? "bg-red-100 text-red-800 border-2 border-red-300 animate-pulse" 
+                            : "bg-blue-100 text-blue-800 border-2 border-blue-300 hover:bg-blue-200"
                         )}>
                           <Users className="h-4 w-4" />
                           <span className="font-bold text-sm">{current.party_size}</span>
                           {current.party_size > table.max_capacity && (
-                            <AlertTriangle className="h-3 w-3 animate-bounce" />
+                            <AlertTriangle className="h-4 w-4 animate-bounce text-red-600" />
                           )}
                         </div>
                         
                         {/* Time indicator with urgency colors */}
                         <div className={cn(
-                          "flex items-center gap-1 px-2 py-1 rounded-lg font-bold text-sm border transition-all",
+                          "flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-sm border-2 transition-all duration-200 shadow-sm",
                           minutesSinceArrival > (current.turn_time_minutes || 120) 
-                            ? "bg-red-100 text-red-800 border-red-300 animate-pulse" :
+                            ? "bg-red-100 text-red-800 border-red-300 animate-pulse shadow-red-200" :
                           minutesSinceArrival > (current.turn_time_minutes || 120) * 0.8 
-                            ? "bg-orange-100 text-orange-800 border-orange-300" :
-                          "bg-green-100 text-green-800 border-green-300"
+                            ? "bg-orange-100 text-orange-800 border-orange-300 shadow-orange-200" :
+                          "bg-green-100 text-green-800 border-green-300 shadow-green-200"
                         )}>
                           <Clock className="h-4 w-4" />
                           <span>{minutesSinceArrival}m</span>
                           {minutesSinceArrival > (current.turn_time_minutes || 120) && (
-                            <span className="text-xs">⚠️</span>
+                            <AlertTriangle className="h-3 w-3 animate-bounce" />
                           )}
                         </div>
                       </div>
                       
-                      {/* Quick call button with enhanced styling */}
+                      {/* Enhanced quick call button */}
                       {(current.user?.phone_number || current.guest_phone) && (
                         <Button
                           size="sm"
-                          className="h-8 w-8 p-0 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-xl border-2 border-green-300 hover:scale-110 transition-all"
+                          aria-label={`Call ${current.user?.full_name || current.guest_name || 'Guest'} at ${current.user?.phone_number || current.guest_phone}`}
+                          className="h-9 w-9 p-0 bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-full shadow-2xl border-3 border-green-300 hover:scale-110 transition-all duration-200 animate-pulse focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-offset-2"
                           onClick={(e) => {
                             e.stopPropagation()
                             const phone = current.user?.phone_number || current.guest_phone
@@ -352,12 +439,12 @@ export function UnifiedFloorPlan({
                   {/* Status indicator with enhanced visual feedback */}
                   <div className="flex items-center justify-center">
                     <div className={cn(
-                      "px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-lg border-2 transition-all",
-                      current.status === 'arrived' ? "bg-blue-100 text-blue-800 border-blue-300 animate-pulse" :
-                      current.status === 'seated' ? "bg-purple-100 text-purple-800 border-purple-300" :
-                      current.status === 'ordered' ? "bg-orange-100 text-orange-800 border-orange-300" :
-                      current.status === 'payment' ? "bg-yellow-100 text-yellow-800 border-yellow-300" :
-                      "bg-green-100 text-green-800 border-green-300"
+                      "px-4 py-2 rounded-2xl text-sm font-bold flex items-center gap-2.5 shadow-xl border-2 transition-all duration-300 transform hover:scale-105",
+                      current.status === 'arrived' ? "bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-blue-400 animate-pulse shadow-blue-300/50" :
+                      current.status === 'seated' ? "bg-gradient-to-r from-purple-100 to-purple-200 text-purple-800 border-purple-400 shadow-purple-300/50" :
+                      current.status === 'ordered' ? "bg-gradient-to-r from-orange-100 to-orange-200 text-orange-800 border-orange-400 shadow-orange-300/50" :
+                      current.status === 'payment' ? "bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800 border-yellow-400 shadow-yellow-300/50 animate-pulse" :
+                      "bg-gradient-to-r from-green-100 to-green-200 text-green-800 border-green-400 shadow-green-300/50"
                     )}>
                       <StatusIcon className="h-4 w-4" />
                       <span className="capitalize">{current.status.replace(/_/g, ' ')}</span>
@@ -369,17 +456,19 @@ export function UnifiedFloorPlan({
                     </div>
                   </div>
 
-                  {/* Quick actions - Click to Show/Hide for Tablets */}
-                  {activeMenuTable === table.id && (
-                    <div className="absolute -bottom-12 left-0 right-0 flex justify-center gap-2 z-50">
-                      {/* Quick status buttons based on current status */}
+                  {/* Quick actions - Enhanced positioning and animation */}
+                  {selectedTable === table.id && activeMenuTable === table.id && (
+                    <div className="absolute -bottom-20 left-1/2 transform -translate-x-1/2 flex gap-2 z-50 animate-in fade-in-0 slide-in-from-top-4 duration-300">
+                      {/* Enhanced quick status buttons */}
                       {current.status === 'arrived' && (
                         <Button 
-                          className="h-10 text-sm px-4 shadow-xl bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-xl font-medium"
+                          size="sm"
+                          className="h-11 text-sm px-5 shadow-2xl bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-2xl font-semibold border-2 border-purple-400 hover:scale-105 transition-all duration-200"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleStatusTransition(current.id, 'seated')
                           }}
+                          disabled={loadingTransition === current.id}
                         >
                           <ChefHat className="h-4 w-4 mr-2" />
                           Seat Now
@@ -388,11 +477,13 @@ export function UnifiedFloorPlan({
                       
                       {current.status === 'seated' && (
                         <Button 
-                          className="h-10 text-sm px-4 shadow-xl bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-xl font-medium"
+                          size="sm"
+                          className="h-11 text-sm px-5 shadow-2xl bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-2xl font-semibold border-2 border-orange-400 hover:scale-105 transition-all duration-200"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleStatusTransition(current.id, 'ordered')
                           }}
+                          disabled={loadingTransition === current.id}
                         >
                           <Coffee className="h-4 w-4 mr-2" />
                           Ordered
@@ -401,11 +492,13 @@ export function UnifiedFloorPlan({
                       
                       {['ordered', 'appetizers', 'main_course', 'dessert'].includes(current.status) && (
                         <Button 
-                          className="h-10 text-sm px-4 shadow-xl bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 text-white rounded-xl font-medium"
+                          size="sm"
+                          className="h-11 text-sm px-5 shadow-2xl bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 text-white rounded-2xl font-semibold border-2 border-yellow-400 hover:scale-105 transition-all duration-200"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleStatusTransition(current.id, 'payment')
                           }}
+                          disabled={loadingTransition === current.id}
                         >
                           <CreditCard className="h-4 w-4 mr-2" />
                           Check
@@ -414,53 +507,48 @@ export function UnifiedFloorPlan({
                       
                       {current.status === 'payment' && (
                         <Button 
-                          className="h-10 text-sm px-4 shadow-xl bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl font-medium"
+                          size="sm"
+                          className="h-11 text-sm px-5 shadow-2xl bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-2xl font-semibold border-2 border-green-400 hover:scale-105 transition-all duration-200"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleStatusTransition(current.id, 'completed')
                           }}
+                          disabled={loadingTransition === current.id}
                         >
                           <CheckCircle className="h-4 w-4 mr-2" />
                           Complete
                         </Button>
                       )}
 
-                      {/* Close menu button */}
+                      {/* View Details button */}
                       <Button 
-                        className="h-10 px-3 shadow-xl bg-red-600 hover:bg-red-700 text-white rounded-xl"
+                        size="sm"
+                        className="h-11 px-5 shadow-2xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-2xl font-semibold border-2 border-blue-400 hover:scale-105 transition-all duration-200"
                         onClick={(e) => {
                           e.stopPropagation()
-                          setActiveMenuTable(null)
+                          if (onTableClick) onTableClick(table, { current, upcoming, allUpcoming, recentHistory })
                         }}
                       >
-                        ✕
-                      </Button>
-                      
-                      <Button 
-                        className="h-10 px-3 shadow-xl bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setActiveMenuTable(null) // Close menu first
-                          if (onTableClick) onTableClick(table, { current, upcoming })
-                        }}
-                      >
-                        <Eye className="h-4 w-4" />
+                        <Eye className="h-4 w-4 mr-2" />
+                        Details
                       </Button>
                     </div>
                   )}
                 </div>
                               ) : (
-                <div className="text-center py-2">
-                  <Badge 
-                    variant="secondary" 
-                    className="text-xs bg-muted text-muted-foreground border-border"
-                  >
-                    Available
-                  </Badge>
+                <div className="text-center py-3">
+                  <div className="mb-3">
+                    <Badge 
+                      variant="secondary" 
+                      className="text-sm px-3 py-1.5 bg-green-100 text-green-800 border-green-300 font-medium shadow-sm"
+                    >
+                      ✅ Available
+                    </Badge>
+                  </div>
                   
-                  {/* Show next upcoming booking */}
+                  {/* Show next upcoming booking with better visibility */}
                   {upcoming && (
-                    <div className="text-xs mt-2 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-2 border-blue-200 dark:border-blue-700 rounded-xl shadow-sm">
+                    <div className="text-xs p-3 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 border-2 border-blue-300 dark:border-blue-600 rounded-xl shadow-md">
                       <div className="flex items-start gap-2">
                         <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
                           <Clock className="h-3 w-3 text-white" />
@@ -482,22 +570,45 @@ export function UnifiedFloorPlan({
                     </div>
                   )}
                   
-                  {/* Show activity indicators */}
+                  {/* Enhanced activity indicators for empty tables */}
                   {!upcoming && (
-                    <div className="text-center mt-2 space-y-2">
-                      <div className="w-8 h-8 mx-auto bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-                        <span className="text-white text-lg">✓</span>
+                    <div className="space-y-3">
+                      {/* Main availability indicator */}
+                      <div className="text-center">
+                        <div className="w-10 h-10 mx-auto bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center shadow-lg">
+                          <span className="text-white text-xl font-bold">✓</span>
+                        </div>
                       </div>
                       
-                      {/* Quick info indicators */}
-                      <div className="flex justify-center gap-2">
-                        {allUpcoming.length > 0 && (
-                          <div className="w-2 h-2 bg-blue-400 rounded-full" title={`${allUpcoming.length} upcoming bookings`} />
-                        )}
-                        {recentHistory.length > 0 && (
-                          <div className="w-2 h-2 bg-gray-400 rounded-full" title={`${recentHistory.length} recent bookings today`} />
-                        )}
-                      </div>
+                      {/* Activity summary */}
+                      {(allUpcoming.length > 0 || recentHistory.length > 0) && (
+                        <div className="text-center space-y-2">
+                          <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Table Activity</p>
+                          <div className="flex justify-center gap-3">
+                            {allUpcoming.length > 0 && (
+                              <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-100 text-blue-700 rounded-lg border border-blue-300">
+                                <Calendar className="h-3 w-3" />
+                                <span className="text-xs font-medium">{allUpcoming.length} upcoming</span>
+                              </div>
+                            )}
+                            {recentHistory.length > 0 && (
+                              <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-100 text-gray-700 rounded-lg border border-gray-300">
+                                <CheckCircle className="h-3 w-3" />
+                                <span className="text-xs font-medium">{recentHistory.length} today</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Click hint for empty tables */}
+                      {selectedTable !== table.id && (
+                        <div className="text-center mt-2">
+                          <p className="text-xs text-muted-foreground px-2 py-1 bg-muted/50 rounded-lg">
+                            Click for details
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -557,16 +668,21 @@ export function UnifiedFloorPlan({
     )
   }
 
-  // Calculate stats
-  const occupiedTables = tables.filter(t => {
-    const { current } = getTableBookingInfo(t)
-    return !!current
-  }).length
+  // Memoized stats calculation for performance
+  const tableStats = useMemo(() => {
+    const activeTables = tables.filter(t => t.is_active)
+    const occupiedTables = activeTables.filter(t => {
+      const { current } = getTableBookingInfo(t)
+      return !!current
+    }).length
 
-  const availableTables = tables.filter(t => t.is_active).length - occupiedTables
-  const occupancyRate = tables.filter(t => t.is_active).length > 0 
-    ? Math.round((occupiedTables / tables.filter(t => t.is_active).length) * 100) 
-    : 0
+    const availableTables = activeTables.length - occupiedTables
+    const occupancyRate = activeTables.length > 0 
+      ? Math.round((occupiedTables / activeTables.length) * 100) 
+      : 0
+
+    return { occupiedTables, availableTables, occupancyRate }
+  }, [tables, bookings, currentTime])
 
   return (
     <Card className="h-full flex flex-col shadow-xl border">
@@ -574,50 +690,73 @@ export function UnifiedFloorPlan({
         <div>
           <h2 className="text-lg font-semibold text-foreground">Live Floor Plan</h2>
           <p className="text-sm text-muted-foreground">
-            <span className="font-medium text-green-600 dark:text-green-400">{occupiedTables}</span> occupied • 
-            <span className="font-medium text-blue-600 dark:text-blue-400 ml-2">{availableTables}</span> available • 
+            <span className="font-medium text-green-600 dark:text-green-400">{tableStats.occupiedTables}</span> occupied • 
+            <span className="font-medium text-blue-600 dark:text-blue-400 ml-2">{tableStats.availableTables}</span> available • 
             <span className={cn(
               "font-medium ml-2",
-              occupancyRate > 80 ? "text-red-600 dark:text-red-400" : 
-              occupancyRate > 60 ? "text-orange-600 dark:text-orange-400" : 
+              tableStats.occupancyRate > 80 ? "text-red-600 dark:text-red-400" : 
+              tableStats.occupancyRate > 60 ? "text-orange-600 dark:text-orange-400" : 
               "text-green-600 dark:text-green-400"
-            )}>{occupancyRate}%</span> capacity
+            )}>{tableStats.occupancyRate}%</span> capacity
           </p>
         </div>
         
-        {/* Legend with better contrast */}
-        <div className="flex items-center gap-4 text-xs">
-          <div className="flex items-center gap-2 px-3 py-2 bg-green-800 text-white rounded-lg shadow-md">
+        {/* Enhanced legend with better UX hints */}
+        <div className="flex items-center gap-3 text-xs">
+          <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-green-700 to-green-800 text-white rounded-xl shadow-lg border border-green-600">
+            <div className="w-3 h-3 rounded-full bg-green-300 animate-pulse" />
+            <span className="font-semibold">🍽️ Occupied</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-gray-700 to-gray-800 text-white rounded-xl shadow-lg border border-gray-600">
             <div className="w-3 h-3 rounded-full bg-green-400" />
-            <span className="font-medium">🍽️ Dining</span>
+            <span className="font-semibold">✅ Available</span>
           </div>
-          <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 text-white rounded-lg shadow-md">
-            <div className="w-3 h-3 rounded-full bg-gray-400" />
-            <span className="font-medium">✅ Available</span>
+          <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-700 to-blue-800 text-white rounded-xl shadow-lg border border-blue-600">
+            <div className="w-3 h-3 rounded-full bg-blue-300 animate-bounce" />
+            <span className="font-semibold">📅 Reserved</span>
           </div>
-          <div className="flex items-center gap-2 px-3 py-2 bg-blue-800 text-white rounded-lg shadow-md">
-            <div className="w-3 h-3 rounded-full bg-blue-400" />
-            <span className="font-medium">📅 Reserved</span>
-          </div>
+          {selectedTable && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl shadow-lg border-2 border-blue-400 animate-pulse">
+              <div className="w-3 h-3 rounded-full bg-blue-200" />
+              <span className="font-bold">👆 Selected</span>
+            </div>
+          )}
           {searchQuery && (
-            <div className="flex items-center gap-2 ml-2 px-3 py-2 bg-yellow-600 text-white rounded-full border-2 border-yellow-400 animate-pulse shadow-md">
-              <div className="w-3 h-3 rounded-full bg-yellow-200" />
+            <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-yellow-600 to-yellow-700 text-white rounded-xl shadow-lg border-2 border-yellow-400 animate-pulse">
+              <div className="w-3 h-3 rounded-full bg-yellow-200 animate-ping" />
               <span className="font-bold">🔍 Found</span>
             </div>
           )}
         </div>
       </div>
       
-      <div className="flex-1 relative bg-background overflow-auto">
+      <div className="flex-1 relative bg-background overflow-auto" ref={floorPlanRef}>
         <div 
           className="relative"
           style={{ minHeight: "800px", minWidth: "1200px" }}
+          onClick={(e) => {
+            // Only deselect if clicking on empty space
+            if (e.target === e.currentTarget) {
+              setSelectedTable(null)
+              setActiveMenuTable(null)
+            }
+          }}
         >
           {tables.filter(t => t.is_active).map(renderTable)}
           
-        
+          {/* Enhanced accessibility overlay for screen readers */}
+          <div className="sr-only" aria-live="polite" aria-atomic="true">
+            {selectedTable && (() => {
+              const selectedTableData = tables.find(t => t.id === selectedTable)
+              const { current } = selectedTableData ? getTableBookingInfo(selectedTableData) : { current: null }
+              return `Table ${selectedTableData?.table_number} selected. ${current ? `Occupied by ${current.user?.full_name || current.guest_name || 'Guest'}, status: ${current.status.replace(/_/g, ' ')}.` : 'Available for booking.'}`
+            })()}
+          </div>
         </div>
       </div>
     </Card>
   )
-}
+})
+
+// Add display name for debugging
+UnifiedFloorPlan.displayName = 'UnifiedFloorPlan'
