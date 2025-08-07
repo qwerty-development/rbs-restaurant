@@ -2,9 +2,10 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useSidebar } from '@/lib/contexts/sidebar-context'
 import { 
   LayoutDashboard, 
   Calendar, 
@@ -144,7 +145,32 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  const { isCollapsed, setIsCollapsed, toggleSidebar } = useSidebar()
+
+  // Keyboard navigation support
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isCollapsed) {
+        setIsCollapsed(true)
+      }
+    }
+
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [isCollapsed, setIsCollapsed])
+
+  // Prevent body scroll when sidebar is expanded
+  useEffect(() => {
+    if (!isCollapsed) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = 'unset'
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset'
+    }
+  }, [isCollapsed])
 
   const handleSignOut = async () => {
     try {
@@ -166,73 +192,123 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
   )
 
   return (
-    <aside className={cn(
-      "flex flex-col h-full bg-sidebar border-r border-sidebar-border transition-all duration-300",
-      isCollapsed ? "w-16" : "w-64"
-    )}>
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-sidebar-border">
-        {!isCollapsed && (
-          <div>
-            <h2 className="text-lg font-semibold truncate">{restaurant.name}</h2>
-            <p className="text-sm text-sidebar-foreground/60 capitalize">{role}</p>
-          </div>
+    <>
+      {/* Backdrop blur when expanded - covers everything */}
+      {!isCollapsed && (
+        <div 
+          className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[50] transition-all duration-200 ease-out"
+          onClick={() => setIsCollapsed(true)}
+          onTouchEnd={() => setIsCollapsed(true)} // Better touch support
+          role="button"
+          tabIndex={-1}
+          aria-label="Close sidebar"
+        />
+      )}
+      
+      <aside 
+        className={cn(
+          "flex flex-col h-screen bg-sidebar/98 backdrop-blur-xl border-r border-sidebar-border transition-all duration-200 ease-out group fixed inset-y-0 left-0",
+          // Always fixed position to prevent layout jumps
+          // Collapsed: narrow width, normal z-index
+          // Expanded: wider width, higher z-index
+          isCollapsed 
+            ? "w-16 z-30 shadow-sm" 
+            : "w-72 z-[60] shadow-2xl"
         )}
+        role="complementary"
+        aria-label="Navigation sidebar"
+      >
+      {/* Header - Optimized for tablets */}
+      <div className="flex items-center justify-between p-3 md:p-4 border-b border-sidebar-border">
+        <div className={cn(
+          "transition-all duration-200 ease-out overflow-hidden",
+          isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
+        )}>
+          <h2 className="text-base md:text-lg font-semibold truncate whitespace-nowrap">{restaurant.name}</h2>
+          <p className="text-xs md:text-sm text-sidebar-foreground/60 capitalize whitespace-nowrap">{role}</p>
+        </div>
+        
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="ml-auto"
+          onClick={toggleSidebar}
+          className={cn(
+            "h-8 w-8 md:h-9 md:w-9 shrink-0 transition-all duration-150 ease-out hover:bg-sidebar-accent/30",
+            isCollapsed ? "" : "ml-auto"
+          )}
         >
-          {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          {isCollapsed ? <ChevronRight className="h-3 w-3 md:h-4 md:w-4" /> : <ChevronLeft className="h-3 w-3 md:h-4 md:w-4" />}
         </Button>
       </div>
 
-      {/* Navigation */}
-      <ScrollArea className="flex-1 px-2 py-4">
-        <nav className="space-y-1">
+      {/* Navigation - Optimized for tablets */}
+      <ScrollArea className="flex-1 px-1.5 md:px-2 py-3 md:py-4">
+        <nav className="space-y-0.5 md:space-y-1">
           {filteredNavItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => {
+                  // Auto-collapse sidebar on navigation for better UX on tablets
+                  if (window.innerWidth < 1024 && !isCollapsed) {
+                    setIsCollapsed(true)
+                  }
+                }}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                  "flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ease-out touch-manipulation",
                   isActive
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
                     : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                  isCollapsed && "justify-center px-2"
+                  isCollapsed && "justify-center"
                 )}
                 title={isCollapsed ? item.title : undefined}
+                data-tooltip={isCollapsed ? item.title : undefined}
               >
-                <item.icon className="h-5 w-5 shrink-0" />
-                {!isCollapsed && <span>{item.title}</span>}
+                <item.icon className="h-4 w-4 md:h-5 md:w-5 shrink-0" />
+                <span className={cn(
+                  "text-xs md:text-sm transition-all duration-200 ease-out whitespace-nowrap",
+                  isCollapsed ? "opacity-0 w-0" : "opacity-100 w-auto ml-3"
+                )}>
+                  {item.title}
+                </span>
               </Link>
             )
           })}
         </nav>
       </ScrollArea>
 
-      {/* Bottom Section */}
-      <div className="border-t border-sidebar-border p-2 space-y-1">
+      {/* Bottom Section - Optimized for tablets */}
+      <div className="border-t border-sidebar-border p-1.5 md:p-2 space-y-0.5 md:space-y-1">
         {filteredBottomItems.map((item) => {
           const isActive = pathname === item.href
           return (
             <Link
               key={item.href}
               href={item.href}
+              onClick={() => {
+                // Auto-collapse sidebar on navigation for better UX on tablets
+                if (window.innerWidth < 1024 && !isCollapsed) {
+                  setIsCollapsed(true)
+                }
+              }}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                "flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ease-out touch-manipulation",
                 isActive
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                isCollapsed && "justify-center px-2"
+                isCollapsed && "justify-center"
               )}
               title={isCollapsed ? item.title : undefined}
             >
-              <item.icon className="h-5 w-5 shrink-0" />
-              {!isCollapsed && <span>{item.title}</span>}
+              <item.icon className="h-4 w-4 md:h-5 md:w-5 shrink-0" />
+              <span className={cn(
+                "text-xs md:text-sm transition-all duration-200 ease-out whitespace-nowrap",
+                isCollapsed ? "opacity-0 w-0" : "opacity-100 w-auto ml-3"
+              )}>
+                {item.title}
+              </span>
             </Link>
           )
         })}
@@ -241,15 +317,21 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
           variant="ghost"
           onClick={handleSignOut}
           className={cn(
-            "w-full justify-start gap-3 text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-            isCollapsed && "justify-center px-2"
+            "w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground py-2.5 h-auto touch-manipulation transition-all duration-150 ease-out px-3",
+            isCollapsed && "justify-center"
           )}
           title={isCollapsed ? "Sign Out" : undefined}
         >
-          <LogOut className="h-5 w-5 shrink-0" />
-          {!isCollapsed && <span>Sign Out</span>}
+          <LogOut className="h-4 w-4 md:h-5 md:w-5 shrink-0" />
+          <span className={cn(
+            "text-xs md:text-sm transition-all duration-200 ease-out whitespace-nowrap",
+            isCollapsed ? "opacity-0 w-0" : "opacity-100 w-auto ml-3"
+          )}>
+            Sign Out
+          </span>
         </Button>
       </div>
     </aside>
+    </>
   )
 }

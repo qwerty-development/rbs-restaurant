@@ -189,23 +189,23 @@ const RequestExpiryTimer = ({ booking, requestService }: {
   if (!timeLeft || booking.status !== 'pending') return null
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       <div className={cn(
-        "flex items-center gap-1 text-xs",
+        "flex items-center gap-2 text-sm tablet:text-base font-medium",
         timeLeft.expired ? "text-red-600" : 
         timeLeft.hours < 2 ? "text-orange-600" : 
         "text-gray-600"
       )}>
-        <Timer className="h-3 w-3" />
+        <Timer className="h-4 w-4 tablet:h-5 tablet:w-5" />
         {timeLeft.expired ? (
-          "Expired"
+          <span className="font-bold">EXPIRED</span>
         ) : (
-          `Expires in ${timeLeft.hours}h ${timeLeft.minutes}m`
+          <span>Expires in {timeLeft.hours}h {timeLeft.minutes}m</span>
         )}
       </div>
       <Progress 
         value={timeLeft.percentage} 
-        className="h-1" 
+        className="h-2 tablet:h-3" 
         indicatorClassName={cn(
           timeLeft.percentage < 20 ? "bg-red-500" :
           timeLeft.percentage < 50 ? "bg-orange-500" :
@@ -320,15 +320,15 @@ export function BookingList({
   if (bookings.length === 0) {
     return (
       <Card>
-        <CardContent className="py-8 text-center">
-          <p className="text-muted-foreground">No bookings found</p>
+        <CardContent className="py-12 tablet:py-16 text-center">
+          <p className="text-muted-foreground text-base tablet:text-lg">No bookings found</p>
         </CardContent>
       </Card>
     )
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 tablet:space-y-6">
       {bookings.map((booking: any) => {
         const bookingTime = new Date(booking.booking_time)
         const now = new Date()
@@ -345,19 +345,20 @@ export function BookingList({
           <Card
             key={booking.id}
             className={cn(
-              "cursor-pointer hover:shadow-md transition-all",
-              isDining && "border-l-4 border-l-purple-500",
-              isLate && "border-l-4 border-l-red-500",
-              booking.status === 'pending' && booking.request_expires_at && "border-l-4 border-l-yellow-500"
+              "cursor-pointer hover:shadow-lg transition-all min-h-touch-lg",
+              "tablet:hover:scale-[1.01] tablet:active:scale-[0.99]",
+              isDining && "border-l-4 tablet:border-l-6 border-l-purple-500",
+              isLate && "border-l-4 tablet:border-l-6 border-l-red-500",
+              booking.status === 'pending' && booking.request_expires_at && "border-l-4 tablet:border-l-6 border-l-yellow-500"
             )}
             onClick={() => onSelectBooking(booking)}
           >
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div className="space-y-1 flex-1">
-                  <div className="flex items-center gap-3">
-                    <StatusIcon className={cn("h-5 w-5", statusConfig.color)} />
-                    <h3 className="font-semibold text-lg">
+            <CardHeader className="pb-4 tablet:pb-6">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-2 flex-1">
+                  <div className="flex items-center gap-3 tablet:gap-4">
+                    <StatusIcon className={cn("h-5 w-5 tablet:h-6 tablet:w-6", statusConfig.color)} />
+                    <h3 className="font-semibold text-lg tablet:text-xl">
                       {formatGuestName(booking)}
                     </h3>
                     
@@ -393,20 +394,20 @@ export function BookingList({
                     
                     <Badge 
                       variant={getStatusBadgeVariant(booking.status)}
-                      className={cn(statusConfig.bgColor, statusConfig.color)}
+                      className={cn(statusConfig.bgColor, statusConfig.color, "px-3 py-1 text-sm tablet:text-base font-medium")}
                     >
                       {statusConfig.label}
                     </Badge>
                     {isLate && (
-                      <Badge variant="destructive" className="text-xs">
+                      <Badge variant="destructive" className="px-3 py-1 text-sm tablet:text-base font-medium">
                         Late ({elapsedMinutes}m)
                       </Badge>
                     )}
                   </div>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <span className="font-mono">#{booking.confirmation_code}</span>
+                  <div className="flex items-center gap-4 text-sm tablet:text-base text-muted-foreground">
+                    <span className="font-mono font-medium">#{booking.confirmation_code}</span>
                     {booking.occasion && (
-                      <Badge variant="secondary" className="text-xs">
+                      <Badge variant="secondary" className="px-3 py-1 text-sm">
                         🎉 {booking.occasion}
                       </Badge>
                     )}
@@ -415,8 +416,8 @@ export function BookingList({
                 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" size="icon">
-                      <MoreVertical className="h-4 w-4" />
+                    <Button variant="ghost" size="default" className="min-h-touch min-w-touch">
+                      <MoreVertical className="h-5 w-5" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
@@ -553,39 +554,39 @@ export function BookingList({
               </div>
             </CardHeader>
             
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
+            <CardContent className="pt-0">
+              <div className="grid grid-cols-1 tablet:grid-cols-2 lg:grid-cols-4 gap-4 tablet:gap-6 text-sm tablet:text-base">
+                <div className="flex items-center gap-3">
+                  <Clock className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                   <div>
-                    <span>{format(bookingTime, compact ? 'h:mm a' : 'MMM d, h:mm a')}</span>
+                    <span className="font-medium">{format(bookingTime, compact ? 'h:mm a' : 'MMM d, h:mm a')}</span>
                     {isDining && (
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs tablet:text-sm text-muted-foreground">
                         {elapsedMinutes}m elapsed
                       </p>
                     )}
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  <span>{booking.party_size} guests</span>
+                <div className="flex items-center gap-3">
+                  <Users className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                  <span className="font-medium">{booking.party_size} guests</span>
                 </div>
                 
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
-                  <span className="truncate">{formatGuestPhone(booking)}</span>
+                <div className="flex items-center gap-3">
+                  <Phone className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                  <span className="truncate font-medium">{formatGuestPhone(booking)}</span>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Table2 className="h-4 w-4 text-muted-foreground" />
+                <div className="flex items-center gap-3">
+                  <Table2 className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                   <span>
                     {hasAssignedTables ? (
-                      <span className="font-medium">
+                      <span className="font-semibold">
                         Table {booking.tables.map((t: { table_number: any }) => t.table_number).join(", ")}
                       </span>
                     ) : (
-                      <Badge variant="destructive" className="text-xs">
+                      <Badge variant="destructive" className="px-3 py-1 text-sm font-medium">
                         No table
                       </Badge>
                     )}
@@ -593,65 +594,65 @@ export function BookingList({
                 </div>
               </div>
 
-              {/* Request expiry timer */}
+              {/* Request expiry timer - Enhanced visibility */}
               {booking.status === 'pending' && booking.request_expires_at && (
-                <div className="mt-3">
+                <div className="mt-4 tablet:mt-6">
                   <RequestExpiryTimer booking={booking} requestService={requestService} />
                 </div>
               )}
 
-              {/* Dining progress bar */}
+              {/* Dining progress bar - Enhanced visibility */}
               {isDining && (
-                <div className="mt-3 space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Service Progress</span>
-                    <span className="font-medium">{diningProgress}%</span>
+                <div className="mt-4 tablet:mt-6 space-y-2">
+                  <div className="flex items-center justify-between text-sm tablet:text-base">
+                    <span className="text-muted-foreground font-medium">Service Progress</span>
+                    <span className="font-bold text-lg">{diningProgress}%</span>
                   </div>
-                  <Progress value={diningProgress} className="h-2" />
+                  <Progress value={diningProgress} className="h-3 tablet:h-4" />
                 </div>
               )}
 
               {/* Special requests */}
               {booking.special_requests && (
-                <div className="mt-3 p-2 bg-muted rounded text-sm">
-                  <p className="font-medium mb-1">Special requests:</p>
-                  <p className="text-muted-foreground">{booking.special_requests}</p>
+                <div className="mt-4 tablet:mt-6 p-3 tablet:p-4 bg-muted rounded-lg text-sm tablet:text-base">
+                  <p className="font-semibold mb-2">Special requests:</p>
+                  <p className="text-muted-foreground leading-relaxed">{booking.special_requests}</p>
                 </div>
               )}
 
               {/* Alerts and warnings */}
-              <div className="mt-3 space-y-2">
+              <div className="mt-4 tablet:mt-6 space-y-3">
                 {!hasAssignedTables && ['confirmed', 'arrived'].includes(booking.status) && (
-                  <Alert className="py-2">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription className="text-sm">
+                  <Alert className="py-3 tablet:py-4">
+                    <AlertCircle className="h-5 w-5" />
+                    <AlertDescription className="text-sm tablet:text-base font-medium">
                       Table assignment required
                     </AlertDescription>
                   </Alert>
                 )}
                 
                 {booking.status === 'payment' && (
-                  <Alert className="py-2 border-yellow-200 bg-yellow-50">
-                    <CreditCard className="h-4 w-4 text-yellow-600" />
-                    <AlertDescription className="text-sm text-yellow-800">
+                  <Alert className="py-3 tablet:py-4 border-yellow-200 bg-yellow-50">
+                    <CreditCard className="h-5 w-5 text-yellow-600" />
+                    <AlertDescription className="text-sm tablet:text-base text-yellow-800 font-medium">
                       Guest is ready to pay
                     </AlertDescription>
                   </Alert>
                 )}
                 
                 {booking.status === 'arrived' && hasAssignedTables && (
-                  <Alert className="py-2 border-blue-200 bg-blue-50">
-                    <UserCheck className="h-4 w-4 text-blue-600" />
-                    <AlertDescription className="text-sm text-blue-800">
+                  <Alert className="py-3 tablet:py-4 border-blue-200 bg-blue-50">
+                    <UserCheck className="h-5 w-5 text-blue-600" />
+                    <AlertDescription className="text-sm tablet:text-base text-blue-800 font-medium">
                       Guest has arrived - ready to be seated at Table {booking.tables[0].table_number}
                     </AlertDescription>
                   </Alert>
                 )}
                 
                 {booking.status === 'pending' && booking.acceptance_attempted_at && (
-                  <Alert className="py-2 border-orange-200 bg-orange-50">
-                    <AlertTriangle className="h-4 w-4 text-orange-600" />
-                    <AlertDescription className="text-sm text-orange-800">
+                  <Alert className="py-3 tablet:py-4 border-orange-200 bg-orange-50">
+                    <AlertTriangle className="h-5 w-5 text-orange-600" />
+                    <AlertDescription className="text-sm tablet:text-base text-orange-800 font-medium">
                       Previous acceptance failed: {booking.acceptance_failed_reason}
                     </AlertDescription>
                   </Alert>

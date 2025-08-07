@@ -2,7 +2,8 @@
 
 'use client'
 
-import { Bell, User } from 'lucide-react'
+import { Bell, User, Menu } from 'lucide-react'
+import { useSidebar } from '@/lib/contexts/sidebar-context'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -32,6 +33,7 @@ interface HeaderProps {
 export function Header({ restaurant, user, role }: HeaderProps) {
   const router = useRouter()
   const supabase = createClient()
+  const { toggleSidebar } = useSidebar()
 
   const handleSignOut = async () => {
     try {
@@ -45,28 +47,28 @@ export function Header({ restaurant, user, role }: HeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-16 items-center gap-4 px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-1 items-center gap-4">
+    <header className="sticky top-0 z-20 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="flex h-12 md:h-14 lg:h-16 items-center gap-3 md:gap-4 px-3 sm:px-4 md:px-5 lg:px-8">
+        <div className="flex flex-1 items-center gap-3 md:gap-4">
           {/* Page breadcrumbs or title can go here */}
         </div>
 
-        <div className="flex items-center gap-4">
-          {/* Notifications */}
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="h-5 w-5" />
-            <span className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-red-600 text-[10px] font-medium text-white flex items-center justify-center">
+        <div className="flex items-center gap-2 md:gap-3 lg:gap-4">
+          {/* Notifications - Optimized for tablets */}
+          <Button variant="ghost" size="icon" className="relative h-8 w-8 md:h-9 md:w-9 touch-manipulation">
+            <Bell className="h-4 w-4 md:h-5 md:w-5" />
+            <span className="absolute -right-0.5 -top-0.5 h-3.5 w-3.5 md:h-4 md:w-4 rounded-full bg-red-600 text-[9px] md:text-[10px] font-medium text-white flex items-center justify-center">
               3
             </span>
           </Button>
 
-          {/* User Menu */}
+          {/* User Menu - Optimized for tablets */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-9 w-9 rounded-full">
-                <Avatar className="h-9 w-9">
+              <Button variant="ghost" className="relative h-8 w-8 md:h-9 md:w-9 rounded-full touch-manipulation">
+                <Avatar className="h-8 w-8 md:h-9 md:w-9">
                   <AvatarImage src="" alt={user.email} />
-                  <AvatarFallback>
+                  <AvatarFallback className="text-xs md:text-sm">
                     {user.email?.charAt(0).toUpperCase() || 'U'}
                   </AvatarFallback>
                 </Avatar>
@@ -82,15 +84,15 @@ export function Header({ restaurant, user, role }: HeaderProps) {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => router.push('/profile')}>
+              <DropdownMenuItem onClick={() => router.push('/profile')} className="py-2.5 md:py-2">
                 <User className="mr-2 h-4 w-4" />
                 Profile
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push('/settings')}>
+              <DropdownMenuItem onClick={() => router.push('/settings')} className="py-2.5 md:py-2">
                 Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut}>
+              <DropdownMenuItem onClick={handleSignOut} className="py-2.5 md:py-2">
                 Sign out
               </DropdownMenuItem>
             </DropdownMenuContent>

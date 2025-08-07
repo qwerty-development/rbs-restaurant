@@ -16,6 +16,15 @@ module.exports = {
         "2xl": "1400px",
       },
     },
+    screens: {
+      'xs': '475px',
+      'sm': '640px',
+      'md': '768px', // 8-inch tablets in landscape
+      'tablet': '820px', // 8-inch tablets optimized breakpoint
+      'lg': '1024px',
+      'xl': '1280px',
+      '2xl': '1536px',
+    },
     extend: {
       colors: {
         border: "hsl(var(--border))",
@@ -56,6 +65,22 @@ module.exports = {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      spacing: {
+        '18': '4.5rem',
+        '84': '21rem',
+        '88': '22rem',
+        '92': '23rem',
+        '100': '25rem',
+        '104': '26rem',
+      },
+      minHeight: {
+        'touch': '44px', // iOS touch target minimum
+        'touch-lg': '48px', // Android touch target minimum
+      },
+      minWidth: {
+        'touch': '44px',
+        'touch-lg': '48px',
       },
       keyframes: {
         "accordion-down": {
