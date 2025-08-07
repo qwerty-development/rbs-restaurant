@@ -20,7 +20,8 @@ import {
   Gift,
   Megaphone,
   HelpCircle,
-  LogOut
+  LogOut,
+  Bell
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -117,6 +118,13 @@ const navigationItems = [
 ]
 
 const bottomNavigationItems = [
+  {
+    title: 'Notifications',
+    href: '/notifications',
+    icon: Bell,
+    permission: null,
+    badge: 3, // Notification count
+  },
   {
     title: 'Help & Support',
     href: '/help',
@@ -225,7 +233,14 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
                         : "text-foreground hover:bg-accent/50"
                     )}
                   >
-                    <item.icon className="h-4 w-4 sm:h-5 sm:w-5" />
+                    <div className="relative">
+                      <item.icon className="h-4 w-4 sm:h-5 sm:w-5" />
+                      {(item as any).badge && (item as any).badge > 0 && (
+                        <span className="absolute -right-1 -top-1 h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-red-600 text-[8px] sm:text-[9px] font-medium text-white flex items-center justify-center">
+                          {(item as any).badge}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-xs sm:text-sm">{item.title}</span>
                   </Link>
                 )
