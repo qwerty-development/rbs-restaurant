@@ -72,15 +72,15 @@ function StatCard({
   trend?: { value: number; isPositive: boolean }
 }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
+    <Card className="hover:shadow-sm transition-shadow cursor-pointer">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+        <CardTitle className="text-sm tablet:text-base font-medium leading-tight">{title}</CardTitle>
+        <Icon className="h-5 w-5 tablet:h-6 tablet:w-6 text-muted-foreground" />
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
+        <div className="text-xl tablet:text-2xl font-bold">{value}</div>
         {description && (
-          <p className="text-xs text-muted-foreground">{description}</p>
+          <p className="text-xs tablet:text-sm text-muted-foreground mt-1">{description}</p>
         )}
         {trend && (
           <div className="flex items-center mt-2">
@@ -596,75 +596,78 @@ export default function BookingsPage() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-6">
+      {/* Page Header - Optimized for tablet */}
+      <div className="flex flex-col tablet:flex-row items-start tablet:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Bookings</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl tablet:text-3xl font-bold tracking-tight">Bookings</h1>
+          <p className="text-sm tablet:text-base text-muted-foreground">
             Manage your restaurant bookings and table assignments
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-3">
           {/* Auto-refresh toggle */}
 
-          {/* Manual refresh */}
-          <Button variant="outline" size="sm" onClick={handleRefresh}>
-            <RefreshCw className="mr-2 h-4 w-4" />
+          {/* Manual refresh - Larger touch target */}
+          <Button variant="outline" size="default" onClick={handleRefresh} className="min-h-touch-lg">
+            <RefreshCw className="mr-2 h-5 w-5" />
             Refresh
           </Button>
 
-          {/* Analytics toggle */}
+          {/* Analytics toggle - Larger touch target */}
           <Button
             variant={showAnalytics ? "default" : "outline"}
-            size="sm"
+            size="default"
             onClick={() => setShowAnalytics(!showAnalytics)}
+            className="min-h-touch-lg"
           >
-            <BarChart3 className="mr-2 h-4 w-4" />
+            <BarChart3 className="mr-2 h-5 w-5" />
             Analytics
           </Button>
 
           {/* Bulk actions */}
           {selectedBookings.length > 0 && (
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               <Button
                 variant="outline"
-                size="sm"
+                size="default"
                 onClick={() => bulkUpdateMutation.mutate({ 
                   bookingIds: selectedBookings, 
                   updates: { status: "confirmed" }
                 })}
+                className="min-h-touch-lg"
               >
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                Confirm ({selectedBookings.length})
+                <CheckCircle2 className="mr-2 h-5 w-5" />
+                <span className="hidden tablet:inline">Confirm</span> ({selectedBookings.length})
               </Button>
               <Button
                 variant="destructive"
-                size="sm"
+                size="default"
                 onClick={() => bulkUpdateMutation.mutate({ 
                   bookingIds: selectedBookings, 
                   updates: { status: "cancelled_by_user" }
                 })}
+                className="min-h-touch-lg"
               >
-                <XCircle className="mr-2 h-4 w-4" />
-                Cancel ({selectedBookings.length})
+                <XCircle className="mr-2 h-5 w-5" />
+                <span className="hidden tablet:inline">Cancel</span> ({selectedBookings.length})
               </Button>
             </div>
           )}
 
-          <Button variant="outline">
-            <Download className="mr-2 h-4 w-4" />
-            Export
+          <Button variant="outline" size="default" className="min-h-touch-lg">
+            <Download className="mr-2 h-5 w-5" />
+            <span className="hidden tablet:inline">Export</span>
           </Button>
-          <Button onClick={() => setShowManualBooking(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Booking
+          <Button onClick={() => setShowManualBooking(true)} size="default" className="min-h-touch-lg bg-primary">
+            <Plus className="mr-2 h-5 w-5" />
+            <span className="font-medium">Add Booking</span>
           </Button>
         </div>
       </div>
 
-      {/* Enhanced Statistics Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Enhanced Statistics Cards - Optimized for tablet */}
+      <div className="grid gap-4 grid-cols-2 tablet:grid-cols-4 xl:grid-cols-4">
         <StatCard
           title="Upcoming Today"
           value={bookingStats.upcoming}
@@ -727,28 +730,34 @@ export default function BookingsPage() {
 
       {/* Enhanced View Toggle with Live Indicator */}
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)}>
-        <div className="flex items-center justify-between">
-          <TabsList className="grid w-[400px] grid-cols-4">
-            <TabsTrigger value="upcoming" className="relative">
-              Upcoming
-              {bookingStats.upcoming > 0 && (
-                <Badge variant="default" className="ml-1 px-1 text-xs">
-                  {bookingStats.upcoming}
-                </Badge>
-              )}
+        <div className="flex flex-col tablet:flex-row items-start tablet:items-center justify-between gap-4">
+          <TabsList className="grid w-full tablet:w-[480px] grid-cols-2 tablet:grid-cols-4 h-auto">
+            <TabsTrigger value="upcoming" className="relative min-h-touch-lg px-4 py-3">
+              <span className="flex items-center gap-2">
+                <span>Upcoming</span>
+                {bookingStats.upcoming > 0 && (
+                  <Badge variant="default" className="px-2 py-0.5 text-xs font-medium">
+                    {bookingStats.upcoming}
+                  </Badge>
+                )}
+              </span>
             </TabsTrigger>
-            <TabsTrigger value="list" className="relative">
-              All Bookings
-              {bookingStats.needingAttention > 0 && (
-                <div className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full animate-pulse" />
-              )}
+            <TabsTrigger value="list" className="relative min-h-touch-lg px-4 py-3">
+              <span className="flex items-center gap-2">
+                <span>All</span>
+                {bookingStats.needingAttention > 0 && (
+                  <div className="h-2 w-2 bg-red-500 rounded-full animate-pulse" />
+                )}
+              </span>
             </TabsTrigger>
-            <TabsTrigger value="calendar">Calendar</TabsTrigger>
-            <TabsTrigger value="tables" className="relative">
-              Tables
-              {tableStats?.utilization && tableStats.utilization > 80 && (
-                <div className="absolute -top-1 -right-1 h-3 w-3 bg-yellow-500 rounded-full animate-pulse" />
-              )}
+            <TabsTrigger value="calendar" className="min-h-touch-lg px-4 py-3">Calendar</TabsTrigger>
+            <TabsTrigger value="tables" className="relative min-h-touch-lg px-4 py-3">
+              <span className="flex items-center gap-2">
+                <span>Tables</span>
+                {tableStats?.utilization && tableStats.utilization > 80 && (
+                  <div className="h-2 w-2 bg-yellow-500 rounded-full animate-pulse" />
+                )}
+              </span>
             </TabsTrigger>
           </TabsList>
           
@@ -769,78 +778,84 @@ export default function BookingsPage() {
               <CardTitle>Quick Filters</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col gap-4">
-                {/* Date Range Buttons */}
-                <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col gap-6">
+                {/* Date Range Buttons - Optimized for touch */}
+                <div className="flex flex-wrap gap-3">
                   <Button
                     variant={dateRange === "today" ? "default" : "outline"}
-                    size="sm"
+                    size="default"
                     onClick={() => setDateRange("today")}
+                    className="min-h-touch-lg font-medium"
                   >
                     Today ({format(now, "MMM d")})
                   </Button>
                   <Button
                     variant={dateRange === "tomorrow" ? "default" : "outline"}
-                    size="sm"
+                    size="default"
                     onClick={() => setDateRange("tomorrow")}
+                    className="min-h-touch-lg font-medium"
                   >
                     Tomorrow ({format(addDays(now, 1), "MMM d")})
                   </Button>
                   <Button
                     variant={dateRange === "week" ? "default" : "outline"}
-                    size="sm"
+                    size="default"
                     onClick={() => setDateRange("week")}
+                    className="min-h-touch-lg font-medium"
                   >
                     This Week
                   </Button>
                 </div>
 
-                {/* Request Filter Buttons */}
-                <div className="flex gap-2">
+                {/* Request Filter Buttons - Optimized for touch */}
+                <div className="flex flex-wrap gap-3">
                   <Button
                     variant={requestFilter === "all" ? "default" : "outline"}
-                    size="sm"
+                    size="default"
                     onClick={() => setRequestFilter("all")}
+                    className="min-h-touch-lg"
                   >
                     All
                   </Button>
                   <Button
                     variant={requestFilter === "pending" ? "default" : "outline"}
-                    size="sm"
+                    size="default"
                     onClick={() => setRequestFilter("pending")}
+                    className="min-h-touch-lg"
                   >
-                    <Timer className="h-4 w-4 mr-1" />
+                    <Timer className="h-4 w-4 mr-2" />
                     Pending ({bookingStats.pending})
                   </Button>
                   <Button
                     variant={requestFilter === "expiring" ? "default" : "outline"}
-                    size="sm"
+                    size="default"
                     onClick={() => setRequestFilter("expiring")}
+                    className="min-h-touch-lg"
                   >
-                    <AlertCircle className="h-4 w-4 mr-1" />
+                    <AlertCircle className="h-4 w-4 mr-2" />
                     Expiring Soon
                   </Button>
                 </div>
 
-                {/* Search and Filters */}
-                <div className="flex flex-col sm:flex-row gap-4">
+                {/* Search and Filters - Tablet optimized */}
+                <div className="flex flex-col tablet:flex-row gap-4">
                   <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       placeholder="Search by name, code, phone, email, or table..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9"
+                      className="pl-12 h-12 text-base"
                     />
                   </div>
                   <Select value={timeFilter} onValueChange={setTimeFilter}>
-                    <SelectTrigger className="w-[140px]">
+                    <SelectTrigger className="w-full tablet:w-[160px] h-12 text-base">
                       <SelectValue placeholder="Time" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Times</SelectItem>
-                      <SelectItem value="lunch">Lunch (11-3)</SelectItem>
-                      <SelectItem value="dinner">Dinner (5-11)</SelectItem>
+                      <SelectItem value="all" className="py-3">All Times</SelectItem>
+                      <SelectItem value="lunch" className="py-3">Lunch (11-3)</SelectItem>
+                      <SelectItem value="dinner" className="py-3">Dinner (5-11)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -857,11 +872,12 @@ export default function BookingsPage() {
                         {bookingStats.withoutTables > 1 ? ' need' : ' needs'} table assignment
                       </span>
                       <Button 
-                        size="sm" 
+                        size="default" 
                         onClick={() => {
                           setViewMode("tables")
                           setStatusFilter("confirmed")
                         }}
+                        className="min-h-touch-lg font-medium"
                       >
                         Assign Tables
                       </Button>
@@ -878,17 +894,18 @@ export default function BookingsPage() {
                       </span>
                       <div className="flex gap-2">
                         <Button 
-                          size="sm" 
+                          size="default" 
                           variant="outline"
                           onClick={() => {
                             const pendingBookings = filteredBookings?.filter(b => b.status === "pending").map(b => b.id) || []
                             setSelectedBookings(pendingBookings)
                           }}
+                          className="min-h-touch-lg"
                         >
                           Select All
                         </Button>
                         <Button 
-                          size="sm"
+                          size="default"
                           onClick={() => {
                             const pendingBookings = filteredBookings?.filter(b => b.status === "pending").map(b => b.id) || []
                             bulkUpdateMutation.mutate({ 
@@ -896,6 +913,7 @@ export default function BookingsPage() {
                               updates: { status: "confirmed" }
                             })
                           }}
+                          className="min-h-touch-lg font-medium"
                         >
                           Confirm All
                         </Button>
@@ -916,21 +934,21 @@ export default function BookingsPage() {
                     <Alert className="border-red-200 bg-red-50">
                       <AlertTriangle className="h-4 w-4 text-red-600" />
                       <AlertDescription className="text-red-800">
-                        {urgentBookings.length} booking{urgentBookings.length > 1 ? 's' : ''} starting within the next hour
-                        <div className="mt-2 text-sm">
+                        🔥 {urgentBookings.length} URGENT booking{urgentBookings.length > 1 ? 's' : ''} starting within the next hour
+                        <div className="mt-3 text-sm tablet:text-base space-y-2">
                           {urgentBookings.slice(0, 3).map(booking => (
-                            <div key={booking.id} className="flex items-center gap-2">
-                              <span>{format(new Date(booking.booking_time), "HH:mm")}</span>
-                              <span>{booking.user?.full_name || booking.guest_name}</span>
+                            <div key={booking.id} className="flex items-center gap-3 p-2 bg-red-50 rounded font-medium">
+                              <span className="font-bold text-red-700">{format(new Date(booking.booking_time), "HH:mm")}</span>
+                              <span className="font-semibold">{booking.user?.full_name || booking.guest_name}</span>
                               <span>Party of {booking.party_size}</span>
                               {!booking.tables?.length && (
-                                <Badge variant="destructive" className="text-xs">No table</Badge>
+                                <Badge variant="destructive" className="px-2 py-1 text-xs font-bold animate-pulse">NO TABLE</Badge>
                               )}
                             </div>
                           ))}
                           {urgentBookings.length > 3 && (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              +{urgentBookings.length - 3} more...
+                            <div className="text-sm tablet:text-base text-muted-foreground mt-2 font-medium">
+                              +{urgentBookings.length - 3} more urgent bookings...
                             </div>
                           )}
                         </div>
@@ -963,89 +981,96 @@ export default function BookingsPage() {
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-4">
-                {/* Status Quick Filters */}
-                <div className="flex flex-wrap gap-2">
+                {/* Status Quick Filters - Optimized for tablet */}
+                <div className="grid grid-cols-2 tablet:grid-cols-4 lg:grid-cols-7 gap-3">
                   <Button
                     variant={statusFilter === "all" ? "default" : "outline"}
-                    size="sm"
+                    size="default"
                     onClick={() => setStatusFilter("all")}
+                    className="min-h-touch-lg font-medium"
                   >
                     All ({bookingStats.all})
                   </Button>
                   <Button
                     variant={statusFilter === "upcoming" ? "default" : "outline"}
-                    size="sm"
+                    size="default"
                     onClick={() => setStatusFilter("upcoming")}
+                    className="min-h-touch-lg font-medium"
                   >
                     Upcoming ({bookingStats.upcoming})
                   </Button>
                   <Button
                     variant={statusFilter === "pending" ? "default" : "outline"}
-                    size="sm"
+                    size="default"
                     onClick={() => setStatusFilter("pending")}
+                    className="min-h-touch-lg font-medium"
                   >
                     Pending ({bookingStats.pending})
                   </Button>
                   <Button
                     variant={statusFilter === "confirmed" ? "default" : "outline"}
-                    size="sm"
+                    size="default"
                     onClick={() => setStatusFilter("confirmed")}
+                    className="min-h-touch-lg font-medium"
                   >
                     Confirmed ({bookingStats.confirmed})
                   </Button>
                   <Button
                     variant={statusFilter === "no_show" ? "destructive" : "outline"}
-                    size="sm"
+                    size="default"
                     onClick={() => setStatusFilter("no_show")}
+                    className="min-h-touch-lg font-medium"
                   >
                     No Shows ({bookingStats.no_show})
                   </Button>
                   <Button
                     variant={statusFilter === "cancelled_by_user" ? "destructive" : "outline"}
-                    size="sm"
+                    size="default"
                     onClick={() => setStatusFilter("cancelled_by_user")}
+                    className="min-h-touch-lg font-medium"
                   >
                     Cancelled ({bookingStats.cancelled})
                   </Button>
                   <Button
                     variant={statusFilter === "completed" ? "default" : "outline"}
-                    size="sm"
+                    size="default"
                     onClick={() => setStatusFilter("completed")}
+                    className="min-h-touch-lg font-medium"
                   >
                     Completed ({bookingStats.completed})
                   </Button>
                 </div>
 
-                {/* Search and Detailed Filters */}
-                <div className="flex flex-col sm:flex-row gap-4">
+                {/* Search and Detailed Filters - Tablet optimized */}
+                <div className="flex flex-col tablet:flex-row gap-4">
                   <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       placeholder="Search by name, code, phone, email, or table..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9"
+                      className="pl-12 h-12 text-base"
                     />
                   </div>
                   <Select value={timeFilter} onValueChange={setTimeFilter}>
-                    <SelectTrigger className="w-[140px]">
+                    <SelectTrigger className="w-full tablet:w-[160px] h-12 text-base">
                       <SelectValue placeholder="Time" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Times</SelectItem>
-                      <SelectItem value="lunch">Lunch (11-3)</SelectItem>
-                      <SelectItem value="dinner">Dinner (5-11)</SelectItem>
+                      <SelectItem value="all" className="py-3">All Times</SelectItem>
+                      <SelectItem value="lunch" className="py-3">Lunch (11-3)</SelectItem>
+                      <SelectItem value="dinner" className="py-3">Dinner (5-11)</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={dateRange} onValueChange={setDateRange}>
-                    <SelectTrigger className="w-[140px]">
+                    <SelectTrigger className="w-full tablet:w-[160px] h-12 text-base">
                       <SelectValue placeholder="Date Range" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="today">Today</SelectItem>
-                      <SelectItem value="tomorrow">Tomorrow</SelectItem>
-                      <SelectItem value="week">This Week</SelectItem>
-                      <SelectItem value="all">All Dates</SelectItem>
+                      <SelectItem value="today" className="py-3">Today</SelectItem>
+                      <SelectItem value="tomorrow" className="py-3">Tomorrow</SelectItem>
+                      <SelectItem value="week" className="py-3">This Week</SelectItem>
+                      <SelectItem value="all" className="py-3">All Dates</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1065,20 +1090,20 @@ export default function BookingsPage() {
           />
         </TabsContent>
 
-        {/* Calendar View */}
+        {/* Calendar View - Optimized for tablet */}
         <TabsContent value="calendar" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-[300px_1fr]">
+          <div className="grid gap-4 tablet:grid-cols-[320px_1fr] lg:grid-cols-[360px_1fr]">
             {/* Calendar */}
             <Card>
               <CardHeader>
-                <CardTitle>Select Date</CardTitle>
+                <CardTitle className="text-lg tablet:text-xl">Select Date</CardTitle>
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent className="p-4">
                 <Calendar
                   mode="single"
                   selected={selectedDate}
                   onSelect={(date) => date && setSelectedDate(date)}
-                  className="rounded-md"
+                  className="rounded-md scale-110 tablet:scale-125 origin-top-left"
                 />
               </CardContent>
             </Card>
@@ -1086,10 +1111,10 @@ export default function BookingsPage() {
             {/* Day's Bookings */}
             <Card>
               <CardHeader>
-                <CardTitle>
+                <CardTitle className="text-lg tablet:text-xl">
                   Bookings for {format(selectedDate, "MMMM d, yyyy")}
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-base">
                   {filteredBookings?.length || 0} bookings scheduled
                 </CardDescription>
               </CardHeader>
@@ -1111,40 +1136,42 @@ export default function BookingsPage() {
 
         {/* Table View */}
         <TabsContent value="tables" className="space-y-4">
-          {/* Table View Filters */}
+          {/* Table View Filters - Optimized for tablet */}
           <Card>
             <CardHeader>
-              <CardTitle>Table Filters</CardTitle>
+              <CardTitle className="text-lg tablet:text-xl">Table Filters</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex gap-2">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap gap-3">
                   <Button
                     variant={dateRange === "today" ? "default" : "outline"}
-                    size="sm"
+                    size="default"
                     onClick={() => setDateRange("today")}
+                    className="min-h-touch-lg font-medium"
                   >
                     Today ({format(selectedDate, "MMM d")})
                   </Button>
                   <Button
                     variant={dateRange === "tomorrow" ? "default" : "outline"}
-                    size="sm"
+                    size="default"
                     onClick={() => {
                       setDateRange("tomorrow")
                       setSelectedDate(addDays(now, 1))
                     }}
+                    className="min-h-touch-lg font-medium"
                   >
                     Tomorrow ({format(addDays(now, 1), "MMM d")})
                   </Button>
                 </div>
-                <div className="flex gap-2">
-                  <Badge variant="destructive" className="px-3 py-1">
+                <div className="flex flex-wrap gap-3">
+                  <Badge variant="destructive" className="px-4 py-2 text-sm font-medium">
                     🔴 Currently Occupied
                   </Badge>
-                  <Badge variant="secondary" className="px-3 py-1">
+                  <Badge variant="secondary" className="px-4 py-2 text-sm font-medium">
                     🟡 Has Upcoming Bookings
                   </Badge>
-                  <Badge variant="default" className="px-3 py-1">
+                  <Badge variant="default" className="px-4 py-2 text-sm font-medium">
                     🟢 Available
                   </Badge>
                 </div>
@@ -1154,14 +1181,14 @@ export default function BookingsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Table Status Overview</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-lg tablet:text-xl">Table Status Overview</CardTitle>
+              <CardDescription className="text-base">
                 Real-time table availability and booking assignments for {format(selectedDate, "MMMM d, yyyy")}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {tables && tables.length > 0 ? (
-                <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                <div className="grid gap-4 grid-cols-2 tablet:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                   {tables.map((table) => {
                     const tableBookings = bookings?.filter(booking =>
                       booking.tables?.some(t => t.id === table.id) &&
@@ -1196,12 +1223,12 @@ export default function BookingsPage() {
                     }
 
                     return (
-                      <Card key={table.id} className={`p-4 ${cardStyle} hover:shadow-md transition-shadow cursor-pointer`}>
-                        <div className="text-center space-y-2">
+                      <Card key={table.id} className={`p-4 tablet:p-6 ${cardStyle} hover:shadow-lg transition-all cursor-pointer min-h-[200px] tablet:min-h-[240px]`}>
+                        <div className="text-center space-y-3">
                           {/* Table Header */}
                           <div className="flex items-center justify-center gap-2">
-                            <span className="text-lg">{statusIcon}</span>
-                            <div className="text-lg font-semibold">
+                            <span className="text-xl tablet:text-2xl">{statusIcon}</span>
+                            <div className="text-lg tablet:text-xl font-semibold">
                               Table {table.table_number}
                             </div>
                           </div>
@@ -1209,13 +1236,13 @@ export default function BookingsPage() {
                           {/* Status Badge */}
                           <Badge 
                             variant={isCurrentlyOccupied ? "destructive" : hasUpcomingBookings ? "secondary" : "default"} 
-                            className="mb-2"
+                            className="mb-3 px-3 py-1 text-sm font-medium"
                           >
                             {isCurrentlyOccupied ? "Occupied" : hasUpcomingBookings ? "Has Bookings" : "Available"}
                           </Badge>
 
                           {/* Table Info */}
-                          <div className="text-sm text-muted-foreground">
+                          <div className="text-sm tablet:text-base text-muted-foreground font-medium">
                             {table.capacity} seats • {table.table_type}
                           </div>
 
@@ -1268,48 +1295,48 @@ export default function BookingsPage() {
                             )}
                           </div>
 
-                          {/* Quick Actions */}
-                          <div className="mt-2 space-y-1">
+                          {/* Quick Actions - Tablet optimized */}
+                          <div className="mt-4 space-y-2">
                             {!isCurrentlyOccupied && !hasUpcomingBookings && (
                               <Button 
-                                size="sm" 
+                                size="default" 
                                 variant="outline" 
-                                className="w-full text-xs"
+                                className="w-full text-sm min-h-touch font-medium"
                                 onClick={() => setShowManualBooking(true)}
                               >
-                                <Plus className="mr-1 h-3 w-3" />
+                                <Plus className="mr-2 h-4 w-4" />
                                 Book Now
                               </Button>
                             )}
                             
                             {nextBooking && nextBooking.status === "pending" && (
                               <Button 
-                                size="sm" 
+                                size="default" 
                                 variant="default" 
-                                className="w-full text-xs"
+                                className="w-full text-sm min-h-touch font-medium"
                                 onClick={() => quickConfirmMutation.mutate(nextBooking.id)}
                               >
-                                <CheckCircle2 className="mr-1 h-3 w-3" />
+                                <CheckCircle2 className="mr-2 h-4 w-4" />
                                 Quick Confirm
                               </Button>
                             )}
 
                             {isCurrentlyOccupied && (
                               <Button 
-                                size="sm" 
+                                size="default" 
                                 variant="outline" 
-                                className="w-full text-xs"
+                                className="w-full text-sm min-h-touch font-medium"
                                 onClick={() => setSelectedBooking(currentBooking)}
                               >
-                                <Eye className="mr-1 h-3 w-3" />
+                                <Eye className="mr-2 h-4 w-4" />
                                 View Details
                               </Button>
                             )}
 
                             {upcomingBookings.length > 0 && (
-                              <div className="text-xs text-center text-muted-foreground pt-1">
+                              <div className="text-sm text-center text-muted-foreground pt-2">
                                 <button 
-                                  className="hover:underline"
+                                  className="hover:underline font-medium min-h-touch inline-block py-2 px-4"
                                   onClick={() => {
                                     setViewMode("list")
                                     setSearchQuery(`table ${table.table_number}`)
@@ -1326,10 +1353,10 @@ export default function BookingsPage() {
                   })}
                 </div>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Table2 className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                  <div className="text-lg font-medium mb-2">No tables configured</div>
-                  <p>Set up your restaurant tables to see real-time availability</p>
+                <div className="text-center py-12 text-muted-foreground">
+                  <Table2 className="mx-auto h-16 w-16 mb-6 opacity-50" />
+                  <div className="text-xl font-medium mb-3">No tables configured</div>
+                  <p className="text-base">Set up your restaurant tables to see real-time availability</p>
                 </div>
               )}
             </CardContent>
@@ -1353,18 +1380,18 @@ export default function BookingsPage() {
 
      
 
-      {/* Manual Booking Modal */}
+      {/* Manual Booking Modal - Tablet optimized */}
       <Dialog open={showManualBooking} onOpenChange={setShowManualBooking}>
-        <DialogContent className="max-w-4xl w-full h-[95vh] flex flex-col p-0">
-          <div className="flex-shrink-0 px-6 py-4 border-b">
+        <DialogContent className="max-w-4xl w-[95vw] h-[90vh] tablet:h-[95vh] flex flex-col p-0">
+          <div className="flex-shrink-0 px-4 tablet:px-6 py-4 border-b">
             <DialogHeader>
-              <DialogTitle>Add Manual Booking</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-lg tablet:text-xl">Add Manual Booking</DialogTitle>
+              <DialogDescription className="text-sm tablet:text-base">
                 Create a new booking manually for walk-ins or phone reservations
               </DialogDescription>
             </DialogHeader>
           </div>
-          <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="flex-1 overflow-y-auto px-4 tablet:px-6 py-4">
             <ManualBookingForm
               restaurantId={restaurantId}
               onSubmit={(data) => createManualBookingMutation.mutate(data)}
