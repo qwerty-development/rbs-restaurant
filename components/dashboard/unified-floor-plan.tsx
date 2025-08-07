@@ -602,13 +602,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                       )}
                       
                       {/* Click hint for empty tables */}
-                      {selectedTable !== table.id && (
-                        <div className="text-center mt-2">
-                          <p className="text-xs text-muted-foreground px-2 py-1 bg-muted/50 rounded-lg">
-                            Click for details
-                          </p>
-                        </div>
-                      )}
+                      
                     </div>
                   )}
                 </div>
