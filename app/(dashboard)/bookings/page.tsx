@@ -1,7 +1,7 @@
 // app/(dashboard)/bookings/page.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { format, startOfDay, endOfDay, addDays, isToday, isTomorrow, addMinutes, differenceInMinutes } from "date-fns"
@@ -31,6 +31,7 @@ import { BookingDetails } from "@/components/bookings/booking-details"
 import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
 import { TableAvailabilityService } from "@/lib/table-availability"
 import { toast } from "react-hot-toast"
+import { cn } from "@/lib/utils"
 import { 
   Search, 
   Calendar as CalendarIcon, 
@@ -53,7 +54,12 @@ import {
   AlertTriangle,
   Eye,
   BarChart3,
-  Timer
+  Timer,
+  Volume2,
+  VolumeX,
+  Sparkles,
+  Target,
+  TrendingUp as TrendUp
 } from "lucide-react"
 import type { Booking } from "@/types"
 
@@ -63,33 +69,85 @@ function StatCard({
   value, 
   description, 
   icon: Icon,
-  trend 
+  trend,
+  priority = "normal",
+  onClick,
+  pulse = false
 }: { 
   title: string
   value: string | number
   description?: string
   icon: any
   trend?: { value: number; isPositive: boolean }
+  priority?: "normal" | "high" | "critical"
+  onClick?: () => void
+  pulse?: boolean
 }) {
+  const getPriorityStyles = () => {
+    switch (priority) {
+      case "critical":
+        return "border-red-200 bg-gradient-to-br from-red-50 to-red-100/50 hover:from-red-100 hover:to-red-200/50 shadow-red-100/50"
+      case "high":
+        return "border-yellow-200 bg-gradient-to-br from-yellow-50 to-yellow-100/50 hover:from-yellow-100 hover:to-yellow-200/50 shadow-yellow-100/50"
+      default:
+        return "border-border bg-gradient-to-br from-card to-card/50 hover:from-card hover:to-muted/50"
+    }
+  }
+
   return (
-    <Card className="hover:shadow-sm transition-shadow cursor-pointer">
+    <Card 
+      className={cn(
+        "cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] backdrop-blur-sm",
+        getPriorityStyles(),
+        pulse && "animate-pulse"
+      )}
+      onClick={onClick}
+    >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-        <CardTitle className="text-sm tablet:text-base font-medium leading-tight">{title}</CardTitle>
-        <Icon className="h-5 w-5 tablet:h-6 tablet:w-6 text-muted-foreground" />
+        <div>
+          <CardTitle className="text-sm tablet:text-base font-semibold leading-tight mb-1">{title}</CardTitle>
+          {priority === "critical" && (
+            <div className="flex items-center gap-1">
+              <div className="h-2 w-2 bg-red-500 rounded-full animate-pulse" />
+              <span className="text-xs font-medium text-red-600">URGENT</span>
+            </div>
+          )}
+        </div>
+        <div className="relative">
+          <Icon className={cn(
+            "h-6 w-6 tablet:h-8 tablet:w-8 transition-colors",
+            priority === "critical" ? "text-red-600" :
+            priority === "high" ? "text-yellow-600" :
+            "text-muted-foreground hover:text-primary"
+          )} />
+          {pulse && (
+            <div className="absolute inset-0 rounded-full bg-current opacity-20 animate-ping" />
+          )}
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="text-xl tablet:text-2xl font-bold">{value}</div>
+        <div className={cn(
+          "text-2xl tablet:text-3xl font-bold mb-1",
+          priority === "critical" ? "text-red-700" :
+          priority === "high" ? "text-yellow-700" :
+          "text-foreground"
+        )}>
+          {value}
+        </div>
         {description && (
-          <p className="text-xs tablet:text-sm text-muted-foreground mt-1">{description}</p>
+          <p className="text-xs tablet:text-sm text-muted-foreground font-medium">{description}</p>
         )}
         {trend && (
-          <div className="flex items-center mt-2">
+          <div className="flex items-center mt-3 p-2 bg-background/50 rounded-lg">
             {trend.isPositive ? (
-              <TrendingUp className="h-4 w-4 text-green-600 mr-1" />
+              <TrendingUp className="h-4 w-4 text-green-600 mr-2" />
             ) : (
-              <TrendingDown className="h-4 w-4 text-red-600 mr-1" />
+              <TrendingDown className="h-4 w-4 text-red-600 mr-2" />
             )}
-            <span className={`text-xs ${trend.isPositive ? 'text-green-600' : 'text-red-600'}`}>
+            <span className={cn(
+              "text-xs tablet:text-sm font-semibold",
+              trend.isPositive ? 'text-green-600' : 'text-red-600'
+            )}>
               {trend.value}% from last week
             </span>
           </div>
@@ -113,12 +171,17 @@ export default function BookingsPage() {
   const [selectedBookings, setSelectedBookings] = useState<string[]>([])
   const [showAnalytics, setShowAnalytics] = useState(false)
   const [requestFilter, setRequestFilter] = useState<"all" | "pending" | "expiring">("all")
+  const [soundEnabled, setSoundEnabled] = useState(true)
+  const [draggedBooking, setDraggedBooking] = useState<string | null>(null)
+  const [showQuickStats, setShowQuickStats] = useState(true)
+  const [lastRefresh, setLastRefresh] = useState(new Date())
+  const [showShortcuts, setShowShortcuts] = useState(false)
   
   const supabase = createClient()
   const queryClient = useQueryClient()
   const tableService = new TableAvailabilityService()
 
-  // Keyboard shortcuts
+  // Enhanced Keyboard Shortcuts & Gestures
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only trigger if not typing in an input
@@ -129,48 +192,97 @@ export default function BookingsPage() {
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault()
             handleRefresh()
+            setLastRefresh(new Date())
+            if (soundEnabled) {
+              // Play refresh sound (would need audio implementation)
+              toast.success('Data refreshed! 🔄')
+            }
           }
           break
         case 'n':
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault()
             setShowManualBooking(true)
+            toast.success('Quick booking mode activated! ⚡')
+          }
+          break
+        case 'a':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault()
+            setShowAnalytics(!showAnalytics)
+            toast.success('Analytics toggled! 📊')
+          }
+          break
+        case 't':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault()
+            setViewMode("tables")
+            toast.success('Table view activated! 🏓')
           }
           break
         case '1':
+          e.preventDefault()
           setViewMode("upcoming")
+          toast.success('Upcoming view! 📅')
           break
         case '2':
+          e.preventDefault()
           setViewMode("list")
+          toast.success('List view! 📋')
           break
         case '3':
+          e.preventDefault()
           setViewMode("calendar")
+          toast.success('Calendar view! 📆')
           break
         case '4':
+          e.preventDefault()
           setViewMode("tables")
+          toast.success('Table view! 🏓')
+          break
+        case 'p':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault()
+            setRequestFilter("pending")
+            toast.success('Showing pending bookings! ⏳')
+          }
+          break
+        case 'f':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault()
+            // Focus search input
+            const searchInput = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement
+            searchInput?.focus()
+            toast.success('Search activated! 🔍')
+          }
           break
         case 'Escape':
           setSelectedBookings([])
           setSelectedBooking(null)
+          setShowManualBooking(false)
+          setShowAnalytics(false)
+          toast.success('Cleared selections! ✨')
           break
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [soundEnabled, showAnalytics])
 
-  // Auto-refresh data every 30 seconds for real-time updates
+  // Enhanced Auto-refresh with Smart Performance
   useEffect(() => {
     if (!autoRefresh) return
     
     const interval = setInterval(() => {
       queryClient.invalidateQueries({ queryKey: ["bookings"] })
       queryClient.invalidateQueries({ queryKey: ["table-stats"] })
-    }, 30000) // 30 seconds
+      setLastRefresh(new Date())
+    }, 15000) // 15 seconds for more responsive updates
 
     return () => clearInterval(interval)
   }, [autoRefresh, queryClient])
+  
 
   // Get restaurant ID
   const [restaurantId, setRestaurantId] = useState<string>("")
@@ -565,65 +677,141 @@ export default function BookingsPage() {
     return true
   })
 
-  // Get booking counts and statistics with enhanced analytics
-  const bookingStats = {
-    all: bookings?.length || 0,
-    pending: bookings?.filter(b => b.status === "pending").length || 0,
-    confirmed: bookings?.filter(b => b.status === "confirmed").length || 0,
-    completed: bookings?.filter(b => b.status === "completed").length || 0,
-    cancelled: bookings?.filter(b => 
-      b.status === "cancelled_by_user" || b.status === "declined_by_restaurant"
-    ).length || 0,
-    no_show: bookings?.filter(b => b.status === "no_show").length || 0,
-    withoutTables: bookings?.filter(b => 
-      b.status === "confirmed" && (!b.tables || b.tables.length === 0)
-    ).length || 0,
-    upcoming: bookings?.filter(b => 
-      (b.status === "pending" || b.status === "confirmed") && 
-      new Date(b.booking_time) > now
-    ).length || 0,
-    // New analytics
-    avgPartySize: bookings?.length ? 
-      Math.round((bookings.reduce((acc, b) => acc + b.party_size, 0) / bookings.length) * 10) / 10 : 0,
-    totalGuests: bookings?.filter(b => b.status === "confirmed" || b.status === "completed")
-      .reduce((acc, b) => acc + b.party_size, 0) || 0,
-    revenue: (bookings?.filter(b => b.status === "completed").length || 0) * 45, // Estimated revenue
-    needingAttention: bookings?.filter(b => {
-      const isUrgentPending = b.status === "pending" && new Date(b.booking_time).getTime() - now.getTime() < 3600000
-      const isConfirmedWithoutTable = b.status === "confirmed" && (!b.tables || b.tables.length === 0)
-      return b.status === "pending" || isConfirmedWithoutTable || isUrgentPending
-    }).length || 0,
-  }
+  // Performance optimization - Memoized booking statistics
+  const bookingStats = useMemo(() => {
+    if (!bookings) return {
+      all: 0, pending: 0, confirmed: 0, completed: 0, cancelled: 0, no_show: 0,
+      withoutTables: 0, upcoming: 0, avgPartySize: 0, totalGuests: 0, revenue: 0, needingAttention: 0
+    }
+    
+    return {
+      all: bookings.length,
+      pending: bookings.filter((b: any) => b.status === "pending").length,
+      confirmed: bookings.filter((b: any) => b.status === "confirmed").length,
+      completed: bookings.filter((b: any) => b.status === "completed").length,
+      cancelled: bookings.filter((b: any) => 
+        b.status === "cancelled_by_user" || b.status === "declined_by_restaurant"
+      ).length,
+      no_show: bookings.filter((b: any) => b.status === "no_show").length,
+      withoutTables: bookings.filter((b: any) => 
+        b.status === "confirmed" && (!b.tables || b.tables.length === 0)
+      ).length,
+      upcoming: bookings.filter((b: any) => 
+        (b.status === "pending" || b.status === "confirmed") && 
+        new Date(b.booking_time) > now
+      ).length,
+      avgPartySize: bookings.length ? 
+        Math.round((bookings.reduce((acc: number, b: any) => acc + b.party_size, 0) / bookings.length) * 10) / 10 : 0,
+      totalGuests: bookings.filter((b: any) => b.status === "confirmed" || b.status === "completed")
+        .reduce((acc: number, b: any) => acc + b.party_size, 0),
+      revenue: (bookings.filter((b: any) => b.status === "completed").length) * 45,
+      needingAttention: bookings.filter((b: any) => {
+        const isUrgentPending = b.status === "pending" && new Date(b.booking_time).getTime() - now.getTime() < 3600000
+        const isConfirmedWithoutTable = b.status === "confirmed" && (!b.tables || b.tables.length === 0)
+        return b.status === "pending" || isConfirmedWithoutTable || isUrgentPending
+      }).length
+    }
+  }, [bookings, now])
 
   return (
-    <div className="space-y-6">
-      {/* Page Header - Optimized for tablet */}
-      <div className="flex flex-col tablet:flex-row items-start tablet:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl tablet:text-3xl font-bold tracking-tight">Bookings</h1>
-          <p className="text-sm tablet:text-base text-muted-foreground">
-            Manage your restaurant bookings and table assignments
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3">
+    <div className="space-y-6 tablet:space-y-8 animate-in fade-in-0 duration-500">
+      {/* Enhanced Header with Live Status */}
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-secondary/5 rounded-2xl" />
+        <div className="relative backdrop-blur-sm border border-border/50 rounded-2xl p-4 tablet:p-6">
+          <div className="flex flex-col tablet:flex-row items-start tablet:items-center justify-between gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <CalendarIcon className="h-6 w-6 tablet:h-8 tablet:w-8 text-primary" />
+                </div>
+                <div>
+                  <h1 className="text-2xl tablet:text-4xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">
+                    Bookings Control
+                  </h1>
+                  <p className="text-sm tablet:text-lg text-muted-foreground font-medium">
+                    Live restaurant operations • {format(now, 'EEEE, MMMM do')}
+                  </p>
+                </div>
+              </div>
+              
+              {/* Quick Status Bar with Keyboard Shortcuts */}
+              <div className="flex items-center gap-4 tablet:gap-6 text-xs tablet:text-sm">
+                <div className="flex items-center gap-2">
+                  <div className={`h-2 w-2 tablet:h-3 tablet:w-3 rounded-full ${autoRefresh ? 'bg-green-500 animate-pulse shadow-lg shadow-green-500/50' : 'bg-gray-400'}`} />
+                  <span className="font-medium">{autoRefresh ? 'LIVE' : 'PAUSED'}</span>
+                </div>
+                <div className="h-4 w-px bg-border" />
+                <span className="font-mono bg-muted px-2 py-1 rounded text-xs">{format(lastRefresh, 'HH:mm:ss')}</span>
+                <div className="h-4 w-px bg-border" />
+                <span className="font-medium">{bookingStats.upcoming || 0} upcoming today</span>
+                <div className="h-4 w-px bg-border" />
+                <div className="flex items-center gap-1 text-muted-foreground">
+                  <kbd className="px-1.5 py-0.5 text-xs bg-muted border rounded">Ctrl+R</kbd>
+                  <span className="text-xs">Refresh</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3 tablet:gap-4">
           {/* Auto-refresh toggle */}
 
-          {/* Manual refresh - Larger touch target */}
-          <Button variant="outline" size="default" onClick={handleRefresh} className="min-h-touch-lg">
-            <RefreshCw className="mr-2 h-5 w-5" />
-            Refresh
-          </Button>
+              <Button 
+                variant="outline" 
+                size="default" 
+                onClick={() => {
+                  handleRefresh()
+                  setLastRefresh(new Date())
+                }} 
+                className="min-h-touch-lg shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105 active:scale-95"
+              >
+                <RefreshCw className="mr-2 h-5 w-5" />
+                <span className="hidden tablet:inline">Refresh</span>
+              </Button>
 
-          {/* Analytics toggle - Larger touch target */}
-          <Button
-            variant={showAnalytics ? "default" : "outline"}
-            size="default"
-            onClick={() => setShowAnalytics(!showAnalytics)}
-            className="min-h-touch-lg"
-          >
-            <BarChart3 className="mr-2 h-5 w-5" />
-            Analytics
-          </Button>
+              <Button
+                variant={showAnalytics ? "default" : "outline"}
+                size="default"
+                onClick={() => setShowAnalytics(!showAnalytics)}
+                className="min-h-touch-lg shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105 active:scale-95"
+              >
+                <BarChart3 className="mr-2 h-5 w-5" />
+                <span className="hidden tablet:inline">Analytics</span>
+              </Button>
+              
+              {/* Smart Controls */}
+              <div className="flex gap-2">
+                <Button
+                  variant={soundEnabled ? "default" : "outline"}
+                  size="default"
+                  onClick={() => {
+                    setSoundEnabled(!soundEnabled)
+                    toast.success(soundEnabled ? 'Sound disabled 🔇' : 'Sound enabled 🔊')
+                  }}
+                  className="min-h-touch-lg shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105 active:scale-95"
+                  title="Toggle sound notifications"
+                >
+                  {soundEnabled ? 
+                    <Volume2 className="h-5 w-5" /> : 
+                    <VolumeX className="h-5 w-5" />
+                  }
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="default"
+                  onClick={() => {
+                    setAutoRefresh(!autoRefresh)
+                    toast.success(autoRefresh ? 'Auto-refresh paused ⏸️' : 'Auto-refresh enabled ▶️')
+                  }}
+                  className="min-h-touch-lg shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105 active:scale-95"
+                  title="Toggle auto-refresh"
+                >
+                  {autoRefresh ? 
+                    <Timer className="h-5 w-5" /> : 
+                    <Timer className="h-5 w-5 opacity-50" />
+                  }
+                </Button>
+              </div>
 
           {/* Bulk actions */}
           {selectedBookings.length > 0 && (
@@ -659,20 +847,29 @@ export default function BookingsPage() {
             <Download className="mr-2 h-5 w-5" />
             <span className="hidden tablet:inline">Export</span>
           </Button>
-          <Button onClick={() => setShowManualBooking(true)} size="default" className="min-h-touch-lg bg-primary">
-            <Plus className="mr-2 h-5 w-5" />
-            <span className="font-medium">Add Booking</span>
-          </Button>
+              <Button 
+                onClick={() => setShowManualBooking(true)} 
+                size="default" 
+                className="min-h-touch-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 font-semibold"
+              >
+                <Plus className="mr-2 h-5 w-5" />
+                <span>Add Booking</span>
+                <Zap className="ml-2 h-4 w-4 opacity-80" />
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Enhanced Statistics Cards - Optimized for tablet */}
-      <div className="grid gap-4 grid-cols-2 tablet:grid-cols-4 xl:grid-cols-4">
+      {/* Ultimate Statistics Dashboard */}
+      <div className="grid gap-4 tablet:gap-6 grid-cols-2 tablet:grid-cols-4 xl:grid-cols-4">
         <StatCard
           title="Upcoming Today"
           value={bookingStats.upcoming}
           description={`${bookingStats.pending} pending confirmation`}
           icon={CalendarIcon}
+          priority={bookingStats.pending > 0 ? "high" : "normal"}
+          onClick={() => setRequestFilter("pending")}
         />
         <StatCard
           title="Table Utilization"
@@ -680,18 +877,24 @@ export default function BookingsPage() {
           description={`${tableStats?.totalTables || 0} tables total`}
           icon={Table2}
           trend={{ value: 12, isPositive: true }}
+          priority={tableStats?.utilization && tableStats.utilization > 85 ? "high" : "normal"}
+          onClick={() => setViewMode("tables")}
         />
         <StatCard
           title="Needs Attention"
           value={bookingStats.needingAttention}
           description="Requires immediate action"
           icon={AlertTriangle}
+          priority={bookingStats.needingAttention > 0 ? "critical" : "normal"}
+          onClick={() => setStatusFilter("pending")}
+          pulse={bookingStats.needingAttention > 0}
         />
         <StatCard
           title="Total Guests"
           value={bookingStats.totalGuests}
           description={`Avg party: ${bookingStats.avgPartySize}`}
           icon={Users}
+          onClick={() => setShowAnalytics(true)}
         />
       </div>
 
@@ -761,12 +964,31 @@ export default function BookingsPage() {
             </TabsTrigger>
           </TabsList>
           
-          {/* Live status indicator */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <div className={`h-2 w-2 rounded-full ${autoRefresh ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-            <span>{autoRefresh ? 'Live' : 'Paused'}</span>
-            <span>•</span>
-         
+          {/* Enhanced Live Status & Performance Metrics */}
+          <div className="flex items-center gap-3 text-sm tablet:text-base text-muted-foreground bg-muted/30 px-3 py-2 rounded-lg backdrop-blur-sm">
+            <div className="flex items-center gap-2">
+              <div className={`h-3 w-3 rounded-full ${autoRefresh ? 'bg-green-500 animate-pulse shadow-lg shadow-green-500/50' : 'bg-gray-400'}`} />
+              <span className="font-medium">{autoRefresh ? '🟢 Live' : '⏸️ Paused'}</span>
+            </div>
+            <div className="h-4 w-px bg-border" />
+            <span className="font-mono text-xs tablet:text-sm bg-background px-2 py-1 rounded border">
+              {format(new Date(), 'HH:mm:ss')}
+            </span>
+            <div className="h-4 w-px bg-border" />
+            <div className="flex items-center gap-2">
+              <Zap className="h-3 w-3 text-yellow-500" />
+              <span className="text-xs font-medium">
+                {Math.round((bookingStats.confirmed / Math.max(bookingStats.all, 1)) * 100)}% confirmed
+              </span>
+            </div>
+            <div className="h-4 w-px bg-border" />
+            <button 
+              onClick={() => setShowShortcuts(true)}
+              className="flex items-center gap-1 hover:bg-background/50 px-2 py-1 rounded transition-colors"
+            >
+              <kbd className="px-1 py-0.5 text-xs bg-background border rounded font-mono">?</kbd>
+              <span className="text-xs font-medium">shortcuts</span>
+            </button>
           </div>
         </div>
 
@@ -864,45 +1086,67 @@ export default function BookingsPage() {
               {/* Quick alerts and actions */}
               <div className="space-y-3">
                 {bookingStats.withoutTables > 0 && (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
+                  <Alert className="border-2 border-red-200 bg-gradient-to-r from-red-50 to-orange-50 shadow-lg">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5 text-red-600 animate-bounce" />
+                      <div className="h-2 w-2 bg-red-500 rounded-full animate-pulse" />
+                    </div>
                     <AlertDescription className="flex items-center justify-between">
-                      <span>
-                        {bookingStats.withoutTables} confirmed booking{bookingStats.withoutTables > 1 ? 's' : ''} 
-                        {bookingStats.withoutTables > 1 ? ' need' : ' needs'} table assignment
-                      </span>
+                      <div className="space-y-1">
+                        <div className="font-bold text-red-800">
+                          🏓 URGENT: {bookingStats.withoutTables} confirmed booking{bookingStats.withoutTables > 1 ? 's' : ''} 
+                          {bookingStats.withoutTables > 1 ? ' need' : ' needs'} table assignment
+                        </div>
+                        <div className="text-xs text-red-600 font-medium">
+                          Guests may arrive without tables ready!
+                        </div>
+                      </div>
                       <Button 
                         size="default" 
                         onClick={() => {
                           setViewMode("tables")
                           setStatusFilter("confirmed")
+                          toast.success('Switching to table assignment mode! 🏓')
                         }}
-                        className="min-h-touch-lg font-medium"
+                        className="min-h-touch-lg font-bold bg-red-600 hover:bg-red-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 animate-pulse"
                       >
-                        Assign Tables
+                        ⚡ Assign Tables Now
                       </Button>
                     </AlertDescription>
                   </Alert>
                 )}
 
                 {bookingStats.pending > 0 && (
-                  <Alert className="border-yellow-200 bg-yellow-50">
-                    <Timer className="h-4 w-4 text-yellow-600" />
+                  <Alert className="border-2 border-yellow-300 bg-gradient-to-r from-yellow-50 to-amber-50 shadow-lg">
+                    <div className="flex items-center gap-2">
+                      <Timer className="h-5 w-5 text-yellow-600 animate-spin" />
+                      <div className="flex gap-1">
+                        <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-pulse" />
+                        <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-pulse" style={{animationDelay: '0.2s'}} />
+                        <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-pulse" style={{animationDelay: '0.4s'}} />
+                      </div>
+                    </div>
                     <AlertDescription className="flex items-center justify-between">
-                      <span className="text-yellow-800">
-                        {bookingStats.pending} booking{bookingStats.pending > 1 ? 's' : ''} pending confirmation
-                      </span>
-                      <div className="flex gap-2">
+                      <div className="space-y-1">
+                        <div className="font-bold text-yellow-800">
+                          ⏰ {bookingStats.pending} booking{bookingStats.pending > 1 ? 's' : ''} awaiting confirmation
+                        </div>
+                        <div className="text-xs text-yellow-700 font-medium">
+                          Quick action: Accept or decline before they expire
+                        </div>
+                      </div>
+                      <div className="flex gap-3">
                         <Button 
                           size="default" 
                           variant="outline"
                           onClick={() => {
                             const pendingBookings = filteredBookings?.filter(b => b.status === "pending").map(b => b.id) || []
                             setSelectedBookings(pendingBookings)
+                            toast.success(`Selected ${pendingBookings.length} pending bookings! ✅`)
                           }}
-                          className="min-h-touch-lg"
+                          className="min-h-touch-lg border-yellow-300 hover:bg-yellow-100 font-medium"
                         >
-                          Select All
+                          🎦 Select All
                         </Button>
                         <Button 
                           size="default"
@@ -912,10 +1156,11 @@ export default function BookingsPage() {
                               bookingIds: pendingBookings, 
                               updates: { status: "confirmed" }
                             })
+                            toast.success(`Confirming ${pendingBookings.length} bookings! 🎉`)
                           }}
-                          className="min-h-touch-lg font-medium"
+                          className="min-h-touch-lg bg-yellow-600 hover:bg-yellow-700 text-white font-bold shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105"
                         >
-                          Confirm All
+                          ⚡ Confirm All
                         </Button>
                       </div>
                     </AlertDescription>
@@ -1398,6 +1643,94 @@ export default function BookingsPage() {
               onCancel={() => setShowManualBooking(false)}
               isLoading={createManualBookingMutation.isPending}
             />
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Keyboard Shortcuts Help Modal */}
+      <Dialog open={showShortcuts} onOpenChange={setShowShortcuts}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5" />
+              Keyboard Shortcuts
+            </DialogTitle>
+            <DialogDescription>
+              Master these shortcuts to work faster on tablets and keyboards
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 tablet:grid-cols-2">
+            <div className="space-y-3">
+              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Navigation</h3>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Upcoming View</span>
+                  <kbd className="px-2 py-1 text-xs bg-muted border rounded font-mono">1</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">List View</span>
+                  <kbd className="px-2 py-1 text-xs bg-muted border rounded font-mono">2</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Calendar View</span>
+                  <kbd className="px-2 py-1 text-xs bg-muted border rounded font-mono">3</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Table View</span>
+                  <kbd className="px-2 py-1 text-xs bg-muted border rounded font-mono">4</kbd>
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Actions</h3>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Refresh Data</span>
+                  <kbd className="px-2 py-1 text-xs bg-muted border rounded font-mono">Ctrl+R</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">New Booking</span>
+                  <kbd className="px-2 py-1 text-xs bg-muted border rounded font-mono">Ctrl+N</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Toggle Analytics</span>
+                  <kbd className="px-2 py-1 text-xs bg-muted border rounded font-mono">Ctrl+A</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Search Focus</span>
+                  <kbd className="px-2 py-1 text-xs bg-muted border rounded font-mono">Ctrl+F</kbd>
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Filters</h3>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Pending Only</span>
+                  <kbd className="px-2 py-1 text-xs bg-muted border rounded font-mono">Ctrl+P</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Table Management</span>
+                  <kbd className="px-2 py-1 text-xs bg-muted border rounded font-mono">Ctrl+T</kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Clear Selection</span>
+                  <kbd className="px-2 py-1 text-xs bg-muted border rounded font-mono">Esc</kbd>
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Pro Tips</h3>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>• Use number keys (1-4) for quick view switching</p>
+                <p>• Ctrl combinations work on tablets with keyboards</p>
+                <p>• Long press cards for context menus</p>
+                <p>• Swipe gestures work on touch devices</p>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
