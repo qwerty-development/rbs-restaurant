@@ -78,9 +78,7 @@ export class BookingRequestService {
       const minSize = restaurant.min_party_size || 1
       const maxSize = restaurant.max_party_size || 20
       
-      if (data.partySize < minSize || data.partySize > maxSize) {
-        throw new Error(`Party size must be between ${minSize} and ${maxSize} guests`)
-      }
+
 
       // Validate booking window
       const bookingWindowDays = restaurant.booking_window_days || 30
