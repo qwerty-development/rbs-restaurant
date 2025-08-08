@@ -47,6 +47,7 @@ interface UnifiedFloorPlanProps {
   onStatusUpdate?: (bookingId: string, newStatus: DiningStatus) => void
   onTableSwitch?: (bookingId: string, newTableIds: string[]) => void
   onCheckIn?: (bookingId: string, tableIds: string[]) => void
+  onTableUpdate?: (tableId: string, position: { x: number; y: number }) => void
   searchQuery?: string
 }
 
@@ -99,6 +100,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
   onStatusUpdate,
   onTableSwitch,
   onCheckIn,
+  onTableUpdate,
   searchQuery
 }: UnifiedFloorPlanProps) {
   const [tableStatuses, setTableStatuses] = useState<Map<string, any>>(new Map())
@@ -108,6 +110,8 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
   const [activeMenuTable, setActiveMenuTable] = useState<string | null>(null)
   const [hoveredTable, setHoveredTable] = useState<string | null>(null)
   const [loadingTransition, setLoadingTransition] = useState<string | null>(null)
+  const [editMode, setEditMode] = useState(false)
+  const [draggingTable, setDraggingTable] = useState<string | null>(null)
   const floorPlanRef = useRef<HTMLDivElement>(null)
   
   const tableStatusService = useMemo(() => new TableStatusService(), [])
@@ -156,6 +160,108 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [])
+
+  // Table drag handlers for edit mode
+  const handleTableDragStart = useCallback((e: React.MouseEvent | React.TouchEvent, tableId: string) => {
+    if (!editMode) return
+    
+    e.preventDefault()
+    setDraggingTable(tableId)
+    setSelectedTable(tableId)
+    
+    const element = e.currentTarget as HTMLElement
+    element.style.zIndex = '1000'
+    element.style.transition = 'none'
+    
+    // Store initial position
+    const containerRect = floorPlanRef.current?.getBoundingClientRect()
+    if (containerRect) {
+      const elementRect = element.getBoundingClientRect()
+      const initialX = elementRect.left - containerRect.left
+      const initialY = elementRect.top - containerRect.top
+      
+      // Store drag data on element
+      element.setAttribute('data-drag-x', initialX.toString())
+      element.setAttribute('data-drag-y', initialY.toString())
+    }
+  }, [editMode])
+
+  const handleTableDragMove = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!draggingTable || !editMode) return
+    
+    const element = document.querySelector(`[data-table-id="${draggingTable}"]`) as HTMLElement
+    const container = floorPlanRef.current
+    
+    if (!element || !container) return
+    
+    const containerRect = container.getBoundingClientRect()
+    let clientX: number, clientY: number
+    
+    if ('touches' in e && e.touches.length > 0) {
+      clientX = e.touches[0].clientX
+      clientY = e.touches[0].clientY
+    } else if ('clientX' in e) {
+      clientX = e.clientX
+      clientY = e.clientY
+    } else {
+      return
+    }
+    
+    const x = clientX - containerRect.left
+    const y = clientY - containerRect.top
+    
+    // Apply boundaries
+    const elementWidth = element.offsetWidth
+    const elementHeight = element.offsetHeight
+    const boundedX = Math.max(0, Math.min(containerRect.width - elementWidth, x - elementWidth / 2))
+    const boundedY = Math.max(0, Math.min(containerRect.height - elementHeight, y - elementHeight / 2))
+    
+    element.style.left = `${boundedX}px`
+    element.style.top = `${boundedY}px`
+  }, [draggingTable, editMode])
+
+  const handleTableDragEnd = useCallback(() => {
+    if (!draggingTable || !editMode || !onTableUpdate) {
+      setDraggingTable(null)
+      return
+    }
+    
+    const element = document.querySelector(`[data-table-id="${draggingTable}"]`) as HTMLElement
+    const container = floorPlanRef.current
+    
+    if (element && container) {
+      const containerRect = container.getBoundingClientRect()
+      const elementRect = element.getBoundingClientRect()
+      
+      const percentX = ((elementRect.left - containerRect.left) / containerRect.width) * 100
+      const percentY = ((elementRect.top - containerRect.top) / containerRect.height) * 100
+      
+      onTableUpdate(draggingTable, { x: percentX, y: percentY })
+      
+      // Reset styles
+      element.style.zIndex = ''
+      element.style.transition = ''
+    }
+    
+    setDraggingTable(null)
+  }, [draggingTable, editMode, onTableUpdate])
+
+  // Global drag event listeners for table repositioning
+  useEffect(() => {
+    if (editMode) {
+      document.addEventListener('mousemove', handleTableDragMove)
+      document.addEventListener('mouseup', handleTableDragEnd)
+      document.addEventListener('touchmove', handleTableDragMove, { passive: false })
+      document.addEventListener('touchend', handleTableDragEnd)
+      
+      return () => {
+        document.removeEventListener('mousemove', handleTableDragMove)
+        document.removeEventListener('mouseup', handleTableDragEnd)
+        document.removeEventListener('touchmove', handleTableDragMove)
+        document.removeEventListener('touchend', handleTableDragEnd)
+      }
+    }
+  }, [editMode, handleTableDragMove, handleTableDragEnd])
 
   const getTableBookingInfo = (table: any) => {
     // Get all bookings for this table (current, upcoming, and recent)
@@ -260,6 +366,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
             <div
               role="button"
               tabIndex={0}
+              data-table-id={table.id}
               aria-label={`Table ${table.table_number}, capacity ${table.min_capacity}-${table.max_capacity}${current ? `, occupied by ${current.guest_name || current.user?.full_name || 'Guest'}, status: ${current.status.replace(/_/g, ' ')}` : ', available'}`}
               className={cn(
                 "relative rounded-2xl border-3 cursor-pointer transition-all duration-300 ease-out focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-offset-2",
@@ -278,6 +385,10 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 isHighlighted && "ring-4 ring-yellow-400 animate-pulse ring-offset-2 ring-offset-background",
                 // Drag states
                 isDragging && !isOccupied && "border-dashed border-green-500 bg-green-50/70 shadow-green-200/50",
+                draggingTable === table.id && "shadow-2xl scale-110 cursor-grabbing z-50",
+                // Edit mode styling
+                editMode && "hover:ring-2 hover:ring-purple-400",
+                editMode && !isOccupied && "cursor-move",
                 // Shape
                 table.shape === "circle" ? "rounded-full" : "rounded-2xl",
                 // Interactive states
@@ -287,11 +398,13 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 position: "absolute",
                 left: `${table.x_position}%`,
                 top: `${table.y_position}%`,
-                width: `${(table.width || 140) * 1.1}px`,
-                height: `${(table.height || 120) * 1.1}px`,
-                padding: "12px"
+                width: `${(table.width || 120) * 0.85}px`,
+                height: `${(table.height || 100) * 0.85}px`,
+                padding: "8px"
               }}
               onClick={() => {
+                if (editMode) return // Prevent click when in edit mode
+                
                 // Simple click-to-toggle selection
                 if (selectedTable === table.id) {
                   setSelectedTable(null)
@@ -316,6 +429,16 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                       }
                     })
                   }
+                }
+              }}
+              onMouseDown={(e) => {
+                if (editMode && !isOccupied) {
+                  handleTableDragStart(e, table.id)
+                }
+              }}
+              onTouchStart={(e) => {
+                if (editMode && !isOccupied) {
+                  handleTableDragStart(e, table.id)
                 }
               }}
               onKeyDown={(e) => {
@@ -365,51 +488,51 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 }
               }}
             >
-              {/* Table header - Tablet Optimized */}
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5">
-                  <StatusIcon className="h-4 w-4 text-current" />
-                  <span className="font-bold text-base text-foreground">T{table.table_number}</span>
+              {/* Table header - Compact for tablets */}
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-1">
+                  <StatusIcon className="h-3 w-3 text-current" />
+                  <span className="font-bold text-sm text-foreground">T{table.table_number}</span>
                 </div>
-                <Badge variant="outline" className="text-xs px-1.5 py-0.5 bg-background/70 font-medium rounded-md">
+                <Badge variant="outline" className="text-xs px-1 py-0 bg-background/70 font-medium rounded-md">
                   {table.min_capacity}-{table.max_capacity}
                 </Badge>
               </div>
 
               {/* Current booking info */}
               {isOccupied && current ? (
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                   {/* Guest info - Simplified with icons */}
                   <div>
-                    <p className="font-bold text-base truncate text-foreground mb-1">
+                    <p className="font-bold text-sm truncate text-foreground mb-0.5">
                       {current.guest_name || current.user?.full_name || 'Guest'}
                     </p>
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         {/* Party size with visual indicators */}
                         <div className={cn(
-                          "flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all duration-200 shadow-sm",
+                          "flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 shadow-sm",
                           current.party_size > table.max_capacity 
                             ? "bg-red-100 text-red-800 border-2 border-red-300 animate-pulse" 
                             : "bg-blue-100 text-blue-800 border-2 border-blue-300 hover:bg-blue-200"
                         )}>
-                          <Users className="h-4 w-4" />
-                          <span className="font-bold text-sm">{current.party_size}</span>
+                          <Users className="h-3 w-3" />
+                          <span className="font-bold text-xs">{current.party_size}</span>
                           {current.party_size > table.max_capacity && (
-                            <AlertTriangle className="h-4 w-4 animate-bounce text-red-600" />
+                            <AlertTriangle className="h-3 w-3 animate-bounce text-red-600" />
                           )}
                         </div>
                         
                         {/* Time indicator with urgency colors */}
                         <div className={cn(
-                          "flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-sm border-2 transition-all duration-200 shadow-sm",
+                          "flex items-center gap-1 px-2 py-1 rounded-lg font-bold text-xs border-2 transition-all duration-200 shadow-sm",
                           minutesSinceArrival > (current.turn_time_minutes || 120) 
                             ? "bg-red-100 text-red-800 border-red-300 animate-pulse shadow-red-200" :
                           minutesSinceArrival > (current.turn_time_minutes || 120) * 0.8 
                             ? "bg-orange-100 text-orange-800 border-orange-300 shadow-orange-200" :
                           "bg-green-100 text-green-800 border-green-300 shadow-green-200"
                         )}>
-                          <Clock className="h-4 w-4" />
+                          <Clock className="h-3 w-3" />
                           <span>{minutesSinceArrival}m</span>
                           {minutesSinceArrival > (current.turn_time_minutes || 120) && (
                             <AlertTriangle className="h-3 w-3 animate-bounce" />
@@ -422,14 +545,14 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                         <Button
                           size="sm"
                           aria-label={`Call ${current.guest_name || current.user?.full_name || 'Guest'} at ${current.user?.phone_number || current.guest_phone}`}
-                          className="h-9 w-9 p-0 bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-full shadow-2xl border-3 border-green-300 hover:scale-110 transition-all duration-200 animate-pulse focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-offset-2"
+                          className="h-7 w-7 p-0 bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-full shadow-lg border-2 border-green-300 hover:scale-110 transition-all duration-200 animate-pulse focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-offset-2"
                           onClick={(e) => {
                             e.stopPropagation()
                             const phone = current.user?.phone_number || current.guest_phone
                             window.open(`tel:${phone}`, '_self')
                           }}
                         >
-                          <Phone className="h-4 w-4" />
+                          <Phone className="h-3 w-3" />
                         </Button>
                       )}
                     </div>
@@ -438,14 +561,14 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                   {/* Status indicator with enhanced visual feedback */}
                   <div className="flex items-center justify-center">
                     <div className={cn(
-                      "px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg border-2 transition-all duration-300 transform hover:scale-105",
+                      "px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-md border transition-all duration-300 transform hover:scale-105",
                       current.status === 'arrived' ? "bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-blue-400 animate-pulse shadow-blue-300/50" :
                       current.status === 'seated' ? "bg-gradient-to-r from-purple-100 to-purple-200 text-purple-800 border-purple-400 shadow-purple-300/50" :
                       current.status === 'ordered' ? "bg-gradient-to-r from-orange-100 to-orange-200 text-orange-800 border-orange-400 shadow-orange-300/50" :
                       current.status === 'payment' ? "bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800 border-yellow-400 shadow-yellow-300/50 animate-pulse" :
                       "bg-gradient-to-r from-green-100 to-green-200 text-green-800 border-green-400 shadow-green-300/50"
                     )}>
-                      <StatusIcon className="h-3 w-3" />
+                      <StatusIcon className="h-2.5 w-2.5" />
                       <span className="capitalize">{current.status.replace(/_/g, ' ')}</span>
                       {/* Status emoji indicators */}
                       {current.status === 'arrived' && <span>👋</span>}
@@ -455,91 +578,91 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                     </div>
                   </div>
 
-                  {/* Quick actions - Enhanced positioning and animation */}
+                  {/* Quick actions - Compact for tablets */}
                   {selectedTable === table.id && activeMenuTable === table.id && (
-                    <div className="absolute -bottom-16 left-1/2 transform -translate-x-1/2 flex gap-1.5 z-50 animate-in fade-in-0 slide-in-from-top-4 duration-300">
+                    <div className="absolute -bottom-12 left-1/2 transform -translate-x-1/2 flex gap-1 z-50 animate-in fade-in-0 slide-in-from-top-4 duration-300">
                       {/* Enhanced quick status buttons */}
                       {current.status === 'arrived' && (
                         <Button 
                           size="sm"
-                          className="h-9 text-xs px-3 shadow-xl bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-xl font-semibold border-2 border-purple-400 hover:scale-105 transition-all duration-200"
+                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-lg font-semibold border border-purple-400 hover:scale-105 transition-all duration-200"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleStatusTransition(current.id, 'seated')
                           }}
                           disabled={loadingTransition === current.id}
                         >
-                          <ChefHat className="h-3 w-3 mr-1.5" />
-                          Seat Now
+                          <ChefHat className="h-2.5 w-2.5 mr-1" />
+                          Seat
                         </Button>
                       )}
                       
                       {current.status === 'seated' && (
                         <Button 
                           size="sm"
-                          className="h-9 text-xs px-3 shadow-xl bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-xl font-semibold border-2 border-orange-400 hover:scale-105 transition-all duration-200"
+                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-lg font-semibold border border-orange-400 hover:scale-105 transition-all duration-200"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleStatusTransition(current.id, 'ordered')
                           }}
                           disabled={loadingTransition === current.id}
                         >
-                          <Coffee className="h-3 w-3 mr-1.5" />
-                          Ordered
+                          <Coffee className="h-2.5 w-2.5 mr-1" />
+                          Order
                         </Button>
                       )}
                       
                       {['ordered', 'appetizers', 'main_course', 'dessert'].includes(current.status) && (
                         <Button 
                           size="sm"
-                          className="h-9 text-xs px-3 shadow-xl bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 text-white rounded-xl font-semibold border-2 border-yellow-400 hover:scale-105 transition-all duration-200"
+                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 text-white rounded-lg font-semibold border border-yellow-400 hover:scale-105 transition-all duration-200"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleStatusTransition(current.id, 'payment')
                           }}
                           disabled={loadingTransition === current.id}
                         >
-                          <CreditCard className="h-3 w-3 mr-1.5" />
-                          Check
+                          <CreditCard className="h-2.5 w-2.5 mr-1" />
+                          Bill
                         </Button>
                       )}
                       
                       {current.status === 'payment' && (
                         <Button 
                           size="sm"
-                          className="h-9 text-xs px-3 shadow-xl bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl font-semibold border-2 border-green-400 hover:scale-105 transition-all duration-200"
+                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg font-semibold border border-green-400 hover:scale-105 transition-all duration-200"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleStatusTransition(current.id, 'completed')
                           }}
                           disabled={loadingTransition === current.id}
                         >
-                          <CheckCircle className="h-3 w-3 mr-1.5" />
-                          Complete
+                          <CheckCircle className="h-2.5 w-2.5 mr-1" />
+                          Done
                         </Button>
                       )}
 
                       {/* View Details button */}
                       <Button 
                         size="sm"
-                        className="h-9 px-3 shadow-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-semibold border-2 border-blue-400 hover:scale-105 transition-all duration-200"
+                        className="h-7 px-2 shadow-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg font-semibold border border-blue-400 hover:scale-105 transition-all duration-200"
                         onClick={(e) => {
                           e.stopPropagation()
                           if (onTableClick) onTableClick(table, { current, upcoming, allUpcoming, recentHistory })
                         }}
                       >
-                        <Eye className="h-3 w-3 mr-1.5" />
-                        Details
+                        <Eye className="h-2.5 w-2.5 mr-1" />
+                        Info
                       </Button>
                     </div>
                   )}
                 </div>
                               ) : (
-                <div className="text-center py-3">
-                  <div className="mb-3">
+                <div className="text-center py-2">
+                  <div className="mb-2">
                     <Badge 
                       variant="secondary" 
-                      className="text-sm px-3 py-1.5 bg-green-100 text-green-800 border-green-300 font-medium shadow-sm"
+                      className="text-xs px-2 py-1 bg-green-100 text-green-800 border-green-300 font-medium shadow-sm"
                     >
                       ✅ Available
                     </Badge>
@@ -547,21 +670,21 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                   
                   {/* Show next upcoming booking with better visibility */}
                   {upcoming && (
-                    <div className="text-xs p-3 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 border-2 border-blue-300 dark:border-blue-600 rounded-xl shadow-md">
+                    <div className="text-xs p-2 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 border border-blue-300 dark:border-blue-600 rounded-lg shadow-sm">
                       <div className="flex items-start gap-2">
-                        <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                          <Clock className="h-3 w-3 text-white" />
+                        <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                          <Clock className="h-2 w-2 text-white" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="font-bold text-blue-900 dark:text-blue-200">
                             📅 {format(new Date(upcoming.booking_time), 'h:mm a')}
                           </p>
                           <p className="truncate text-blue-700 dark:text-blue-300 flex items-center gap-1">
-                            <Users className="h-3 w-3" />
+                            <Users className="h-2.5 w-2.5" />
                             {upcoming.guest_name || upcoming.user?.full_name} ({upcoming.party_size})
                           </p>
                           <p className="text-blue-600 dark:text-blue-400 mt-1 flex items-center gap-1">
-                            <Timer className="h-3 w-3" />
+                            <Timer className="h-2.5 w-2.5" />
                             {differenceInMinutes(new Date(upcoming.booking_time), currentTime)}m away
                           </p>
                         </div>
@@ -574,8 +697,8 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                     <div className="space-y-3">
                       {/* Main availability indicator */}
                       <div className="text-center">
-                        <div className="w-10 h-10 mx-auto bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center shadow-lg">
-                          <span className="text-white text-xl font-bold">✓</span>
+                        <div className="w-8 h-8 mx-auto bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center shadow-lg">
+                          <span className="text-white text-lg font-bold">✓</span>
                         </div>
                       </div>
                       
@@ -586,13 +709,13 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                           <div className="flex justify-center gap-3">
                             {allUpcoming.length > 0 && (
                               <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-100 text-blue-700 rounded-lg border border-blue-300">
-                                <Calendar className="h-3 w-3" />
+                                <Calendar className="h-2.5 w-2.5" />
                                 <span className="text-xs font-medium">{allUpcoming.length} upcoming</span>
                               </div>
                             )}
                             {recentHistory.length > 0 && (
                               <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-100 text-gray-700 rounded-lg border border-gray-300">
-                                <CheckCircle className="h-3 w-3" />
+                                <CheckCircle className="h-2.5 w-2.5" />
                                 <span className="text-xs font-medium">{recentHistory.length} today</span>
                               </div>
                             )}
@@ -661,24 +784,28 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
     )
   }
 
-  // Memoized stats calculation for performance
-  const tableStats = useMemo(() => {
-    const activeTables = tables.filter(t => t.is_active)
-    const occupiedTables = activeTables.filter(t => {
-      const { current } = getTableBookingInfo(t)
-      return !!current
-    }).length
-
-    const availableTables = activeTables.length - occupiedTables
-    const occupancyRate = activeTables.length > 0 
-      ? Math.round((occupiedTables / activeTables.length) * 100) 
-      : 0
-
-    return { occupiedTables, availableTables, occupancyRate }
-  }, [tables, bookings, currentTime, getTableBookingInfo])
 
   return (
     <div className="h-full w-full flex flex-col bg-gradient-to-br from-gray-900 to-gray-800">
+      {/* Edit Mode Toggle */}
+      {onTableUpdate && (
+        <div className="absolute top-4 right-4 z-50">
+          <Button
+            size="sm"
+            variant={editMode ? "destructive" : "secondary"}
+            onClick={() => setEditMode(!editMode)}
+            className={cn(
+              "shadow-lg transition-all duration-200 font-medium",
+              editMode 
+                ? "bg-red-600 hover:bg-red-700 text-white animate-pulse" 
+                : "bg-white/90 hover:bg-white text-gray-800 border border-gray-300"
+            )}
+          >
+            {editMode ? "Exit Edit" : "Edit Layout"}
+          </Button>
+        </div>
+      )}
+
       {/* Full-Screen Floor Plan Area */}
       <div className="flex-1 relative bg-gradient-to-br from-gray-800 to-gray-900 overflow-auto" ref={floorPlanRef}>
         <div 

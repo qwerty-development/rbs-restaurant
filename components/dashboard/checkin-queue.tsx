@@ -1,7 +1,7 @@
 // components/dashboard/checkin-queue.tsx
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import React, { useState, useEffect, useMemo, useCallback } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,9 +14,9 @@ import { format, differenceInMinutes, addMinutes } from "date-fns"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
 import { useTableCombinations } from "@/lib/hooks/use-table-combinations"
-import { 
-  UserCheck, 
-  Clock, 
+import {
+  UserCheck,
+  Clock,
   Table2,
   AlertCircle,
   Timer,
@@ -26,10 +26,19 @@ import {
   CheckCircle,
   AlertTriangle,
   GitMerge,
-  Unlock
+  Unlock,
+  ChefHat,
+  Utensils,
+  Coffee,
+  CreditCard,
+  Play,
+  Activity,
+  TrendingUp,
+  Users
 } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { TableStatusService, type DiningStatus } from "@/lib/table-status"
 const TABLE_TYPE_COLORS: Record<string, string> = {
   booth: "bg-gradient-to-br from-blue-900 to-blue-800 text-blue-100 border-blue-700",
   window: "bg-gradient-to-br from-emerald-900 to-emerald-800 text-emerald-100 border-emerald-700",
@@ -69,6 +78,7 @@ interface CheckInQueueProps {
   onCheckIn: (bookingId: string, tableIds: string[]) => void
   onQuickSeat: (guestData: any, tableIds: string[]) => void
   onTableSwitch?: (bookingId: string, newTableIds: string[], swapBookingId?: string) => void
+  onStatusUpdate?: (bookingId: string, newStatus: DiningStatus) => void
   customersData?: Record<string, any>
   onSelectBooking?: (booking: any) => void
 }
@@ -81,6 +91,7 @@ export function CheckInQueue({
   onCheckIn,
   onQuickSeat,
   onTableSwitch,
+  onStatusUpdate,
   customersData = {},
   onSelectBooking
 }: CheckInQueueProps) {
@@ -121,6 +132,15 @@ export function CheckInQueue({
 
   const supabase = createClient()
   const queryClient = useQueryClient()
+  const tableStatusService = useMemo(() => new TableStatusService(), [])
+
+  // Get current user for status updates
+  const [userId, setUserId] = useState<string>("")
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setUserId(user.id)
+    })
+  }, [supabase])
 
   // Fetch table combinations with enhanced filtering
   const { data: tableCombinations = [], isLoading: combinationsLoading } = useTableCombinations(restaurantId)
@@ -385,16 +405,45 @@ export function CheckInQueue({
     })
   }, [tables, bookings, customersData])
 
+  // Handle status updates
+  const handleStatusUpdate = useCallback(async (bookingId: string, newStatus: DiningStatus) => {
+    if (!userId) return
+
+    try {
+      await tableStatusService.updateBookingStatus(bookingId, newStatus, userId)
+      if (onStatusUpdate) {
+        onStatusUpdate(bookingId, newStatus)
+      }
+      toast.success(`Status updated to ${newStatus.replace(/_/g, ' ')}`)
+    } catch (error) {
+      console.error('Status update error:', error)
+      toast.error('Failed to update status')
+    }
+  }, [tableStatusService, userId, onStatusUpdate])
+
   // Filter and categorize bookings
   const categorizedBookings = useMemo(() => {
     const arrivals = bookings.filter(booking => {
       const bookingTime = new Date(booking.booking_time)
       const minutesUntil = differenceInMinutes(bookingTime, currentTime)
-      return booking.status === 'confirmed' && 
+      return booking.status === 'confirmed' &&
              minutesUntil >= -30 && minutesUntil <= 60
     }).sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
 
+    // Active dining guests
+    const activeDining = bookings.filter(b =>
+      ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(b.status)
+    ).sort((a, b) => {
+      // Sort by status progression, then by booking time
+      const statusOrder = { seated: 1, ordered: 2, appetizers: 3, main_course: 4, dessert: 5, payment: 6 }
+      const aOrder = statusOrder[b.status as keyof typeof statusOrder] || 0
+      const bOrder = statusOrder[b.status as keyof typeof statusOrder] || 0
+      if (aOrder !== bOrder) return aOrder - bOrder
+      return new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime()
+    })
+
     return {
+      activeDining,
       waitingForSeating: bookings.filter(b => b.status === 'arrived'),
       lateArrivals: arrivals.filter(b => {
         const minutesUntil = differenceInMinutes(new Date(b.booking_time), currentTime)
@@ -408,7 +457,7 @@ export function CheckInQueue({
         const minutesUntil = differenceInMinutes(new Date(b.booking_time), currentTime)
         return minutesUntil > 15
       }),
-      needingTables: bookings.filter(b => 
+      needingTables: bookings.filter(b =>
         b.status === 'confirmed' && (!b.tables || b.tables.length === 0)
       ),
       vipArrivals: arrivals.filter(b => {
@@ -839,114 +888,68 @@ export function CheckInQueue({
       <div
         key={booking.id}
         className={cn(
-          "relative p-2 rounded-lg border cursor-pointer transition-colors",
+          "relative p-1.5 rounded border cursor-pointer transition-colors",
           status.bgColor,
           "hover:border-gray-400"
         )}
         onClick={() => onSelectBooking?.(booking)}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex-1">
-            {/* Status and guest name */}
-            <div className="flex items-center gap-3 mb-2">
-              <StatusIcon className={cn("h-4 w-4", status.color)} />
-              <div>
-                <p className="font-medium text-gray-100">
-                  {booking.user?.full_name || booking.guest_name || 'Guest'}
-                </p>
-                <p className="text-xs text-gray-400">{status.subLabel}</p>
-              </div>
-              
-              {/* Essential badges only */}
-              <div className="flex items-center gap-1 ml-auto">
-                {customerData?.vip_status && (
-                  <Badge className="text-xs px-1.5 py-0.5 bg-yellow-600 text-white">
-                    VIP
-                  </Badge>
-                )}
-                {customerData?.blacklisted && (
-                  <Badge variant="destructive" className="text-xs px-1.5 py-0.5">
-                    Alert
-                  </Badge>
-                )}
-              </div>
+        {/* Compact single row layout */}
+        <div className="flex items-center gap-1.5">
+          <StatusIcon className={cn("h-3 w-3 flex-shrink-0", status.color)} />
+          
+          <div className="flex-1 min-w-0">
+            {/* Guest name and essential info in single line */}
+            <div className="flex items-center gap-1 mb-0.5">
+              <p className="font-medium text-gray-100 text-xs truncate">
+                {booking.guest_name || booking.user?.full_name || 'Anonymous'}
+              </p>
+              {customerData?.vip_status && (
+                <Badge className="text-xs px-1 py-0 bg-yellow-600 text-white h-3 min-w-0">
+                  V
+                </Badge>
+              )}
             </div>
-
-            {/* Essential booking details */}
-            <div className="flex items-center gap-4 text-sm text-gray-300">
-              <span>{format(new Date(booking.booking_time), 'h:mm a')}</span>
-              <span>{booking.party_size} guests</span>
+            
+            {/* Time and party size in compact format */}
+            <div className="flex items-center gap-2 text-xs text-gray-300">
+              <span>{format(new Date(booking.booking_time), 'h:mm')}</span>
+              <span>{booking.party_size}p</span>
               {hasTable && (
-                <span className="text-green-400">
-                  T{booking.tables.map((t: any) => t.table_number).join(", ")}
+                <span className="text-green-400 text-xs">
+                  T{booking.tables.map((t: any) => t.table_number).join(",")}
                 </span>
               )}
             </div>
-
-            {/* Special requests - only if critical */}
-            {customerData?.blacklisted && customerData?.blacklist_reason && (
-              <div className="mt-2 p-2 bg-red-900/30 rounded text-xs text-red-400">
-                {customerData.blacklist_reason}
-              </div>
-            )}
           </div>
 
-          {/* Action buttons */}
-          <div className="ml-4 flex gap-2">
+          {/* Compact button with icon + text */}
+          <div className="flex-shrink-0">
             {booking.status === 'arrived' ? (
-              // Guest is checked in and waiting to be seated
-              <>
-                <Button
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleSeatGuest(booking)
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  Seat
-                </Button>
-                {hasTable && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleOpenEnhancedTableSwitch(booking)
-                    }}
-                    className="border-blue-500 text-blue-400 hover:bg-blue-900/30"
-                  >
-                    Switch
-                  </Button>
-                )}
-              </>
+              <Button
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleSeatGuest(booking)
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-1.5 py-0.5 h-5 text-xs flex items-center gap-0.5"
+              >
+                <Users className="h-2.5 w-2.5" />
+                Seat
+              </Button>
             ) : canCheckInDirectly ? (
-              // Guest can be checked in directly
               <Button
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation()
                   handleQuickCheckIn(booking)
                 }}
-                className="bg-green-600 hover:bg-green-700 text-white"
+                className="bg-green-600 hover:bg-green-700 text-white px-1.5 py-0.5 h-5 text-xs flex items-center gap-0.5"
               >
-                Check-in
-              </Button>
-            ) : hasTable ? (
-              // Guest has table but it's occupied - need to switch
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleOpenEnhancedTableSwitch(booking)
-                }}
-                className="border-blue-500 text-blue-400 hover:bg-blue-900/30"
-              >
-                Switch
+                <CheckCircle className="h-2.5 w-2.5" />
+                In
               </Button>
             ) : (
-              // Guest needs table assignment
               <Button
                 size="sm"
                 variant="outline"
@@ -954,8 +957,9 @@ export function CheckInQueue({
                   e.stopPropagation()
                   handleOpenEnhancedTableSwitch(booking)
                 }}
-                className="border-amber-500 text-amber-400 hover:bg-amber-900/30"
+                className="border-amber-500 text-amber-400 hover:bg-amber-900/30 px-1.5 py-0.5 h-5 text-xs flex items-center gap-0.5"
               >
+                <Table2 className="h-2.5 w-2.5" />
                 Assign
               </Button>
             )}
@@ -965,17 +969,131 @@ export function CheckInQueue({
     )
   }
 
+  // Status icons mapping
+  const STATUS_ICONS = {
+    seated: Users,
+    ordered: ChefHat,
+    appetizers: Utensils,
+    main_course: Utensils,
+    dessert: Coffee,
+    payment: CreditCard
+  }
+
+
+
+  // Status colors mapping
+  const STATUS_COLORS = {
+    seated: "text-blue-400 bg-blue-900/30 border-blue-700",
+    ordered: "text-purple-400 bg-purple-900/30 border-purple-700",
+    appetizers: "text-green-400 bg-green-900/30 border-green-700",
+    main_course: "text-orange-400 bg-orange-900/30 border-orange-700",
+    dessert: "text-pink-400 bg-pink-900/30 border-pink-700",
+    payment: "text-yellow-400 bg-yellow-900/30 border-yellow-700"
+  }
+
+  const renderDiningCard = (booking: any) => {
+    const hasTable = booking.tables && booking.tables.length > 0
+    const customerData = booking.user?.id ? customersData[booking.user.id] : null
+    const StatusIcon = STATUS_ICONS[booking.status as keyof typeof STATUS_ICONS] || Activity
+    const statusColor = STATUS_COLORS[booking.status as keyof typeof STATUS_COLORS] || "text-gray-400 bg-gray-800/30 border-gray-600"
+
+    // Calculate dining progress and time
+    const progress = TableStatusService.getDiningProgress(booking.status as DiningStatus)
+    const bookingTime = new Date(booking.booking_time)
+    const elapsedMinutes = differenceInMinutes(currentTime, bookingTime)
+    const estimatedTotal = booking.turn_time_minutes || 120
+    const remainingMinutes = Math.max(0, estimatedTotal - elapsedMinutes)
+
+    // Get valid next transitions
+    const validTransitions = tableStatusService.getValidTransitions(booking.status as DiningStatus)
+    const nextTransition = validTransitions[0] // Most common next step
+
+    return (
+      <div
+        key={booking.id}
+        className={cn(
+          "relative p-1.5 rounded border cursor-pointer transition-all duration-200",
+          statusColor,
+          "hover:border-gray-400"
+        )}
+        onClick={() => onSelectBooking?.(booking)}
+      >
+        <div className="flex items-center gap-1.5">
+          <StatusIcon className="h-3 w-3 flex-shrink-0" />
+          
+          <div className="flex-1 min-w-0">
+            {/* Guest name and VIP badge */}
+            <div className="flex items-center gap-1 mb-0.5">
+              <p className="font-medium text-gray-100 text-xs truncate">
+                {booking.guest_name || booking.user?.full_name || 'Anonymous'}
+              </p>
+              {customerData?.vip_status && (
+                <Badge className="text-xs px-1 py-0 bg-yellow-600 text-white h-3 min-w-0">
+                  V
+                </Badge>
+              )}
+            </div>
+
+            {/* Status and time info */}
+            <div className="flex items-center gap-2 text-xs text-gray-300">
+              <span>{format(new Date(booking.booking_time), 'h:mm')}</span>
+              <span>{booking.party_size}p</span>
+              {hasTable && (
+                <span className="text-green-400">
+                  T{booking.tables.map((t: any) => t.table_number).join(",")}
+                </span>
+              )}
+              <span className="text-gray-400">{elapsedMinutes}m</span>
+            </div>
+
+            {/* Mini progress bar */}
+            <div className="w-full bg-gray-700 rounded-full h-1 mt-0.5">
+              <div
+                className="bg-gradient-to-r from-blue-500 to-green-500 h-1 rounded-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Compact button with icon + text */}
+          <div className="flex-shrink-0">
+            {nextTransition && (
+              <Button
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleStatusUpdate(booking.id, nextTransition.to)
+                }}
+                className="bg-green-600 hover:bg-green-700 text-white px-1.5 py-0.5 h-5 text-xs flex items-center gap-0.5"
+              >
+                <Play className="h-2.5 w-2.5" />
+                Next
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900 text-gray-200 overflow-hidden">
-      {/* Simplified Header - More Compact */}
-      <div className="px-2 py-1.5 border-b border-gray-800">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-100">Check-in Queue</h3>
+    <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900 text-gray-200 overflow-x-auto overflow-y-hidden min-w-[320px] w-full">
+      {/* Ultra-Compact Header */}
+      <div className="px-1 py-1 border-b border-gray-800 flex-shrink-0">
+        <div className="flex items-center justify-between min-w-0">
+          <h3 className="text-xs font-semibold text-gray-100 truncate">Queue</h3>
           
           {/* Essential stats only */}
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex items-center gap-2 text-xs flex-shrink-0 ml-2">
+            {categorizedBookings.activeDining.length > 0 && (
+              <div className="flex items-center gap-1 text-green-400">
+                <Activity className="h-3 w-3" />
+                <span className="font-medium">{categorizedBookings.activeDining.length}</span>
+              </div>
+            )}
             {categorizedBookings.waitingForSeating.length > 0 && (
               <div className="flex items-center gap-1 text-orange-400">
+                <UserCheck className="h-3 w-3" />
                 <span className="font-medium">{categorizedBookings.waitingForSeating.length}</span>
               </div>
             )}
@@ -993,28 +1111,58 @@ export function CheckInQueue({
         </div>
       </div>
 
-      <Tabs defaultValue="arrivals" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="mx-2 mt-1 grid w-[calc(100%-1rem)] grid-cols-2 bg-gray-800 h-8">
-          <TabsTrigger value="arrivals" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs">
-            Arrivals
-            {(categorizedBookings.lateArrivals.length + 
-              categorizedBookings.currentArrivals.length + 
+      <Tabs defaultValue="active" className="flex-1 flex flex-col min-h-0">
+        <TabsList className="mx-1 mt-0.5 grid w-[calc(100%-0.5rem)] grid-cols-3 bg-gray-800 h-7 gap-px flex-shrink-0">
+          <TabsTrigger value="active" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs font-medium px-2 flex items-center justify-center min-w-0 flex-1 gap-1">
+            <span className="truncate">Active</span>
+            {categorizedBookings.activeDining.length > 0 && (
+              <Badge className="px-1 py-0 text-xs bg-green-600 min-w-[14px] h-3.5 flex items-center justify-center leading-none text-white font-medium">
+                {categorizedBookings.activeDining.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="arrivals" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs font-medium px-2 flex items-center justify-center min-w-0 flex-1 gap-1">
+            <span className="truncate">Arrivals</span>
+            {(categorizedBookings.lateArrivals.length +
+              categorizedBookings.currentArrivals.length +
               categorizedBookings.upcomingArrivals.length) > 0 && (
-              <Badge className="ml-1 px-1 py-0 text-xs bg-blue-600">
-                {categorizedBookings.lateArrivals.length + 
-                 categorizedBookings.currentArrivals.length + 
+              <Badge className="px-1 py-0 text-xs bg-blue-600 min-w-[14px] h-3.5 flex items-center justify-center leading-none text-white font-medium">
+                {categorizedBookings.lateArrivals.length +
+                 categorizedBookings.currentArrivals.length +
                  categorizedBookings.upcomingArrivals.length}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="walkin" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs">
-            Walk-in
+          <TabsTrigger value="walkin" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs font-medium px-2 flex items-center justify-center min-w-0 flex-1">
+            <span className="truncate">Walk-in</span>
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="arrivals" className="flex-1 px-2 pb-1 mt-1 min-h-0">
-          <ScrollArea className="h-full max-h-[calc(100vh-12rem)] sm:max-h-[calc(100vh-10rem)] md:max-h-[calc(100vh-8rem)]">
-            <div className="space-y-1 pr-2">
+        <TabsContent value="active" className="flex-1 px-1 pb-1 mt-0.5 min-h-0">
+          <ScrollArea className="h-full max-h-[calc(100vh-12rem)] sm:max-h-[calc(100vh-10rem)] md:max-h-[calc(100vh-8rem)] overflow-x-auto">
+            <div className="space-y-0.5 pr-1">
+              {/* Active dining guests */}
+              {categorizedBookings.activeDining.length > 0 ? (
+                <div className="space-y-1">
+                  <h4 className="text-xs font-medium text-green-400 border-b border-green-800 pb-1">
+                    Currently Dining ({categorizedBookings.activeDining.length})
+                  </h4>
+                  {categorizedBookings.activeDining.map(renderDiningCard)}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Activity className="h-6 w-6 text-gray-500 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">No active dining guests</p>
+                  <p className="text-xs text-gray-500 mt-1">Guests will appear here once seated</p>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </TabsContent>
+
+        <TabsContent value="arrivals" className="flex-1 px-1 pb-1 mt-0.5 min-h-0">
+          <ScrollArea className="h-full max-h-[calc(100vh-12rem)] sm:max-h-[calc(100vh-10rem)] md:max-h-[calc(100vh-8rem)] overflow-x-auto">
+            <div className="space-y-0.5 pr-1">
               {/* Waiting for seating - highest priority */}
               {categorizedBookings.waitingForSeating.length > 0 && (
                 <div className="space-y-1">
@@ -1066,18 +1214,36 @@ export function CheckInQueue({
           </ScrollArea>
         </TabsContent>
 
-        <TabsContent value="walkin" className="flex-1 px-2 pb-1 mt-1 min-h-0">
-          <ScrollArea className="h-full max-h-[calc(100vh-12rem)] sm:max-h-[calc(100vh-10rem)] md:max-h-[calc(100vh-8rem)]">
-            <div className="space-y-2 pr-2">
-            {/* Available tables summary */}
+        <TabsContent value="walkin" className="flex-1 px-1 pb-1 mt-0.5 min-h-0">
+          <ScrollArea className="h-full max-h-[calc(100vh-12rem)] sm:max-h-[calc(100vh-10rem)] md:max-h-[calc(100vh-8rem)] overflow-x-auto">
+            <div className="space-y-1 pr-1">
+            {/* Enhanced tables summary */}
             <div className="p-2 bg-gray-800/50 rounded-lg border border-gray-700">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-300">
-                  {availableTables.length} tables available
-                </span>
+              <div className="flex items-center justify-between text-xs mb-2">
+                <span className="text-gray-300 font-medium">Table Status</span>
                 <span className="text-gray-400">
-                  Cap: {availableTables.reduce((sum, t) => sum + t.max_capacity, 0)}
+                  Total: {tables.filter(t => t.is_active).length}
                 </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center gap-1">
+                  <CheckCircle className="h-3 w-3 text-green-400" />
+                  <span className="text-green-400">{availableTables.length} Available</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <UserCheck className="h-3 w-3 text-red-400" />
+                  <span className="text-red-400">{tableStatus.filter(t => t.isOccupied).length} Occupied</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Activity className="h-3 w-3 text-green-400" />
+                  <span className="text-green-400">{categorizedBookings.activeDining.length} Dining</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Clock className="h-3 w-3 text-yellow-400" />
+                  <span className="text-yellow-400">
+                    {tableStatus.filter(t => !t.isOccupied && t.upcomingBookings && t.upcomingBookings.length > 0).length} Reserved
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -1177,7 +1343,7 @@ export function CheckInQueue({
                 <Label className="text-sm text-gray-300 mb-2 block">
                   Select Table - {availableTables.length} available
                 </Label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2">
                     {tableStatus
                       .filter(table => table.is_active)
                       .sort((a, b) => {
@@ -1232,7 +1398,7 @@ export function CheckInQueue({
                             variant="outline"
                             disabled={!canSelect}
                             className={cn(
-                              "h-16 p-2 transition-all duration-200 hover:scale-105 relative",
+                              "h-14 p-1.5 transition-all duration-200 hover:scale-105 relative",
                               bgColor,
                               statusColor,
                               canSelect && "hover:bg-gray-700/50 cursor-pointer",
@@ -1251,7 +1417,7 @@ export function CheckInQueue({
                           >
                             <div className="w-full h-full flex flex-col items-center justify-center">
                               {/* Table number - main focus */}
-                              <div className="font-bold text-lg text-white">
+                              <div className="font-bold text-sm text-white">
                                 T{table.table_number}
                               </div>
                               
@@ -1261,13 +1427,13 @@ export function CheckInQueue({
                               </div>
                               
                               {/* Status icon - top right corner */}
-                              <div className="absolute top-1 right-1">
+                              <div className="absolute top-0.5 right-0.5">
                                 {statusIcon}
                               </div>
                               
                               {/* Next booking time - bottom if needed */}
                               {!table.isOccupied && nextBooking && minutesUntilNext! <= 60 && (
-                                <div className="absolute bottom-1 left-1 text-xs text-yellow-300">
+                                <div className="absolute bottom-0.5 left-0.5 text-xs text-yellow-300">
                                   {minutesUntilNext! > 0 ? `${minutesUntilNext}m` : 'now'}
                                 </div>
                               )}
@@ -1280,7 +1446,7 @@ export function CheckInQueue({
 
               {/* Seat button */}
               <Button
-                className="w-full h-11 font-medium bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-500"
+                className="w-full h-9 font-medium bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-500"
                 onClick={handleWalkIn}
                 disabled={selectedTableIds.length === 0}
               >

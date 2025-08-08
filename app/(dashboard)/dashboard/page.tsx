@@ -521,6 +521,30 @@ export default function DashboardPage() {
 
 
   // Create manual booking
+  // Table position update mutation
+  const updateTablePositionMutation = useMutation({
+    mutationFn: async ({ tableId, position }: { tableId: string; position: { x: number; y: number } }) => {
+      const { error } = await supabase
+        .from('tables')
+        .update({
+          x_position: position.x,
+          y_position: position.y,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', tableId)
+
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tables', restaurantId] })
+      toast.success('Table position updated')
+    },
+    onError: (error) => {
+      console.error('Table position update error:', error)
+      toast.error('Failed to update table position')
+    }
+  })
+
   const createManualBookingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -744,30 +768,30 @@ export default function DashboardPage() {
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
-      {/* Compact Header - Optimized for tablets */}
-      <header className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-lg px-2 py-1.5 flex-shrink-0 border-b border-slate-700/50">
-        <div className="flex items-center justify-between gap-2">
+      {/* Ultra-Compact Header - Optimized for 8-inch tablets */}
+      <header className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-lg px-1.5 py-0.5 flex-shrink-0 border-b border-slate-700/50">
+        <div className="flex items-center justify-between gap-1.5">
           {/* Left Side - Brand & Live Stats */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
         
             
             {/* Enhanced Live Stats - Including Floor Plan Stats */}
-            <div className="hidden md:flex items-center gap-2 bg-slate-800/60 backdrop-blur-xl rounded-lg px-2 py-1 border border-slate-600/40">
-              <div className="flex items-center gap-1">
-                <div className="h-1.5 w-1.5 bg-emerald-400 rounded-full animate-pulse" />
+            <div className="hidden sm:flex items-center gap-1 bg-slate-800/60 backdrop-blur-xl rounded-md px-1 py-0.5 border border-slate-600/40">
+              <div className="flex items-center gap-0.5">
+                <div className="h-1 w-1 bg-emerald-400 rounded-full animate-pulse" />
                 <span className="text-xs font-bold text-emerald-400">{stats.currentGuests}</span>
                 <span className="text-xs text-slate-400">dining</span>
               </div>
               <div className="w-px h-3 bg-slate-600" />
-              <div className="flex items-center gap-1">
-                <Table2 className="h-3 w-3 text-blue-400" />
+              <div className="flex items-center gap-0.5">
+                <Table2 className="h-2.5 w-2.5 text-blue-400" />
                 <span className="text-xs font-bold text-blue-400">{stats.availableTables}</span>
                 <span className="text-xs text-slate-400">free</span>
               </div>
               <div className="w-px h-3 bg-slate-600" />
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5">
                 <div className={cn(
-                  "h-1.5 w-1.5 rounded-full",
+                  "h-1 w-1 rounded-full",
                   stats.occupancyRate > 80 ? "bg-red-400" : stats.occupancyRate > 60 ? "bg-yellow-400" : "bg-green-400"
                 )} />
                 <span className={cn(
@@ -781,22 +805,22 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Center - Compact Search */}
-          <div className="flex-1 max-w-sm mx-2">
+          {/* Center - Ultra-Compact Search */}
+          <div className="flex-1 max-w-xs mx-1">
             <div className="relative">
-              <div className="relative bg-slate-800/90 backdrop-blur-xl rounded-lg border border-slate-600/50 overflow-hidden">
-                <div className="absolute left-2 top-1/2 transform -translate-y-1/2">
-                  <Search className="h-3 w-3 text-slate-400" />
+              <div className="relative bg-slate-800/90 backdrop-blur-xl rounded-md border border-slate-600/50 overflow-hidden">
+                <div className="absolute left-1 top-1/2 transform -translate-y-1/2">
+                  <Search className="h-2.5 w-2.5 text-slate-400" />
                 </div>
                 <Input
-                  placeholder="Search guests, tables..."
+                  placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-7 pl-8 pr-10 bg-transparent border-0 text-white placeholder:text-slate-400 focus:ring-0 focus:outline-none text-xs"
+                  className="w-full h-5 pl-5 pr-6 bg-transparent border-0 text-white placeholder:text-slate-400 focus:ring-0 focus:outline-none text-xs"
                 />
                 {searchQuery && (
-                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                    <div className="flex items-center gap-1 bg-blue-600/90 text-white px-1.5 py-0.5 rounded text-xs font-semibold">
+                  <div className="absolute right-1 top-1/2 transform -translate-y-1/2">
+                    <div className="flex items-center gap-0.5 bg-blue-600/90 text-white px-1 py-0 rounded text-xs font-semibold">
                       {filteredBookings.length}
                     </div>
                   </div>
@@ -805,29 +829,29 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Right Side - Action Buttons */}
-          <div className="flex items-center gap-1">
+          {/* Right Side - Compact Action Buttons */}
+          <div className="flex items-center gap-0.5">
             <Button
               onClick={() => setShowTimeline(!showTimeline)}
               size="sm"
               className={cn(
-                "px-2 py-1 h-7 text-xs font-semibold rounded-lg transition-all duration-300",
+                "px-1 py-0.5 h-5 text-xs font-medium rounded-md transition-all duration-300",
                 showTimeline 
                   ? "bg-blue-600 hover:bg-blue-700 text-white shadow-lg" 
                   : "bg-slate-700/80 hover:bg-slate-600 text-slate-200 border border-slate-600/50"
               )}
             >
-              <BarChart3 className="h-3 w-3 mr-1" />
-              Timeline
+              <BarChart3 className="h-2.5 w-2.5 mr-0.5" />
+              <span className="hidden sm:inline">Timeline</span>
             </Button>
             
             <Button
               onClick={() => setShowManualBooking(true)}
               size="sm"
-              className="px-2 py-1 h-7 text-xs font-semibold bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white shadow-lg rounded-lg transition-all duration-300 hover:scale-105"
+              className="px-1 py-0.5 h-5 text-xs font-medium bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white shadow-lg rounded-md transition-all duration-300"
             >
-              <UserPlus className="h-3 w-3 mr-1" />
-              New Guest
+              <UserPlus className="h-2.5 w-2.5 mr-0.5" />
+              <span className="hidden sm:inline">New</span>
             </Button>
           </div>
         </div>
@@ -841,10 +865,10 @@ export default function DashboardPage() {
         currentTime={currentTime}
       />
 
-      {/* Main Content Area - Floor Plan + Check-in Queue Side by Side */}
+      {/* Main Content Area - Side by side layout */}
       <main className="flex-1 overflow-hidden flex">
-        {/* Floor Plan - Takes up most of the space */}
-        <div className="flex-1">
+        {/* Floor Plan - Takes up remaining space */}
+        <div className="flex-1 min-w-0">
           <UnifiedFloorPlan
             tables={tables}
             bookings={filteredBookings}
@@ -863,12 +887,15 @@ export default function DashboardPage() {
             }
             onTableSwitch={handleTableSwitch}
             onCheckIn={handleCheckIn}
+            onTableUpdate={(tableId, position) => 
+              updateTablePositionMutation.mutate({ tableId, position })
+            }
             searchQuery={searchQuery}
           />
         </div>
 
-        {/* Check-in Queue - Wider sidebar for better tablet layout */}
-        <div className="w-[35rem] border-l border-gray-700 bg-gray-900 flex flex-col">
+        {/* Check-in Queue - Better width for tablets */}
+        <div className="w-[220px] sm:w-[240px] md:w-[260px] lg:w-[280px] border-l border-gray-700 bg-gray-900 flex flex-col flex-shrink-0">
           {/* Pending Requests Section */}
           {stats.pendingCount > 0 && (
             <div className="border-b border-gray-700">
@@ -903,6 +930,9 @@ export default function DashboardPage() {
               onCheckIn={handleCheckIn}
               onQuickSeat={handleQuickSeat}
               onTableSwitch={handleTableSwitch}
+              onStatusUpdate={(bookingId, status) =>
+                updateBookingMutation.mutate({ bookingId, updates: { status } })
+              }
               customersData={customersData}
               onSelectBooking={setSelectedBooking}
               restaurantId={restaurantId}
