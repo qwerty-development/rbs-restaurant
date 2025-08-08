@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch"
 import { Edit, Trash2, Leaf, Wheat, Flame, Star } from "lucide-react"
 import type { MenuItem } from "@/types"
 import { cn } from "@/lib/utils"
+import Image from "next/image"
 
 interface MenuItemCardProps {
   item: MenuItem
@@ -27,10 +28,12 @@ export function MenuItemCard({ item, onEdit, onToggleAvailability }: MenuItemCar
         {/* Image */}
         {item.image_url && (
           <div className="aspect-video relative rounded-lg overflow-hidden mb-3">
-            <img
+            <Image
               src={item.image_url}
               alt={item.name}
-              className="object-cover w-full h-full"
+              fill
+              sizes="(max-width: 768px) 100vw, 50vw"
+              className="object-cover"
             />
             {item.is_featured && (
               <Badge className="absolute top-2 right-2 gap-1">

@@ -525,6 +525,37 @@ export function CheckInQueue({
     }
   }
 
+  const handleSeatGuest = async (booking: any) => {
+    if (!booking.tables || booking.tables.length === 0) {
+      toast.error("No tables assigned. Please assign tables first.")
+      handleOpenEnhancedTableSwitch(booking)
+      return
+    }
+    
+    // Check if tables are occupied by other bookings (excluding this booking)
+    const tablesAvailable = booking.tables.every((table: any) => {
+      // Find any booking that is physically occupying this table (excluding current booking)
+      const occupyingBooking = bookings.find(b => {
+        if (b.id === booking.id) return false // Exclude the current booking
+        const physicallyPresent = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(b.status)
+        return physicallyPresent && b.tables?.some((t: any) => t.id === table.id)
+      })
+      
+      return !occupyingBooking // Table is available if no one else is physically there
+    })
+    
+    if (!tablesAvailable) {
+      toast.error("Tables are no longer available. Please reassign tables first.")
+      handleOpenEnhancedTableSwitch(booking)
+      return
+    }
+    
+    // Guest is already checked in (status: 'arrived'), just seat them
+    if (onCheckIn) {
+      onCheckIn(booking.id, booking.tables.map((t: any) => t.id))
+    }
+  }
+
   const handleOpenEnhancedTableSwitch = (booking: any, suggestedTables?: any[]) => {
     // If suggested tables provided, calculate options for those specific tables
     // Otherwise, find all possible options across all available tables
@@ -860,9 +891,37 @@ export function CheckInQueue({
             )}
           </div>
 
-          {/* Simplified action button */}
-          <div className="ml-4">
-            {canCheckInDirectly ? (
+          {/* Action buttons */}
+          <div className="ml-4 flex gap-2">
+            {booking.status === 'arrived' ? (
+              // Guest is checked in and waiting to be seated
+              <>
+                <Button
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleSeatGuest(booking)
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  Seat
+                </Button>
+                {hasTable && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleOpenEnhancedTableSwitch(booking)
+                    }}
+                    className="border-blue-500 text-blue-400 hover:bg-blue-900/30"
+                  >
+                    Switch
+                  </Button>
+                )}
+              </>
+            ) : canCheckInDirectly ? (
+              // Guest can be checked in directly
               <Button
                 size="sm"
                 onClick={(e) => {
@@ -874,6 +933,7 @@ export function CheckInQueue({
                 Check-in
               </Button>
             ) : hasTable ? (
+              // Guest has table but it's occupied - need to switch
               <Button
                 size="sm"
                 variant="outline"
@@ -886,6 +946,7 @@ export function CheckInQueue({
                 Switch
               </Button>
             ) : (
+              // Guest needs table assignment
               <Button
                 size="sm"
                 variant="outline"

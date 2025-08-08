@@ -44,7 +44,6 @@ import {
   UserCheck
 } from "lucide-react"
 import { toast } from "react-hot-toast"
-import { ScrollArea } from "@/components/ui/scroll-area"
 
 // Updated form schema with proper null handling
 const formSchema = z.object({
@@ -555,12 +554,15 @@ export function ManualBookingForm({
   }
 
   return (
-    <ScrollArea className="h-[80vh] pr-4">
-      <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+    <div className="manual-booking-form relative max-w-full overflow-x-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-800/50 min-h-full">
+      <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6 max-w-full overflow-x-hidden pb-24">
         {/* Customer Search */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Customer Selection (Optional)</h3>
-          <p className="text-sm text-muted-foreground">
+        <div className="space-y-4 rounded-xl border border-slate-200/60 dark:border-slate-700/60 p-6 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm dark:shadow-slate-900/20">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <Search className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+            Customer Selection (Optional)
+          </h3>
+          <p className="text-sm text-slate-600 dark:text-slate-300">
             Search for an existing customer or leave blank to create a new booking
           </p>
           
@@ -594,16 +596,21 @@ export function ManualBookingForm({
             
             {/* Customer dropdown */}
             {showCustomerDropdown && customerSearch.length >= 2 && (
-              <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg max-h-60 overflow-y-auto">
+              <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl dark:shadow-slate-900/40 max-h-60 overflow-y-auto backdrop-blur-sm">
                 {customersLoading && (
-                  <div className="p-3">
-                    <p className="text-sm text-muted-foreground">Searching customers...</p>
+                  <div className="p-4">
+                    <p className="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Searching customers...
+                    </p>
                   </div>
                 )}
                 
                 {customersError && (
-                  <div className="p-3">
-                    <p className="text-sm text-red-600">Error searching customers: {customersError.message}</p>
+                  <div className="p-4">
+                    <p className="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
+                      Error searching customers: {customersError.message}
+                    </p>
                   </div>
                 )}
                 
@@ -612,35 +619,35 @@ export function ManualBookingForm({
                     {customers.map((customer) => (
                       <div
                         key={customer.id}
-                        className="flex items-center gap-3 p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"
+                        className="flex items-center gap-3 p-4 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer border-b border-slate-100 dark:border-slate-700 last:border-b-0 transition-colors duration-150"
                         onClick={() => handleCustomerSelect(customer)}
                       >
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <p className="font-medium">
+                            <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">
                               {customer.profile?.full_name || customer.guest_name || 'Guest'}
                             </p>
                             {customer.vip_status && (
-                              <Badge variant="secondary" className="text-xs">
-                                <Star className="h-3 w-3 mr-1" />
+                              <Badge variant="secondary" className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700">
+                                <Star className="h-3 w-3 mr-1 fill-current" />
                                 VIP
                               </Badge>
                             )}
                             {customer.user_id && (
-                              <Badge variant="outline" className="text-xs">
+                              <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700">
                                 <UserCheck className="h-3 w-3 mr-1" />
                                 Registered
                               </Badge>
                             )}
                           </div>
-                          <div className="text-sm text-muted-foreground">
+                          <div className="text-sm text-slate-600 dark:text-slate-300 truncate">
                             {customer.guest_email && <span>{customer.guest_email}</span>}
                             {customer.guest_email && (customer.profile?.phone_number || customer.guest_phone) && <span> • </span>}
                             {(customer.profile?.phone_number || customer.guest_phone) && (
                               <span>{customer.profile?.phone_number || customer.guest_phone}</span>
                             )}
                           </div>
-                          <div className="text-xs text-muted-foreground">
+                          <div className="text-xs text-slate-500 dark:text-slate-400 truncate">
                             {customer.total_bookings} bookings
                             {customer.last_visit && (
                               <span> • Last visit: {format(new Date(customer.last_visit), 'MMM d, yyyy')}</span>
@@ -653,8 +660,8 @@ export function ManualBookingForm({
                 )}
                 
                 {!customersLoading && !customersError && customers && customers.length === 0 && (
-                  <div className="p-3">
-                    <p className="text-sm text-muted-foreground">No customers found matching "{customerSearch}"</p>
+                  <div className="p-4">
+                    <p className="text-sm text-slate-600 dark:text-slate-300">No customers found matching "{customerSearch}"</p>
                   </div>
                 )}
               </div>
@@ -663,15 +670,15 @@ export function ManualBookingForm({
           
           {/* Selected customer display */}
           {selectedCustomer && (
-            <div className="p-3 bg-muted/50 rounded-lg border">
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <UserCheck className="h-4 w-4 text-primary" />
-                  <span className="font-medium">Selected Customer:</span>
-                  <span>{selectedCustomer.profile?.full_name || selectedCustomer.guest_name}</span>
+                  <UserCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span className="font-semibold text-slate-800 dark:text-slate-100">Selected Customer:</span>
+                  <span className="text-slate-700 dark:text-slate-200">{selectedCustomer.profile?.full_name || selectedCustomer.guest_name}</span>
                   {selectedCustomer.vip_status && (
-                    <Badge variant="secondary" className="text-xs">
-                      <Star className="h-3 w-3 mr-1" />
+                    <Badge variant="secondary" className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700">
+                      <Star className="h-3 w-3 mr-1 fill-current" />
                       VIP
                     </Badge>
                   )}
@@ -692,8 +699,9 @@ export function ManualBookingForm({
         </div>
 
         {/* Guest Information */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold">
+        <div className="space-y-4 rounded-xl border border-slate-200/60 dark:border-slate-700/60 p-6 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm dark:shadow-slate-900/20">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <UserCheck className="h-5 w-5 text-slate-600 dark:text-slate-400" />
             {selectedCustomer ? 'Guest Information (Auto-filled)' : 'Guest Information (Optional)'}
           </h3>
         
@@ -714,7 +722,7 @@ export function ManualBookingForm({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="guest_phone">Phone Number (Optional)</Label>
               <Input
@@ -754,10 +762,13 @@ export function ManualBookingForm({
         </div>
 
         {/* Booking Details */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Booking Details</h3>
+        <div className="space-y-4 rounded-xl border border-slate-200/60 dark:border-slate-700/60 p-6 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm dark:shadow-slate-900/20">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <CalendarIcon className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+            Booking Details
+          </h3>
           
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label>Date *</Label>
               <Popover>
@@ -774,7 +785,7 @@ export function ManualBookingForm({
                     {bookingDate ? format(bookingDate, "PPP") : <span>Pick a date</span>}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
+                <PopoverContent className="w-auto p-0 max-w-[95vw] sm:max-w-none">
                   <Calendar
                     mode="single"
                     selected={bookingDate}
@@ -800,7 +811,7 @@ export function ManualBookingForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <Label htmlFor="party_size">Party Size *</Label>
               <div className="relative">
@@ -858,12 +869,15 @@ export function ManualBookingForm({
         </div>
 
         {/* Table Assignment */}
-        <div className="space-y-4">
+        <div className="space-y-4 rounded-xl border border-slate-200/60 dark:border-slate-700/60 p-6 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm dark:shadow-slate-900/20">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold">Table Assignment</h3>
-              <p className="text-sm text-muted-foreground">
-                Select tables for {partySize} guests 
+              <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <Table2 className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+                Table Assignment
+              </h3>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Select tables for {partySize} guests
                 (Selected capacity: {selectedTablesCapacity})
               </p>
             </div>
@@ -873,6 +887,7 @@ export function ManualBookingForm({
               variant="outline"
               onClick={suggestTables}
               disabled={checkingAvailability || isLoading}
+              className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 shadow-sm"
             >
               <RefreshCw className={`h-4 w-4 mr-1 ${checkingAvailability ? 'animate-spin' : ''}`} />
               Auto-suggest
@@ -971,7 +986,7 @@ export function ManualBookingForm({
             </Alert>
           )}
           
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {allTables?.map((table) => {
               const isSelected = selectedTables.includes(table.id)
               const isAvailable = getTableAvailability(table.id)
@@ -1020,11 +1035,11 @@ export function ManualBookingForm({
                 <label
                   key={table.id}
                   className={cn(
-                    "flex items-center p-3 border rounded-lg cursor-pointer transition-colors",
-                    isSelected && "bg-primary/10 border-primary",
-                    !isSelected && isAvailable && "hover:bg-muted",
-                    !isAvailable && !isSelected && "opacity-50 cursor-not-allowed",
-                    isOccupiedDuringBookingTime && "bg-red-50 border-red-200"
+                    "flex items-center p-4 border rounded-xl cursor-pointer transition-all duration-200 w-full min-w-0 hover:shadow-md",
+                    isSelected && "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 shadow-sm ring-1 ring-blue-200 dark:ring-blue-800",
+                    !isSelected && isAvailable && "hover:bg-slate-50 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700",
+                    !isAvailable && !isSelected && "opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-800",
+                    isOccupiedDuringBookingTime && "bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700 ring-1 ring-red-200 dark:ring-red-800"
                   )}
                 >
                   <Checkbox
@@ -1037,36 +1052,44 @@ export function ManualBookingForm({
                       handleTableToggle(table.id)
                     }}
                     disabled={isLoading || (!isAvailable && !isSelected)}
-                    className="mr-3"
+                    className="mr-3 flex-shrink-0"
                   />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <Table2 className="h-4 w-4" />
-                      <span className="font-medium">{table.table_number}</span>
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Table2 className="h-4 w-4 text-slate-600 dark:text-slate-400 flex-shrink-0" />
+                      <span className="font-semibold text-slate-800 dark:text-slate-100">T{table.table_number}</span>
                       {isOccupiedDuringBookingTime && (
-                        <Badge variant="destructive" className="text-xs">Booked</Badge>
+                        <Badge variant="destructive" className="text-xs px-2 py-0.5 flex-shrink-0 bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300 border-red-300 dark:border-red-700">Booked</Badge>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-slate-600 dark:text-slate-300 mb-2 truncate">
+                      <Users className="h-3 w-3 inline mr-1" />
                       {table.capacity} seats • {table.table_type}
                     </p>
                     {table.features && table.features.length > 0 && (
-                      <div className="flex gap-1 mt-1">
+                      <div className="flex flex-wrap gap-1 mb-2 max-w-full">
                         {table.features.slice(0, 2).map((feature: string, idx: number) => (
-                          <Badge key={idx} variant="outline" className="text-xs">
+                          <Badge key={idx} variant="outline" className="text-xs px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 truncate max-w-[80px]">
                             {feature}
                           </Badge>
                         ))}
+                        {table.features.length > 2 && (
+                          <Badge variant="outline" className="text-xs px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600">
+                            +{table.features.length - 2}
+                          </Badge>
+                        )}
                       </div>
                     )}
                     {isOccupiedDuringBookingTime && conflictingBooking && (
-                      <p className="text-xs text-red-600 mt-1">
-                        Booked by {conflictingBooking.user?.full_name || conflictingBooking.guest_name} 
-                        at {format(new Date(conflictingBooking.booking_time), "h:mm a")}
+                      <p className="text-xs text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded border border-red-200 dark:border-red-800 truncate">
+                        <span className="font-medium">Booked by:</span> {(conflictingBooking.user?.full_name || conflictingBooking.guest_name || 'Guest').substring(0, 20)}
+                        {(conflictingBooking.user?.full_name || conflictingBooking.guest_name || '').length > 20 && '...'}
+                        <br />
+                        <span className="font-medium">Time:</span> {format(new Date(conflictingBooking.booking_time), "h:mm a")}
                       </p>
                     )}
                     {availabilityInfo && !availabilityInfo.isAvailable && !isOccupiedDuringBookingTime && (
-                      <p className="text-xs text-red-600 mt-1">
+                      <p className="text-xs text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded border border-red-200 dark:border-red-800">
                         Not available at this time
                       </p>
                     )}
@@ -1091,8 +1114,11 @@ export function ManualBookingForm({
         </div>
 
         {/* Additional Information */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Additional Information</h3>
+        <div className="space-y-4 rounded-xl border border-slate-200/60 dark:border-slate-700/60 p-6 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm dark:shadow-slate-900/20">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+            Additional Information
+          </h3>
           
           <div>
             <Label htmlFor="occasion">Occasion</Label>
@@ -1116,19 +1142,20 @@ export function ManualBookingForm({
         </div>
 
         {/* Actions */}
-        <div className="flex justify-end gap-2 pt-4">
+        <div className="sticky bottom-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-t border-slate-200/60 dark:border-slate-700/60 pt-4 pb-4 flex justify-end gap-3 shadow-lg dark:shadow-slate-900/40">
           <Button
             type="button"
             variant="outline"
             onClick={onCancel}
             disabled={isLoading}
+            className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 shadow-sm px-6"
           >
             Cancel
           </Button>
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             disabled={
-              isLoading || 
+              isLoading ||
               selectedTables.length === 0 ||
               (availability && !availability.available) ||
               (selectedTablesCapacity > 0 && selectedTablesCapacity < partySize) ||
@@ -1147,27 +1174,28 @@ export function ManualBookingForm({
                   const existingBookingEndTime = addMinutes(existingBookingTime, booking.turn_time_minutes || 120)
 
                   const conflictingStatuses = [
-                    'confirmed', 'arrived', 'seated', 'ordered', 'appetizers', 
+                    'confirmed', 'arrived', 'seated', 'ordered', 'appetizers',
                     'main_course', 'dessert', 'payment'
                   ]
-                  
+
                   if (!conflictingStatuses.includes(booking.status)) {
                     return false
                   }
 
                   // Check for time overlap
                   return (
-                    bookingDateTime < existingBookingEndTime && 
+                    bookingDateTime < existingBookingEndTime &&
                     bookingEndTime > existingBookingTime
                   )
                 })
               }))
             }
+            className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white shadow-md px-8 font-semibold"
           >
             {isLoading ? "Creating..." : "Create Booking"}
           </Button>
         </div>
       </form>
-    </ScrollArea>
+    </div>
   )
 }

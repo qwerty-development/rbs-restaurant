@@ -83,12 +83,7 @@ export default function CustomersPage() {
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [showAddCustomerDialog, setShowAddCustomerDialog] = useState(false)
 
-  // Load initial data
-  useEffect(() => {
-    loadInitialData()
-  }, [])
-
-  const loadInitialData = async () => {
+  const loadInitialData = useCallback(async () => {
     try {
       setLoading(true)
 
@@ -141,7 +136,12 @@ export default function CustomersPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [router])
+
+  // Load initial data
+  useEffect(() => {
+    loadInitialData()
+  }, [loadInitialData])
 
   const loadCustomers = async (restaurantId: string) => {
     try {

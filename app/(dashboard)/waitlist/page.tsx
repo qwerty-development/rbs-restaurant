@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -217,14 +217,7 @@ export default function WaitlistPage() {
     }
   }, [restaurantId])
 
-  // Cleanup timers on unmount
-  useEffect(() => {
-    return () => {
-      Object.values(undoTimers).forEach(timer => clearTimeout(timer))
-    }
-  }, [])
-
-  const loadWaitlistEntries = async (restaurantId: string) => {
+  const loadWaitlistEntries = useCallback(async (restaurantId: string) => {
     try {
       setLoading(true)
       const { data, error } = await supabase
@@ -273,7 +266,14 @@ export default function WaitlistPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [undoTimers])
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(undoTimers).forEach(timer => clearTimeout(timer))
+    }
+  }, [undoTimers])
 
   const updateWaitlistStatus = async (entryId: string, newStatus: string) => {
     try {

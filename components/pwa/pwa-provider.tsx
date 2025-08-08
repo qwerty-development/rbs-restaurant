@@ -5,8 +5,18 @@ import { toast } from 'sonner'
 
 export function PWAProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    // Register service worker
+    // Temporarily disable service worker to debug CSP issues
     if ('serviceWorker' in navigator) {
+      // Unregister any existing service workers
+      navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for(let registration of registrations) {
+          registration.unregister()
+          console.log('Unregistered service worker:', registration)
+        }
+      })
+      
+      // Don't register service worker for now
+      /*
       navigator.serviceWorker
         .register('/sw.js')
         .then((registration) => {
@@ -36,13 +46,16 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
         .catch((registrationError) => {
           console.log('SW registration failed: ', registrationError)
         })
+        */
 
       // Handle service worker messages
+      /*
       navigator.serviceWorker.addEventListener('message', (event) => {
         if (event.data && event.data.type === 'CACHE_UPDATED') {
           toast.success('App updated successfully!')
         }
       })
+      */
     }
 
     // Handle app installation

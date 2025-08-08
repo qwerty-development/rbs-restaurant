@@ -241,11 +241,6 @@ export default function StaffPage() {
     }
   }, [watchedRole, form])
 
-  // Load initial data
-  useEffect(() => {
-    loadInitialData()
-  }, [])
-
   const loadInitialData = async () => {
     try {
       setLoading(true)
@@ -310,6 +305,11 @@ export default function StaffPage() {
       setLoading(false)
     }
   }
+
+  // Load initial data
+  useEffect(() => {
+    loadInitialData()
+  }, [])
 
   const loadStaffMembers = async (restaurantId: string) => {
     try {

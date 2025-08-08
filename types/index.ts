@@ -74,7 +74,7 @@ export interface Restaurant {
     restaurant_id: string
     booking_time: string
     party_size: number
-    status: "pending" | "confirmed" | "cancelled_by_user" | "declined_by_restaurant" | "completed" | "no_show"
+    status: "pending" | "confirmed" | "cancelled_by_user" | "declined_by_restaurant" | "auto_declined" | "completed" | "no_show" | "arrived" | "seated" | "ordered" | "appetizers" | "main_course" | "dessert" | "payment" | "cancelled_by_restaurant"
     special_requests: string | null
     occasion: string | null
     dietary_notes: string[] | null
@@ -95,6 +95,15 @@ export interface Restaurant {
     attendees: number
     turn_time_minutes: number
     applied_loyalty_rule_id: string | null
+    actual_end_time: string | null
+    seated_at: string | null
+    meal_progress: Record<string, any> | null
+    request_expires_at: string | null
+    auto_declined: boolean
+    acceptance_attempted_at: string | null
+    acceptance_failed_reason: string | null
+    suggested_alternative_time: string | null
+    suggested_alternative_tables: string[] | null
     
     // Relations
     user?: {
@@ -365,4 +374,145 @@ export interface Restaurant {
     // Relations
     user?: Profile
     restaurant?: Restaurant
+  }
+
+  // Missing interfaces from database schema
+  export interface BookingStatusHistory {
+    id: string
+    booking_id: string
+    old_status: string | null
+    new_status: string
+    changed_by: string | null
+    changed_at: string
+    reason: string | null
+    metadata: Record<string, any>
+    // Relations
+    changed_by_profile?: Profile
+  }
+
+  export interface CustomerNote {
+    id: string
+    customer_id: string
+    note: string
+    category: 'dietary' | 'preference' | 'behavior' | 'special_occasion' | 'general' | null
+    is_important: boolean
+    created_by: string
+    created_at: string
+    updated_at: string
+    // Relations
+    created_by_profile?: Profile
+  }
+
+  export interface CustomerPreference {
+    id: string
+    customer_id: string
+    preference_type: 'seating' | 'ambiance' | 'service' | 'menu' | 'timing'
+    preference_value: Record<string, any>
+    created_at: string
+    updated_at: string
+  }
+
+  export interface CustomerTagAssignment {
+    id: string
+    customer_id: string
+    tag_id: string
+    assigned_by: string
+    assigned_at: string
+    // Relations
+    tag?: CustomerTag
+    assigned_by_profile?: Profile
+  }
+
+  export interface CustomerTag {
+    id: string
+    restaurant_id: string
+    name: string
+    color: string
+    description: string | null
+    created_at: string
+  }
+
+  export interface RestaurantCustomer {
+    id: string
+    restaurant_id: string
+    user_id: string | null
+    guest_email: string | null
+    guest_phone: string | null
+    guest_name: string | null
+    total_bookings: number
+    total_spent: number
+    average_party_size: number
+    last_visit: string | null
+    first_visit: string | null
+    no_show_count: number
+    cancelled_count: number
+    vip_status: boolean
+    blacklisted: boolean
+    blacklist_reason: string | null
+    preferred_table_types: string[] | null
+    preferred_time_slots: string[] | null
+    created_at: string
+    updated_at: string
+    // Relations
+    profile?: Profile
+    tags?: CustomerTagAssignment[]
+    notes?: CustomerNote[]
+    preferences?: CustomerPreference[]
+  }
+
+  export interface RestaurantLoyaltyBalance {
+    id: string
+    restaurant_id: string
+    total_purchased: number
+    current_balance: number
+    last_purchase_at: string | null
+    created_at: string
+    updated_at: string
+  }
+
+  export interface RestaurantLoyaltyTransaction {
+    id: string
+    restaurant_id: string
+    transaction_type: 'purchase' | 'deduction' | 'refund' | 'adjustment'
+    points: number
+    balance_before: number
+    balance_after: number
+    description: string | null
+    booking_id: string | null
+    user_id: string | null
+    created_at: string
+    metadata: Record<string, any>
+    // Relations
+    booking?: Booking
+    user?: Profile
+  }
+
+  export interface RestaurantTurnTime {
+    id: string
+    restaurant_id: string
+    party_size: number
+    turn_time_minutes: number
+    day_of_week: number | null
+    created_at: string
+  }
+
+  export interface TableAvailability {
+    id: string
+    table_id: string
+    date: string
+    time_slot: string
+    is_available: boolean
+    booking_id: string | null
+    // Relations
+    table?: RestaurantTable
+    booking?: Booking
+  }
+
+  export interface BookingTable {
+    id: string
+    booking_id: string
+    table_id: string
+    created_at: string
+    // Relations
+    table?: RestaurantTable
   }

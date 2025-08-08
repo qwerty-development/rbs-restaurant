@@ -10,7 +10,10 @@
       "Bash(npm install:*)",
       "Bash(npx web-push:*)",
       "Bash(cp:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(find:*)",
+      "Bash(rm:*)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": []
   }

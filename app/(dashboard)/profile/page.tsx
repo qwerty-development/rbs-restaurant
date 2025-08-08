@@ -89,10 +89,6 @@ export default function ProfilePage() {
     },
   })
 
-  useEffect(() => {
-    fetchUserData()
-  }, [])
-
   const fetchUserData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -136,6 +132,10 @@ export default function ProfilePage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchUserData()
+  }, [])
 
   const handleProfileUpdate = async (data: ProfileFormData) => {
     try {

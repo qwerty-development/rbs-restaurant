@@ -131,8 +131,6 @@ export default function DashboardPage() {
 
     if (totalCapacity < partySize) {
       errors.push(`Selected tables can seat ${totalCapacity} but party size is ${partySize}`)
-    } else if (totalCapacity > partySize * 1.5) {
-      warnings.push(`Selected tables can seat ${totalCapacity} which may be too large for party of ${partySize}`)
     }
 
     return { valid: errors.length === 0, errors, warnings }
@@ -520,6 +518,7 @@ export default function DashboardPage() {
       toast.error("Failed to switch tables")
     }
   }
+
 
   // Create manual booking
   const createManualBookingMutation = useMutation({

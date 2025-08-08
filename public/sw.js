@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rbs-restaurant-v1'
+const CACHE_NAME = 'rbs-restaurant-v3'
 const urlsToCache = [
   '/',
   '/dashboard',
@@ -27,16 +27,38 @@ self.addEventListener('install', function (event) {
 
 // Fetch event - serve from cache when offline
 self.addEventListener('fetch', function (event) {
-  event.respondWith(
-    caches.match(event.request)
-      .then(function (response) {
-        // Return cached version or fetch from network
-        if (response) {
-          return response
-        }
-        return fetch(event.request)
-      })
-  )
+  const requestUrl = new URL(event.request.url)
+  
+  // Skip service worker entirely for:
+  // 1. External APIs (Supabase, etc.)
+  // 2. API routes that need authentication
+  // 3. Non-GET requests
+  if (requestUrl.hostname.includes('supabase.co') || 
+      requestUrl.pathname.startsWith('/api/') ||
+      event.request.method !== 'GET' ||
+      requestUrl.protocol === 'chrome-extension:') {
+    // Let the request go directly to the network, don't intercept
+    return
+  }
+
+  // Only handle static assets and pages for caching
+  if (requestUrl.origin === self.location.origin) {
+    event.respondWith(
+      caches.match(event.request)
+        .then(function (response) {
+          // Return cached version or fetch from network
+          if (response) {
+            return response
+          }
+          return fetch(event.request).catch(() => {
+            // If offline and no cache, return a custom offline page
+            if (event.request.destination === 'document') {
+              return caches.match('/')
+            }
+          })
+        })
+    )
+  }
 })
 
 // Activate event - clean up old caches
@@ -94,8 +116,8 @@ self.addEventListener('notificationclick', function (event) {
   
   event.notification.close()
   
-  const baseUrl = 'https://rbs-restaurant.vercel.app'
-  
+  const baseUrl = self.location.origin
+
   if (event.action === 'view') {
     const url = event.notification.data.url || '/dashboard'
     const fullUrl = url.startsWith('http') ? url : baseUrl + url

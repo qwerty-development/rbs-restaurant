@@ -110,7 +110,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
   const [loadingTransition, setLoadingTransition] = useState<string | null>(null)
   const floorPlanRef = useRef<HTMLDivElement>(null)
   
-  const tableStatusService = new TableStatusService()
+  const tableStatusService = useMemo(() => new TableStatusService(), [])
 
   // Load table statuses
   useEffect(() => {
@@ -122,7 +122,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
     
     const interval = setInterval(loadStatuses, 30000)
     return () => clearInterval(interval)
-  }, [restaurantId, currentTime])
+  }, [restaurantId, currentTime, tableStatusService])
 
   // Click outside to deselect
   useEffect(() => {
@@ -237,7 +237,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
     const query = searchQuery.toLowerCase()
     
     if (booking) {
-      const guestName = (booking.user?.full_name || booking.guest_name || '').toLowerCase()
+      const guestName = (booking.guest_name || booking.user?.full_name || '').toLowerCase()
       const phone = (booking.user?.phone_number || booking.guest_phone || '').toLowerCase()
       return guestName.includes(query) || phone.includes(query)
     }
@@ -260,7 +260,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
             <div
               role="button"
               tabIndex={0}
-              aria-label={`Table ${table.table_number}, capacity ${table.min_capacity}-${table.max_capacity}${current ? `, occupied by ${current.user?.full_name || current.guest_name || 'Guest'}, status: ${current.status.replace(/_/g, ' ')}` : ', available'}`}
+              aria-label={`Table ${table.table_number}, capacity ${table.min_capacity}-${table.max_capacity}${current ? `, occupied by ${current.guest_name || current.user?.full_name || 'Guest'}, status: ${current.status.replace(/_/g, ' ')}` : ', available'}`}
               className={cn(
                 "relative rounded-2xl border-3 cursor-pointer transition-all duration-300 ease-out focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-offset-2",
                 TABLE_TYPE_COLORS[table.table_type] || "bg-gradient-to-br from-white to-gray-50 border-gray-300 shadow-lg",
@@ -382,7 +382,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                   {/* Guest info - Simplified with icons */}
                   <div>
                     <p className="font-bold text-base truncate text-foreground mb-1">
-                      {current.user?.full_name || current.guest_name || 'Guest'}
+                      {current.guest_name || current.user?.full_name || 'Guest'}
                     </p>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -421,7 +421,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                       {(current.user?.phone_number || current.guest_phone) && (
                         <Button
                           size="sm"
-                          aria-label={`Call ${current.user?.full_name || current.guest_name || 'Guest'} at ${current.user?.phone_number || current.guest_phone}`}
+                          aria-label={`Call ${current.guest_name || current.user?.full_name || 'Guest'} at ${current.user?.phone_number || current.guest_phone}`}
                           className="h-9 w-9 p-0 bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-full shadow-2xl border-3 border-green-300 hover:scale-110 transition-all duration-200 animate-pulse focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-offset-2"
                           onClick={(e) => {
                             e.stopPropagation()
@@ -558,7 +558,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                           </p>
                           <p className="truncate text-blue-700 dark:text-blue-300 flex items-center gap-1">
                             <Users className="h-3 w-3" />
-                            {upcoming.user?.full_name || upcoming.guest_name} ({upcoming.party_size})
+                            {upcoming.guest_name || upcoming.user?.full_name} ({upcoming.party_size})
                           </p>
                           <p className="text-blue-600 dark:text-blue-400 mt-1 flex items-center gap-1">
                             <Timer className="h-3 w-3" />
@@ -630,7 +630,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
           <TooltipContent side="top" className="max-w-xs">
             {current ? (
               <div className="space-y-2">
-                <p className="font-semibold">{current.user?.full_name || current.guest_name}</p>
+                <p className="font-semibold">{current.guest_name || current.user?.full_name}</p>
                 <div className="space-y-1 text-sm">
                   <p>Party of {current.party_size}</p>
                   <p>Arrived: {format(bookingTime!, 'h:mm a')}</p>
@@ -675,7 +675,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
       : 0
 
     return { occupiedTables, availableTables, occupancyRate }
-  }, [tables, bookings, currentTime])
+  }, [tables, bookings, currentTime, getTableBookingInfo])
 
   return (
     <div className="h-full w-full flex flex-col bg-gradient-to-br from-gray-900 to-gray-800">
@@ -699,7 +699,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
             {selectedTable && (() => {
               const selectedTableData = tables.find(t => t.id === selectedTable)
               const { current } = selectedTableData ? getTableBookingInfo(selectedTableData) : { current: null }
-              return `Table ${selectedTableData?.table_number} selected. ${current ? `Occupied by ${current.user?.full_name || current.guest_name || 'Guest'}, status: ${current.status.replace(/_/g, ' ')}.` : 'Available for booking.'}`
+              return `Table ${selectedTableData?.table_number} selected. ${current ? `Occupied by ${current.guest_name || current.user?.full_name || 'Guest'}, status: ${current.status.replace(/_/g, ' ')}.` : 'Available for booking.'}`
             })()}
           </div>
         </div>

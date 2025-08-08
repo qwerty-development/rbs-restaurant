@@ -1,7 +1,7 @@
 // app/(dashboard)/bookings/page.tsx
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { format, startOfDay, endOfDay, addDays, isToday, isTomorrow, addMinutes, differenceInMinutes } from "date-fns"
@@ -158,7 +158,7 @@ function StatCard({
 }
 
 export default function BookingsPage() {
-  const now = new Date()
+  const now = useMemo(() => new Date(), [])
   const [selectedDate, setSelectedDate] = useState<Date>(now)
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -561,12 +561,12 @@ export default function BookingsPage() {
   })
 
   // Manual refresh function
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["bookings"] })
     queryClient.invalidateQueries({ queryKey: ["table-stats"] })
     queryClient.invalidateQueries({ queryKey: ["tables"] })
     toast.success("Data refreshed")
-  }
+  }, [queryClient])
   const createManualBookingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
       const { data: { user } } = await supabase.auth.getUser()
