@@ -4,6 +4,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "react-hot-toast"
 import { Providers } from "@/components/provider"
+import { PWAProvider } from "@/components/pwa/pwa-provider"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -21,8 +22,10 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <Providers>
-          {children}
-          <Toaster position="top-center" />
+          <PWAProvider>
+            {children}
+            <Toaster position="top-center" />
+          </PWAProvider>
         </Providers>
       </body>
     </html>

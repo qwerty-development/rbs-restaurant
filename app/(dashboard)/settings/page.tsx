@@ -46,9 +46,13 @@ import {
   Instagram,
   Link2,
   Save,
-  ChevronRight
+  ChevronRight,
+  Smartphone,
+  Download
 } from "lucide-react"
 import Link from "next/link"
+import { PushNotificationManager } from "@/components/pwa/push-notification-manager"
+import { InstallPrompt } from "@/components/pwa/install-prompt"
 
 // Type definitions
 type Restaurant = {
@@ -326,10 +330,11 @@ export default function SettingsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="operational">Operational</TabsTrigger>
           <TabsTrigger value="features">Features & Pricing</TabsTrigger>
+          <TabsTrigger value="pwa">PWA & Mobile</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-4">
@@ -857,6 +862,71 @@ export default function SettingsPage() {
               </Form>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="pwa" className="space-y-4">
+          <div className="space-y-6">
+            {/* PWA Install Prompt */}
+            <InstallPrompt />
+            
+            {/* Push Notifications */}
+            <PushNotificationManager />
+            
+            {/* PWA Status Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Smartphone className="h-5 w-5" />
+                  Progressive Web App Status
+                </CardTitle>
+                <CardDescription>
+                  Information about PWA features and capabilities
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <div className="font-medium">✅ Service Worker</div>
+                    <div className="text-sm text-muted-foreground">
+                      Enables offline functionality and caching
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="font-medium">✅ Web App Manifest</div>
+                    <div className="text-sm text-muted-foreground">
+                      Allows installation to home screen
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="font-medium">✅ Push Notifications</div>
+                    <div className="text-sm text-muted-foreground">
+                      Real-time notifications for bookings and updates
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="font-medium">✅ Offline Support</div>
+                    <div className="text-sm text-muted-foreground">
+                      Basic functionality when internet is unavailable
+                    </div>
+                  </div>
+                </div>
+                
+                <Separator />
+                
+                <div className="space-y-3">
+                  <div className="font-medium">PWA Benefits:</div>
+                  <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                    <li>Fast loading and smooth performance</li>
+                    <li>Works offline with cached data</li>
+                    <li>Install directly to home screen</li>
+                    <li>Push notifications for real-time updates</li>
+                    <li>Native app-like experience</li>
+                    <li>Automatic updates in background</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

@@ -6,7 +6,11 @@
       "Bash(npx tsc:*)",
       "Bash(npm run build:*)",
       "Bash(npx next lint:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(npm install:*)",
+      "Bash(npx web-push:*)",
+      "Bash(cp:*)",
+      "Bash(curl:*)"
     ],
     "deny": []
   }
