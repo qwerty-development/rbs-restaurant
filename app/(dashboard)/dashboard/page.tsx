@@ -985,7 +985,7 @@ export default function DashboardPage() {
         <DialogContent className="max-w-3xl w-full h-[90vh] flex flex-col p-0">
           <div className="flex-shrink-0 px-6 py-4 border-b bg-white">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-lg">
+              <DialogTitle className="flex items-center gap-2 text-lg text-emerald-500">
                 <UserPlus className="h-5 w-5 text-emerald-600" />
                 Add New Booking
               </DialogTitle>
