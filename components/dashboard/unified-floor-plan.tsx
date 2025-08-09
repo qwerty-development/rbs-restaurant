@@ -25,11 +25,11 @@ import {
   AlertTriangle,
   Calendar,
   Eye,
-  ChevronRight
+  ChevronRight,
+  Move
 } from "lucide-react"
 import { format, addMinutes, differenceInMinutes } from "date-fns"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
-// Removed dropdown menu imports - using click-to-show for tablets
 import {
   Tooltip,
   TooltipContent,
@@ -112,6 +112,8 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
   const [loadingTransition, setLoadingTransition] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
   const [draggingTable, setDraggingTable] = useState<string | null>(null)
+  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null)
+  const [tableStartPos, setTableStartPos] = useState<{ x: number; y: number } | null>(null)
   const floorPlanRef = useRef<HTMLDivElement>(null)
   
   const tableStatusService = useMemo(() => new TableStatusService(), [])
@@ -152,6 +154,8 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
       if (event.key === 'Escape') {
         setSelectedTable(null)
         setActiveMenuTable(null)
+        setEditMode(false)
+        setDraggingTable(null)
       }
     }
 
@@ -161,42 +165,26 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
     }
   }, [])
 
-  // Table drag handlers for edit mode
+  // Enhanced table drag handlers with proper touch support
   const handleTableDragStart = useCallback((e: React.MouseEvent | React.TouchEvent, tableId: string) => {
     if (!editMode) return
     
     e.preventDefault()
+    e.stopPropagation()
+    
+    const table = tables.find(t => t.id === tableId)
+    if (!table) return
+    
     setDraggingTable(tableId)
     setSelectedTable(tableId)
     
-    const element = e.currentTarget as HTMLElement
-    element.style.zIndex = '1000'
-    element.style.transition = 'none'
-    
-    // Store initial position
-    const containerRect = floorPlanRef.current?.getBoundingClientRect()
-    if (containerRect) {
-      const elementRect = element.getBoundingClientRect()
-      const initialX = elementRect.left - containerRect.left
-      const initialY = elementRect.top - containerRect.top
-      
-      // Store drag data on element
-      element.setAttribute('data-drag-x', initialX.toString())
-      element.setAttribute('data-drag-y', initialY.toString())
-    }
-  }, [editMode])
-
-  const handleTableDragMove = useCallback((e: MouseEvent | TouchEvent) => {
-    if (!draggingTable || !editMode) return
-    
-    const element = document.querySelector(`[data-table-id="${draggingTable}"]`) as HTMLElement
+    // Get starting positions
     const container = floorPlanRef.current
-    
-    if (!element || !container) return
+    if (!container) return
     
     const containerRect = container.getBoundingClientRect()
-    let clientX: number, clientY: number
     
+    let clientX: number, clientY: number
     if ('touches' in e && e.touches.length > 0) {
       clientX = e.touches[0].clientX
       clientY = e.touches[0].clientY
@@ -207,22 +195,67 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
       return
     }
     
-    const x = clientX - containerRect.left
-    const y = clientY - containerRect.top
+    // Store drag start position
+    setDragStartPos({
+      x: clientX - containerRect.left,
+      y: clientY - containerRect.top
+    })
     
-    // Apply boundaries
-    const elementWidth = element.offsetWidth
-    const elementHeight = element.offsetHeight
-    const boundedX = Math.max(0, Math.min(containerRect.width - elementWidth, x - elementWidth / 2))
-    const boundedY = Math.max(0, Math.min(containerRect.height - elementHeight, y - elementHeight / 2))
-    
-    element.style.left = `${boundedX}px`
-    element.style.top = `${boundedY}px`
-  }, [draggingTable, editMode])
+    // Store table's initial position
+    setTableStartPos({
+      x: table.x_position,
+      y: table.y_position
+    })
+  }, [editMode, tables])
 
-  const handleTableDragEnd = useCallback(() => {
+  const handleTableDragMove = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!draggingTable || !editMode || !dragStartPos || !tableStartPos) return
+    
+    e.preventDefault()
+    
+    const container = floorPlanRef.current
+    if (!container) return
+    
+    const containerRect = container.getBoundingClientRect()
+    
+    let clientX: number, clientY: number
+    if ('touches' in e && e.touches.length > 0) {
+      clientX = e.touches[0].clientX
+      clientY = e.touches[0].clientY
+    } else if ('clientX' in e) {
+      clientX = e.clientX
+      clientY = e.clientY
+    } else {
+      return
+    }
+    
+    // Calculate new position as percentage
+    const currentX = clientX - containerRect.left
+    const currentY = clientY - containerRect.top
+    
+    const deltaX = ((currentX - dragStartPos.x) / containerRect.width) * 100
+    const deltaY = ((currentY - dragStartPos.y) / containerRect.height) * 100
+    
+    let newX = tableStartPos.x + deltaX
+    let newY = tableStartPos.y + deltaY
+    
+    // Constrain to boundaries (0-100%)
+    newX = Math.max(0, Math.min(90, newX))
+    newY = Math.max(0, Math.min(90, newY))
+    
+    // Update visual position
+    const element = document.querySelector(`[data-table-id="${draggingTable}"]`) as HTMLElement
+    if (element) {
+      element.style.left = `${newX}%`
+      element.style.top = `${newY}%`
+    }
+  }, [draggingTable, editMode, dragStartPos, tableStartPos])
+
+  const handleTableDragEnd = useCallback(async () => {
     if (!draggingTable || !editMode || !onTableUpdate) {
       setDraggingTable(null)
+      setDragStartPos(null)
+      setTableStartPos(null)
       return
     }
     
@@ -236,32 +269,50 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
       const percentX = ((elementRect.left - containerRect.left) / containerRect.width) * 100
       const percentY = ((elementRect.top - containerRect.top) / containerRect.height) * 100
       
-      onTableUpdate(draggingTable, { x: percentX, y: percentY })
+      // Ensure values are within bounds
+      const finalX = Math.max(0, Math.min(90, percentX))
+      const finalY = Math.max(0, Math.min(90, percentY))
       
-      // Reset styles
-      element.style.zIndex = ''
-      element.style.transition = ''
+      try {
+        await onTableUpdate(draggingTable, { x: finalX, y: finalY })
+      } catch (error) {
+        console.error('Failed to update table position:', error)
+        // Reset position on error
+        const table = tables.find(t => t.id === draggingTable)
+        if (table) {
+          element.style.left = `${table.x_position}%`
+          element.style.top = `${table.y_position}%`
+        }
+      }
     }
     
     setDraggingTable(null)
-  }, [draggingTable, editMode, onTableUpdate])
+    setDragStartPos(null)
+    setTableStartPos(null)
+  }, [draggingTable, editMode, onTableUpdate, tables])
 
   // Global drag event listeners for table repositioning
   useEffect(() => {
-    if (editMode) {
-      document.addEventListener('mousemove', handleTableDragMove)
-      document.addEventListener('mouseup', handleTableDragEnd)
-      document.addEventListener('touchmove', handleTableDragMove, { passive: false })
-      document.addEventListener('touchend', handleTableDragEnd)
+    if (editMode && draggingTable) {
+      const handleMove = (e: MouseEvent | TouchEvent) => handleTableDragMove(e)
+      const handleEnd = () => handleTableDragEnd()
+      
+      // Mouse events
+      document.addEventListener('mousemove', handleMove)
+      document.addEventListener('mouseup', handleEnd)
+      
+      // Touch events
+      document.addEventListener('touchmove', handleMove, { passive: false })
+      document.addEventListener('touchend', handleEnd)
       
       return () => {
-        document.removeEventListener('mousemove', handleTableDragMove)
-        document.removeEventListener('mouseup', handleTableDragEnd)
-        document.removeEventListener('touchmove', handleTableDragMove)
-        document.removeEventListener('touchend', handleTableDragEnd)
+        document.removeEventListener('mousemove', handleMove)
+        document.removeEventListener('mouseup', handleEnd)
+        document.removeEventListener('touchmove', handleMove)
+        document.removeEventListener('touchend', handleEnd)
       }
     }
-  }, [editMode, handleTableDragMove, handleTableDragEnd])
+  }, [editMode, draggingTable, handleTableDragMove, handleTableDragEnd])
 
   const getTableBookingInfo = (table: any) => {
     // Get all bookings for this table (current, upcoming, and recent)
@@ -400,7 +451,8 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 top: `${table.y_position}%`,
                 width: `${(table.width || 120) * 0.85}px`,
                 height: `${(table.height || 100) * 0.85}px`,
-                padding: "8px"
+                padding: "8px",
+                transition: draggingTable === table.id ? 'none' : undefined
               }}
               onClick={() => {
                 if (editMode) return // Prevent click when in edit mode
@@ -472,7 +524,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               onMouseEnter={() => setHoveredTable(table.id)}
               onMouseLeave={() => setHoveredTable(null)}
               onDragOver={(e) => {
-                if (!isOccupied) {
+                if (!isOccupied && !editMode) {
                   e.preventDefault()
                   e.currentTarget.classList.add("scale-105")
                 }
@@ -483,11 +535,18 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               onDrop={(e) => {
                 e.preventDefault()
                 e.currentTarget.classList.remove("scale-105")
-                if (!isOccupied) {
+                if (!isOccupied && !editMode) {
                   handleTableDrop(table.id)
                 }
               }}
             >
+              {/* Edit mode drag handle */}
+              {editMode && !isOccupied && (
+                <div className="absolute -top-2 -right-2 p-1.5 bg-purple-600 text-white rounded-full shadow-lg z-10">
+                  <Move className="h-3 w-3" />
+                </div>
+              )}
+
               {/* Table header - Compact for tablets */}
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1">
@@ -657,7 +716,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                     </div>
                   )}
                 </div>
-                              ) : (
+              ) : (
                 <div className="text-center py-2">
                   <div className="mb-2">
                     <Badge 
@@ -722,16 +781,13 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                           </div>
                         </div>
                       )}
-                      
-                      {/* Click hint for empty tables */}
-                      
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Drag handle */}
-              {isOccupied && current && (
+              {/* Drag handle for moving bookings between tables */}
+              {isOccupied && current && !editMode && (
                 <div
                   className="absolute top-1 right-1 p-1 bg-background/80 border border-border rounded cursor-move hover:bg-background transition-colors"
                   draggable
@@ -793,7 +849,12 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
           <Button
             size="sm"
             variant={editMode ? "destructive" : "secondary"}
-            onClick={() => setEditMode(!editMode)}
+            onClick={() => {
+              setEditMode(!editMode)
+              setDraggingTable(null)
+              setDragStartPos(null)
+              setTableStartPos(null)
+            }}
             className={cn(
               "shadow-lg transition-all duration-200 font-medium",
               editMode 

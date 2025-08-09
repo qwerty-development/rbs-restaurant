@@ -39,6 +39,7 @@ import {
 import { toast } from "react-hot-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
+
 const TABLE_TYPE_COLORS: Record<string, string> = {
   booth: "bg-gradient-to-br from-blue-900 to-blue-800 text-blue-100 border-blue-700",
   window: "bg-gradient-to-br from-emerald-900 to-emerald-800 text-emerald-100 border-emerald-700",
@@ -979,8 +980,6 @@ export function CheckInQueue({
     payment: CreditCard
   }
 
-
-
   // Status colors mapping
   const STATUS_COLORS = {
     seated: "text-blue-400 bg-blue-900/30 border-blue-700",
@@ -1077,14 +1076,14 @@ export function CheckInQueue({
   }
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900 text-gray-200 overflow-x-auto overflow-y-hidden min-w-[320px] w-full">
+    <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900 text-gray-200">
       {/* Ultra-Compact Header */}
-      <div className="px-1 py-1 border-b border-gray-800 flex-shrink-0">
-        <div className="flex items-center justify-between min-w-0">
-          <h3 className="text-xs font-semibold text-gray-100 truncate">Queue</h3>
+      <div className="px-2 py-1 border-b border-gray-800 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-gray-100">Queue</h3>
           
           {/* Essential stats only */}
-          <div className="flex items-center gap-2 text-xs flex-shrink-0 ml-2">
+          <div className="flex items-center gap-2 text-xs">
             {categorizedBookings.activeDining.length > 0 && (
               <div className="flex items-center gap-1 text-green-400">
                 <Activity className="h-3 w-3" />
@@ -1111,36 +1110,36 @@ export function CheckInQueue({
         </div>
       </div>
 
-      <Tabs defaultValue="active" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="mx-1 mt-0.5 grid w-[calc(100%-0.5rem)] grid-cols-3 bg-gray-800 h-7 gap-px flex-shrink-0">
-          <TabsTrigger value="active" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs font-medium px-2 flex items-center justify-center min-w-0 flex-1 gap-1">
-            <span className="truncate">Active</span>
+      <Tabs defaultValue="active" className="flex-1 flex flex-col overflow-hidden">
+        <TabsList className="mx-2 mt-1 grid w-[calc(100%-1rem)] grid-cols-3 bg-gray-800 h-7 p-0.5 flex-shrink-0">
+          <TabsTrigger value="active" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs px-1 h-6">
+            Active
             {categorizedBookings.activeDining.length > 0 && (
-              <Badge className="px-1 py-0 text-xs bg-green-600 min-w-[14px] h-3.5 flex items-center justify-center leading-none text-white font-medium">
+              <Badge className="ml-1 px-1 py-0 text-xs bg-green-600 h-3.5 leading-none">
                 {categorizedBookings.activeDining.length}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="arrivals" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs font-medium px-2 flex items-center justify-center min-w-0 flex-1 gap-1">
-            <span className="truncate">Arrivals</span>
+          <TabsTrigger value="arrivals" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs px-1 h-6">
+            Arrivals
             {(categorizedBookings.lateArrivals.length +
               categorizedBookings.currentArrivals.length +
               categorizedBookings.upcomingArrivals.length) > 0 && (
-              <Badge className="px-1 py-0 text-xs bg-blue-600 min-w-[14px] h-3.5 flex items-center justify-center leading-none text-white font-medium">
+              <Badge className="ml-1 px-1 py-0 text-xs bg-blue-600 h-3.5 leading-none">
                 {categorizedBookings.lateArrivals.length +
                  categorizedBookings.currentArrivals.length +
                  categorizedBookings.upcomingArrivals.length}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="walkin" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs font-medium px-2 flex items-center justify-center min-w-0 flex-1">
-            <span className="truncate">Walk-in</span>
+          <TabsTrigger value="walkin" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs px-1 h-6">
+            Walk-in
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="active" className="flex-1 px-1 pb-1 mt-0.5 min-h-0">
-          <ScrollArea className="h-full max-h-[calc(100vh-12rem)] sm:max-h-[calc(100vh-10rem)] md:max-h-[calc(100vh-8rem)] overflow-x-auto">
-            <div className="space-y-0.5 pr-1">
+        <TabsContent value="active" className="flex-1 overflow-hidden mt-1 mx-2 mb-1">
+          <ScrollArea className="h-full">
+            <div className="space-y-1 pr-2">
               {/* Active dining guests */}
               {categorizedBookings.activeDining.length > 0 ? (
                 <div className="space-y-1">
@@ -1160,9 +1159,9 @@ export function CheckInQueue({
           </ScrollArea>
         </TabsContent>
 
-        <TabsContent value="arrivals" className="flex-1 px-1 pb-1 mt-0.5 min-h-0">
-          <ScrollArea className="h-full max-h-[calc(100vh-12rem)] sm:max-h-[calc(100vh-10rem)] md:max-h-[calc(100vh-8rem)] overflow-x-auto">
-            <div className="space-y-0.5 pr-1">
+        <TabsContent value="arrivals" className="flex-1 overflow-hidden mt-1 mx-2 mb-1">
+          <ScrollArea className="h-full">
+            <div className="space-y-1 pr-2">
               {/* Waiting for seating - highest priority */}
               {categorizedBookings.waitingForSeating.length > 0 && (
                 <div className="space-y-1">
@@ -1175,7 +1174,7 @@ export function CheckInQueue({
 
               {/* VIP Arrivals */}
               {categorizedBookings.vipArrivals.length > 0 && (
-                <div className="space-y-1">
+                <div className="space-y-1 mt-2">
                   <h4 className="text-xs font-medium text-yellow-400 border-b border-yellow-800 pb-1">
                     VIP Guests
                   </h4>
@@ -1185,7 +1184,7 @@ export function CheckInQueue({
 
               {/* All other arrivals combined */}
               {[...categorizedBookings.lateArrivals, ...categorizedBookings.currentArrivals, ...categorizedBookings.upcomingArrivals].length > 0 && (
-                <div className="space-y-1">
+                <div className="space-y-1 mt-2">
                   <h4 className="text-xs font-medium text-gray-400 border-b border-gray-700 pb-1">
                     Arrivals
                   </h4>
@@ -1214,140 +1213,139 @@ export function CheckInQueue({
           </ScrollArea>
         </TabsContent>
 
-        <TabsContent value="walkin" className="flex-1 px-1 pb-1 mt-0.5 min-h-0">
-          <ScrollArea className="h-full max-h-[calc(100vh-12rem)] sm:max-h-[calc(100vh-10rem)] md:max-h-[calc(100vh-8rem)] overflow-x-auto">
-            <div className="space-y-1 pr-1">
-            {/* Enhanced tables summary */}
-            <div className="p-2 bg-gray-800/50 rounded-lg border border-gray-700">
-              <div className="flex items-center justify-between text-xs mb-2">
-                <span className="text-gray-300 font-medium">Table Status</span>
-                <span className="text-gray-400">
-                  Total: {tables.filter(t => t.is_active).length}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="flex items-center gap-1">
-                  <CheckCircle className="h-3 w-3 text-green-400" />
-                  <span className="text-green-400">{availableTables.length} Available</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <UserCheck className="h-3 w-3 text-red-400" />
-                  <span className="text-red-400">{tableStatus.filter(t => t.isOccupied).length} Occupied</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Activity className="h-3 w-3 text-green-400" />
-                  <span className="text-green-400">{categorizedBookings.activeDining.length} Dining</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Clock className="h-3 w-3 text-yellow-400" />
-                  <span className="text-yellow-400">
-                    {tableStatus.filter(t => !t.isOccupied && t.upcomingBookings && t.upcomingBookings.length > 0).length} Reserved
+        <TabsContent value="walkin" className="flex-1 overflow-hidden mt-1 mx-2 mb-1">
+          <ScrollArea className="h-full">
+            <div className="space-y-2 pr-2">
+              {/* Enhanced tables summary */}
+              <div className="p-2 bg-gray-800/50 rounded-lg border border-gray-700">
+                <div className="flex items-center justify-between text-xs mb-2">
+                  <span className="text-gray-300 font-medium">Table Status</span>
+                  <span className="text-gray-400">
+                    Total: {tables.filter(t => t.is_active).length}
                   </span>
                 </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center gap-1">
+                    <CheckCircle className="h-3 w-3 text-green-400" />
+                    <span className="text-green-400">{availableTables.length} Available</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <UserCheck className="h-3 w-3 text-red-400" />
+                    <span className="text-red-400">{tableStatus.filter(t => t.isOccupied).length} Occupied</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Activity className="h-3 w-3 text-green-400" />
+                    <span className="text-green-400">{categorizedBookings.activeDining.length} Dining</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Clock className="h-3 w-3 text-yellow-400" />
+                    <span className="text-yellow-400">
+                      {tableStatus.filter(t => !t.isOccupied && t.upcomingBookings && t.upcomingBookings.length > 0).length} Reserved
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            {/* Simplified walk-in form */}
-            <div className="space-y-2 bg-gray-800/30 p-2 rounded-lg border border-gray-700">
-              {/* Customer search */}
-              <div>
-                <Label className="text-xs text-gray-300 mb-1 block">
-                  Search Customer (Optional)
-                </Label>
-                <div className="relative">
-                  <Input
-                    placeholder="Search by name or phone..."
-                    value={customerSearch}
-                    onChange={(e) => {
-                      setCustomerSearch(e.target.value)
-                      setShowCustomerDropdown(true)
-                    }}
-                    onFocus={() => setShowCustomerDropdown(customerSearch.length >= 1)}
-                    onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
-                    className="bg-gray-900 border-gray-700 text-white text-xs h-8"
-                  />
-                  
-                  {/* Customer dropdown */}
-                  {showCustomerDropdown && customerSearch.length >= 1 && customers && customers.length > 0 && (
-                    <div className="absolute z-50 w-full mt-1 bg-gray-900 border border-gray-700 rounded-md shadow-lg max-h-32 overflow-y-auto">
-                      {customers.map((customer) => (
-                        <div
-                          key={customer.id}
-                          className="p-2 hover:bg-gray-800 cursor-pointer text-xs"
-                          onClick={() => handleCustomerSelect(customer)}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-white">
-                              {customer.profile?.full_name || customer.guest_name || 'Guest'}
-                            </span>
-                            {customer.vip_status && (
-                              <Badge className="text-xs px-1.5 py-0.5 bg-yellow-600">
-                                VIP
-                              </Badge>
-                            )}
+              {/* Simplified walk-in form */}
+              <div className="space-y-2 bg-gray-800/30 p-2 rounded-lg border border-gray-700">
+                {/* Customer search */}
+                <div>
+                  <Label className="text-xs text-gray-300 mb-1 block">
+                    Search Customer (Optional)
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      placeholder="Search by name or phone..."
+                      value={customerSearch}
+                      onChange={(e) => {
+                        setCustomerSearch(e.target.value)
+                        setShowCustomerDropdown(true)
+                      }}
+                      onFocus={() => setShowCustomerDropdown(customerSearch.length >= 1)}
+                      onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
+                      className="bg-gray-900 border-gray-700 text-white text-xs h-7"
+                    />
+                    
+                    {/* Customer dropdown */}
+                    {showCustomerDropdown && customerSearch.length >= 1 && customers && customers.length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-gray-900 border border-gray-700 rounded-md shadow-lg max-h-32 overflow-y-auto">
+                        {customers.map((customer) => (
+                          <div
+                            key={customer.id}
+                            className="p-2 hover:bg-gray-800 cursor-pointer text-xs"
+                            onClick={() => handleCustomerSelect(customer)}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-white">
+                                {customer.profile?.full_name || customer.guest_name || 'Guest'}
+                              </span>
+                              {customer.vip_status && (
+                                <Badge className="text-xs px-1 py-0 bg-yellow-600">
+                                  VIP
+                                </Badge>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Selected customer */}
+                  {selectedCustomer && (
+                    <div className="mt-1 p-1.5 bg-blue-900/30 rounded text-xs">
+                      <span className="text-blue-300">Selected: </span>
+                      <span className="text-white font-medium">
+                        {selectedCustomer.profile?.full_name || selectedCustomer.guest_name}
+                      </span>
                     </div>
                   )}
                 </div>
-                
-                {/* Selected customer */}
-                {selectedCustomer && (
-                  <div className="mt-2 p-2 bg-blue-900/30 rounded text-sm">
-                    <span className="text-blue-300">Selected: </span>
-                    <span className="text-white font-medium">
-                      {selectedCustomer.profile?.full_name || selectedCustomer.guest_name}
-                    </span>
+
+                {/* Basic details */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <Label className="text-xs text-gray-300 mb-0.5 block">Name</Label>
+                    <Input
+                      value={walkInData.guestName}
+                      onChange={(e) => setWalkInData(prev => ({ ...prev, guestName: e.target.value }))}
+                      placeholder="Optional"
+                      disabled={!!selectedCustomer}
+                      className="bg-gray-900/50 border-gray-600 text-white text-xs h-7"
+                    />
                   </div>
-                )}
-              </div>
+                  <div>
+                    <Label className="text-xs text-gray-300 mb-0.5 block">Phone</Label>
+                    <Input
+                      value={walkInData.guestPhone}
+                      onChange={(e) => setWalkInData(prev => ({ ...prev, guestPhone: e.target.value }))}
+                      placeholder="Optional"
+                      disabled={!!selectedCustomer}
+                      className="bg-gray-900/50 border-gray-600 text-white text-xs h-7"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-gray-300 mb-0.5 block">Party</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={walkInData.partySize}
+                      onChange={(e) => setWalkInData(prev => ({ ...prev, partySize: parseInt(e.target.value) || 1 }))}
+                      className="bg-gray-900/50 border-gray-600 text-white text-xs h-7"
+                    />
+                  </div>
+                </div>
 
-              {/* Basic details */}
-              <div className="space-y-2">
+                {/* Table selection */}
                 <div>
-                  <Label className="text-sm text-gray-300 mb-1 block">Name</Label>
-                  <Input
-                    value={walkInData.guestName}
-                    onChange={(e) => setWalkInData(prev => ({ ...prev, guestName: e.target.value }))}
-                    placeholder="Optional"
-                    disabled={!!selectedCustomer}
-                    className="bg-gray-900/50 border-gray-600 text-white"
-                  />
-                </div>
-                <div>
-                  <Label className="text-sm text-gray-300 mb-1 block">Phone</Label>
-                  <Input
-                    value={walkInData.guestPhone}
-                    onChange={(e) => setWalkInData(prev => ({ ...prev, guestPhone: e.target.value }))}
-                    placeholder="Optional"
-                    disabled={!!selectedCustomer}
-                    className="bg-gray-900/50 border-gray-600 text-white"
-                  />
-                </div>
-                <div>
-                  <Label className="text-sm text-gray-300 mb-1 block">Party Size</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="20"
-                    value={walkInData.partySize}
-                    onChange={(e) => setWalkInData(prev => ({ ...prev, partySize: parseInt(e.target.value) || 1 }))}
-                    className="bg-gray-900/50 border-gray-600 text-white"
-                  />
-                </div>
-              </div>
-
-              {/* Table selection */}
-              <div>
-                <Label className="text-sm text-gray-300 mb-2 block">
-                  Select Table - {availableTables.length} available
-                </Label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2">
+                  <Label className="text-xs text-gray-300 mb-1 block">
+                    Select Table - {availableTables.length} available
+                  </Label>
+                  <div className="grid grid-cols-3 gap-1.5">
                     {tableStatus
                       .filter(table => table.is_active)
                       .sort((a, b) => {
-                        // Sort by availability first, then by table number
                         if (a.isOccupied !== b.isOccupied) {
                           return a.isOccupied ? 1 : -1
                         }
@@ -1359,30 +1357,23 @@ export function CheckInQueue({
                         const fitsParty = table.max_capacity >= walkInData.partySize
                         const canSelect = isAvailable && fitsParty
                         
-                        // Get next booking info
                         const nextBooking = table.upcomingBookings?.[0]
                         const minutesUntilNext = nextBooking ? differenceInMinutes(new Date(nextBooking.booking_time), currentTime) : null
                         
-                        // Determine table status
                         let statusColor = "border-gray-600"
-                        let statusIcon = <CheckCircle className="h-3 w-3 text-green-400" />
                         let bgColor = "bg-gray-800/50"
                         
                         if (table.isOccupied) {
                           statusColor = "border-red-500"
-                          statusIcon = <UserCheck className="h-3 w-3 text-red-400" />
                           bgColor = "bg-red-900/20"
                         } else if (!fitsParty) {
                           statusColor = "border-orange-500"
-                          statusIcon = <AlertTriangle className="h-3 w-3 text-orange-400" />
                           bgColor = "bg-orange-900/20"
                         } else if (nextBooking && minutesUntilNext! <= 60) {
                           statusColor = "border-yellow-500"
-                          statusIcon = <Clock className="h-3 w-3 text-yellow-400" />
                           bgColor = "bg-yellow-900/20"
                         } else {
                           statusColor = "border-green-500"
-                          statusIcon = <CheckCircle className="h-3 w-3 text-green-400" />
                           bgColor = "bg-green-900/20"
                         }
                         
@@ -1398,12 +1389,12 @@ export function CheckInQueue({
                             variant="outline"
                             disabled={!canSelect}
                             className={cn(
-                              "h-14 p-1.5 transition-all duration-200 hover:scale-105 relative",
+                              "h-10 p-1 transition-all relative",
                               bgColor,
                               statusColor,
                               canSelect && "hover:bg-gray-700/50 cursor-pointer",
                               !canSelect && "opacity-60 cursor-not-allowed",
-                              isSelected && "ring-2 ring-blue-400 ring-offset-1 ring-offset-gray-900"
+                              isSelected && "ring-1 ring-blue-400"
                             )}
                             onClick={() => {
                               if (canSelect) {
@@ -1416,48 +1407,33 @@ export function CheckInQueue({
                             }}
                           >
                             <div className="w-full h-full flex flex-col items-center justify-center">
-                              {/* Table number - main focus */}
-                              <div className="font-bold text-sm text-white">
+                              <div className="font-bold text-xs text-white">
                                 T{table.table_number}
                               </div>
-                              
-                              {/* Capacity */}
                               <div className="text-xs text-gray-400">
                                 {table.max_capacity}p
                               </div>
-                              
-                              {/* Status icon - top right corner */}
-                              <div className="absolute top-0.5 right-0.5">
-                                {statusIcon}
-                              </div>
-                              
-                              {/* Next booking time - bottom if needed */}
-                              {!table.isOccupied && nextBooking && minutesUntilNext! <= 60 && (
-                                <div className="absolute bottom-0.5 left-0.5 text-xs text-yellow-300">
-                                  {minutesUntilNext! > 0 ? `${minutesUntilNext}m` : 'now'}
-                                </div>
-                              )}
                             </div>
                           </Button>
                         )
                       })}
+                  </div>
                 </div>
-              </div>
 
-              {/* Seat button */}
-              <Button
-                className="w-full h-9 font-medium bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-500"
-                onClick={handleWalkIn}
-                disabled={selectedTableIds.length === 0}
-              >
-                {selectedTableIds.length > 0 
-                  ? `Seat at Table ${selectedTableIds.map(id => 
-                      tableStatus.find(t => t.id === id)?.table_number
-                    ).join(', ')}`
-                  : 'Select a Table'
-                }
-              </Button>
-            </div>
+                {/* Seat button */}
+                <Button
+                  className="w-full h-8 text-xs font-medium bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-500"
+                  onClick={handleWalkIn}
+                  disabled={selectedTableIds.length === 0}
+                >
+                  {selectedTableIds.length > 0 
+                    ? `Seat at Table ${selectedTableIds.map(id => 
+                        tableStatus.find(t => t.id === id)?.table_number
+                      ).join(', ')}`
+                    : 'Select a Table'
+                  }
+                </Button>
+              </div>
             </div>
           </ScrollArea>
         </TabsContent>

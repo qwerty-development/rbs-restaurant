@@ -243,3 +243,39 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* PWA Orientation handling */
+@media screen and (orientation: portrait) and (max-width: 768px) {
+  .landscape-only-message {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: hsl(var(--background));
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 2rem;
+    text-align: center;
+  }
+  
+  .landscape-only-message .rotate-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    animation: rotate 2s infinite linear;
+  }
+  
+  @keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+}
+
+@media screen and (orientation: landscape) {
+  .landscape-only-message {
+    display: none;
+  }
+}
