@@ -4,9 +4,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
-import { 
+import {
   Table2,
   Users,
   Clock,
@@ -21,11 +20,9 @@ import {
   UserCheck,
   Hand,
   Phone,
-  MessageSquare,
   AlertTriangle,
   Calendar,
   Eye,
-  ChevronRight,
   Move
 } from "lucide-react"
 import { format, addMinutes, differenceInMinutes } from "date-fns"
@@ -36,6 +33,22 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+
+// Drag state interface for better performance
+interface DragState {
+  tableId: string | null
+  element: HTMLElement | null
+  startX: number
+  startY: number
+  offsetX: number
+  offsetY: number
+  initialLeft: number
+  initialTop: number
+  animationId: number | null
+  touchId: number | null
+  isDragConfirmed: boolean
+  startTime: number
+}
 
 interface UnifiedFloorPlanProps {
   tables: any[]
@@ -111,12 +124,37 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
   const [hoveredTable, setHoveredTable] = useState<string | null>(null)
   const [loadingTransition, setLoadingTransition] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
-  const [draggingTable, setDraggingTable] = useState<string | null>(null)
-  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null)
-  const [tableStartPos, setTableStartPos] = useState<{ x: number; y: number } | null>(null)
   const floorPlanRef = useRef<HTMLDivElement>(null)
+
+  // Use refs for drag state to avoid re-renders and improve performance
+  const dragStateRef = useRef<DragState>({
+    tableId: null,
+    element: null,
+    startX: 0,
+    startY: 0,
+    offsetX: 0,
+    offsetY: 0,
+    initialLeft: 0,
+    initialTop: 0,
+    animationId: null,
+    touchId: null,
+    isDragConfirmed: false,
+    startTime: 0
+  })
+
+  // Track final positions for smooth updates
+  const finalPositionsRef = useRef<Record<string, { x: number; y: number }>>({})
   
   const tableStatusService = useMemo(() => new TableStatusService(), [])
+
+  // Initialize positions
+  useEffect(() => {
+    const positions: Record<string, { x: number; y: number }> = {}
+    tables.forEach(table => {
+      positions[table.id] = { x: table.x_position, y: table.y_position }
+    })
+    finalPositionsRef.current = { ...positions }
+  }, [tables])
 
   // Load table statuses
   useEffect(() => {
@@ -125,7 +163,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
       setTableStatuses(statuses)
     }
     loadStatuses()
-    
+
     const interval = setInterval(loadStatuses, 30000)
     return () => clearInterval(interval)
   }, [restaurantId, currentTime, tableStatusService])
@@ -155,7 +193,21 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
         setSelectedTable(null)
         setActiveMenuTable(null)
         setEditMode(false)
-        setDraggingTable(null)
+        // Reset drag state
+        dragStateRef.current = {
+          tableId: null,
+          element: null,
+          startX: 0,
+          startY: 0,
+          offsetX: 0,
+          offsetY: 0,
+          initialLeft: 0,
+          initialTop: 0,
+          animationId: null,
+          touchId: null,
+          isDragConfirmed: false,
+          startTime: 0
+        }
       }
     }
 
@@ -165,154 +217,255 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
     }
   }, [])
 
-  // Enhanced table drag handlers with proper touch support
+  // Helper functions for event handling
+  const getEventCoordinates = (e: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent) => {
+    if ('touches' in e && e.touches.length > 0) {
+      return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }
+    } else if ('clientX' in e) {
+      return { clientX: e.clientX, clientY: e.clientY }
+    }
+    return { clientX: 0, clientY: 0 }
+  }
+
+  const getTouchById = (touches: TouchList, touchId: number) => {
+    for (let i = 0; i < touches.length; i++) {
+      if (touches[i].identifier === touchId) {
+        return touches[i]
+      }
+    }
+    return null
+  }
+
+  // Enhanced table drag handlers with proper touch support and performance optimization
   const handleTableDragStart = useCallback((e: React.MouseEvent | React.TouchEvent, tableId: string) => {
     if (!editMode) return
-    
+
     e.preventDefault()
     e.stopPropagation()
-    
+
     const table = tables.find(t => t.id === tableId)
     if (!table) return
-    
-    setDraggingTable(tableId)
-    setSelectedTable(tableId)
-    
-    // Get starting positions
+
+    const element = document.querySelector(`[data-table-id="${tableId}"]`) as HTMLElement
     const container = floorPlanRef.current
-    if (!container) return
-    
+    if (!element || !container) return
+
+    setSelectedTable(tableId)
+
     const containerRect = container.getBoundingClientRect()
-    
-    let clientX: number, clientY: number
-    if ('touches' in e && e.touches.length > 0) {
-      clientX = e.touches[0].clientX
-      clientY = e.touches[0].clientY
-    } else if ('clientX' in e) {
-      clientX = e.clientX
-      clientY = e.clientY
-    } else {
-      return
+    const elementRect = element.getBoundingClientRect()
+    const coords = getEventCoordinates(e)
+
+    // Get touch ID for touch events
+    const touchId = 'touches' in e && e.touches.length > 0 ? e.touches[0].identifier : null
+    const isTouch = 'touches' in e
+
+    // Calculate precise offset from touch/mouse to element's top-left
+    const offsetX = coords.clientX - elementRect.left
+    const offsetY = coords.clientY - elementRect.top
+
+    // Get current position
+    const currentLeft = elementRect.left - containerRect.left
+    const currentTop = elementRect.top - containerRect.top
+
+    dragStateRef.current = {
+      tableId,
+      element,
+      startX: coords.clientX,
+      startY: coords.clientY,
+      offsetX,
+      offsetY,
+      initialLeft: currentLeft,
+      initialTop: currentTop,
+      animationId: null,
+      touchId,
+      isDragConfirmed: !isTouch, // For mouse, immediately confirm. For touch, wait for movement.
+      startTime: Date.now()
     }
-    
-    // Store drag start position
-    setDragStartPos({
-      x: clientX - containerRect.left,
-      y: clientY - containerRect.top
-    })
-    
-    // Store table's initial position
-    setTableStartPos({
-      x: table.x_position,
-      y: table.y_position
-    })
+
+    // Visual feedback
+    element.style.zIndex = '1000'
+    element.style.touchAction = 'none'
   }, [editMode, tables])
 
   const handleTableDragMove = useCallback((e: MouseEvent | TouchEvent) => {
-    if (!draggingTable || !editMode || !dragStartPos || !tableStartPos) return
-    
-    e.preventDefault()
-    
-    const container = floorPlanRef.current
-    if (!container) return
-    
-    const containerRect = container.getBoundingClientRect()
-    
-    let clientX: number, clientY: number
-    if ('touches' in e && e.touches.length > 0) {
-      clientX = e.touches[0].clientX
-      clientY = e.touches[0].clientY
-    } else if ('clientX' in e) {
-      clientX = e.clientX
-      clientY = e.clientY
-    } else {
-      return
-    }
-    
-    // Calculate new position as percentage
-    const currentX = clientX - containerRect.left
-    const currentY = clientY - containerRect.top
-    
-    const deltaX = ((currentX - dragStartPos.x) / containerRect.width) * 100
-    const deltaY = ((currentY - dragStartPos.y) / containerRect.height) * 100
-    
-    let newX = tableStartPos.x + deltaX
-    let newY = tableStartPos.y + deltaY
-    
-    // Constrain to boundaries (0-100%)
-    newX = Math.max(0, Math.min(90, newX))
-    newY = Math.max(0, Math.min(90, newY))
-    
-    // Update visual position
-    const element = document.querySelector(`[data-table-id="${draggingTable}"]`) as HTMLElement
-    if (element) {
-      element.style.left = `${newX}%`
-      element.style.top = `${newY}%`
-    }
-  }, [draggingTable, editMode, dragStartPos, tableStartPos])
+    const dragState = dragStateRef.current
 
-  const handleTableDragEnd = useCallback(async () => {
-    if (!draggingTable || !editMode || !onTableUpdate) {
-      setDraggingTable(null)
-      setDragStartPos(null)
-      setTableStartPos(null)
-      return
+    // Handle dragging
+    if (dragState.tableId && dragState.element && floorPlanRef.current && editMode) {
+      let coords: { clientX: number; clientY: number }
+
+      // For touch events, check if it's the same touch
+      if ('touches' in e && dragState.touchId !== null) {
+        const touch = getTouchById(e.touches, dragState.touchId)
+        if (!touch) return
+        coords = { clientX: touch.clientX, clientY: touch.clientY }
+      } else {
+        coords = getEventCoordinates(e)
+      }
+
+      // Calculate movement distance to determine if this is a drag or just a tap/scroll
+      const deltaX = coords.clientX - dragState.startX
+      const deltaY = coords.clientY - dragState.startY
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
+
+      // For touch events, require minimum movement to confirm drag
+      if (!dragState.isDragConfirmed) {
+        const DRAG_THRESHOLD = 8 // pixels
+        const TIME_THRESHOLD = 150 // ms
+
+        if (distance > DRAG_THRESHOLD || (Date.now() - dragState.startTime) > TIME_THRESHOLD) {
+          dragState.isDragConfirmed = true
+          e.preventDefault()
+        } else {
+          return // Don't prevent default yet, allow scrolling
+        }
+      } else {
+        e.preventDefault()
+      }
+
+      // Cancel any pending animation frame
+      if (dragState.animationId) {
+        cancelAnimationFrame(dragState.animationId)
+      }
+
+      // Use requestAnimationFrame for smooth 60fps updates
+      dragState.animationId = requestAnimationFrame(() => {
+        const containerRect = floorPlanRef.current!.getBoundingClientRect()
+
+        const newLeft = dragState.initialLeft + deltaX
+        const newTop = dragState.initialTop + deltaY
+
+        // Apply boundaries
+        const elementWidth = dragState.element!.offsetWidth
+        const elementHeight = dragState.element!.offsetHeight
+
+        const boundedLeft = Math.max(0, Math.min(containerRect.width - elementWidth, newLeft))
+        const boundedTop = Math.max(0, Math.min(containerRect.height - elementHeight, newTop))
+
+        // Apply position directly to DOM (super fast)
+        dragState.element!.style.left = `${boundedLeft}px`
+        dragState.element!.style.top = `${boundedTop}px`
+
+        // Calculate percentage for final save
+        const percentX = (boundedLeft / containerRect.width) * 100
+        const percentY = (boundedTop / containerRect.height) * 100
+
+        finalPositionsRef.current[dragState.tableId!] = { x: percentX, y: percentY }
+      })
     }
-    
-    const element = document.querySelector(`[data-table-id="${draggingTable}"]`) as HTMLElement
-    const container = floorPlanRef.current
-    
-    if (element && container) {
-      const containerRect = container.getBoundingClientRect()
-      const elementRect = element.getBoundingClientRect()
-      
-      const percentX = ((elementRect.left - containerRect.left) / containerRect.width) * 100
-      const percentY = ((elementRect.top - containerRect.top) / containerRect.height) * 100
-      
-      // Ensure values are within bounds
-      const finalX = Math.max(0, Math.min(90, percentX))
-      const finalY = Math.max(0, Math.min(90, percentY))
-      
-      try {
-        await onTableUpdate(draggingTable, { x: finalX, y: finalY })
-      } catch (error) {
-        console.error('Failed to update table position:', error)
-        // Reset position on error
-        const table = tables.find(t => t.id === draggingTable)
-        if (table) {
-          element.style.left = `${table.x_position}%`
-          element.style.top = `${table.y_position}%`
+  }, [editMode])
+
+  const handleTableDragEnd = useCallback((e?: MouseEvent | TouchEvent) => {
+    const dragState = dragStateRef.current
+
+    // For touch events, check if the ended touch matches our tracked touch
+    if (e && 'changedTouches' in e) {
+      let relevantTouch = false
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === dragState.touchId) {
+          relevantTouch = true
+          break
         }
       }
+      if (!relevantTouch) return
     }
-    
-    setDraggingTable(null)
-    setDragStartPos(null)
-    setTableStartPos(null)
-  }, [draggingTable, editMode, onTableUpdate, tables])
 
-  // Global drag event listeners for table repositioning
-  useEffect(() => {
-    if (editMode && draggingTable) {
-      const handleMove = (e: MouseEvent | TouchEvent) => handleTableDragMove(e)
-      const handleEnd = () => handleTableDragEnd()
-      
-      // Mouse events
-      document.addEventListener('mousemove', handleMove)
-      document.addEventListener('mouseup', handleEnd)
-      
-      // Touch events
-      document.addEventListener('touchmove', handleMove, { passive: false })
-      document.addEventListener('touchend', handleEnd)
-      
-      return () => {
-        document.removeEventListener('mousemove', handleMove)
-        document.removeEventListener('mouseup', handleEnd)
-        document.removeEventListener('touchmove', handleMove)
-        document.removeEventListener('touchend', handleEnd)
+    // Handle drag end
+    if (dragState.tableId && dragState.element && editMode && onTableUpdate) {
+      // Reset visual state
+      dragState.element.style.zIndex = ''
+      dragState.element.style.touchAction = ''
+
+      // Save final position to database only if drag was confirmed
+      if (dragState.isDragConfirmed) {
+        const finalPos = finalPositionsRef.current[dragState.tableId]
+        if (finalPos) {
+          try {
+            onTableUpdate(dragState.tableId, finalPos)
+          } catch (error) {
+            console.error('Failed to update table position:', error)
+            // Reset position on error
+            const table = tables.find(t => t.id === dragState.tableId)
+            if (table && dragState.element) {
+              dragState.element.style.left = `${table.x_position}%`
+              dragState.element.style.top = `${table.y_position}%`
+              finalPositionsRef.current[dragState.tableId] = { x: table.x_position, y: table.y_position }
+            }
+          }
+        }
+      }
+
+      // Clean up animation frame
+      if (dragState.animationId) {
+        cancelAnimationFrame(dragState.animationId)
       }
     }
-  }, [editMode, draggingTable, handleTableDragMove, handleTableDragEnd])
+
+    // Reset drag state
+    dragStateRef.current = {
+      tableId: null,
+      element: null,
+      startX: 0,
+      startY: 0,
+      offsetX: 0,
+      offsetY: 0,
+      initialLeft: 0,
+      initialTop: 0,
+      animationId: null,
+      touchId: null,
+      isDragConfirmed: false,
+      startTime: 0
+    }
+  }, [editMode, onTableUpdate, tables])
+
+  // Setup global event listeners for both mouse and touch
+  useEffect(() => {
+    // Mouse events - always passive false for mouse move to allow prevention
+    document.addEventListener('mousemove', handleTableDragMove, { passive: false })
+    document.addEventListener('mouseup', handleTableDragEnd)
+
+    // Touch events - conditional passive based on whether we have an active touch interaction
+    const handleTouchMove = (e: TouchEvent) => {
+      const dragState = dragStateRef.current
+
+      // Check if this touch event is relevant to our current interaction
+      let isRelevantTouch = false
+      if (dragState.touchId !== null) {
+        for (let i = 0; i < e.touches.length; i++) {
+          if (e.touches[i].identifier === dragState.touchId) {
+            isRelevantTouch = true
+            break
+          }
+        }
+      }
+
+      if (isRelevantTouch) {
+        handleTableDragMove(e)
+      }
+      // If not relevant, let the browser handle it normally for scrolling
+    }
+
+    document.addEventListener('touchmove', handleTouchMove, { passive: false })
+    document.addEventListener('touchend', handleTableDragEnd)
+    document.addEventListener('touchcancel', handleTableDragEnd)
+
+    return () => {
+      // Mouse events
+      document.removeEventListener('mousemove', handleTableDragMove)
+      document.removeEventListener('mouseup', handleTableDragEnd)
+
+      // Touch events
+      document.removeEventListener('touchmove', handleTouchMove)
+      document.removeEventListener('touchend', handleTableDragEnd)
+      document.removeEventListener('touchcancel', handleTableDragEnd)
+
+      // Clean up any pending animation frames
+      if (dragStateRef.current.animationId) {
+        cancelAnimationFrame(dragStateRef.current.animationId)
+      }
+    }
+  }, [handleTableDragMove, handleTableDragEnd])
 
   const getTableBookingInfo = (table: any) => {
     // Get all bookings for this table (current, upcoming, and recent)
@@ -436,7 +589,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 isHighlighted && "ring-4 ring-yellow-400 animate-pulse ring-offset-2 ring-offset-background",
                 // Drag states
                 isDragging && !isOccupied && "border-dashed border-green-500 bg-green-50/70 shadow-green-200/50",
-                draggingTable === table.id && "shadow-2xl scale-110 cursor-grabbing z-50",
+                dragStateRef.current.tableId === table.id && "shadow-2xl scale-110 cursor-grabbing z-50",
                 // Edit mode styling
                 editMode && "hover:ring-2 hover:ring-purple-400",
                 editMode && !isOccupied && "cursor-move",
@@ -447,12 +600,16 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               )}
               style={{
                 position: "absolute",
-                left: `${table.x_position}%`,
-                top: `${table.y_position}%`,
+                left: `${finalPositionsRef.current[table.id]?.x ?? table.x_position}%`,
+                top: `${finalPositionsRef.current[table.id]?.y ?? table.y_position}%`,
                 width: `${(table.width || 120) * 0.85}px`,
                 height: `${(table.height || 100) * 0.85}px`,
                 padding: "8px",
-                transition: draggingTable === table.id ? 'none' : undefined
+                transition: dragStateRef.current.tableId === table.id ? 'none' : undefined,
+                // Optimize for performance
+                willChange: editMode ? "transform, left, top" : "auto",
+                // Prevent iOS bounce and ensure proper touch handling
+                touchAction: dragStateRef.current.tableId === table.id ? "none" : "manipulation"
               }}
               onClick={() => {
                 if (editMode) return // Prevent click when in edit mode
@@ -851,9 +1008,21 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
             variant={editMode ? "destructive" : "secondary"}
             onClick={() => {
               setEditMode(!editMode)
-              setDraggingTable(null)
-              setDragStartPos(null)
-              setTableStartPos(null)
+              // Reset drag state when exiting edit mode
+              dragStateRef.current = {
+                tableId: null,
+                element: null,
+                startX: 0,
+                startY: 0,
+                offsetX: 0,
+                offsetY: 0,
+                initialLeft: 0,
+                initialTop: 0,
+                animationId: null,
+                touchId: null,
+                isDragConfirmed: false,
+                startTime: 0
+              }
             }}
             className={cn(
               "shadow-lg transition-all duration-200 font-medium",
