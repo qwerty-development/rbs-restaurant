@@ -279,3 +279,37 @@
     display: none;
   }
 }
+
+/* PWA Standalone Mode Optimizations */
+@media (display-mode: standalone) {
+  body {
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+
+  /* Hide scrollbars in standalone mode */
+  ::-webkit-scrollbar {
+    width: 0px;
+    background: transparent;
+  }
+
+  /* Prevent pull-to-refresh */
+  html, body {
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* Tablet-specific optimizations for 8-inch screens */
+@media screen and (min-width: 768px) and (max-width: 1024px) and (orientation: landscape) {
+  body {
+    font-size: 16px; /* Optimal for tablet reading */
+  }
+
+  /* Ensure touch targets are at least 44px */
+  button, [role="button"], input, select, textarea {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
