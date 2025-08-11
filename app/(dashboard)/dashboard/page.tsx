@@ -11,6 +11,7 @@ import { PendingRequestsPanel } from "@/components/dashboard/pending-requests-pa
 import { CriticalAlerts } from "@/components/dashboard/critical-alerts"
 import { TodaysTimeline } from "@/components/dashboard/todays-timeline"
 import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
+import { InstallPrompt } from "@/components/pwa/install-prompt"
 import { BookingDetails } from "@/components/bookings/booking-details"
 import { TableAvailabilityService } from "@/lib/table-availability"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
@@ -852,12 +853,17 @@ export default function DashboardPage() {
       </header>
 
       {/* Critical Alerts */}
-      <CriticalAlerts 
+      <CriticalAlerts
         pendingCount={stats.pendingCount}
         awaitingCheckIn={stats.awaitingCheckIn}
         bookings={todaysBookings}
         currentTime={currentTime}
       />
+
+      {/* PWA Install Prompt */}
+      <div className="px-4 pb-2">
+        <InstallPrompt />
+      </div>
 
       {/* Main Content Area - Properly sized for tablets */}
       <main className="flex-1 flex overflow-hidden">
