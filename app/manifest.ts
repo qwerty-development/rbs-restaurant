@@ -5,12 +5,15 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'RBS Restaurant Management',
     short_name: 'RBS Restaurant',
     description: 'Complete restaurant management system for bookings, tables, customers, and operations',
-    start_url: '/',
+    start_url: '/app',
+    scope: '/',
     display: 'standalone',
     background_color: '#ffffff',
     theme_color: '#3b82f6',
-    orientation: 'landscape-primary',
+    orientation: 'any',
     categories: ['business', 'productivity', 'food'],
+    lang: 'en',
+    dir: 'ltr',
     icons: [
       {
         src: '/icon-192x192.png',
@@ -49,6 +52,9 @@ export default function manifest(): MetadataRoute.Manifest {
         purpose: 'any',
       },
     ],
+    prefer_related_applications: false,
+    display_override: ['standalone', 'minimal-ui', 'browser'],
+    id: '/app',
     // Remove screenshots for now since they don't exist
     // screenshots: [
     //   {

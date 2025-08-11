@@ -1,18 +1,23 @@
-const CACHE_NAME = 'rbs-restaurant-v3'
+const CACHE_NAME = 'rbs-restaurant-v4'
 const urlsToCache = [
   '/',
+  '/app',
   '/dashboard',
+  '/login',
   '/bookings',
   '/customers',
   '/tables',
   '/waitlist',
   '/manifest.json',
   '/icon-192x192.png',
-  '/icon-512x512.png'
+  '/icon-384x384.png',
+  '/icon-512x512.png',
+  '/apple-touch-icon.png'
 ]
 
 // Install event - cache resources
 self.addEventListener('install', function (event) {
+  console.log('Service Worker installing...')
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(function (cache) {
@@ -23,6 +28,8 @@ self.addEventListener('install', function (event) {
         console.log('Cache install failed:', error)
       })
   )
+  // Force the waiting service worker to become the active service worker
+  self.skipWaiting()
 })
 
 // Fetch event - serve from cache when offline
@@ -63,6 +70,7 @@ self.addEventListener('fetch', function (event) {
 
 // Activate event - clean up old caches
 self.addEventListener('activate', function (event) {
+  console.log('Service Worker activating...')
   event.waitUntil(
     caches.keys().then(function (cacheNames) {
       return Promise.all(
@@ -73,6 +81,9 @@ self.addEventListener('activate', function (event) {
           }
         })
       )
+    }).then(() => {
+      // Take control of all pages immediately
+      return self.clients.claim()
     })
   )
 })
