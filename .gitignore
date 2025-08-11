@@ -39,3 +39,24 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Android / Bubblewrap
+# Build artifacts - DO NOT COMMIT
+*.apk
+*.aab
+*.idsig
+app/build/
+.gradle/
+build/
+
+# Android signing keystore - SECURITY: DO NOT COMMIT
+android.keystore
+*.keystore
+*.jks
+
+# Generated files
+manifest-checksum.txt
+store_icon.png
+
+# Gradle wrapper jar (optional - some prefer to commit this)
+# gradle/wrapper/gradle-wrapper.jar
