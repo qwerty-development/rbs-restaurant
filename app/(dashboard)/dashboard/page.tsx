@@ -861,7 +861,7 @@ export default function DashboardPage() {
       />
 
       {/* PWA Install Prompt */}
-      <div className="px-4 pb-2">
+      <div className="px-4">
         <InstallPrompt />
       </div>
 

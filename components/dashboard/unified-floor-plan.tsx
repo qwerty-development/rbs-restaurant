@@ -1002,7 +1002,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
     <div className="h-full w-full flex flex-col bg-gradient-to-br from-gray-900 to-gray-800">
       {/* Edit Mode Toggle */}
       {onTableUpdate && (
-        <div className="absolute top-4 right-4 z-50">
+        <div className="absolute top-10 left-20 z-50">
           <Button
             size="sm"
             variant={editMode ? "destructive" : "secondary"}
