@@ -1,6 +1,33 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Image optimization configuration
+  images: {
+    domains: [
+      'localhost',
+      // Add your CDN domain here
+      process.env.CDN_DOMAIN || '',
+      // Supabase storage domain
+      process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('https://', '')?.replace('.supabase.co', '.supabase.co') || '',
+    ].filter(Boolean),
+    formats: ['image/webp', 'image/avif'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    minimumCacheTTL: 31536000, // 1 year
+  },
+
+  // Asset prefix for CDN
+  assetPrefix: process.env.CDN_URL || '',
+
+  // Compression
+  compress: true,
+
+  // Performance optimizations
+  experimental: {
+    optimizeCss: true,
+    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
+  },
+
   async headers() {
     return [
       {
@@ -34,6 +61,36 @@ const nextConfig: NextConfig = {
           {
             key: 'Cache-Control',
             value: 'no-cache, no-store, must-revalidate',
+          },
+        ],
+      },
+      // Static asset caching
+      {
+        source: '/static/(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      // Image caching
+      {
+        source: '/_next/image(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      // Font caching
+      {
+        source: '/_next/static/media/(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
           },
         ],
       },

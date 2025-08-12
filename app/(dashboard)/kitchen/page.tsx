@@ -393,23 +393,42 @@ export default function KitchenDashboard() {
     return unsubscribe
   }, [restaurantId, subscribe, queryClient, soundEnabled])
 
-  // Fetch kitchen orders
+  // Fetch kitchen orders with performance monitoring
   const { data: ordersData, isLoading, error } = useQuery({
     queryKey: ['kitchen-orders', restaurantId, selectedStation],
     queryFn: async () => {
       if (!restaurantId) return { orders: [], summary: {} }
-      
+
+      const startTime = performance.now()
+
       const params = new URLSearchParams({
         status: 'active',
         ...(selectedStation !== 'all' && { station_id: selectedStation })
       })
-      
-      const response = await fetch(`/api/kitchen/orders?${params}`)
-      if (!response.ok) throw new Error('Failed to fetch orders')
-      return response.json()
+
+      try {
+        const response = await fetch(`/api/kitchen/orders?${params}`)
+        if (!response.ok) throw new Error('Failed to fetch orders')
+
+        const data = await response.json()
+        const duration = performance.now() - startTime
+
+        // Log performance for monitoring
+        if (duration > 500) {
+          console.warn(`Kitchen orders fetch took ${duration.toFixed(2)}ms`)
+        }
+
+        return data
+      } catch (error) {
+        const duration = performance.now() - startTime
+        console.error(`Kitchen orders fetch failed after ${duration.toFixed(2)}ms:`, error)
+        throw error
+      }
     },
     enabled: !!restaurantId,
-    refetchInterval: autoRefresh ? 30000 : false // 30 seconds
+    refetchInterval: autoRefresh ? 30000 : false, // 30 seconds
+    staleTime: 15000, // Consider data stale after 15 seconds
+    gcTime: 60000, // Keep in cache for 1 minute
   })
 
   // Fetch kitchen stations

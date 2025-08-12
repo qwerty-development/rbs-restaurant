@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { getOptimizedKitchenService } from "@/lib/services/optimized-kitchen-service"
 
 // GET /api/kitchen/orders - Get orders for kitchen display
 export async function GET(request: NextRequest) {
@@ -45,138 +46,34 @@ export async function GET(request: NextRequest) {
 
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams
-    const status = searchParams.get('status') || 'active' // active, all, specific status
+    const status = searchParams.get('status') || 'active'
     const stationId = searchParams.get('station_id')
     const courseType = searchParams.get('course_type')
     const priority = searchParams.get('priority')
+    const useCache = searchParams.get('no_cache') !== 'true' // Allow cache bypass for debugging
 
-    // Build base query for active kitchen orders
-    let query = supabase
-      .from('orders')
-      .select(`
-        *,
-        booking:bookings!orders_booking_id_fkey(
-          id,
-          guest_name,
-          party_size,
-          booking_time,
-          profiles!bookings_user_id_fkey(
-            id,
-            full_name
-          )
-        ),
-        table:restaurant_tables!orders_table_id_fkey(
-          id,
-          table_number,
-          table_type
-        ),
-        order_items(
-          *,
-          menu_item:menu_items!order_items_menu_item_id_fkey(
-            id,
-            name,
-            description,
-            dietary_tags,
-            allergens,
-            preparation_time,
-            category:menu_categories!menu_items_category_id_fkey(
-              id,
-              name
-            )
-          ),
-          order_modifications(*),
-          kitchen_assignments(
-            *,
-            station:kitchen_stations!kitchen_assignments_station_id_fkey(
-              id,
-              name,
-              station_type
-            ),
-            assigned_to_profile:profiles!kitchen_assignments_assigned_to_fkey(
-              id,
-              full_name
-            )
-          )
-        )
-      `)
-      .eq('restaurant_id', staff.restaurant_id)
-      .order('priority_level', { ascending: false })
-      .order('created_at', { ascending: true })
+    // Use optimized kitchen service
+    const kitchenService = getOptimizedKitchenService()
 
-    // Apply status filter
-    if (status === 'active') {
-      query = query.in('status', ['confirmed', 'preparing', 'ready'])
-    } else if (status !== 'all') {
-      query = query.eq('status', status)
-    }
+    try {
+      const result = await kitchenService.getKitchenOrders(staff.restaurant_id, {
+        status,
+        courseType: courseType || undefined,
+        priority: priority || undefined,
+        stationId: stationId || undefined,
+        useCache
+      })
 
-    // Apply course type filter
-    if (courseType) {
-      query = query.eq('course_type', courseType)
-    }
-
-    // Apply priority filter
-    if (priority) {
-      query = query.eq('priority_level', parseInt(priority))
-    }
-
-    const { data: orders, error } = await query
-
-    if (error) {
-      console.error('Database error:', error)
+      return NextResponse.json(result)
+    } catch (error) {
+      console.error('Kitchen service error:', error)
       return NextResponse.json(
         { error: "Failed to fetch kitchen orders" },
         { status: 500 }
       )
     }
 
-    // Filter by station if specified
-    let filteredOrders = orders
-    if (stationId) {
-      filteredOrders = orders.filter(order => 
-        order.order_items.some((item: any) => 
-          item.kitchen_assignments.some((assignment: any) => 
-            assignment.station_id === stationId
-          )
-        )
-      )
-    }
 
-    // Calculate timing information
-    const ordersWithTiming = filteredOrders.map(order => {
-      const now = new Date()
-      const createdAt = new Date(order.created_at)
-      const elapsedMinutes = Math.floor((now.getTime() - createdAt.getTime()) / 60000)
-      
-      // Calculate estimated completion time
-      const maxPrepTime = Math.max(
-        ...order.order_items.map((item: any) => item.estimated_prep_time || 0)
-      )
-      
-      const estimatedCompletion = new Date(createdAt.getTime() + maxPrepTime * 60000)
-      const isOverdue = now > estimatedCompletion && order.status !== 'ready'
-
-      return {
-        ...order,
-        timing: {
-          elapsed_minutes: elapsedMinutes,
-          estimated_completion: estimatedCompletion,
-          is_overdue: isOverdue,
-          max_prep_time: maxPrepTime
-        }
-      }
-    })
-
-    return NextResponse.json({ 
-      orders: ordersWithTiming,
-      summary: {
-        total: filteredOrders.length,
-        confirmed: filteredOrders.filter(o => o.status === 'confirmed').length,
-        preparing: filteredOrders.filter(o => o.status === 'preparing').length,
-        ready: filteredOrders.filter(o => o.status === 'ready').length,
-        overdue: ordersWithTiming.filter(o => o.timing.is_overdue).length
-      }
-    })
 
   } catch (error) {
     console.error('API error:', error)

@@ -31,6 +31,19 @@ export async function createClient() {
           }
         },
       },
+      db: {
+        schema: 'public'
+      },
+      auth: {
+        persistSession: false, // Server-side doesn't need session persistence
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+      },
+      global: {
+        headers: {
+          'x-client-info': 'rbs-restaurant-server-optimized'
+        }
+      }
     }
   )
 }

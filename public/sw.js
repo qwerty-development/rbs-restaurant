@@ -1,13 +1,7 @@
-const CACHE_NAME = 'rbs-restaurant-v4'
+const CACHE_NAME = 'rbs-restaurant-v5'
 const urlsToCache = [
   '/',
   '/app',
-  '/dashboard',
-  '/login',
-  '/bookings',
-  '/customers',
-  '/tables',
-  '/waitlist',
   '/manifest.json',
   '/icon-192x192.png',
   '/icon-384x384.png',
@@ -35,34 +29,56 @@ self.addEventListener('install', function (event) {
 // Fetch event - serve from cache when offline
 self.addEventListener('fetch', function (event) {
   const requestUrl = new URL(event.request.url)
-  
+
   // Skip service worker entirely for:
   // 1. External APIs (Supabase, etc.)
   // 2. API routes that need authentication
   // 3. Non-GET requests
-  if (requestUrl.hostname.includes('supabase.co') || 
+  // 4. Dashboard routes (let middleware handle authentication)
+  if (requestUrl.hostname.includes('supabase.co') ||
       requestUrl.pathname.startsWith('/api/') ||
+      requestUrl.pathname.startsWith('/dashboard') ||
+      requestUrl.pathname.startsWith('/login') ||
+      requestUrl.pathname.startsWith('/register') ||
       event.request.method !== 'GET' ||
       requestUrl.protocol === 'chrome-extension:') {
     // Let the request go directly to the network, don't intercept
     return
   }
 
-  // Only handle static assets and pages for caching
+  // Only handle static assets and public pages for caching
   if (requestUrl.origin === self.location.origin) {
     event.respondWith(
-      caches.match(event.request)
+      fetch(event.request, { redirect: 'follow' })
         .then(function (response) {
-          // Return cached version or fetch from network
-          if (response) {
+          // If it's a redirect, follow it
+          if (response.redirected) {
             return response
           }
-          return fetch(event.request).catch(() => {
-            // If offline and no cache, return a custom offline page
-            if (event.request.destination === 'document') {
-              return caches.match('/')
-            }
-          })
+
+          // Cache successful responses
+          if (response.status === 200) {
+            const responseToCache = response.clone()
+            caches.open(CACHE_NAME)
+              .then(function (cache) {
+                cache.put(event.request, responseToCache)
+              })
+          }
+
+          return response
+        })
+        .catch(function () {
+          // If offline, try to serve from cache
+          return caches.match(event.request)
+            .then(function (response) {
+              if (response) {
+                return response
+              }
+              // If offline and no cache, return a custom offline page
+              if (event.request.destination === 'document') {
+                return caches.match('/')
+              }
+            })
         })
     )
   }
