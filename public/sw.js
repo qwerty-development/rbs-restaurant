@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rbs-restaurant-v5'
+const CACHE_NAME = 'rbs-restaurant-v6'
 const urlsToCache = [
   '/',
   '/app',
@@ -32,52 +32,51 @@ self.addEventListener('fetch', function (event) {
 
   // Skip service worker entirely for:
   // 1. External APIs (Supabase, etc.)
-  // 2. API routes that need authentication
+  // 2. API routes that need authentication  
   // 3. Non-GET requests
-  // 4. Dashboard routes (let middleware handle authentication)
+  // 4. All dashboard/auth routes (let middleware handle authentication)
+  // 5. Root path to avoid redirect issues
   if (requestUrl.hostname.includes('supabase.co') ||
       requestUrl.pathname.startsWith('/api/') ||
       requestUrl.pathname.startsWith('/dashboard') ||
       requestUrl.pathname.startsWith('/login') ||
       requestUrl.pathname.startsWith('/register') ||
+      requestUrl.pathname.startsWith('/forgot-password') ||
+      requestUrl.pathname.startsWith('/reset-password') ||
+      requestUrl.pathname === '/' ||
       event.request.method !== 'GET' ||
       requestUrl.protocol === 'chrome-extension:') {
     // Let the request go directly to the network, don't intercept
     return
   }
 
-  // Only handle static assets and public pages for caching
-  if (requestUrl.origin === self.location.origin) {
+  // Only handle static assets (images, CSS, JS) for caching
+  if (requestUrl.origin === self.location.origin && 
+      (requestUrl.pathname.startsWith('/_next/') ||
+       requestUrl.pathname.startsWith('/icon-') ||
+       requestUrl.pathname.endsWith('.png') ||
+       requestUrl.pathname.endsWith('.ico') ||
+       requestUrl.pathname.endsWith('.webmanifest'))) {
     event.respondWith(
-      fetch(event.request, { redirect: 'follow' })
+      caches.match(event.request)
         .then(function (response) {
-          // If it's a redirect, follow it
-          if (response.redirected) {
+          // Return from cache if available
+          if (response) {
             return response
           }
 
-          // Cache successful responses
-          if (response.status === 200) {
-            const responseToCache = response.clone()
-            caches.open(CACHE_NAME)
-              .then(function (cache) {
-                cache.put(event.request, responseToCache)
-              })
-          }
-
-          return response
-        })
-        .catch(function () {
-          // If offline, try to serve from cache
-          return caches.match(event.request)
+          // Otherwise fetch from network
+          return fetch(event.request)
             .then(function (response) {
-              if (response) {
-                return response
+              // Cache successful responses
+              if (response.status === 200) {
+                const responseToCache = response.clone()
+                caches.open(CACHE_NAME)
+                  .then(function (cache) {
+                    cache.put(event.request, responseToCache)
+                  })
               }
-              // If offline and no cache, return a custom offline page
-              if (event.request.destination === 'document') {
-                return caches.match('/')
-              }
+              return response
             })
         })
     )
