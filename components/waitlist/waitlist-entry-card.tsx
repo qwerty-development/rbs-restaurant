@@ -42,7 +42,7 @@ interface WaitlistEntryCardProps {
   restaurantId?: string // For integrated workflow actions
 }
 
-export function WaitlistEntryCard({ entry, onStatusUpdate, onCreateBooking, previousStatus, onUndo, restaurantId }: WaitlistEntryCardProps) {
+export function WaitlistEntryCard({ entry, onStatusUpdate, onCreateBooking, previousStatus, onUndo, restaurantId }:any) {
   const [isUpdating, setIsUpdating] = useState(false)
 
   const handleStatusUpdate = async (newStatus: string) => {

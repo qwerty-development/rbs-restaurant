@@ -5,6 +5,7 @@ import "./globals.css"
 import { Toaster } from "react-hot-toast"
 import { Providers } from "@/components/provider"
 import { PWAProvider } from "@/components/pwa/pwa-provider"
+import { Analytics } from "@vercel/analytics/next"
 
 const inter = Inter({ subsets: ["latin"] })
 
