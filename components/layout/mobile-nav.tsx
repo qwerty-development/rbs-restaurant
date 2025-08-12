@@ -5,15 +5,15 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { 
+import {
   Menu,
   X,
-  LayoutDashboard, 
-  Calendar, 
-  Users, 
-  Utensils, 
+  LayoutDashboard,
+  Calendar,
+  Users,
+  Utensils,
   TableIcon,
-  BarChart3, 
+  BarChart3,
   Settings,
   Star,
   DollarSign,
@@ -21,7 +21,10 @@ import {
   Megaphone,
   HelpCircle,
   LogOut,
-  Bell
+  Bell,
+  ChefHat,
+  Clock,
+  Receipt
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -78,6 +81,18 @@ const navigationItems = [
     href: '/analytics',
     icon: BarChart3,
     permission: 'analytics.view',
+  },
+  {
+    title: 'Kitchen',
+    href: '/kitchen',
+    icon: ChefHat,
+    permission: 'kitchen.view',
+  },
+  {
+    title: 'Orders',
+    href: '/orders',
+    icon: Receipt,
+    permission: 'orders.view',
   },
   {
     title: 'Reviews',

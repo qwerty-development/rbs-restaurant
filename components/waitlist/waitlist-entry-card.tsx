@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatTimeRange, getTableTypeDisplay, getStatusColor } from '@/lib/utils/time-utils'
+import { ContextualActions, QuickActionBar } from '@/components/workflow/contextual-actions'
 import type { WaitlistEntry } from '@/types'
 
 interface WaitlistEntryCardProps {
@@ -38,9 +39,10 @@ interface WaitlistEntryCardProps {
   previousStatus?: string // Track previous status for undo functionality
   onUndo?: (entryId: string) => Promise<void>
   undoExpiresAt?: number // Timestamp when undo expires
+  restaurantId?: string // For integrated workflow actions
 }
 
-export function WaitlistEntryCard({ entry, onStatusUpdate, onCreateBooking, previousStatus, onUndo }: WaitlistEntryCardProps) {
+export function WaitlistEntryCard({ entry, onStatusUpdate, onCreateBooking, previousStatus, onUndo, restaurantId }: WaitlistEntryCardProps) {
   const [isUpdating, setIsUpdating] = useState(false)
 
   const handleStatusUpdate = async (newStatus: string) => {
@@ -169,6 +171,24 @@ export function WaitlistEntryCard({ entry, onStatusUpdate, onCreateBooking, prev
                 <Undo2 className="h-4 w-4 mr-2" />
                 {getUndoText()}
               </Button>
+            )}
+
+            {/* Integrated Workflow Actions */}
+            {entry.status === 'booked' && entry.booking_id && restaurantId && (
+              <div className="w-full mb-3">
+                <QuickActionBar
+                  bookingId={entry.booking_id}
+                  currentStatus="confirmed" // Waitlist bookings start as confirmed
+                  restaurantId={restaurantId}
+                  onActionComplete={(action, result) => {
+                    if (result.success) {
+                      // Refresh the waitlist or update UI as needed
+                      console.log(`Workflow action ${action} completed:`, result)
+                    }
+                  }}
+                  className="bg-green-50 border border-green-200"
+                />
+              </div>
             )}
 
             {/* Quick Action Buttons */}

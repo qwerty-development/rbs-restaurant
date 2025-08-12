@@ -6,7 +6,14 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "seed:menu": "tsx scripts/seed-menu-data.ts",
+    "create:sample-data": "tsx scripts/create-sample-data.ts",
+    "test:database-data": "tsx scripts/test-database-data.ts",
+    "test:order-status": "tsx scripts/test-order-status-update.ts",
+    "test:menu-apis": "tsx scripts/test-menu-apis.ts",
+    "test:kitchen-operations": "tsx scripts/test-kitchen-operations.ts",
+    "test:kitchen-styling": "tsx scripts/test-kitchen-styling.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.0",

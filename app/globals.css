@@ -62,6 +62,299 @@
   }
 }
 
+/* Kitchen Operations Specific Styles */
+@layer components {
+  /* Kitchen Display System */
+  .kitchen-display {
+    @apply h-screen flex flex-col bg-background overflow-hidden;
+  }
+
+  .kitchen-header {
+    @apply bg-card border-b border-border px-4 py-3 flex items-center justify-between;
+  }
+
+  .kitchen-station-tabs {
+    @apply bg-card border-b border-border px-4 py-2;
+  }
+
+  /* Order Cards */
+  .order-card {
+    @apply transition-all duration-200 hover:shadow-lg bg-card border-border;
+  }
+
+  .order-card-priority-1 {
+    @apply border-border;
+  }
+
+  .order-card-priority-2 {
+    @apply border-blue-400;
+  }
+
+  .order-card-priority-3 {
+    @apply border-yellow-400;
+  }
+
+  .order-card-priority-4 {
+    @apply border-orange-400;
+  }
+
+  .order-card-priority-5 {
+    @apply border-destructive;
+  }
+
+  .order-card-overdue {
+    @apply border-destructive bg-destructive/5 dark:bg-destructive/10;
+  }
+
+  .order-card-ready {
+    @apply ring-2 ring-green-500/50 border-green-500/50;
+  }
+
+  /* Order Items */
+  .order-item {
+    @apply flex items-center justify-between p-2 bg-muted/50 rounded border border-border;
+  }
+
+  .order-item-name {
+    @apply font-medium text-foreground;
+  }
+
+  .order-item-instructions {
+    @apply text-xs text-orange-600 dark:text-orange-400 mt-1 font-medium;
+  }
+
+  .order-item-modifications {
+    @apply text-xs text-blue-600 dark:text-blue-400 mt-1;
+  }
+
+  .order-item-allergens {
+    @apply text-xs text-destructive mt-1 font-medium;
+  }
+
+  /* Status Indicators */
+  .status-indicator-pending {
+    @apply bg-muted;
+  }
+
+  .status-indicator-confirmed {
+    @apply bg-blue-500;
+  }
+
+  .status-indicator-preparing {
+    @apply bg-yellow-500;
+  }
+
+  .status-indicator-ready {
+    @apply bg-green-500;
+  }
+
+  .status-indicator-served {
+    @apply bg-purple-500;
+  }
+
+  .status-indicator-completed {
+    @apply bg-muted;
+  }
+
+  .status-indicator-cancelled {
+    @apply bg-destructive;
+  }
+
+  /* Dietary and Special Requirements */
+  .dietary-requirements {
+    @apply flex items-center gap-2 p-2 bg-blue-50 dark:bg-blue-950/30 rounded border border-blue-200 dark:border-blue-800;
+  }
+
+  .dietary-requirements-icon {
+    @apply h-4 w-4 text-blue-600 dark:text-blue-400;
+  }
+
+  .dietary-requirements-text {
+    @apply text-sm font-medium text-blue-800 dark:text-blue-200;
+  }
+
+  .special-instructions {
+    @apply border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-950/30;
+  }
+
+  .special-instructions-icon {
+    @apply h-4 w-4 text-yellow-600 dark:text-yellow-400;
+  }
+
+  .special-instructions-text {
+    @apply font-medium text-yellow-800 dark:text-yellow-200;
+  }
+
+  /* Timing Indicators */
+  .timing-normal {
+    @apply text-green-600 dark:text-green-400;
+  }
+
+  .timing-warning {
+    @apply text-yellow-600 dark:text-yellow-400;
+  }
+
+  .timing-overdue {
+    @apply text-destructive;
+  }
+
+  /* Connection Status */
+  .connection-connected {
+    @apply text-green-500;
+  }
+
+  .connection-disconnected {
+    @apply text-destructive;
+  }
+
+  /* Order Entry Modal */
+  .order-entry-modal {
+    @apply max-w-6xl h-[90vh] flex flex-col;
+  }
+
+  .menu-item-card {
+    @apply cursor-pointer hover:shadow-md transition-shadow bg-card border-border hover:border-primary/50;
+  }
+
+  .menu-item-name {
+    @apply font-medium text-sm text-card-foreground;
+  }
+
+  .menu-item-price {
+    @apply font-bold text-sm text-card-foreground;
+  }
+
+  .order-summary-card {
+    @apply bg-card border-border;
+  }
+
+  .order-total-section {
+    @apply border-t border-border pt-4;
+  }
+
+  .order-total-text {
+    @apply text-foreground;
+  }
+
+  /* Print Styles */
+  .print-button {
+    @apply px-4 py-2 bg-primary text-primary-foreground text-xs rounded hover:bg-primary/90 transition-colors;
+  }
+
+  /* Tablet Optimizations */
+  @media (max-width: 1024px) and (orientation: landscape) {
+    .kitchen-display {
+      @apply text-base;
+    }
+
+    .order-card {
+      @apply p-3;
+    }
+
+    .kitchen-header {
+      @apply px-3 py-2;
+    }
+
+    .kitchen-station-tabs {
+      @apply px-3 py-1;
+    }
+  }
+
+  /* High Priority Alerts */
+  .priority-alert {
+    @apply bg-destructive/10 border border-destructive/30 rounded;
+  }
+
+  .priority-alert-icon {
+    @apply h-4 w-4 text-destructive;
+  }
+
+  .priority-alert-text {
+    @apply text-destructive font-bold text-xs;
+  }
+
+  /* Allergen Alerts */
+  .allergen-alert {
+    @apply bg-orange-100 dark:bg-orange-950/30 border border-orange-300 dark:border-orange-700 rounded;
+  }
+
+  .allergen-alert-icon {
+    @apply h-4 w-4 text-orange-600 dark:text-orange-400;
+  }
+
+  .allergen-alert-text {
+    @apply text-orange-800 dark:text-orange-200 font-bold text-xs;
+  }
+
+  /* Empty States */
+  .empty-state {
+    @apply text-center py-12;
+  }
+
+  .empty-state-icon {
+    @apply h-12 w-12 mx-auto text-muted-foreground mb-4;
+  }
+
+  .empty-state-title {
+    @apply text-lg text-muted-foreground;
+  }
+
+  .empty-state-description {
+    @apply text-sm text-muted-foreground/70;
+  }
+
+  /* Loading States */
+  .loading-spinner {
+    @apply h-8 w-8 animate-spin mx-auto mb-4;
+  }
+
+  /* Focus and Accessibility */
+  .focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Print Media Queries */
+  @media print {
+    .print-hidden {
+      @apply hidden;
+    }
+
+    .print-visible {
+      @apply block;
+    }
+
+    .order-ticket {
+      @apply shadow-none border-black;
+    }
+  }
+}
+
+/* Dark mode specific adjustments for kitchen operations */
+@media (prefers-color-scheme: dark) {
+  .kitchen-display {
+    color-scheme: dark;
+  }
+}
+
+/* Ensure proper contrast in all modes */
+@layer utilities {
+  .text-contrast {
+    @apply text-foreground;
+  }
+
+  .bg-contrast {
+    @apply bg-card;
+  }
+
+  .border-contrast {
+    @apply border-border;
+  }
+
+  .hover-contrast {
+    @apply hover:bg-muted/50;
+  }
+}
+
 /* Custom scrollbar */
 @layer utilities {
   .scrollbar-hide {

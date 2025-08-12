@@ -54,8 +54,11 @@ export async function GET(request: NextRequest) {
           name,
           address
         ),
-        booking_tables(
-          table:restaurant_tables(*)
+        table:restaurant_tables!bookings_table_id_fkey(
+          id,
+          table_number,
+          table_type,
+          capacity
         )
       `)
       .eq('restaurant_id', staff.restaurant_id)
@@ -75,7 +78,13 @@ export async function GET(request: NextRequest) {
     }
 
     if (status && status !== 'all') {
-      query = query.eq('status', status)
+      // Support multiple statuses separated by commas
+      const statuses = status.split(',').map(s => s.trim())
+      if (statuses.length === 1) {
+        query = query.eq('status', statuses[0])
+      } else {
+        query = query.in('status', statuses)
+      }
     }
 
     const { data: bookings, error } = await query

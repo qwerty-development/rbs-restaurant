@@ -22,6 +22,8 @@ import {
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { format, parseISO, isToday, isTomorrow, isFuture, isPast } from 'date-fns'
+import { ContextualActions, QuickActionBar } from '@/components/workflow/contextual-actions'
+import { getUnifiedWorkflow } from '@/lib/services/unified-restaurant-workflow'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -626,6 +628,7 @@ export default function WaitlistPage() {
                   onCreateBooking={handleCreateBooking}
                   previousStatus={statusHistory[entry.id]}
                   onUndo={undoStatusChange}
+                  restaurantId={restaurantId}
                 />
               ))}
             </div>

@@ -6,13 +6,13 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useSidebar } from '@/lib/contexts/sidebar-context'
-import { 
-  LayoutDashboard, 
-  Calendar, 
-  Users, 
-  Utensils, 
+import {
+  LayoutDashboard,
+  Calendar,
+  Users,
+  Utensils,
   TableIcon,
-  BarChart3, 
+  BarChart3,
   Settings,
   Star,
   DollarSign,
@@ -25,7 +25,9 @@ import {
   Crown,
   User,
   Clock,
-  Bell
+  Bell,
+  ChefHat,
+  Receipt
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -94,6 +96,18 @@ const navigationItems = [
     href: '/waitlist',
     icon: Clock,
     permission: 'bookings.view',
+  },
+  {
+    title: 'Kitchen',
+    href: '/kitchen',
+    icon: ChefHat,
+    permission: 'kitchen.view',
+  },
+  {
+    title: 'Orders',
+    href: '/orders',
+    icon: Receipt,
+    permission: 'orders.view',
   },
   {
     title: 'Reviews',

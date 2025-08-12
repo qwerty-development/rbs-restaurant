@@ -858,3 +858,150 @@ CREATE TABLE public.waitlist (
   CONSTRAINT waitlist_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
   CONSTRAINT waitlist_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
 );
+
+-- Order Management System Tables
+
+CREATE TABLE public.orders (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  booking_id uuid NOT NULL,
+  restaurant_id uuid NOT NULL,
+  table_id uuid,
+  order_number text NOT NULL,
+  status text NOT NULL DEFAULT 'pending' CHECK (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'preparing'::text, 'ready'::text, 'served'::text, 'completed'::text, 'cancelled'::text])),
+  order_type text NOT NULL DEFAULT 'dine_in' CHECK (order_type = ANY (ARRAY['dine_in'::text, 'takeaway'::text, 'delivery'::text])),
+  course_type text CHECK (course_type = ANY (ARRAY['appetizer'::text, 'main_course'::text, 'dessert'::text, 'beverage'::text, 'all_courses'::text])),
+  subtotal numeric NOT NULL DEFAULT 0,
+  tax_amount numeric NOT NULL DEFAULT 0,
+  total_amount numeric NOT NULL DEFAULT 0,
+  special_instructions text,
+  dietary_requirements ARRAY DEFAULT '{}'::text[],
+  estimated_prep_time integer, -- in minutes
+  actual_prep_time integer, -- in minutes
+  priority_level integer DEFAULT 1 CHECK (priority_level >= 1 AND priority_level <= 5),
+  created_by uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  confirmed_at timestamp with time zone,
+  started_preparing_at timestamp with time zone,
+  ready_at timestamp with time zone,
+  served_at timestamp with time zone,
+  completed_at timestamp with time zone,
+  CONSTRAINT orders_pkey PRIMARY KEY (id),
+  CONSTRAINT orders_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
+  CONSTRAINT orders_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
+  CONSTRAINT orders_table_id_fkey FOREIGN KEY (table_id) REFERENCES public.restaurant_tables(id),
+  CONSTRAINT orders_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
+);
+
+CREATE TABLE public.order_items (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL,
+  menu_item_id uuid NOT NULL,
+  quantity integer NOT NULL CHECK (quantity > 0),
+  unit_price numeric NOT NULL,
+  total_price numeric NOT NULL,
+  special_instructions text,
+  dietary_modifications ARRAY DEFAULT '{}'::text[],
+  status text NOT NULL DEFAULT 'pending' CHECK (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'preparing'::text, 'ready'::text, 'served'::text, 'cancelled'::text])),
+  estimated_prep_time integer, -- in minutes
+  actual_prep_time integer, -- in minutes
+  started_preparing_at timestamp with time zone,
+  ready_at timestamp with time zone,
+  served_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT order_items_pkey PRIMARY KEY (id),
+  CONSTRAINT order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE CASCADE,
+  CONSTRAINT order_items_menu_item_id_fkey FOREIGN KEY (menu_item_id) REFERENCES public.menu_items(id)
+);
+
+CREATE TABLE public.kitchen_stations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  restaurant_id uuid NOT NULL,
+  name text NOT NULL,
+  description text,
+  station_type text NOT NULL CHECK (station_type = ANY (ARRAY['cold'::text, 'hot'::text, 'grill'::text, 'fryer'::text, 'pastry'::text, 'beverage'::text, 'expo'::text])),
+  is_active boolean DEFAULT true,
+  display_order integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT kitchen_stations_pkey PRIMARY KEY (id),
+  CONSTRAINT kitchen_stations_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id)
+);
+
+CREATE TABLE public.order_status_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL,
+  order_item_id uuid,
+  old_status text,
+  new_status text NOT NULL,
+  changed_by uuid NOT NULL,
+  changed_at timestamp with time zone DEFAULT now(),
+  notes text,
+  station_id uuid,
+  estimated_completion timestamp with time zone,
+  CONSTRAINT order_status_history_pkey PRIMARY KEY (id),
+  CONSTRAINT order_status_history_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id),
+  CONSTRAINT order_status_history_order_item_id_fkey FOREIGN KEY (order_item_id) REFERENCES public.order_items(id),
+  CONSTRAINT order_status_history_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES public.profiles(id),
+  CONSTRAINT order_status_history_station_id_fkey FOREIGN KEY (station_id) REFERENCES public.kitchen_stations(id)
+);
+
+CREATE TABLE public.kitchen_assignments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  order_item_id uuid NOT NULL,
+  station_id uuid NOT NULL,
+  assigned_to uuid,
+  assigned_at timestamp with time zone DEFAULT now(),
+  started_at timestamp with time zone,
+  completed_at timestamp with time zone,
+  notes text,
+  CONSTRAINT kitchen_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT kitchen_assignments_order_item_id_fkey FOREIGN KEY (order_item_id) REFERENCES public.order_items(id),
+  CONSTRAINT kitchen_assignments_station_id_fkey FOREIGN KEY (station_id) REFERENCES public.kitchen_stations(id),
+  CONSTRAINT kitchen_assignments_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.profiles(id)
+);
+
+CREATE TABLE public.menu_item_stations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  menu_item_id uuid NOT NULL,
+  station_id uuid NOT NULL,
+  is_primary boolean DEFAULT false,
+  preparation_order integer DEFAULT 1,
+  estimated_time integer, -- in minutes
+  CONSTRAINT menu_item_stations_pkey PRIMARY KEY (id),
+  CONSTRAINT menu_item_stations_menu_item_id_fkey FOREIGN KEY (menu_item_id) REFERENCES public.menu_items(id),
+  CONSTRAINT menu_item_stations_station_id_fkey FOREIGN KEY (station_id) REFERENCES public.kitchen_stations(id)
+);
+
+CREATE TABLE public.order_modifications (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  order_item_id uuid NOT NULL,
+  modification_type text NOT NULL CHECK (modification_type = ANY (ARRAY['add'::text, 'remove'::text, 'substitute'::text, 'extra'::text, 'less'::text, 'on_side'::text])),
+  description text NOT NULL,
+  price_adjustment numeric DEFAULT 0,
+  created_by uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT order_modifications_pkey PRIMARY KEY (id),
+  CONSTRAINT order_modifications_order_item_id_fkey FOREIGN KEY (order_item_id) REFERENCES public.order_items(id),
+  CONSTRAINT order_modifications_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
+);
+
+CREATE TABLE public.kitchen_display_settings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  restaurant_id uuid NOT NULL,
+  station_id uuid,
+  display_name text NOT NULL,
+  show_prep_times boolean DEFAULT true,
+  show_dietary_info boolean DEFAULT true,
+  show_special_instructions boolean DEFAULT true,
+  auto_advance_orders boolean DEFAULT false,
+  sound_notifications boolean DEFAULT true,
+  color_scheme text DEFAULT 'default',
+  font_size text DEFAULT 'medium' CHECK (font_size = ANY (ARRAY['small'::text, 'medium'::text, 'large'::text])),
+  orders_per_page integer DEFAULT 10,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT kitchen_display_settings_pkey PRIMARY KEY (id),
+  CONSTRAINT kitchen_display_settings_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
+  CONSTRAINT kitchen_display_settings_station_id_fkey FOREIGN KEY (station_id) REFERENCES public.kitchen_stations(id)
+);
