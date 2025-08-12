@@ -3,6 +3,9 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { Sidebar } from "@/components/layout/sidebar"
 import { MobileNav } from "@/components/layout/mobile-nav"
+import { StaffChatProvider } from "@/lib/contexts/staff-chat-context"
+import StaffChatToggle from "@/components/chat/chat-toggle"
+import StaffChatPanel from "@/components/chat/staff-chat-panel"
 import { SidebarProvider } from "@/lib/contexts/sidebar-context"
 
 export default async function DashboardLayout({
@@ -57,9 +60,13 @@ export default async function DashboardLayout({
 
         {/* Main Content - Full height optimization without header */}
         <div className="transition-all duration-200 ease-out sm:ml-16">
-          <main className="min-h-screen">
-            {children}
-          </main>
+          <StaffChatProvider restaurantId={staffData.restaurant.id}>
+            <main className="min-h-screen">
+              {children}
+            </main>
+            <StaffChatToggle />
+            <StaffChatPanel />
+          </StaffChatProvider>
         </div>
       </div>
     </SidebarProvider>
