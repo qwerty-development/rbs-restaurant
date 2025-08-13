@@ -6,15 +6,15 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Users, 
+import {
+  TrendingUp,
+  TrendingDown,
+  Users,
   Calendar,
   DollarSign,
   Clock,
   AlertCircle,
-  Award,
+  Star,
   PieChart
 } from 'lucide-react'
 import { format } from 'date-fns'
@@ -235,7 +235,7 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{insights.customerSegments.vip}</div>
-              <Award className="h-4 w-4 text-yellow-500 mt-2" />
+              <Star className="h-4 w-4 text-yellow-500 mt-2" />
             </CardContent>
           </Card>
 

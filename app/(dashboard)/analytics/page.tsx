@@ -14,19 +14,19 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { 
-  TrendingUp, 
-  Users, 
+import { RevenueDashboard } from "@/components/analytics/revenue-dashboard"
+import { BusinessIntelligenceDashboard } from "@/components/analytics/business-intelligence-dashboard"
+import { BookingAnalyticsDashboard } from "@/components/analytics/booking-analytics-dashboard"
+import { CustomerAnalyticsDashboard } from "@/components/analytics/customer-analytics-dashboard"
+import {
+  TrendingUp,
+  Users,
   Calendar,
   DollarSign,
   Star,
   Clock,
   AlertCircle,
-  Award,
-  UserCheck,
-  ArrowRight,
-  BarChart3,
-  PieChart
+  ArrowRight
 } from "lucide-react"
 import { format, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from "date-fns"
 import { useRouter } from "next/navigation"
@@ -42,12 +42,7 @@ type BookingStats = {
   revenue: number
 }
 
-type CustomerStats = {
-  uniqueCustomers: number
-  repeatCustomers: number
-  newCustomers: number
-  frequentCustomers: number
-}
+
 
 type TimeStats = {
   busiestDay: string
@@ -146,85 +141,7 @@ export default function AnalyticsPage() {
     enabled: !!restaurantId,
   })
 
-  // Fetch customer statistics
-  const { data: customerStats, isLoading: customerStatsLoading } = useQuery({
-    queryKey: ["customer-stats", restaurantId, dateRange],
-    queryFn: async () => {
-      if (!restaurantId) return null
 
-      // Get bookings in the date range
-      const { data: bookings, error } = await supabase
-        .from("bookings")
-        .select("user_id, booking_time")
-        .eq("restaurant_id", restaurantId)
-        .gte("booking_time", start.toISOString())
-        .lte("booking_time", end.toISOString())
-        .not("user_id", "is", null)
-
-      if (error) throw error
-
-      // Get unique customers in this period
-      const uniqueCustomers = new Set(bookings.map(b => b.user_id)).size
-
-      // Get all-time booking stats to determine repeat vs new customers
-      const { data: allTimeBookings, error: allTimeError } = await supabase
-        .from("bookings")
-        .select("user_id, booking_time")
-        .eq("restaurant_id", restaurantId)
-        .not("user_id", "is", null)
-
-      if (allTimeError) throw allTimeError
-
-      // Analyze customers
-      const customerBookingCounts = new Map()
-      allTimeBookings.forEach(booking => {
-        const userId = booking.user_id
-        if (!customerBookingCounts.has(userId)) {
-          customerBookingCounts.set(userId, {
-            totalBookings: 0,
-            firstBooking: booking.booking_time,
-          })
-        }
-        customerBookingCounts.get(userId).totalBookings++
-        
-        // Update first booking if this is earlier
-        if (new Date(booking.booking_time) < new Date(customerBookingCounts.get(userId).firstBooking)) {
-          customerBookingCounts.get(userId).firstBooking = booking.booking_time
-        }
-      })
-
-      // Count customers in current period
-      const currentPeriodCustomers = new Set(bookings.map(b => b.user_id))
-      let newCustomers = 0
-      let repeatCustomers = 0
-      let frequentCustomers = 0
-
-      currentPeriodCustomers.forEach(userId => {
-        const customerData = customerBookingCounts.get(userId)
-        if (customerData) {
-          const firstBookingInPeriod = new Date(customerData.firstBooking) >= start
-          
-          if (firstBookingInPeriod) {
-            newCustomers++
-          } else if (customerData.totalBookings >= 5) {
-            frequentCustomers++
-          } else {
-            repeatCustomers++
-          }
-        }
-      })
-
-      const stats: CustomerStats = {
-        uniqueCustomers,
-        repeatCustomers,
-        newCustomers,
-        frequentCustomers,
-      }
-
-      return stats
-    },
-    enabled: !!restaurantId,
-  })
 
   // Fetch time-based statistics
   const { data: timeStats, isLoading: timeStatsLoading } = useQuery({
@@ -318,7 +235,7 @@ export default function AnalyticsPage() {
     enabled: !!restaurantId,
   })
 
-  const isLoading = bookingStatsLoading || customerStatsLoading || timeStatsLoading || reviewStatsLoading
+  const isLoading = bookingStatsLoading || timeStatsLoading || reviewStatsLoading
 
   if (isLoading) {
     return (
@@ -371,13 +288,13 @@ export default function AnalyticsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Unique Customers</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{customerStats?.uniqueCustomers || 0}</div>
+            <div className="text-2xl font-bold">{bookingStats?.total || 0}</div>
             <p className="text-xs text-muted-foreground">
-              {customerStats?.newCustomers || 0} new, {customerStats?.repeatCustomers || 0} returning
+              {bookingStats?.completed || 0} completed, {bookingStats?.cancelled || 0} cancelled
             </p>
           </CardContent>
         </Card>
@@ -398,20 +315,7 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Est. Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ${(bookingStats?.revenue || 0).toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              From completed bookings
-            </p>
-          </CardContent>
-        </Card>
+      
       </div>
 
       {/* Quick Actions */}
@@ -439,213 +343,32 @@ export default function AnalyticsPage() {
         </Button>
       </div>
 
-      <Tabs defaultValue="bookings" className="space-y-4">
+      <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
+          <TabsTrigger value="overview">Live Overview</TabsTrigger>
+          <TabsTrigger value="revenue">Revenue</TabsTrigger>
           <TabsTrigger value="bookings">Bookings</TabsTrigger>
           <TabsTrigger value="customers">Customers</TabsTrigger>
           <TabsTrigger value="operations">Operations</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="overview" className="space-y-4">
+          <BusinessIntelligenceDashboard />
+        </TabsContent>
+
+        <TabsContent value="revenue" className="space-y-4">
+          <RevenueDashboard />
+        </TabsContent>
+
         <TabsContent value="bookings" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Booking Status Distribution</CardTitle>
-                <CardDescription>
-                  Breakdown of all bookings in the selected period
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Confirmed</span>
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-16 bg-green-200 rounded">
-                        <div 
-                          className="h-2 bg-green-500 rounded" 
-                          style={{ 
-                            width: `${bookingStats && bookingStats.total > 0 
-                              ? (bookingStats.confirmed / bookingStats.total) * 100 
-                              : 0}%` 
-                          }}
-                        />
-                      </div>
-                      <span className="text-sm text-muted-foreground">
-                        {bookingStats?.confirmed || 0} ({bookingStats && bookingStats.total > 0
-                          ? Math.round((bookingStats.confirmed / bookingStats.total) * 100)
-                          : 0}%)
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Completed</span>
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-16 bg-blue-200 rounded">
-                        <div 
-                          className="h-2 bg-blue-500 rounded" 
-                          style={{ 
-                            width: `${bookingStats && bookingStats.total > 0 
-                              ? (bookingStats.completed / bookingStats.total) * 100 
-                              : 0}%` 
-                          }}
-                        />
-                      </div>
-                      <span className="text-sm text-muted-foreground">
-                        {bookingStats?.completed || 0} ({bookingStats && bookingStats.total > 0
-                          ? Math.round((bookingStats.completed / bookingStats.total) * 100)
-                          : 0}%)
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Pending</span>
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-16 bg-yellow-200 rounded">
-                        <div 
-                          className="h-2 bg-yellow-500 rounded" 
-                          style={{ 
-                            width: `${bookingStats && bookingStats.total > 0 
-                              ? (bookingStats.pending / bookingStats.total) * 100 
-                              : 0}%` 
-                          }}
-                        />
-                      </div>
-                      <span className="text-sm text-muted-foreground">
-                        {bookingStats?.pending || 0} ({bookingStats && bookingStats.total > 0
-                          ? Math.round((bookingStats.pending / bookingStats.total) * 100)
-                          : 0}%)
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Cancelled</span>
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-16 bg-red-200 rounded">
-                        <div 
-                          className="h-2 bg-red-500 rounded" 
-                          style={{ 
-                            width: `${bookingStats && bookingStats.total > 0 
-                              ? (bookingStats.cancelled / bookingStats.total) * 100 
-                              : 0}%` 
-                          }}
-                        />
-                      </div>
-                      <span className="text-sm text-muted-foreground">
-                        {bookingStats?.cancelled || 0} ({bookingStats && bookingStats.total > 0
-                          ? Math.round((bookingStats.cancelled / bookingStats.total) * 100)
-                          : 0}%)
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">No Show</span>
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-16 bg-gray-200 rounded">
-                        <div 
-                          className="h-2 bg-gray-500 rounded" 
-                          style={{ 
-                            width: `${bookingStats && bookingStats.total > 0 
-                              ? (bookingStats.noShow / bookingStats.total) * 100 
-                              : 0}%` 
-                          }}
-                        />
-                      </div>
-                      <span className="text-sm text-muted-foreground">
-                        {bookingStats?.noShow || 0} ({bookingStats && bookingStats.total > 0
-                          ? Math.round((bookingStats.noShow / bookingStats.total) * 100)
-                          : 0}%)
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Peak Times</CardTitle>
-                <CardDescription>
-                  Your busiest periods and averages
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Busiest Day</span>
-                    <span className="text-sm text-muted-foreground">
-                      {timeStats?.busiestDay || "N/A"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Busiest Hour</span>
-                    <span className="text-sm text-muted-foreground">
-                      {timeStats?.busiestHour || "N/A"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Avg Party Size</span>
-                    <span className="text-sm text-muted-foreground">
-                      {timeStats?.averagePartySize || 0} guests
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Avg Turn Time</span>
-                    <span className="text-sm text-muted-foreground">
-                      {timeStats?.averageTurnTime || 0} minutes
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <BookingAnalyticsDashboard />
         </TabsContent>
 
         <TabsContent value="customers" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">New Customers</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{customerStats?.newCustomers || 0}</div>
-                <p className="text-xs text-muted-foreground">
-                  First-time visitors
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Repeat Customers</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{customerStats?.repeatCustomers || 0}</div>
-                <p className="text-xs text-muted-foreground">
-                  Returning customers
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Frequent Customers</CardTitle>
-                <Award className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{customerStats?.frequentCustomers || 0}</div>
-                <p className="text-xs text-muted-foreground">
-                  5+ visits total
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+          <CustomerAnalyticsDashboard />
         </TabsContent>
+
+
 
         <TabsContent value="operations" className="space-y-4">
           <Card>

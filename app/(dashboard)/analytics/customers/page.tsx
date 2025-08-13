@@ -817,7 +817,7 @@ export default function CustomerAnalyticsPage() {
                 <TableRow>
                   <TableHead>Customer</TableHead>
                   <TableHead>Total Bookings</TableHead>
-                  <TableHead>Estimated Spent</TableHead>
+          
                   <TableHead>Avg Rating</TableHead>
                   <TableHead>Member Since</TableHead>
                   <TableHead>Status</TableHead>
@@ -843,7 +843,7 @@ export default function CustomerAnalyticsPage() {
                       </div>
                     </TableCell>
                     <TableCell>{customer.totalBookings}</TableCell>
-                    <TableCell>${customer.totalSpent.toFixed(0)}</TableCell>
+               
                     <TableCell>
                       {customer.avgRating > 0 ? (
                         <div className="flex items-center gap-1">
