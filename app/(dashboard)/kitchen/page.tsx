@@ -86,9 +86,9 @@ interface OrderItem {
 }
 
 const STATUS_COLORS = {
-  confirmed: "bg-blue-500",
-  preparing: "bg-yellow-500",
-  ready: "bg-green-500",
+  confirmed: "bg-primary",
+  preparing: "bg-secondary",
+  ready: "bg-accent",
   served: "bg-muted"
 }
 
@@ -101,9 +101,9 @@ const STATUS_ICONS = {
 
 const PRIORITY_COLORS = {
   1: "border-border",
-  2: "border-blue-400",
-  3: "border-yellow-400",
-  4: "border-orange-400",
+  2: "border-primary",
+  3: "border-secondary",
+  4: "border-accent",
   5: "border-destructive"
 }
 

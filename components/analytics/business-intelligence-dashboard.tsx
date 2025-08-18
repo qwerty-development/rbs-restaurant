@@ -680,8 +680,8 @@ export function BusinessIntelligenceDashboard() {
               <Area 
                 type="monotone" 
                 dataKey="bookings" 
-                stroke="#3B82F6" 
-                fill="#3B82F6" 
+                stroke="#7A2E4A" 
+                fill="#7A2E4A" 
                 fillOpacity={0.2}
               />
             </AreaChart>

@@ -14,5 +14,13 @@
      limitations under the License.
 -->
 <resources>
-    <color name="shortcut_background">#F5F5F5</color>
+    <!-- New Brand Color Palette -->
+    <color name="shortcut_background">#FBF8F6</color> <!-- off white background -->
+    <color name="colorPrimary">#7A2E4A</color> <!-- Mulberry Velvet -->
+    <color name="colorPrimaryDark">#5A1F34</color> <!-- Darker Mulberry Velvet -->
+    <color name="navigationColor">#7A2E4A</color> <!-- Mulberry Velvet -->
+    <color name="navigationColorDark">#5A1F34</color> <!-- Darker Mulberry Velvet -->
+    <color name="navigationDividerColor">#E8DDD8</color> <!-- Subtle Blushed Linen -->
+    <color name="navigationDividerColorDark">#E8DDD8</color> <!-- Subtle Blushed Linen -->
+    <color name="backgroundColor">#FBF8F6</color> <!-- off white background -->
 </resources>

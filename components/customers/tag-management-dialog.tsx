@@ -45,14 +45,14 @@ interface TagManagementDialogProps {
 }
 
 const TAG_COLORS = [
-  { name: 'Gray', value: '#6B7280' },
-  { name: 'Red', value: '#EF4444' },
-  { name: 'Orange', value: '#F97316' },
-  { name: 'Yellow', value: '#F59E0B' },
-  { name: 'Green', value: '#10B981' },
-  { name: 'Blue', value: '#3B82F6' },
-  { name: 'Purple', value: '#8B5CF6' },
-  { name: 'Pink', value: '#EC4899' },
+  { name: 'Mulberry Velvet', value: '#7A2E4A' }, // Primary brand color
+  { name: 'Lavender Fog', value: '#D4C4E0' }, // Accent brand color
+  { name: 'Blushed Linen', value: '#FFF0E6' }, // Secondary brand color
+  { name: 'Charcoal Mood', value: '#787878' }, // Muted foreground
+  { name: 'Sage Green', value: '#10B981' },
+  { name: 'Warm Orange', value: '#F97316' },
+  { name: 'Golden Yellow', value: '#F59E0B' },
+  { name: 'Deep Purple', value: '#8B5CF6' },
 ]
 
 export function TagManagementDialog({
@@ -72,7 +72,7 @@ export function TagManagementDialog({
   // New tag form
   const [newTag, setNewTag] = useState({
     name: '',
-    color: '#6B7280',
+    color: '#7A2E4A', // Default to primary brand color
     description: ''
   })
   
@@ -102,7 +102,7 @@ export function TagManagementDialog({
       if (error) throw error
 
       toast.success('Tag created successfully')
-      setNewTag({ name: '', color: '#6B7280', description: '' })
+      setNewTag({ name: '', color: '#7A2E4A', description: '' })
       onUpdate()
     } catch (error: any) {
       console.error('Error creating tag:', error)

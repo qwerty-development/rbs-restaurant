@@ -80,27 +80,27 @@ const STATUS_ICONS: any = {
 }
 
 const STATUS_COLORS: any = {
-  'pending': 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-400 dark:border-yellow-600 text-yellow-800 dark:text-yellow-300',
-  'confirmed': 'bg-blue-100 dark:bg-blue-900/30 border-blue-400 dark:border-blue-600 text-blue-800 dark:text-blue-300',
-  'arrived': 'bg-indigo-100 dark:bg-indigo-900/30 border-indigo-400 dark:border-indigo-600 text-indigo-800 dark:text-indigo-300',
-  'seated': 'bg-purple-100 dark:bg-purple-900/30 border-purple-400 dark:border-purple-600 text-purple-800 dark:text-purple-300',
-  'ordered': 'bg-orange-100 dark:bg-orange-900/30 border-orange-400 dark:border-orange-600 text-orange-800 dark:text-orange-300',
-  'appetizers': 'bg-green-100 dark:bg-green-900/30 border-green-400 dark:border-green-600 text-green-800 dark:text-green-300',
-  'main_course': 'bg-green-200 dark:bg-green-800/40 border-green-500 dark:border-green-500 text-green-900 dark:text-green-200',
-  'dessert': 'bg-pink-100 dark:bg-pink-900/30 border-pink-400 dark:border-pink-600 text-pink-800 dark:text-pink-300',
-  'payment': 'bg-yellow-200 dark:bg-yellow-800/40 border-yellow-500 dark:border-yellow-500 text-yellow-900 dark:text-yellow-200',
+  'pending': 'bg-secondary/50 border-secondary text-secondary-foreground',
+  'confirmed': 'bg-primary/20 border-primary/40 text-primary',
+  'arrived': 'bg-accent/30 border-accent text-accent-foreground',
+  'seated': 'bg-primary/30 border-primary text-primary',
+  'ordered': 'bg-secondary/70 border-secondary text-secondary-foreground',
+  'appetizers': 'bg-accent/50 border-accent text-accent-foreground',
+  'main_course': 'bg-secondary border-secondary text-secondary-foreground',
+  'dessert': 'bg-accent/70 border-accent text-accent-foreground',
+  'payment': 'bg-primary/40 border-primary text-primary',
   'completed': 'bg-muted border-border text-muted-foreground',
-  'no_show': 'bg-red-100 dark:bg-red-900/30 border-red-400 dark:border-red-600 text-red-800 dark:text-red-300',
-  'cancelled': 'bg-red-100 dark:bg-red-900/30 border-red-400 dark:border-red-600 text-red-800 dark:text-red-300'
+  'no_show': 'bg-destructive/20 border-destructive text-destructive',
+  'cancelled': 'bg-destructive/20 border-destructive text-destructive'
 }
 
 const TABLE_TYPE_COLORS: Record<string, string> = {
-  booth: "bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/50 dark:to-blue-900/30 border-blue-300 dark:border-blue-700 shadow-blue-200/30 dark:shadow-blue-900/20",
-  window: "bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950/50 dark:to-emerald-900/30 border-emerald-300 dark:border-emerald-700 shadow-emerald-200/30 dark:shadow-emerald-900/20",
-  patio: "bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950/50 dark:to-amber-900/30 border-amber-300 dark:border-amber-700 shadow-amber-200/30 dark:shadow-amber-900/20",
+  booth: "bg-gradient-to-br from-primary/10 to-primary/20 border-primary/30 shadow-primary/10",
+  window: "bg-gradient-to-br from-accent/10 to-accent/20 border-accent/30 shadow-accent/10",
+  patio: "bg-gradient-to-br from-secondary/20 to-secondary/30 border-secondary/40 shadow-secondary/10",
   standard: "bg-gradient-to-br from-card to-muted border-border shadow-sm",
-  bar: "bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/50 dark:to-purple-900/30 border-purple-300 dark:border-purple-700 shadow-purple-200/30 dark:shadow-purple-900/20",
-  private: "bg-gradient-to-br from-rose-50 to-rose-100 dark:from-rose-950/50 dark:to-rose-900/30 border-rose-300 dark:border-rose-700 shadow-rose-200/30 dark:shadow-rose-900/20",
+  bar: "bg-gradient-to-br from-accent/20 to-accent/30 border-accent/40 shadow-accent/10",
+  private: "bg-gradient-to-br from-primary/10 to-primary/20 border-primary/30 shadow-primary/10",
 }
 
 export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({ 
@@ -573,8 +573,8 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               data-table-id={table.id}
               aria-label={`Table ${table.table_number}, capacity ${table.min_capacity}-${table.max_capacity}${current ? `, occupied by ${current.guest_name || current.user?.full_name || 'Guest'}, status: ${current.status.replace(/_/g, ' ')}` : ', available'}`}
               className={cn(
-                "relative rounded-2xl border-3 cursor-pointer transition-all duration-300 ease-out focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-offset-2",
-                TABLE_TYPE_COLORS[table.table_type] || "bg-gradient-to-br from-white to-gray-50 border-gray-300 shadow-lg",
+                "relative rounded-2xl border-3 cursor-pointer transition-all duration-300 ease-out focus:outline-none focus:ring-4 focus:ring-primary focus:ring-offset-2",
+                TABLE_TYPE_COLORS[table.table_type] || "bg-gradient-to-br from-background to-card border-border shadow-lg",
                 // Occupied table styling
                 isOccupied && "ring-4 ring-offset-2 ring-offset-background shadow-xl",
                 isOccupied && STATUS_COLORS[current.status as DiningStatus],
@@ -699,7 +699,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
             >
               {/* Edit mode drag handle */}
               {editMode && !isOccupied && (
-                <div className="absolute -top-2 -right-2 p-1.5 bg-purple-600 text-white rounded-full shadow-lg z-10">
+                <div className="absolute -top-2 -right-2 p-1.5 bg-primary text-primary-foreground rounded-full shadow-lg z-10">
                   <Move className="h-3 w-3" />
                 </div>
               )}
@@ -730,12 +730,12 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                           "flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 shadow-sm",
                           current.party_size > table.max_capacity 
                             ? "bg-red-100 text-red-800 border-2 border-red-300 animate-pulse" 
-                            : "bg-blue-100 text-blue-800 border-2 border-blue-300 hover:bg-blue-200"
+                            : "bg-primary/20 text-primary border-2 border-primary/30 hover:bg-primary/30"
                         )}>
                           <Users className="h-3 w-3" />
                           <span className="font-bold text-xs">{current.party_size}</span>
                           {current.party_size > table.max_capacity && (
-                            <AlertTriangle className="h-3 w-3 animate-bounce text-red-600" />
+                            <AlertTriangle className="h-3 w-3 animate-bounce text-destructive" />
                           )}
                         </div>
                         
@@ -761,7 +761,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                         <Button
                           size="sm"
                           aria-label={`Call ${current.guest_name || current.user?.full_name || 'Guest'} at ${current.user?.phone_number || current.guest_phone}`}
-                          className="h-7 w-7 p-0 bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-full shadow-lg border-2 border-green-300 hover:scale-110 transition-all duration-200 animate-pulse focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-offset-2"
+                          className="h-7 w-7 p-0 bg-gradient-to-br from-accent to-accent/80 hover:from-accent/80 hover:to-accent text-accent-foreground rounded-full shadow-lg border-2 border-accent/30 hover:scale-110 transition-all duration-200 animate-pulse focus:outline-none focus:ring-2 focus:ring-accent/40 focus:ring-offset-2"
                           onClick={(e) => {
                             e.stopPropagation()
                             const phone = current.user?.phone_number || current.guest_phone
@@ -778,7 +778,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                   <div className="flex items-center justify-center">
                     <div className={cn(
                       "px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-md border transition-all duration-300 transform hover:scale-105",
-                      current.status === 'arrived' ? "bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border-blue-400 animate-pulse shadow-blue-300/50" :
+                      current.status === 'arrived' ? "bg-gradient-to-r from-primary/20 to-primary/30 text-primary border-primary/40 animate-pulse shadow-primary/20" :
                       current.status === 'seated' ? "bg-gradient-to-r from-purple-100 to-purple-200 text-purple-800 border-purple-400 shadow-purple-300/50" :
                       current.status === 'ordered' ? "bg-gradient-to-r from-orange-100 to-orange-200 text-orange-800 border-orange-400 shadow-orange-300/50" :
                       current.status === 'payment' ? "bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800 border-yellow-400 shadow-yellow-300/50 animate-pulse" :
@@ -801,7 +801,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                       {current.status === 'arrived' && (
                         <Button 
                           size="sm"
-                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-lg font-semibold border border-purple-400 hover:scale-105 transition-all duration-200"
+                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground rounded-lg font-semibold border border-primary/40 hover:scale-105 transition-all duration-200"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleStatusTransition(current.id, 'seated')
@@ -816,7 +816,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                       {current.status === 'seated' && (
                         <Button 
                           size="sm"
-                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-lg font-semibold border border-orange-400 hover:scale-105 transition-all duration-200"
+                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-secondary to-secondary/90 hover:from-secondary/90 hover:to-secondary text-secondary-foreground rounded-lg font-semibold border border-secondary/40 hover:scale-105 transition-all duration-200"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleStatusTransition(current.id, 'ordered')
@@ -831,7 +831,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                       {['ordered', 'appetizers', 'main_course', 'dessert'].includes(current.status) && (
                         <Button 
                           size="sm"
-                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 text-white rounded-lg font-semibold border border-yellow-400 hover:scale-105 transition-all duration-200"
+                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-accent to-accent/90 hover:from-accent/90 hover:to-accent text-accent-foreground rounded-lg font-semibold border border-accent/40 hover:scale-105 transition-all duration-200"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleStatusTransition(current.id, 'payment')
@@ -846,7 +846,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                       {current.status === 'payment' && (
                         <Button 
                           size="sm"
-                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg font-semibold border border-green-400 hover:scale-105 transition-all duration-200"
+                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-accent to-accent/90 hover:from-accent/90 hover:to-accent text-accent-foreground rounded-lg font-semibold border border-accent/40 hover:scale-105 transition-all duration-200"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleStatusTransition(current.id, 'completed')
@@ -861,7 +861,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                       {/* View Details button */}
                       <Button 
                         size="sm"
-                        className="h-7 px-2 shadow-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg font-semibold border border-blue-400 hover:scale-105 transition-all duration-200"
+                        className="h-7 px-2 shadow-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground rounded-lg font-semibold border border-primary/40 hover:scale-105 transition-all duration-200"
                         onClick={(e) => {
                           e.stopPropagation()
                           if (onTableClick) onTableClick(table, { current, upcoming, allUpcoming, recentHistory })
@@ -878,7 +878,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                   <div className="mb-2">
                     <Badge 
                       variant="secondary" 
-                      className="text-xs px-2 py-1 bg-green-100 text-green-800 border-green-300 font-medium shadow-sm"
+                      className="text-xs px-2 py-1 bg-accent/30 text-accent-foreground border-accent/50 font-medium shadow-sm"
                     >
                       ✅ Available
                     </Badge>
@@ -886,20 +886,20 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                   
                   {/* Show next upcoming booking with better visibility */}
                   {upcoming && (
-                    <div className="text-xs p-2 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 border border-blue-300 dark:border-blue-600 rounded-lg shadow-sm">
+                    <div className="text-xs p-2 bg-gradient-to-br from-accent/30 to-accent/40 border border-accent/50 rounded-lg shadow-sm">
                       <div className="flex items-start gap-2">
-                        <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                          <Clock className="h-2 w-2 text-white" />
+                        <div className="w-4 h-4 bg-accent rounded-full flex items-center justify-center flex-shrink-0">
+                          <Clock className="h-2 w-2 text-accent-foreground" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="font-bold text-blue-900 dark:text-blue-200">
+                          <p className="font-bold text-accent-foreground">
                             📅 {format(new Date(upcoming.booking_time), 'h:mm a')}
                           </p>
-                          <p className="truncate text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                          <p className="truncate text-accent-foreground flex items-center gap-1">
                             <Users className="h-2.5 w-2.5" />
                             {upcoming.guest_name || upcoming.user?.full_name} ({upcoming.party_size})
                           </p>
-                          <p className="text-blue-600 dark:text-blue-400 mt-1 flex items-center gap-1">
+                          <p className="text-accent-foreground mt-1 flex items-center gap-1">
                             <Timer className="h-2.5 w-2.5" />
                             {differenceInMinutes(new Date(upcoming.booking_time), currentTime)}m away
                           </p>
@@ -913,24 +913,24 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                     <div className="space-y-3">
                       {/* Main availability indicator */}
                       <div className="text-center">
-                        <div className="w-8 h-8 mx-auto bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center shadow-lg">
-                          <span className="text-white text-lg font-bold">✓</span>
+                        <div className="w-8 h-8 mx-auto bg-gradient-to-br from-accent to-accent/80 rounded-full flex items-center justify-center shadow-lg">
+                          <span className="text-accent-foreground text-lg font-bold">✓</span>
                         </div>
                       </div>
                       
                       {/* Activity summary */}
                       {(allUpcoming.length > 0 || recentHistory.length > 0) && (
                         <div className="text-center space-y-2">
-                          <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Table Activity</p>
+                          <p className="text-xs font-medium text-muted-foreground">Table Activity</p>
                           <div className="flex justify-center gap-3">
                             {allUpcoming.length > 0 && (
-                              <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-100 text-blue-700 rounded-lg border border-blue-300">
+                              <div className="flex items-center gap-1.5 px-2 py-1 bg-primary/20 text-primary rounded-lg border border-primary/30">
                                 <Calendar className="h-2.5 w-2.5" />
                                 <span className="text-xs font-medium">{allUpcoming.length} upcoming</span>
                               </div>
                             )}
                             {recentHistory.length > 0 && (
-                              <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-100 text-gray-700 rounded-lg border border-gray-300">
+                              <div className="flex items-center gap-1.5 px-2 py-1 bg-muted text-muted-foreground rounded-lg border border-border">
                                 <CheckCircle className="h-2.5 w-2.5" />
                                 <span className="text-xs font-medium">{recentHistory.length} today</span>
                               </div>
@@ -972,10 +972,10 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                   <p>Arrived: {format(bookingTime!, 'h:mm a')}</p>
                   <p>Status: {current.status.replace(/_/g, ' ')}</p>
                   {current.special_requests && (
-                    <p className="italic text-yellow-200">Note: {current.special_requests}</p>
+                    <p className="italic text-secondary-foreground">Note: {current.special_requests}</p>
                   )}
                   {(current.user?.phone_number || current.guest_phone) && (
-                    <p className="font-mono text-green-200">📞 {current.user?.phone_number || current.guest_phone}</p>
+                    <p className="font-mono text-accent-foreground">📞 {current.user?.phone_number || current.guest_phone}</p>
                   )}
                 </div>
               </div>
@@ -999,7 +999,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
 
 
   return (
-    <div className="h-full w-full flex flex-col bg-gradient-to-br from-gray-900 to-gray-800">
+    <div className="h-full w-full flex flex-col bg-gradient-to-br from-background to-card">
       {/* Edit Mode Toggle */}
       {onTableUpdate && (
         <div className="absolute top-10 left-20 z-50">
@@ -1028,7 +1028,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               "shadow-lg transition-all duration-200 font-medium",
               editMode 
                 ? "bg-red-600 hover:bg-red-700 text-white animate-pulse" 
-                : "bg-white/90 hover:bg-white text-gray-800 border border-gray-300"
+                : "bg-background/90 hover:bg-background text-foreground border border-border"
             )}
           >
             {editMode ? "Exit Edit" : "Edit Layout"}
@@ -1037,7 +1037,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
       )}
 
       {/* Full-Screen Floor Plan Area */}
-      <div className="flex-1 relative bg-gradient-to-br from-gray-800 to-gray-900 overflow-auto" ref={floorPlanRef}>
+      <div className="flex-1 relative bg-gradient-to-br from-card to-muted overflow-auto" ref={floorPlanRef}>
         <div 
           className="relative w-full h-full"
           style={{ minHeight: "600px", minWidth: "700px" }}

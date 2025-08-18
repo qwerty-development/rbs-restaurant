@@ -69,7 +69,7 @@ interface CustomerMetrics {
   segments: Record<string, number>
 }
 
-const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4']
+const COLORS = ['#7A2E4A', '#D4C4E0', '#FFF0E6', '#10B981', '#F97316', '#F59E0B'] // Brand colors with complementary colors
 
 export function CustomerAnalyticsDashboard() {
   const supabase = createClient()

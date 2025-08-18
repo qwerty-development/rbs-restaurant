@@ -502,7 +502,7 @@ export default function DashboardPage() {
       if (validation.warnings.length > 0) {
         validation.warnings.forEach(warning => toast.error(warning, { 
           duration: 4000,
-          style: { backgroundColor: '#f59e0b', color: 'white' } 
+          style: { backgroundColor: '#7A2E4A', color: 'white' } 
         }))
       }
 
@@ -655,7 +655,7 @@ export default function DashboardPage() {
     if (validation.warnings.length > 0) {
       validation.warnings.forEach(warning => toast.error(warning, { 
         duration: 4000,
-        style: { backgroundColor: '#f59e0b', color: 'white' } 
+        style: { backgroundColor: '#7A2E4A', color: 'white' }
       }))
     }
 
@@ -750,30 +750,30 @@ export default function DashboardPage() {
 
   if (!restaurantId || !userId) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-background to-card" suppressHydrationWarning>
         <div className="text-center">
           <div className="relative">
-            <div className="animate-spin rounded-full h-16 w-16 border-4 border-gray-200 mx-auto mb-4" />
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-border mx-auto mb-4" />
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 animate-pulse" />
+              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/80 animate-pulse" />
             </div>
           </div>
-          <p className="text-lg font-medium text-gray-700">Loading restaurant data...</p>
-          <p className="text-sm text-gray-500 mt-1">Preparing your dashboard</p>
+          <p className="text-lg font-medium text-foreground">Loading restaurant data...</p>
+          <p className="text-sm text-muted-foreground mt-1">Preparing your dashboard</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
+    <div className="h-screen flex flex-col bg-gradient-to-br from-background to-card overflow-hidden">
       {/* Ultra-Compact Header - Optimized for 8-inch tablets */}
-      <header className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-lg px-2 py-1 flex-shrink-0 border-b border-slate-700/50">
+      <header className="bg-gradient-to-br from-primary via-primary/90 to-primary text-primary-foreground shadow-lg px-2 py-1 flex-shrink-0 border-b border-primary/30">
         <div className="flex items-center justify-between gap-2">
           {/* Left Side - Brand & Live Stats */}
           <div className="flex items-center gap-2">
             {/* Enhanced Live Stats */}
-            <div className="hidden sm:flex items-center gap-2 bg-slate-800/60 backdrop-blur-xl rounded-md px-2 py-0.5 border border-slate-600/40">
+            <div className="hidden sm:flex items-center gap-2 bg-primary/20 backdrop-blur-xl rounded-md px-2 py-0.5 border border-primary/30">
               <div className="flex items-center gap-1">
                 <div className="h-1.5 w-1.5 bg-emerald-400 rounded-full animate-pulse" />
                 <span className="text-xs font-bold text-emerald-400">{stats.currentGuests}</span>
@@ -895,14 +895,14 @@ export default function DashboardPage() {
         </div>
 
         {/* Check-in Queue - Properly sized for tablets */}
-        <div className="w-[260px] border-l border-gray-300 bg-gray-900 flex flex-col flex-shrink-0 overflow-hidden">
+        <div className="w-[260px] border-l border-border bg-card flex flex-col flex-shrink-0 overflow-hidden">
           {/* Pending Requests Section */}
           {stats.pendingCount > 0 && (
-            <div className="border-b border-gray-700 flex-shrink-0">
-              <div className="px-2 py-1.5 bg-red-900/50 border-b border-red-800/50">
+            <div className="border-b border-border flex-shrink-0">
+              <div className="px-2 py-1.5 bg-destructive/20 border-b border-destructive/30">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold text-white flex items-center gap-1.5">
-                    <Timer className="h-3.5 w-3.5 text-red-400" />
+                  <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <Timer className="h-3.5 w-3.5 text-destructive" />
                     Pending Requests
                   </h3>
                   <div className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
@@ -952,7 +952,7 @@ export default function DashboardPage() {
               <AlertTriangle className="h-5 w-5" />
               Confirm Seating
             </DialogTitle>
-            <DialogDescription className="text-gray-600">
+            <DialogDescription className="text-muted-foreground">
               Please review these concerns before seating the guest:
             </DialogDescription>
           </DialogHeader>
@@ -968,7 +968,7 @@ export default function DashboardPage() {
             <Button
               variant="outline"
               onClick={() => setConfirmationDialog({ show: false, warnings: [], onConfirm: () => {} })}
-              className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50"
+              className="flex-1 border-border text-foreground hover:bg-muted"
             >
               Cancel
             </Button>
@@ -1085,7 +1085,7 @@ export default function DashboardPage() {
                   }}
                 >
                   <span className="font-bold">T{table.table_number}</span>
-                  <span className="text-xs text-gray-500">{table.max_capacity} seats</span>
+                  <span className="text-xs text-muted-foreground">{table.max_capacity} seats</span>
                 </Button>
               ))}
           </div>

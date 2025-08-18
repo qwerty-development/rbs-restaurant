@@ -102,12 +102,12 @@ const TABLE_TYPE_LABELS = {
 }
 
 const TABLE_TYPE_COLORS = {
-  booth: "#8B5CF6",
-  window: "#06B6D4", 
-  patio: "#10B981",
-  standard: "#6B7280",
-  bar: "#F59E0B",
-  private: "#EF4444"
+  booth: "#7A2E4A", // Mulberry Velvet
+  window: "#D4C4E0", // Lavender Fog
+  patio: "#FFF0E6", // Blushed Linen
+  standard: "#787878", // Charcoal Mood
+  bar: "#D4C4E0", // Lavender Fog
+  private: "#7A2E4A" // Mulberry Velvet
 }
 
 function TableForm({

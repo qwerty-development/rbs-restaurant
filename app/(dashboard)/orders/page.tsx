@@ -63,10 +63,10 @@ interface Order {
 
 const STATUS_COLORS = {
   pending: "bg-muted",
-  confirmed: "bg-blue-500",
-  preparing: "bg-yellow-500",
-  ready: "bg-green-500",
-  served: "bg-purple-500",
+  confirmed: "bg-primary",
+  preparing: "bg-secondary",
+  ready: "bg-accent",
+  served: "bg-primary/80",
   completed: "bg-muted",
   cancelled: "bg-destructive"
 }

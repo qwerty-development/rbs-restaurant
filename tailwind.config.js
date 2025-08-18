@@ -1,6 +1,7 @@
 // tailwind.config.js
 module.exports = {
-  darkMode: "class",
+  // Light mode only - no dark mode support
+  darkMode: false,
   content: [
     './pages/**/*.{ts,tsx}',
     './components/**/*.{ts,tsx}',

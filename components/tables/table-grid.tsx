@@ -22,12 +22,12 @@ interface TableGridProps {
 }
 
 const TABLE_TYPE_CONFIG = {
-  booth: { label: "Booth", color: "bg-blue-500" },
-  window: { label: "Window", color: "bg-green-500" },
-  patio: { label: "Patio", color: "bg-yellow-500" },
-  standard: { label: "Standard", color: "bg-gray-500" },
-  bar: { label: "Bar", color: "bg-purple-500" },
-  private: { label: "Private", color: "bg-red-500" },
+  booth: { label: "Booth", color: "bg-primary" },
+  window: { label: "Window", color: "bg-accent" },
+  patio: { label: "Patio", color: "bg-secondary" },
+  standard: { label: "Standard", color: "bg-muted" },
+  bar: { label: "Bar", color: "bg-accent" },
+  private: { label: "Private", color: "bg-primary" },
 }
 
 const SHAPE_ICONS = {

@@ -27,12 +27,12 @@ interface TableStatusViewProps {
 }
 
 const TABLE_TYPE_COLORS:any = {
-  booth: "bg-blue-100 border-blue-400 text-blue-800",
-  window: "bg-emerald-100 border-emerald-400 text-emerald-800",
-  patio: "bg-amber-100 border-amber-400 text-amber-800",
-  standard: "bg-slate-100 border-slate-400 text-slate-800",
-  bar: "bg-purple-100 border-purple-400 text-purple-800",
-  private: "bg-rose-100 border-rose-400 text-rose-800",
+  booth: "bg-primary/20 border-primary text-primary",
+  window: "bg-accent/30 border-accent text-accent-foreground",
+  patio: "bg-secondary/50 border-secondary text-secondary-foreground",
+  standard: "bg-muted border-border text-muted-foreground",
+  bar: "bg-accent/40 border-accent text-accent-foreground",
+  private: "bg-primary/30 border-primary text-primary",
 }
 
 const TABLE_TYPE_ICONS:any = {

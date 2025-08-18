@@ -41,12 +41,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
 
 const TABLE_TYPE_COLORS: Record<string, string> = {
-  booth: "bg-gradient-to-br from-blue-900 to-blue-800 text-blue-100 border-blue-700",
-  window: "bg-gradient-to-br from-emerald-900 to-emerald-800 text-emerald-100 border-emerald-700",
-  patio: "bg-gradient-to-br from-amber-900 to-amber-800 text-amber-100 border-amber-700",
-  standard: "bg-gradient-to-br from-yellow-900 to-yellow-800 text-yellow-100 border-yellow-700",
-  bar: "bg-gradient-to-br from-purple-900 to-purple-800 text-purple-100 border-purple-700",
-  private: "bg-gradient-to-br from-rose-900 to-rose-800 text-rose-100 border-rose-700",
+  booth: "bg-gradient-to-br from-primary/80 to-primary text-primary-foreground border-primary/70",
+  window: "bg-gradient-to-br from-accent/80 to-accent text-accent-foreground border-accent/70",
+  patio: "bg-gradient-to-br from-secondary/80 to-secondary text-secondary-foreground border-secondary/70",
+  standard: "bg-gradient-to-br from-muted to-muted/80 text-muted-foreground border-border",
+  bar: "bg-gradient-to-br from-primary/60 to-primary/80 text-primary-foreground border-primary/50",
+  private: "bg-gradient-to-br from-accent/60 to-accent/80 text-accent-foreground border-accent/50",
 }
 
 // Enhanced interfaces
@@ -523,7 +523,7 @@ export function CheckInQueue({
     if (customer.vip_status) {
       toast.success(
         <div className="flex items-center gap-2">
-          <Crown className="h-4 w-4 text-yellow-500" />
+          <Crown className="h-4 w-4 text-accent-foreground" />
           <span>VIP Customer Selected</span>
         </div>,
         { duration: 3000 }
@@ -710,7 +710,7 @@ export function CheckInQueue({
               <p className="text-sm mt-1">
                 {booking.user?.full_name || booking.guest_name} → Tables {selectedOption.tables.map(t => t.table_number).join(', ')}
               </p>
-              <p className="text-sm text-orange-300">
+              <p className="text-sm text-muted-foreground">
                 {targetBooking.user?.full_name || targetBooking.guest_name} needs new table assignment
               </p>
             </div>,
@@ -832,41 +832,41 @@ export function CheckInQueue({
     const minutesUntil = differenceInMinutes(bookingTime, currentTime)
     
     if (minutesUntil < -15) {
-      return { 
-        label: "Late", 
+      return {
+        label: "Late",
         subLabel: `${Math.abs(minutesUntil)}m late`,
-        color: "text-red-400", 
-        bgColor: "bg-gradient-to-br from-red-900/50 to-red-800/30 border-red-700", 
+        color: "text-destructive",
+        bgColor: "bg-gradient-to-br from-destructive/20 to-destructive/10 border-destructive/30",
         icon: AlertCircle,
         pulseAnimation: true,
         priority: 1
       }
     } else if (minutesUntil < 0) {
-      return { 
-        label: "Now", 
+      return {
+        label: "Now",
         subLabel: "Ready to check-in",
-        color: "text-blue-400", 
-        bgColor: "bg-gradient-to-br from-blue-900/50 to-blue-800/30 border-blue-700", 
+        color: "text-primary",
+        bgColor: "bg-gradient-to-br from-primary/20 to-primary/10 border-primary/30",
         icon: UserCheck,
         pulseAnimation: true,
         priority: 2
       }
     } else if (minutesUntil <= 15) {
-      return { 
-        label: `${minutesUntil}m`, 
+      return {
+        label: `${minutesUntil}m`,
         subLabel: "Arriving soon",
-        color: "text-green-400", 
-        bgColor: "bg-gradient-to-br from-green-900/50 to-green-800/30 border-green-700", 
+        color: "text-secondary-foreground",
+        bgColor: "bg-gradient-to-br from-secondary/30 to-secondary/20 border-secondary/40",
         icon: Timer,
         pulseAnimation: false,
         priority: 3
       }
     } else {
-      return { 
-        label: `${minutesUntil}m`, 
+      return {
+        label: `${minutesUntil}m`,
         subLabel: "Upcoming",
-        color: "text-gray-400", 
-        bgColor: "bg-gradient-to-br from-gray-800/50 to-gray-700/30 border-gray-600", 
+        color: "text-muted-foreground",
+        bgColor: "bg-gradient-to-br from-muted/30 to-muted/20 border-border",
         icon: Clock,
         pulseAnimation: false,
         priority: 4
@@ -891,7 +891,7 @@ export function CheckInQueue({
         className={cn(
           "relative p-1.5 rounded border cursor-pointer transition-colors",
           status.bgColor,
-          "hover:border-gray-400"
+          "hover:border-border"
         )}
         onClick={() => onSelectBooking?.(booking)}
       >
@@ -902,22 +902,22 @@ export function CheckInQueue({
           <div className="flex-1 min-w-0">
             {/* Guest name and essential info in single line */}
             <div className="flex items-center gap-1 mb-0.5">
-              <p className="font-medium text-gray-100 text-xs truncate">
+              <p className="font-medium text-foreground text-xs truncate">
                 {booking.guest_name || booking.user?.full_name || 'Anonymous'}
               </p>
               {customerData?.vip_status && (
-                <Badge className="text-xs px-1 py-0 bg-yellow-600 text-white h-3 min-w-0">
+                <Badge className="text-xs px-1 py-0 bg-accent text-accent-foreground h-3 min-w-0">
                   V
                 </Badge>
               )}
             </div>
             
             {/* Time and party size in compact format */}
-            <div className="flex items-center gap-2 text-xs text-gray-300">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>{format(new Date(booking.booking_time), 'h:mm')}</span>
               <span>{booking.party_size}p</span>
               {hasTable && (
-                <span className="text-green-400 text-xs">
+                <span className="text-secondary-foreground text-xs">
                   T{booking.tables.map((t: any) => t.table_number).join(",")}
                 </span>
               )}
@@ -933,7 +933,7 @@ export function CheckInQueue({
                   e.stopPropagation()
                   handleSeatGuest(booking)
                 }}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-1.5 py-0.5 h-5 text-xs flex items-center gap-0.5"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground px-1.5 py-0.5 h-5 text-xs flex items-center gap-0.5"
               >
                 <Users className="h-2.5 w-2.5" />
                 Seat
@@ -945,7 +945,7 @@ export function CheckInQueue({
                   e.stopPropagation()
                   handleQuickCheckIn(booking)
                 }}
-                className="bg-green-600 hover:bg-green-700 text-white px-1.5 py-0.5 h-5 text-xs flex items-center gap-0.5"
+                className="bg-secondary hover:bg-secondary/90 text-secondary-foreground px-1.5 py-0.5 h-5 text-xs flex items-center gap-0.5"
               >
                 <CheckCircle className="h-2.5 w-2.5" />
                 In
@@ -958,7 +958,7 @@ export function CheckInQueue({
                   e.stopPropagation()
                   handleOpenEnhancedTableSwitch(booking)
                 }}
-                className="border-amber-500 text-amber-400 hover:bg-amber-900/30 px-1.5 py-0.5 h-5 text-xs flex items-center gap-0.5"
+                className="border-accent text-accent-foreground hover:bg-accent/30 px-1.5 py-0.5 h-5 text-xs flex items-center gap-0.5"
               >
                 <Table2 className="h-2.5 w-2.5" />
                 Assign
@@ -980,21 +980,21 @@ export function CheckInQueue({
     payment: CreditCard
   }
 
-  // Status colors mapping
+  // Status colors mapping using brand colors
   const STATUS_COLORS = {
-    seated: "text-blue-400 bg-blue-900/30 border-blue-700",
-    ordered: "text-purple-400 bg-purple-900/30 border-purple-700",
-    appetizers: "text-green-400 bg-green-900/30 border-green-700",
-    main_course: "text-orange-400 bg-orange-900/30 border-orange-700",
-    dessert: "text-pink-400 bg-pink-900/30 border-pink-700",
-    payment: "text-yellow-400 bg-yellow-900/30 border-yellow-700"
+    seated: "text-primary bg-primary/10 border-primary/30",
+    ordered: "text-accent-foreground bg-accent/20 border-accent/40",
+    appetizers: "text-secondary-foreground bg-secondary/30 border-secondary/50",
+    main_course: "text-muted-foreground bg-muted/50 border-border",
+    dessert: "text-accent-foreground bg-accent/30 border-accent/50",
+    payment: "text-primary bg-primary/20 border-primary/40"
   }
 
   const renderDiningCard = (booking: any) => {
     const hasTable = booking.tables && booking.tables.length > 0
     const customerData = booking.user?.id ? customersData[booking.user.id] : null
     const StatusIcon = STATUS_ICONS[booking.status as keyof typeof STATUS_ICONS] || Activity
-    const statusColor = STATUS_COLORS[booking.status as keyof typeof STATUS_COLORS] || "text-gray-400 bg-gray-800/30 border-gray-600"
+    const statusColor = STATUS_COLORS[booking.status as keyof typeof STATUS_COLORS] || "text-muted-foreground bg-muted/30 border-border"
 
     // Calculate dining progress and time
     const progress = TableStatusService.getDiningProgress(booking.status as DiningStatus)
@@ -1013,7 +1013,7 @@ export function CheckInQueue({
         className={cn(
           "relative p-1.5 rounded border cursor-pointer transition-all duration-200",
           statusColor,
-          "hover:border-gray-400"
+          "hover:border-border"
         )}
         onClick={() => onSelectBooking?.(booking)}
       >
@@ -1023,32 +1023,32 @@ export function CheckInQueue({
           <div className="flex-1 min-w-0">
             {/* Guest name and VIP badge */}
             <div className="flex items-center gap-1 mb-0.5">
-              <p className="font-medium text-gray-100 text-xs truncate">
+              <p className="font-medium text-foreground text-xs truncate">
                 {booking.guest_name || booking.user?.full_name || 'Anonymous'}
               </p>
               {customerData?.vip_status && (
-                <Badge className="text-xs px-1 py-0 bg-yellow-600 text-white h-3 min-w-0">
+                <Badge className="text-xs px-1 py-0 bg-accent text-accent-foreground h-3 min-w-0">
                   V
                 </Badge>
               )}
             </div>
 
             {/* Status and time info */}
-            <div className="flex items-center gap-2 text-xs text-gray-300">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>{format(new Date(booking.booking_time), 'h:mm')}</span>
               <span>{booking.party_size}p</span>
               {hasTable && (
-                <span className="text-green-400">
+                <span className="text-secondary-foreground">
                   T{booking.tables.map((t: any) => t.table_number).join(",")}
                 </span>
               )}
-              <span className="text-gray-400">{elapsedMinutes}m</span>
+              <span className="text-muted-foreground">{elapsedMinutes}m</span>
             </div>
 
             {/* Mini progress bar */}
-            <div className="w-full bg-gray-700 rounded-full h-1 mt-0.5">
+            <div className="w-full bg-border rounded-full h-1 mt-0.5">
               <div
-                className="bg-gradient-to-r from-blue-500 to-green-500 h-1 rounded-full transition-all duration-300"
+                className="bg-gradient-to-r from-primary to-secondary h-1 rounded-full transition-all duration-300"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -1063,7 +1063,7 @@ export function CheckInQueue({
                   e.stopPropagation()
                   handleStatusUpdate(booking.id, nextTransition.to)
                 }}
-                className="bg-green-600 hover:bg-green-700 text-white px-1.5 py-0.5 h-5 text-xs flex items-center gap-0.5"
+                className="bg-accent hover:bg-accent/80 text-accent-foreground px-1.5 py-0.5 h-5 text-xs flex items-center gap-0.5"
               >
                 <Play className="h-2.5 w-2.5" />
                 Next
@@ -1076,11 +1076,11 @@ export function CheckInQueue({
   }
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900 text-gray-200">
+    <div className="h-full flex flex-col bg-gradient-to-br from-background via-card to-background text-foreground">
       {/* Ultra-Compact Header */}
-      <div className="px-2 py-1 border-b border-gray-800 flex-shrink-0">
+      <div className="px-2 py-1 border-b border-border flex-shrink-0">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-semibold text-gray-100">Queue</h3>
+          <h3 className="text-xs font-semibold text-foreground">Queue</h3>
           
           {/* Essential stats only */}
           <div className="flex items-center gap-2 text-xs">
@@ -1102,7 +1102,7 @@ export function CheckInQueue({
                 <span className="font-medium">{categorizedBookings.vipArrivals.length}</span>
               </div>
             )}
-            <div className="flex items-center gap-1 text-gray-400">
+            <div className="flex items-center gap-1 text-muted-foreground">
               <Table2 className="h-3 w-3" />
               <span>{availableTables.length}</span>
             </div>
@@ -1111,28 +1111,28 @@ export function CheckInQueue({
       </div>
 
       <Tabs defaultValue="active" className="flex-1 flex flex-col overflow-hidden">
-        <TabsList className="mx-2 mt-1 grid w-[calc(100%-1rem)] grid-cols-3 bg-gray-800 h-7 p-0.5 flex-shrink-0">
-          <TabsTrigger value="active" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs px-1 h-6">
+        <TabsList className="mx-2 mt-1 grid w-[calc(100%-1rem)] grid-cols-3 bg-muted h-7 p-0.5 flex-shrink-0">
+          <TabsTrigger value="active" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs px-1 h-6">
             Active
             {categorizedBookings.activeDining.length > 0 && (
-              <Badge className="ml-1 px-1 py-0 text-xs bg-green-600 h-3.5 leading-none">
+              <Badge className="ml-1 px-1 py-0 text-xs bg-secondary text-secondary-foreground h-3.5 leading-none">
                 {categorizedBookings.activeDining.length}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="arrivals" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs px-1 h-6">
+          <TabsTrigger value="arrivals" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs px-1 h-6">
             Arrivals
             {(categorizedBookings.lateArrivals.length +
               categorizedBookings.currentArrivals.length +
               categorizedBookings.upcomingArrivals.length) > 0 && (
-              <Badge className="ml-1 px-1 py-0 text-xs bg-blue-600 h-3.5 leading-none">
+              <Badge className="ml-1 px-1 py-0 text-xs bg-accent text-accent-foreground h-3.5 leading-none">
                 {categorizedBookings.lateArrivals.length +
                  categorizedBookings.currentArrivals.length +
                  categorizedBookings.upcomingArrivals.length}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="walkin" className="data-[state=active]:bg-gray-950 data-[state=active]:text-white text-xs px-1 h-6">
+          <TabsTrigger value="walkin" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs px-1 h-6">
             Walk-in
           </TabsTrigger>
         </TabsList>
@@ -1150,9 +1150,9 @@ export function CheckInQueue({
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <Activity className="h-6 w-6 text-gray-500 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400">No active dining guests</p>
-                  <p className="text-xs text-gray-500 mt-1">Guests will appear here once seated</p>
+                  <Activity className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">No active dining guests</p>
+                  <p className="text-xs text-muted-foreground mt-1">Guests will appear here once seated</p>
                 </div>
               )}
             </div>
@@ -1185,7 +1185,7 @@ export function CheckInQueue({
               {/* All other arrivals combined */}
               {[...categorizedBookings.lateArrivals, ...categorizedBookings.currentArrivals, ...categorizedBookings.upcomingArrivals].length > 0 && (
                 <div className="space-y-1 mt-2">
-                  <h4 className="text-xs font-medium text-gray-400 border-b border-gray-700 pb-1">
+                  <h4 className="text-xs font-medium text-muted-foreground border-b border-border pb-1">
                     Arrivals
                   </h4>
                   {[...categorizedBookings.lateArrivals, ...categorizedBookings.currentArrivals, ...categorizedBookings.upcomingArrivals]
@@ -1205,8 +1205,8 @@ export function CheckInQueue({
                 categorizedBookings.upcomingArrivals.length +
                 categorizedBookings.waitingForSeating.length) === 0 && (
                 <div className="text-center py-8">
-                  <UserCheck className="h-6 w-6 text-gray-500 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400">No arrivals in the next hour</p>
+                  <UserCheck className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">No arrivals in the next hour</p>
                 </div>
               )}
             </div>
@@ -1217,10 +1217,10 @@ export function CheckInQueue({
           <ScrollArea className="h-full">
             <div className="space-y-2 pr-2">
               {/* Enhanced tables summary */}
-              <div className="p-2 bg-gray-800/50 rounded-lg border border-gray-700">
+              <div className="p-2 bg-card rounded-lg border border-border">
                 <div className="flex items-center justify-between text-xs mb-2">
-                  <span className="text-gray-300 font-medium">Table Status</span>
-                  <span className="text-gray-400">
+                  <span className="text-foreground font-medium">Table Status</span>
+                  <span className="text-muted-foreground">
                     Total: {tables.filter(t => t.is_active).length}
                   </span>
                 </div>
@@ -1247,10 +1247,10 @@ export function CheckInQueue({
               </div>
 
               {/* Simplified walk-in form */}
-              <div className="space-y-2 bg-gray-800/30 p-2 rounded-lg border border-gray-700">
+              <div className="space-y-2 bg-card p-2 rounded-lg border border-border">
                 {/* Customer search */}
                 <div>
-                  <Label className="text-xs text-gray-300 mb-1 block">
+                  <Label className="text-xs text-foreground mb-1 block">
                     Search Customer (Optional)
                   </Label>
                   <div className="relative">
@@ -1263,16 +1263,16 @@ export function CheckInQueue({
                       }}
                       onFocus={() => setShowCustomerDropdown(customerSearch.length >= 1)}
                       onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
-                      className="bg-gray-900 border-gray-700 text-white text-xs h-7"
+                      className="bg-background border-border text-foreground text-xs h-7"
                     />
                     
                     {/* Customer dropdown */}
                     {showCustomerDropdown && customerSearch.length >= 1 && customers && customers.length > 0 && (
-                      <div className="absolute z-50 w-full mt-1 bg-gray-900 border border-gray-700 rounded-md shadow-lg max-h-32 overflow-y-auto">
+                      <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-lg max-h-32 overflow-y-auto">
                         {customers.map((customer) => (
                           <div
                             key={customer.id}
-                            className="p-2 hover:bg-gray-800 cursor-pointer text-xs"
+                            className="p-2 hover:bg-muted cursor-pointer text-xs"
                             onClick={() => handleCustomerSelect(customer)}
                           >
                             <div className="flex items-center justify-between">
@@ -1280,7 +1280,7 @@ export function CheckInQueue({
                                 {customer.profile?.full_name || customer.guest_name || 'Guest'}
                               </span>
                               {customer.vip_status && (
-                                <Badge className="text-xs px-1 py-0 bg-yellow-600">
+                                <Badge className="text-xs px-1 py-0 bg-secondary text-secondary-foreground">
                                   VIP
                                 </Badge>
                               )}
@@ -1293,9 +1293,9 @@ export function CheckInQueue({
                   
                   {/* Selected customer */}
                   {selectedCustomer && (
-                    <div className="mt-1 p-1.5 bg-blue-900/30 rounded text-xs">
-                      <span className="text-blue-300">Selected: </span>
-                      <span className="text-white font-medium">
+                    <div className="mt-1 p-1.5 bg-primary/20 rounded text-xs">
+                      <span className="text-primary">Selected: </span>
+                      <span className="text-foreground font-medium">
                         {selectedCustomer.profile?.full_name || selectedCustomer.guest_name}
                       </span>
                     </div>
@@ -1305,41 +1305,41 @@ export function CheckInQueue({
                 {/* Basic details */}
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <Label className="text-xs text-gray-300 mb-0.5 block">Name</Label>
+                    <Label className="text-xs text-foreground mb-0.5 block">Name</Label>
                     <Input
                       value={walkInData.guestName}
                       onChange={(e) => setWalkInData(prev => ({ ...prev, guestName: e.target.value }))}
                       placeholder="Optional"
                       disabled={!!selectedCustomer}
-                      className="bg-gray-900/50 border-gray-600 text-white text-xs h-7"
+                      className="bg-background border-border text-foreground text-xs h-7"
                     />
                   </div>
                   <div>
-                    <Label className="text-xs text-gray-300 mb-0.5 block">Phone</Label>
+                    <Label className="text-xs text-foreground mb-0.5 block">Phone</Label>
                     <Input
                       value={walkInData.guestPhone}
                       onChange={(e) => setWalkInData(prev => ({ ...prev, guestPhone: e.target.value }))}
                       placeholder="Optional"
                       disabled={!!selectedCustomer}
-                      className="bg-gray-900/50 border-gray-600 text-white text-xs h-7"
+                      className="bg-background border-border text-foreground text-xs h-7"
                     />
                   </div>
                   <div>
-                    <Label className="text-xs text-gray-300 mb-0.5 block">Party</Label>
+                    <Label className="text-xs text-foreground mb-0.5 block">Party</Label>
                     <Input
                       type="number"
                       min="1"
                       max="20"
                       value={walkInData.partySize}
                       onChange={(e) => setWalkInData(prev => ({ ...prev, partySize: parseInt(e.target.value) || 1 }))}
-                      className="bg-gray-900/50 border-gray-600 text-white text-xs h-7"
+                      className="bg-background border-border text-foreground text-xs h-7"
                     />
                   </div>
                 </div>
 
                 {/* Table selection */}
                 <div>
-                  <Label className="text-xs text-gray-300 mb-1 block">
+                  <Label className="text-xs text-foreground mb-1 block">
                     Select Table - {availableTables.length} available
                   </Label>
                   <div className="grid grid-cols-3 gap-1.5">
@@ -1360,26 +1360,26 @@ export function CheckInQueue({
                         const nextBooking = table.upcomingBookings?.[0]
                         const minutesUntilNext = nextBooking ? differenceInMinutes(new Date(nextBooking.booking_time), currentTime) : null
                         
-                        let statusColor = "border-gray-600"
-                        let bgColor = "bg-gray-800/50"
+                        let statusColor = "border-border"
+                        let bgColor = "bg-card"
                         
                         if (table.isOccupied) {
-                          statusColor = "border-red-500"
-                          bgColor = "bg-red-900/20"
+                          statusColor = "border-destructive"
+                          bgColor = "bg-destructive/20"
                         } else if (!fitsParty) {
-                          statusColor = "border-orange-500"
-                          bgColor = "bg-orange-900/20"
+                          statusColor = "border-secondary"
+                          bgColor = "bg-secondary/30"
                         } else if (nextBooking && minutesUntilNext! <= 60) {
-                          statusColor = "border-yellow-500"
-                          bgColor = "bg-yellow-900/20"
+                          statusColor = "border-accent"
+                          bgColor = "bg-accent/30"
                         } else {
-                          statusColor = "border-green-500"
-                          bgColor = "bg-green-900/20"
+                          statusColor = "border-accent"
+                          bgColor = "bg-accent/20"
                         }
                         
                         if (isSelected) {
-                          statusColor = "border-blue-500"
-                          bgColor = "bg-blue-900/30"
+                          statusColor = "border-primary"
+                          bgColor = "bg-primary/20"
                         }
                         
                         return (
@@ -1392,9 +1392,9 @@ export function CheckInQueue({
                               "h-10 p-1 transition-all relative",
                               bgColor,
                               statusColor,
-                              canSelect && "hover:bg-gray-700/50 cursor-pointer",
+                              canSelect && "hover:bg-muted cursor-pointer",
                               !canSelect && "opacity-60 cursor-not-allowed",
-                              isSelected && "ring-1 ring-blue-400"
+                              isSelected && "ring-1 ring-primary"
                             )}
                             onClick={() => {
                               if (canSelect) {
@@ -1410,7 +1410,7 @@ export function CheckInQueue({
                               <div className="font-bold text-xs text-white">
                                 T{table.table_number}
                               </div>
-                              <div className="text-xs text-gray-400">
+                              <div className="text-xs text-muted-foreground">
                                 {table.max_capacity}p
                               </div>
                             </div>
@@ -1422,7 +1422,7 @@ export function CheckInQueue({
 
                 {/* Seat button */}
                 <Button
-                  className="w-full h-8 text-xs font-medium bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-500"
+                  className="w-full h-8 text-xs font-medium bg-secondary hover:bg-secondary/90 text-secondary-foreground disabled:bg-muted disabled:text-muted-foreground"
                   onClick={handleWalkIn}
                   disabled={selectedTableIds.length === 0}
                 >
@@ -1451,7 +1451,7 @@ export function CheckInQueue({
       }>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-blue-600">
+            <DialogTitle className="flex items-center gap-2 text-primary">
               <ArrowLeftRight className="h-5 w-5" />
               Smart Table Management
             </DialogTitle>
@@ -1470,8 +1470,8 @@ export function CheckInQueue({
             <div className="space-y-4 py-4">
               {/* Current assignment */}
               {tableSwitchModal.originalTables.length > 0 && (
-                <div className="p-3 bg-gray-100 border border-gray-300 rounded-lg">
-                  <h4 className="font-medium text-gray-700 mb-2">Current Tables:</h4>
+                <div className="p-3 bg-muted border border-border rounded-lg">
+                  <h4 className="font-medium text-foreground mb-2">Current Tables:</h4>
                   <div className="flex gap-2">
                     {tableSwitchModal.originalTables.map(table => (
                       <Badge key={table.id} variant="secondary">
@@ -1485,15 +1485,15 @@ export function CheckInQueue({
               {/* Smart swap options */}
               {tableSwitchModal.swapOptions.length > 0 && (
                 <div className="space-y-3">
-                  <h4 className="font-medium text-gray-700">Recommended Options:</h4>
+                  <h4 className="font-medium text-foreground">Recommended Options:</h4>
                   {tableSwitchModal.swapOptions.map((option, index) => (
                     <div
                       key={index}
                       className={cn(
                         "p-4 rounded-lg border-2 cursor-pointer transition-all",
                         tableSwitchModal.selectedOption === option
-                          ? "border-blue-500 bg-blue-50"
-                          : "border-gray-300 hover:border-gray-400"
+                          ? "border-primary bg-primary/10"
+                          : "border-border hover:border-border"
                       )}
                       onClick={() => setTableSwitchModal(prev => ({ 
                         ...prev, 
@@ -1504,21 +1504,21 @@ export function CheckInQueue({
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
                             {option.type === 'empty' && <Unlock className="h-4 w-4 text-green-600" />}
-                            {option.type === 'swap' && <ArrowLeftRight className="h-4 w-4 text-blue-600" />}
-                            {option.type === 'combination' && <GitMerge className="h-4 w-4 text-purple-600" />}
+                            {option.type === 'swap' && <ArrowLeftRight className="h-4 w-4 text-primary" />}
+                            {option.type === 'combination' && <GitMerge className="h-4 w-4 text-accent-foreground" />}
                             <span className="font-medium">
                               {option.type === 'empty' && (option.targetBooking ? 'Reassign Tables' : 'Direct Assignment')}
                               {option.type === 'swap' && 'True Table Swap'}
                               {option.type === 'combination' && 'Table Combination'}
                             </span>
                             {option.isPredefined && (
-                              <Badge className="text-xs bg-purple-600 text-white">
+                              <Badge className="text-xs bg-primary text-primary-foreground">
                                 Approved
                               </Badge>
                             )}
                           </div>
                           
-                          <div className="text-sm text-gray-600 mb-2">
+                          <div className="text-sm text-muted-foreground mb-2">
                             Tables: {option.tables.map(t => t.table_number).join(', ')}
                           </div>
                           
@@ -1547,10 +1547,10 @@ export function CheckInQueue({
                         
                         <div className="ml-4">
                           <div className="text-center">
-                            <div className="text-2xl font-bold text-gray-700">
+                            <div className="text-2xl font-bold text-foreground">
                               {option.confidence}%
                             </div>
-                            <div className="text-xs text-gray-500">Confidence</div>
+                            <div className="text-xs text-muted-foreground">Confidence</div>
                           </div>
                         </div>
                       </div>
@@ -1561,7 +1561,7 @@ export function CheckInQueue({
 
               {/* Manual table selection */}
               <div>
-                <h4 className="font-medium text-gray-700 mb-3">Or Select Manually:</h4>
+                <h4 className="font-medium text-foreground mb-3">Or Select Manually:</h4>
                 <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
                   {tableStatus
                     .filter(t => t.is_active && !t.isOccupied)
@@ -1608,9 +1608,9 @@ export function CheckInQueue({
               </Alert>
               
               <div className="space-y-3">
-                <div className="p-3 bg-gray-100 rounded-lg">
-                  <p className="text-sm font-medium text-gray-700">Action Summary:</p>
-                  <div className="mt-2 space-y-1 text-sm text-gray-600">
+                <div className="p-3 bg-muted rounded-lg">
+                  <p className="text-sm font-medium text-foreground">Action Summary:</p>
+                  <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                     {tableSwitchModal.selectedOption.benefits.map((benefit, i) => (
                       <div key={i}>• {benefit}</div>
                     ))}
@@ -1644,14 +1644,14 @@ export function CheckInQueue({
                   }
                 }}
                 disabled={!tableSwitchModal.selectedOption && tableSwitchModal.selectedNewTableIds.length === 0}
-                className="bg-blue-600 hover:bg-blue-700"
+                className="bg-primary hover:bg-primary/90"
               >
                 {tableSwitchModal.selectedOption ? 'Review' : 'Assign Tables'}
               </Button>
             ) : (
               <Button
                 onClick={handleTableSwitchConfirm}
-                className="bg-green-600 hover:bg-green-700"
+                className="bg-accent hover:bg-accent/80 text-accent-foreground"
               >
                 <CheckCircle className="h-4 w-4 mr-2" />
                 Confirm Changes

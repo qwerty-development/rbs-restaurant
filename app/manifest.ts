@@ -8,8 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/dashboard',
     scope: '/',
     display: 'standalone',
-    background_color: '#ffffff',
-    theme_color: '#3b82f6',
+    background_color: '#FBF8F6', // Off white brand background
+    theme_color: '#7A2E4A', // Mulberry Velvet brand primary
     orientation: 'landscape-primary',
     categories: ['business', 'productivity', 'food'],
     lang: 'en',

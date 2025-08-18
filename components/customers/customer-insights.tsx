@@ -201,10 +201,10 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
         {[...Array(6)].map((_, i) => (
           <Card key={i}>
             <CardHeader>
-              <div className="h-4 bg-gray-400 rounded w-1/2 animate-pulse" />
+              <div className="h-4 bg-muted rounded w-1/2 animate-pulse" />
             </CardHeader>
             <CardContent>
-              <div className="h-8 bg-gray-400 rounded w-1/3 animate-pulse" />
+              <div className="h-8 bg-muted rounded w-1/3 animate-pulse" />
             </CardContent>
           </Card>
         ))}

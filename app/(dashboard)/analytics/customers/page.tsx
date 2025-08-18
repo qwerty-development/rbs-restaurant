@@ -502,17 +502,17 @@ export default function CustomerAnalyticsPage() {
 
   const metrics = calculateMetrics()
 
-  // Chart colors
-  const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"]
+  // Chart colors using brand palette
+  const COLORS = ["#7A2E4A", "#D4C4E0", "#FFF0E6", "#10B981", "#F97316"]
 
   const getSegmentColor = (segment: string) => {
     switch (segment.toLowerCase()) {
-      case "new": return "#10b981"
-      case "returning": return "#3b82f6"
-      case "frequent": return "#f59e0b"
-      case "at risk": return "#ef4444"
-      case "lost": return "#6b7280"
-      default: return "#8b5cf6"
+      case "new": return "#10B981" // Keep green for new
+      case "returning": return "#7A2E4A" // Mulberry Velvet
+      case "frequent": return "#D4C4E0" // Lavender Fog
+      case "at risk": return "#F97316" // Orange
+      case "lost": return "#787878" // Charcoal Mood
+      default: return "#D4C4E0" // Lavender Fog
     }
   }
 

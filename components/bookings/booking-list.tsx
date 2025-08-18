@@ -62,40 +62,40 @@ interface BookingListProps {
 
 // Fixed status configuration with all statuses
 const STATUS_CONFIG: Record<string, { icon: any; color: string; bgColor: string; label: string }> = {
-  'pending': { 
-    icon: Timer, 
-    color: 'text-yellow-600', 
-    bgColor: 'bg-yellow-100',
+  'pending': {
+    icon: Timer,
+    color: 'text-secondary-foreground',
+    bgColor: 'bg-secondary/50',
     label: 'Pending'
   },
-  'confirmed': { 
-    icon: CheckCircle, 
-    color: 'text-blue-600', 
-    bgColor: 'bg-blue-100',
+  'confirmed': {
+    icon: CheckCircle,
+    color: 'text-primary',
+    bgColor: 'bg-primary/20',
     label: 'Confirmed'
   },
-  'arrived': { 
-    icon: UserCheck, 
-    color: 'text-indigo-600', 
-    bgColor: 'bg-indigo-100',
+  'arrived': {
+    icon: UserCheck,
+    color: 'text-accent-foreground',
+    bgColor: 'bg-accent/30',
     label: 'Arrived'
   },
-  'seated': { 
-    icon: ChefHat, 
-    color: 'text-purple-600', 
-    bgColor: 'bg-purple-100',
+  'seated': {
+    icon: ChefHat,
+    color: 'text-primary',
+    bgColor: 'bg-primary/30',
     label: 'Seated'
   },
-  'ordered': { 
-    icon: Coffee, 
-    color: 'text-orange-600', 
-    bgColor: 'bg-orange-100',
+  'ordered': {
+    icon: Coffee,
+    color: 'text-secondary-foreground',
+    bgColor: 'bg-secondary/70',
     label: 'Ordered'
   },
-  'appetizers': { 
-    icon: Utensils, 
-    color: 'text-green-600', 
-    bgColor: 'bg-green-100',
+  'appetizers': {
+    icon: Utensils,
+    color: 'text-accent-foreground',
+    bgColor: 'bg-accent/50',
     label: 'Appetizers'
   },
   'main_course': { 
@@ -192,24 +192,26 @@ const RequestExpiryTimer = ({ booking, requestService }: {
     <div className="space-y-2">
       <div className={cn(
         "flex items-center gap-2 text-sm tablet:text-base font-medium",
-        timeLeft.expired ? "text-red-600" : 
-        timeLeft.hours < 2 ? "text-orange-600" : 
-        "text-gray-600"
+        timeLeft.expired ? "text-destructive" :
+        timeLeft.hours < 2 ? "text-secondary-foreground" :
+        "text-muted-foreground"
       )}>
         <Timer className="h-4 w-4 tablet:h-5 tablet:w-5" />
-        {timeLeft.expired ? (
-          <span className="font-bold">EXPIRED</span>
-        ) : (
-          <span>Expires in {timeLeft.hours}h {timeLeft.minutes}m</span>
-        )}
+        <span suppressHydrationWarning>
+          {timeLeft.expired ? (
+            <span className="font-bold">EXPIRED</span>
+          ) : (
+            <span>Expires in {timeLeft.hours}h {timeLeft.minutes}m</span>
+          )}
+        </span>
       </div>
       <Progress 
         value={timeLeft.percentage} 
         className="h-2 tablet:h-3" 
         indicatorClassName={cn(
-          timeLeft.percentage < 20 ? "bg-red-500" :
-          timeLeft.percentage < 50 ? "bg-orange-500" :
-          "bg-green-500"
+          timeLeft.percentage < 20 ? "bg-destructive" :
+          timeLeft.percentage < 50 ? "bg-secondary" :
+          "bg-accent"
         )}
       />
     </div>
@@ -400,7 +402,7 @@ export function BookingList({
                     </Badge>
                     {isLate && (
                       <Badge variant="destructive" className="px-3 py-1 text-sm tablet:text-base font-medium">
-                        Late ({elapsedMinutes}m)
+                        <span suppressHydrationWarning>Late ({elapsedMinutes}m)</span>
                       </Badge>
                     )}
                   </div>
@@ -562,7 +564,7 @@ export function BookingList({
                     <span className="font-medium">{format(bookingTime, compact ? 'h:mm a' : 'MMM d, h:mm a')}</span>
                     {isDining && (
                       <p className="text-xs tablet:text-sm text-muted-foreground">
-                        {elapsedMinutes}m elapsed
+                        <span suppressHydrationWarning>{elapsedMinutes}m elapsed</span>
                       </p>
                     )}
                   </div>

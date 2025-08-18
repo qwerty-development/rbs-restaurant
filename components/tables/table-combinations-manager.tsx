@@ -62,12 +62,12 @@ export function TableCombinationsManager({
 
   const getTableTypeColor = (type: string) => {
     const colors = {
-      booth: "bg-blue-100 text-blue-800",
-      window: "bg-green-100 text-green-800",
-      patio: "bg-yellow-100 text-yellow-800",
-      standard: "bg-gray-100 text-gray-800",
-      bar: "bg-purple-100 text-purple-800",
-      private: "bg-red-100 text-red-800",
+      booth: "bg-primary/20 text-primary",
+      window: "bg-accent/30 text-accent-foreground",
+      patio: "bg-secondary/50 text-secondary-foreground",
+      standard: "bg-muted text-muted-foreground",
+      bar: "bg-accent/40 text-accent-foreground",
+      private: "bg-primary/30 text-primary",
     }
     return colors[type as keyof typeof colors] || colors.standard
   }

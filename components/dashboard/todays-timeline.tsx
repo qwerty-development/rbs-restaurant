@@ -1,13 +1,14 @@
 // components/dashboard/todays-timeline.tsx
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
-import { 
-  Clock, 
-  Users, 
+import {
+  Clock,
+  Users,
   Table2,
   AlertCircle,
   CheckCircle,
@@ -29,13 +30,27 @@ interface TodaysTimelineProps {
   customersData?: Record<string, any>
 }
 
-export function TodaysTimeline({ 
-  bookings, 
-  currentTime, 
+export function TodaysTimeline({
+  bookings,
+  currentTime,
   onSelectBooking,
   onUpdateStatus,
   customersData = {}
 }: TodaysTimelineProps) {
+  // Client-only time state to prevent hydration mismatch
+  const [clientTime, setClientTime] = useState<Date | null>(null)
+
+  useEffect(() => {
+    // Set initial client time after hydration
+    setClientTime(currentTime)
+
+    // Update time every minute to keep it current
+    const interval = setInterval(() => {
+      setClientTime(new Date())
+    }, 60000)
+
+    return () => clearInterval(interval)
+  }, [currentTime])
   // Show ALL bookings for today (past and present) - excluding cancelled
   const allTodaysBookings = bookings.filter(booking => 
     !['cancelled_by_user', 'declined_by_restaurant', 'auto_declined'].includes(booking.status)
@@ -135,7 +150,9 @@ export function TodaysTimeline({
         <CardHeader>
           <CardTitle>Today's Timeline</CardTitle>
           <CardDescription>
-            {format(currentTime, "EEEE, MMMM d")}
+            <span suppressHydrationWarning>
+              {clientTime ? format(clientTime, "EEEE, MMMM d") : "Loading..."}
+            </span>
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -149,7 +166,7 @@ export function TodaysTimeline({
     )
   }
 
-  const currentHour = currentTime.getHours()
+  const currentHour = clientTime ? clientTime.getHours() : currentTime.getHours()
 
   return (
     <Card>
@@ -158,7 +175,9 @@ export function TodaysTimeline({
           <div>
             <CardTitle className="text-xl">Today's Timeline</CardTitle>
             <CardDescription className="text-base">
-              {format(currentTime, "EEEE, MMMM d")} • {allTodaysBookings.length} total reservations
+              <span suppressHydrationWarning>
+                {clientTime ? format(clientTime, "EEEE, MMMM d") : "Loading..."} • {allTodaysBookings.length} total reservations
+              </span>
             </CardDescription>
           </div>
           <div className="flex items-center gap-3">
@@ -188,18 +207,20 @@ export function TodaysTimeline({
       <CardContent className="p-6">
         <div className="relative">
           {/* Current time indicator line */}
-          <div 
-            className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 opacity-80" 
-            style={{ 
-              left: `${Math.max(0, Math.min(100, ((currentTime.getHours() + currentTime.getMinutes() / 60 - 10) / 14) * 100))}%` 
+          <div
+            className="absolute top-0 bottom-0 w-0.5 bg-destructive z-20 opacity-80"
+            style={{
+              left: clientTime ? `${Math.max(0, Math.min(100, ((clientTime.getHours() + clientTime.getMinutes() / 60 - 10) / 14) * 100))}%` : '0%'
             }}
           >
             <div className="absolute -top-6 left-1/2 transform -translate-x-1/2">
-              <div className="bg-red-500 text-white text-xs font-medium px-2 py-1 rounded shadow-lg">
-                Now • {format(currentTime, 'h:mm a')}
+              <div className="bg-destructive text-destructive-foreground text-xs font-medium px-2 py-1 rounded shadow-lg">
+                <span suppressHydrationWarning>
+                  Now • {clientTime ? format(clientTime, 'h:mm a') : '--:--'}
+                </span>
               </div>
             </div>
-            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-red-500 rounded-full" />
+            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-destructive rounded-full" />
           </div>
 
           {/* Hour headers */}
@@ -211,10 +232,10 @@ export function TodaysTimeline({
                   key={hour} 
                   className={cn(
                     "flex-1 text-center text-sm font-medium transition-colors",
-                    isCurrentHour ? "text-red-600 font-bold" : "text-muted-foreground"
+                    isCurrentHour ? "text-destructive font-bold" : "text-muted-foreground"
                   )}
                 >
-                  {format(startOfDay(currentTime).setHours(hour), hour === 0 ? 'h a' : 'h a')}
+                  {format(startOfDay(clientTime || currentTime).setHours(hour), hour === 0 ? 'h a' : 'h a')}
                 </div>
               )
             })}
@@ -231,9 +252,9 @@ export function TodaysTimeline({
                   {/* Time label */}
                   <div className={cn(
                     "w-20 flex-shrink-0 text-sm pt-3 pr-4 text-right border-r transition-colors",
-                    isCurrentHour ? "text-red-600 font-bold border-red-200" : "text-muted-foreground border-border"
+                    isCurrentHour ? "text-destructive font-bold border-destructive/30" : "text-muted-foreground border-border"
                   )}>
-                    {format(startOfDay(currentTime).setHours(hour), 'h:mm a')}
+                    {format(startOfDay(clientTime || currentTime).setHours(hour), 'h:mm a')}
                   </div>
                   
                   {/* Bookings content */}
