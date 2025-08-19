@@ -108,6 +108,21 @@ export function CheckInQueue({
     estimatedDuration: 120,
     preferences: [] as string[]
   })
+
+  // Confirmation dialogs state
+  const [walkInConfirmation, setWalkInConfirmation] = useState<{
+    show: boolean
+    type: 'upcoming_reservations' | 'multi_table' | null
+    conflictingReservations: any[]
+    selectedTables: any[]
+    walkInData: any
+  }>({
+    show: false,
+    type: null,
+    conflictingReservations: [],
+    selectedTables: [],
+    walkInData: null
+  })
   
   // Enhanced table switch modal with swap options
   const [tableSwitchModal, setTableSwitchModal] = useState<{
@@ -422,14 +437,29 @@ export function CheckInQueue({
     }
   }, [tableStatusService, userId, onStatusUpdate])
 
+  // Helper function to determine shift based on time
+  const getShift = (bookingTime: Date) => {
+    const hour = bookingTime.getHours()
+    if (hour >= 6 && hour < 11) return 'morning'
+    if (hour >= 11 && hour < 16) return 'lunch'
+    if (hour >= 16 && hour < 22) return 'dinner'
+    return 'late_night'
+  }
+
   // Filter and categorize bookings
   const categorizedBookings = useMemo(() => {
-    const arrivals = bookings.filter(booking => {
-      const bookingTime = new Date(booking.booking_time)
-      const minutesUntil = differenceInMinutes(bookingTime, currentTime)
-      return booking.status === 'confirmed' &&
-             minutesUntil >= -30 && minutesUntil <= 60
+    // Show ALL confirmed arrivals, not just next hour
+    const allArrivals = bookings.filter(booking => {
+      return booking.status === 'confirmed'
     }).sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+
+    // Group arrivals by shift
+    const arrivalsByShift = allArrivals.reduce((acc, booking) => {
+      const shift = getShift(new Date(booking.booking_time))
+      if (!acc[shift]) acc[shift] = []
+      acc[shift].push(booking)
+      return acc
+    }, {} as Record<string, any[]>)
 
     // Active dining guests
     const activeDining = bookings.filter(b =>
@@ -443,25 +473,29 @@ export function CheckInQueue({
       return new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime()
     })
 
+    // Categorize arrivals by urgency (for backward compatibility)
+    const minutesUntil = (booking: any) => differenceInMinutes(new Date(booking.booking_time), currentTime)
+
     return {
       activeDining,
       waitingForSeating: bookings.filter(b => b.status === 'arrived'),
-      lateArrivals: arrivals.filter(b => {
-        const minutesUntil = differenceInMinutes(new Date(b.booking_time), currentTime)
-        return minutesUntil < -15
+      // New shift-based grouping
+      arrivalsByShift,
+      morningArrivals: arrivalsByShift.morning || [],
+      lunchArrivals: arrivalsByShift.lunch || [],
+      dinnerArrivals: arrivalsByShift.dinner || [],
+      lateNightArrivals: arrivalsByShift.late_night || [],
+      // Legacy urgency-based grouping (still used in some places)
+      lateArrivals: allArrivals.filter(b => minutesUntil(b) < -15),
+      currentArrivals: allArrivals.filter(b => {
+        const minutes = minutesUntil(b)
+        return minutes >= -15 && minutes <= 15
       }),
-      currentArrivals: arrivals.filter(b => {
-        const minutesUntil = differenceInMinutes(new Date(b.booking_time), currentTime)
-        return minutesUntil >= -15 && minutesUntil <= 15
-      }),
-      upcomingArrivals: arrivals.filter(b => {
-        const minutesUntil = differenceInMinutes(new Date(b.booking_time), currentTime)
-        return minutesUntil > 15
-      }),
+      upcomingArrivals: allArrivals.filter(b => minutesUntil(b) > 15),
       needingTables: bookings.filter(b =>
         b.status === 'confirmed' && (!b.tables || b.tables.length === 0)
       ),
-      vipArrivals: arrivals.filter(b => {
+      vipArrivals: allArrivals.filter(b => {
         const customerData = b.user?.id ? customersData[b.user.id] : null
         return customerData?.vip_status
       })
@@ -787,13 +821,97 @@ export function CheckInQueue({
       return
     }
 
-    const walkInBooking = {
+    // Check for upcoming reservations on selected tables
+    const conflictingReservations: any[] = []
+    const selectedTables = selectedTableIds.map(id => tableStatus.find(t => t.id === id)).filter(Boolean)
+
+    selectedTables.forEach(table => {
+      if (table.upcomingBookings && table.upcomingBookings.length > 0) {
+        // Check for reservations in the next 2 hours
+        const soonReservations = table.upcomingBookings.filter((booking: any) => {
+          const minutesUntil = differenceInMinutes(new Date(booking.booking_time), currentTime)
+          return minutesUntil <= 120 // Next 2 hours
+        })
+        conflictingReservations.push(...soonReservations.map((booking: any) => ({
+          ...booking,
+          table: table
+        })))
+      }
+    })
+
+    // Check if this is a large party requiring multiple tables or has capacity issues
+    const totalCapacity = selectedTableIds.reduce((sum, id) => {
+      const table = tableStatus.find(t => t.id === id)
+      return sum + (table?.max_capacity || 0)
+    }, 0)
+    const hasCapacityIssue = totalCapacity < walkInData.partySize
+    const isLargeParty = walkInData.partySize > 6 || selectedTableIds.length > 1 || hasCapacityIssue
+
+    // Show confirmation dialog if there are conflicts or large party
+    if (conflictingReservations.length > 0) {
+      setWalkInConfirmation({
+        show: true,
+        type: 'upcoming_reservations',
+        conflictingReservations,
+        selectedTables,
+        walkInData: {
+          customer_id: selectedCustomer?.id || null,
+          user_id: selectedCustomer?.user_id || null,
+          guest_name: selectedCustomer
+            ? (selectedCustomer.profile?.full_name || selectedCustomer.guest_name)
+            : (walkInData.guestName.trim() || `Walk-in ${format(currentTime, 'HH:mm')}`),
+          guest_phone: selectedCustomer
+            ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
+            : walkInData.guestPhone,
+          guest_email: selectedCustomer?.guest_email || null,
+          party_size: walkInData.partySize,
+          table_ids: selectedTableIds,
+          booking_time: currentTime.toISOString(),
+          turn_time_minutes: walkInData.estimatedDuration,
+          status: 'arrived',
+          table_preferences: walkInData.preferences
+        }
+      })
+      return
+    } else if (isLargeParty) {
+      setWalkInConfirmation({
+        show: true,
+        type: 'multi_table',
+        conflictingReservations: [],
+        selectedTables,
+        walkInData: {
+          customer_id: selectedCustomer?.id || null,
+          user_id: selectedCustomer?.user_id || null,
+          guest_name: selectedCustomer
+            ? (selectedCustomer.profile?.full_name || selectedCustomer.guest_name)
+            : (walkInData.guestName.trim() || `Walk-in ${format(currentTime, 'HH:mm')}`),
+          guest_phone: selectedCustomer
+            ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
+            : walkInData.guestPhone,
+          guest_email: selectedCustomer?.guest_email || null,
+          party_size: walkInData.partySize,
+          table_ids: selectedTableIds,
+          booking_time: currentTime.toISOString(),
+          turn_time_minutes: walkInData.estimatedDuration,
+          status: 'arrived',
+          table_preferences: walkInData.preferences
+        }
+      })
+      return
+    }
+
+    // No conflicts, proceed directly
+    await proceedWithWalkIn()
+  }
+
+  const proceedWithWalkIn = async () => {
+    const walkInBooking = walkInConfirmation.walkInData || {
       customer_id: selectedCustomer?.id || null,
       user_id: selectedCustomer?.user_id || null,
-      guest_name: selectedCustomer 
+      guest_name: selectedCustomer
         ? (selectedCustomer.profile?.full_name || selectedCustomer.guest_name)
         : (walkInData.guestName.trim() || `Walk-in ${format(currentTime, 'HH:mm')}`),
-      guest_phone: selectedCustomer 
+      guest_phone: selectedCustomer
         ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
         : walkInData.guestPhone,
       guest_email: selectedCustomer?.guest_email || null,
@@ -806,12 +924,12 @@ export function CheckInQueue({
     }
 
     onQuickSeat(walkInBooking, selectedTableIds)
-    
+
     const tableNumbers = selectedTableIds
       .map(id => tableStatus.find(t => t.id === id)?.table_number)
       .filter(Boolean)
       .join(', ')
-    
+
     toast.success(
       <div>
         <p className="font-medium">Walk-in Seated</p>
@@ -819,12 +937,19 @@ export function CheckInQueue({
       </div>,
       { duration: 3000 }
     )
-    
-    // Reset form
+
+    // Reset form and close confirmation
     setWalkInData({ guestName: "", guestPhone: "", partySize: 2, estimatedDuration: 120, preferences: [] })
     setSelectedTableIds([])
     setSelectedCustomer(null)
     setCustomerSearch("")
+    setWalkInConfirmation({
+      show: false,
+      type: null,
+      conflictingReservations: [],
+      selectedTables: [],
+      walkInData: null
+    })
   }
 
   const getBookingStatus = (booking: any) => {
@@ -1166,7 +1291,7 @@ export function CheckInQueue({
               {categorizedBookings.waitingForSeating.length > 0 && (
                 <div className="space-y-1">
                   <h4 className="text-xs font-medium text-orange-400 border-b border-orange-800 pb-1">
-                    Waiting for Seating
+                    Waiting for Seating ({categorizedBookings.waitingForSeating.length})
                   </h4>
                   {categorizedBookings.waitingForSeating.map(renderEnhancedBookingCard)}
                 </div>
@@ -1176,37 +1301,74 @@ export function CheckInQueue({
               {categorizedBookings.vipArrivals.length > 0 && (
                 <div className="space-y-1 mt-2">
                   <h4 className="text-xs font-medium text-yellow-400 border-b border-yellow-800 pb-1">
-                    VIP Guests
+                    VIP Guests ({categorizedBookings.vipArrivals.length})
                   </h4>
                   {categorizedBookings.vipArrivals.map(renderEnhancedBookingCard)}
                 </div>
               )}
 
-              {/* All other arrivals combined */}
-              {[...categorizedBookings.lateArrivals, ...categorizedBookings.currentArrivals, ...categorizedBookings.upcomingArrivals].length > 0 && (
+              {/* Morning Shift */}
+              {categorizedBookings.morningArrivals.length > 0 && (
                 <div className="space-y-1 mt-2">
-                  <h4 className="text-xs font-medium text-muted-foreground border-b border-border pb-1">
-                    Arrivals
+                  <h4 className="text-xs font-medium text-blue-400 border-b border-blue-800 pb-1">
+                    Morning (6AM - 11AM) ({categorizedBookings.morningArrivals.length})
                   </h4>
-                  {[...categorizedBookings.lateArrivals, ...categorizedBookings.currentArrivals, ...categorizedBookings.upcomingArrivals]
-                    .sort((a, b) => {
-                      const aMinutes = differenceInMinutes(new Date(a.booking_time), currentTime)
-                      const bMinutes = differenceInMinutes(new Date(b.booking_time), currentTime)
-                      return aMinutes - bMinutes
-                    })
+                  {categorizedBookings.morningArrivals
+                    .sort((a: { booking_time: string | number | Date }, b: { booking_time: string | number | Date }) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+                    .map(renderEnhancedBookingCard)
+                  }
+                </div>
+              )}
+
+              {/* Lunch Shift */}
+              {categorizedBookings.lunchArrivals.length > 0 && (
+                <div className="space-y-1 mt-2">
+                  <h4 className="text-xs font-medium text-green-400 border-b border-green-800 pb-1">
+                    Lunch (11AM - 4PM) ({categorizedBookings.lunchArrivals.length})
+                  </h4>
+                  {categorizedBookings.lunchArrivals
+                    .sort((a: { booking_time: string | number | Date }, b: { booking_time: string | number | Date }) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+                    .map(renderEnhancedBookingCard)
+                  }
+                </div>
+              )}
+
+              {/* Dinner Shift */}
+              {categorizedBookings.dinnerArrivals.length > 0 && (
+                <div className="space-y-1 mt-2">
+                  <h4 className="text-xs font-medium text-purple-400 border-b border-purple-800 pb-1">
+                    Dinner (4PM - 10PM) ({categorizedBookings.dinnerArrivals.length})
+                  </h4>
+                  {categorizedBookings.dinnerArrivals
+                    .sort((a: { booking_time: string | number | Date }, b: { booking_time: string | number | Date }) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+                    .map(renderEnhancedBookingCard)
+                  }
+                </div>
+              )}
+
+              {/* Late Night Shift */}
+              {categorizedBookings.lateNightArrivals.length > 0 && (
+                <div className="space-y-1 mt-2">
+                  <h4 className="text-xs font-medium text-red-400 border-b border-red-800 pb-1">
+                    Late Night (10PM - 6AM) ({categorizedBookings.lateNightArrivals.length})
+                  </h4>
+                  {categorizedBookings.lateNightArrivals
+                    .sort((a: { booking_time: string | number | Date }, b: { booking_time: string | number | Date }) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
                     .map(renderEnhancedBookingCard)
                   }
                 </div>
               )}
 
               {/* Empty state */}
-              {(categorizedBookings.lateArrivals.length + 
-                categorizedBookings.currentArrivals.length + 
-                categorizedBookings.upcomingArrivals.length +
+              {(categorizedBookings.morningArrivals.length +
+                categorizedBookings.lunchArrivals.length +
+                categorizedBookings.dinnerArrivals.length +
+                categorizedBookings.lateNightArrivals.length +
                 categorizedBookings.waitingForSeating.length) === 0 && (
                 <div className="text-center py-8">
                   <UserCheck className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">No arrivals in the next hour</p>
+                  <p className="text-sm text-muted-foreground">No arrivals scheduled</p>
+                  <p className="text-xs text-muted-foreground mt-1">All arrivals will appear here grouped by shift</p>
                 </div>
               )}
             </div>
@@ -1354,21 +1516,18 @@ export function CheckInQueue({
                       .map(table => {
                         const isSelected = selectedTableIds.includes(table.id)
                         const isAvailable = !table.isOccupied
-                        const fitsParty = table.max_capacity >= walkInData.partySize
-                        const canSelect = isAvailable && fitsParty
+                        // For large parties, allow selecting any available table to combine capacity
+                        const canSelect = isAvailable
                         
                         const nextBooking = table.upcomingBookings?.[0]
                         const minutesUntilNext = nextBooking ? differenceInMinutes(new Date(nextBooking.booking_time), currentTime) : null
-                        
+
                         let statusColor = "border-border"
                         let bgColor = "bg-card"
-                        
+
                         if (table.isOccupied) {
                           statusColor = "border-destructive"
                           bgColor = "bg-destructive/20"
-                        } else if (!fitsParty) {
-                          statusColor = "border-secondary"
-                          bgColor = "bg-secondary/30"
                         } else if (nextBooking && minutesUntilNext! <= 60) {
                           statusColor = "border-accent"
                           bgColor = "bg-accent/30"
@@ -1420,14 +1579,36 @@ export function CheckInQueue({
                   </div>
                 </div>
 
+                {/* Capacity warning */}
+                {selectedTableIds.length > 0 && (() => {
+                  const totalCapacity = selectedTableIds.reduce((sum, id) => {
+                    const table = tableStatus.find(t => t.id === id)
+                    return sum + (table?.max_capacity || 0)
+                  }, 0)
+                  const isInsufficient = totalCapacity < walkInData.partySize
+
+                  if (isInsufficient) {
+                    return (
+                      <Alert className="border-accent bg-accent/10">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription className="text-xs">
+                          <strong>Capacity Warning:</strong> Selected tables can seat {totalCapacity} people,
+                          but party size is {walkInData.partySize}. You can still proceed if needed.
+                        </AlertDescription>
+                      </Alert>
+                    )
+                  }
+                  return null
+                })()}
+
                 {/* Seat button */}
                 <Button
                   className="w-full h-8 text-xs font-medium bg-secondary hover:bg-secondary/90 text-secondary-foreground disabled:bg-muted disabled:text-muted-foreground"
                   onClick={handleWalkIn}
                   disabled={selectedTableIds.length === 0}
                 >
-                  {selectedTableIds.length > 0 
-                    ? `Seat at Table ${selectedTableIds.map(id => 
+                  {selectedTableIds.length > 0
+                    ? `Seat at Table ${selectedTableIds.map(id =>
                         tableStatus.find(t => t.id === id)?.table_number
                       ).join(', ')}`
                     : 'Select a Table'
@@ -1657,6 +1838,142 @@ export function CheckInQueue({
                 Confirm Changes
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Walk-in Confirmation Dialogs */}
+      <Dialog open={walkInConfirmation.show} onOpenChange={(open) =>
+        !open && setWalkInConfirmation({
+          show: false,
+          type: null,
+          conflictingReservations: [],
+          selectedTables: [],
+          walkInData: null
+        })
+      }>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-accent-foreground" />
+              {walkInConfirmation.type === 'upcoming_reservations'
+                ? 'Table Has Upcoming Reservations'
+                : 'Confirm Table Assignment'
+              }
+            </DialogTitle>
+            <DialogDescription>
+              {walkInConfirmation.type === 'upcoming_reservations'
+                ? 'The selected table(s) have upcoming reservations. Are you sure you want to proceed?'
+                : (() => {
+                    const totalCapacity = walkInConfirmation.selectedTables.reduce((sum: number, table: any) =>
+                      sum + (table?.max_capacity || 0), 0)
+                    const partySize = walkInConfirmation.walkInData?.party_size || 0
+                    const hasCapacityIssue = totalCapacity < partySize
+
+                    if (hasCapacityIssue) {
+                      return `The selected tables can seat ${totalCapacity} people, but the party size is ${partySize}. Please confirm if you want to proceed.`
+                    } else if (walkInConfirmation.selectedTables.length > 1) {
+                      return 'You are seating a large party across multiple tables. Please confirm this arrangement.'
+                    } else {
+                      return 'Please confirm the table assignment for this large party.'
+                    }
+                  })()
+              }
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            {walkInConfirmation.type === 'upcoming_reservations' && (
+              <div className="space-y-3">
+                <Alert className="border-accent bg-accent/10">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Conflicting Reservations:</strong>
+                  </AlertDescription>
+                </Alert>
+
+                <div className="space-y-2">
+                  {walkInConfirmation.conflictingReservations.map((reservation, index) => (
+                    <div key={index} className="p-3 bg-muted rounded-lg border border-border">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-sm">
+                            {reservation.guest_name || reservation.user?.full_name || 'Anonymous'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Table {reservation.table.table_number} • {format(new Date(reservation.booking_time), 'h:mm a')}
+                            ({differenceInMinutes(new Date(reservation.booking_time), currentTime)} min)
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {reservation.party_size}p
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {walkInConfirmation.type === 'multi_table' && (
+              <div className="space-y-3">
+                {(() => {
+                  const totalCapacity = walkInConfirmation.selectedTables.reduce((sum: number, table: any) =>
+                    sum + (table?.max_capacity || 0), 0)
+                  const partySize = walkInConfirmation.walkInData?.party_size || 0
+                  const hasCapacityIssue = totalCapacity < partySize
+
+                  return (
+                    <Alert className={hasCapacityIssue ? "border-accent bg-accent/10" : "border-primary bg-primary/10"}>
+                      {hasCapacityIssue ? <AlertTriangle className="h-4 w-4" /> : <Users className="h-4 w-4" />}
+                      <AlertDescription>
+                        <strong>{hasCapacityIssue ? 'Capacity Warning:' : 'Large Party Setup:'}</strong>
+                      </AlertDescription>
+                    </Alert>
+                  )
+                })()}
+
+                <div className="p-3 bg-muted rounded-lg border border-border">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-sm">Party Details:</span>
+                    <Badge className="bg-primary text-primary-foreground">
+                      {walkInConfirmation.walkInData?.party_size}p
+                    </Badge>
+                  </div>
+                  <div className="text-sm text-muted-foreground space-y-1">
+                    <p>Guest: {walkInConfirmation.walkInData?.guest_name}</p>
+                    <p>Tables: {walkInConfirmation.selectedTables.map((t: any) => `T${t.table_number} (${t.max_capacity}p)`).join(', ')}</p>
+                    <p>Total Capacity: {walkInConfirmation.selectedTables.reduce((sum: number, table: any) =>
+                      sum + (table?.max_capacity || 0), 0)} people</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setWalkInConfirmation({
+                show: false,
+                type: null,
+                conflictingReservations: [],
+                selectedTables: [],
+                walkInData: null
+              })}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={proceedWithWalkIn}
+              className="bg-accent hover:bg-accent/80 text-accent-foreground"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              {walkInConfirmation.type === 'upcoming_reservations'
+                ? 'Proceed Anyway'
+                : 'Confirm Seating'
+              }
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
