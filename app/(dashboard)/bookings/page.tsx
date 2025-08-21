@@ -594,7 +594,7 @@ export default function BookingsPage() {
         .from("bookings")
         .insert({
           restaurant_id: restaurantId,
-          user_id: user.id,
+          user_id: bookingData.user_id || user.id,
           guest_name: bookingData.guest_name,
           guest_email: bookingData.guest_email,
           guest_phone: bookingData.guest_phone,
@@ -1151,7 +1151,7 @@ export default function BookingsPage() {
                           {urgentBookings.slice(0, 3).map(booking => (
                             <div key={booking.id} className="flex items-center gap-3 p-2 bg-red-50 rounded font-medium">
                               <span className="font-bold text-red-700">{format(new Date(booking.booking_time), "HH:mm")}</span>
-                              <span className="font-semibold">{booking.user?.full_name || booking.guest_name}</span>
+                              <span className="font-semibold">{booking.guest_name || booking.user?.full_name}</span>
                               <span>Party of {booking.party_size}</span>
                               {!booking.tables?.length && (
                                 <Badge variant="destructive" className="px-2 py-1 text-xs font-bold animate-pulse">NO TABLE</Badge>
@@ -1466,7 +1466,7 @@ export default function BookingsPage() {
                                 {format(new Date(currentBooking.booking_time), "HH:mm")} - {format(addMinutes(new Date(currentBooking.booking_time), currentBooking.turn_time_minutes || 120), "HH:mm")}
                               </div>
                               <div className="text-red-600">
-                                {currentBooking.user?.full_name || currentBooking.guest_name}
+                                {currentBooking.guest_name || currentBooking.user?.full_name}
                               </div>
                               <div className="text-red-600">
                                 Party of {currentBooking.party_size}
@@ -1482,7 +1482,7 @@ export default function BookingsPage() {
                                 {format(new Date(nextBooking.booking_time), "HH:mm")}
                               </div>
                               <div className="text-yellow-600">
-                                {nextBooking.user?.full_name || nextBooking.guest_name}
+                                {nextBooking.guest_name || nextBooking.user?.full_name}
                               </div>
                               <div className="text-yellow-600">
                                 Party of {nextBooking.party_size}

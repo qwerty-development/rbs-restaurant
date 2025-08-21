@@ -99,7 +99,8 @@ export class TableAvailabilityService {
         p_table_ids: tableIds,
         p_start_time: bookingTime.toISOString(),
         p_end_time: endTime.toISOString(),
-        p_exclude_booking_id: excludeBookingId || null
+        p_exclude_booking_id: excludeBookingId || null,
+        p_exclude_user_id: null
       })
 
     if (conflictError) {
@@ -253,7 +254,9 @@ export class TableAvailabilityService {
         .rpc("check_booking_overlap", {
           p_table_ids: [table.id],
           p_start_time: bookingTime.toISOString(),
-          p_end_time: endTime.toISOString()
+          p_end_time: endTime.toISOString(),
+          p_exclude_booking_id: null,
+          p_exclude_user_id: null
         })
 
       if (conflictId === null) {
@@ -481,7 +484,8 @@ export class TableAvailabilityService {
         p_table_ids: tableIds,
         p_start_time: bookingTime.toISOString(),
         p_end_time: endTime.toISOString(),
-        p_exclude_booking_id: excludeBookingId || null
+        p_exclude_booking_id: excludeBookingId || null,
+        p_exclude_user_id: null
       })
 
     if (error) {

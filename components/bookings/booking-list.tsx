@@ -252,11 +252,11 @@ export function BookingList({
   }
 
   const formatGuestName = (booking: Booking) => {
-    return booking.user?.full_name || booking.guest_name || 'Guest'
+    return booking.guest_name || booking.user?.full_name || 'Guest'
   }
 
   const formatGuestPhone = (booking: Booking) => {
-    return booking.user?.phone_number || booking.guest_phone || 'No phone'
+    return booking.guest_phone || booking.user?.phone_number || 'No phone'
   }
 
   const isDiningStatus = (status: string) => {

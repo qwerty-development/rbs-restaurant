@@ -324,19 +324,19 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                     <div className="space-y-1">
                       <Label className="text-sm text-muted-foreground">Name</Label>
                       <p className="font-medium">
-                        {booking.user?.full_name || booking.guest_name || 'Guest'}
+                        {booking.guest_name || booking.user?.full_name || 'Guest'}
                       </p>
                     </div>
                     <div className="space-y-1">
                       <Label className="text-sm text-muted-foreground">Phone</Label>
                       <p className="font-medium">
-                        {booking.user?.phone_number || booking.guest_phone || 'Not provided'}
+                        {booking.guest_phone || booking.user?.phone_number || 'Not provided'}
                       </p>
                     </div>
                     <div className="space-y-1">
                       <Label className="text-sm text-muted-foreground">Email</Label>
                       <p className="font-medium">
-                        {booking.user?.email || booking.guest_email || 'Not provided'}
+                        {booking.guest_email || booking.user?.email || 'Not provided'}
                       </p>
                     </div>
                     <div className="space-y-1">
