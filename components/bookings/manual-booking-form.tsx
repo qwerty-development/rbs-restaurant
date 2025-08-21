@@ -31,6 +31,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { 
   CalendarIcon, 
   Clock, 
@@ -97,6 +105,12 @@ export function ManualBookingForm({
   const supabase = createClient()
   const tableService = new TableAvailabilityService()
   const availabilityService = new RestaurantAvailability()
+
+  // Add/Use customer prompt state
+  const [showAddCustomerPrompt, setShowAddCustomerPrompt] = useState(false)
+  const [pendingProcessedData, setPendingProcessedData] = useState<any | null>(null)
+  const [pendingGuestDetails, setPendingGuestDetails] = useState<{ name?: string | null; email?: string | null; phone?: string | null } | null>(null)
+  const [isAddingCustomer, setIsAddingCustomer] = useState(false)
 
   // Debounce customer search
   useEffect(() => {
@@ -474,7 +488,205 @@ export function ManualBookingForm({
       table_ids: selectedTables,
     }
 
+    // If no selected customer but guest info is provided, prompt to add/use existing
+    const hasGuestInfo = !!(data.guest_name?.trim() || data.guest_email?.trim() || data.guest_phone?.trim())
+    if (!selectedCustomer && hasGuestInfo) {
+      setPendingProcessedData(processedData)
+      setPendingGuestDetails({
+        name: data.guest_name?.trim() || null,
+        email: data.guest_email?.trim() || null,
+        phone: data.guest_phone?.trim() || null,
+      })
+      setShowAddCustomerPrompt(true)
+      return
+    }
+
     onSubmit(processedData)
+  }
+
+  // Find similar existing customers when prompt is open
+  const { data: similarCustomers, isLoading: similarLoading, error: similarError } = useQuery({
+    queryKey: [
+      "similar-restaurant-customers",
+      restaurantId,
+      showAddCustomerPrompt,
+      pendingGuestDetails?.email || "",
+      pendingGuestDetails?.phone || "",
+      pendingGuestDetails?.name || "",
+    ],
+    queryFn: async () => {
+      if (!showAddCustomerPrompt || !restaurantId) return []
+
+      const orFilters: string[] = []
+      if (pendingGuestDetails?.email) {
+        const email = pendingGuestDetails.email.replace(/'/g, "''")
+        orFilters.push(`guest_email.ilike.%${email}%`)
+      }
+      if (pendingGuestDetails?.phone) {
+        const digits = (pendingGuestDetails.phone || '').replace(/\D/g, '')
+        if (digits) {
+          orFilters.push(`guest_phone.ilike.%${digits}%`)
+        } else {
+          const phone = pendingGuestDetails.phone.replace(/'/g, "''")
+          orFilters.push(`guest_phone.ilike.%${phone}%`)
+        }
+      }
+      if (pendingGuestDetails?.name) {
+        const name = pendingGuestDetails.name.replace(/'/g, "''")
+        orFilters.push(`guest_name.ilike.%${name}%`)
+      }
+
+      if (orFilters.length === 0) return []
+
+      const { data, error } = await supabase
+        .from("restaurant_customers")
+        .select(`
+          *,
+          profile:profiles!restaurant_customers_user_id_fkey(
+            id,
+            full_name,
+            phone_number,
+            avatar_url
+          )
+        `)
+        .eq("restaurant_id", restaurantId)
+        .or(orFilters.join(","))
+        .limit(5)
+        .order("last_visit", { ascending: false })
+
+      if (error) throw error
+      return data || []
+    },
+    enabled: !!restaurantId && showAddCustomerPrompt,
+  })
+
+  const finalizeBookingWithCustomer = (customer: any) => {
+    if (!pendingProcessedData) return
+    const updated = {
+      ...pendingProcessedData,
+      customer_id: customer?.id || null,
+      user_id: customer?.user_id || null,
+      guest_name: customer?.profile?.full_name || customer?.guest_name || pendingProcessedData.guest_name,
+      guest_phone: customer?.profile?.phone_number || customer?.guest_phone || pendingProcessedData.guest_phone,
+      guest_email: customer?.guest_email || pendingProcessedData.guest_email,
+    }
+    setShowAddCustomerPrompt(false)
+    setPendingProcessedData(null)
+    setPendingGuestDetails(null)
+    onSubmit(updated)
+  }
+
+  const handleSkipAddingCustomer = () => {
+    if (!pendingProcessedData) return
+    setShowAddCustomerPrompt(false)
+    const toSubmit = { ...pendingProcessedData }
+    setPendingProcessedData(null)
+    setPendingGuestDetails(null)
+    onSubmit(toSubmit)
+  }
+
+  const handleAddNewCustomer = async () => {
+    if (!pendingProcessedData || !restaurantId) return
+    const name = pendingGuestDetails?.name || pendingProcessedData.guest_name || null
+    const email = pendingGuestDetails?.email || pendingProcessedData.guest_email || null
+    const phone = pendingGuestDetails?.phone || pendingProcessedData.guest_phone || null
+
+    if (!name && !email && !phone) {
+      toast.error("Provide at least a name, email, or phone to add a customer")
+      return
+    }
+
+    setIsAddingCustomer(true)
+    try {
+      // First: try to find existing exact match to avoid duplicates
+      let existingQuery = supabase
+        .from("restaurant_customers")
+        .select(`
+          *,
+          profile:profiles!restaurant_customers_user_id_fkey(
+            id,
+            full_name,
+            phone_number,
+            avatar_url
+          )
+        `)
+        .eq("restaurant_id", restaurantId)
+        .limit(1)
+
+      if (email && phone) {
+        existingQuery = existingQuery.eq("guest_email", email).eq("guest_phone", phone)
+      } else if (email) {
+        existingQuery = existingQuery.eq("guest_email", email)
+      } else if (phone) {
+        existingQuery = existingQuery.eq("guest_phone", phone)
+      }
+
+      const { data: existing } = await existingQuery.single()
+      if (existing) {
+        toast.success("Using existing customer record")
+        finalizeBookingWithCustomer(existing)
+        return
+      }
+
+      // Insert new customer; if a race creates it, handle unique violation gracefully
+      const { data, error } = await supabase
+        .from("restaurant_customers")
+        .insert({
+          restaurant_id: restaurantId,
+          guest_name: name,
+          guest_email: email,
+          guest_phone: phone,
+          first_visit: new Date().toISOString(),
+          last_visit: new Date().toISOString(),
+        })
+        .select(`
+          *,
+          profile:profiles!restaurant_customers_user_id_fkey(
+            id,
+            full_name,
+            phone_number,
+            avatar_url
+          )
+        `)
+        .single()
+
+      if (error) {
+        // If duplicate, fetch existing and use it
+        // @ts-ignore Supabase error shape
+        if (error?.code === '23505') {
+          const { data: dupExisting } = await supabase
+            .from("restaurant_customers")
+            .select(`
+              *,
+              profile:profiles!restaurant_customers_user_id_fkey(
+                id,
+                full_name,
+                phone_number,
+                avatar_url
+              )
+            `)
+            .eq("restaurant_id", restaurantId)
+            .eq("guest_email", email)
+            .eq("guest_phone", phone)
+            .single()
+
+          if (dupExisting) {
+            toast.success("Customer already exists. Using existing record.")
+            finalizeBookingWithCustomer(dupExisting)
+            return
+          }
+        }
+        throw error
+      }
+
+      toast.success("Customer added to restaurant")
+      finalizeBookingWithCustomer(data)
+    } catch (err) {
+      console.error("Error adding restaurant customer:", err)
+      toast.error("Failed to add customer")
+    } finally {
+      setIsAddingCustomer(false)
+    }
   }
 
   const handleTableToggle = (tableId: string) => {
@@ -1196,6 +1408,82 @@ export function ManualBookingForm({
           </Button>
         </div>
       </form>
+      {/* Add/Use customer prompt */}
+      <Dialog
+        open={showAddCustomerPrompt}
+        onOpenChange={(open) => {
+          if (!open) {
+            // Treat closing the dialog as skipping adding a customer
+            handleSkipAddingCustomer()
+          } else {
+            setShowAddCustomerPrompt(true)
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add guest to restaurant customers?</DialogTitle>
+            <DialogDescription>
+              This booking has guest info. You can save them as a customer for future use, or select an existing similar customer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4">
+              <p className="text-sm text-slate-600 dark:text-slate-300 mb-2 font-medium">Guest details</p>
+              <div className="text-sm text-slate-700 dark:text-slate-200">
+                <div><span className="text-slate-500 dark:text-slate-400">Name:</span> {pendingGuestDetails?.name || "—"}</div>
+                <div><span className="text-slate-500 dark:text-slate-400">Email:</span> {pendingGuestDetails?.email || "—"}</div>
+                <div><span className="text-slate-500 dark:text-slate-400">Phone:</span> {pendingGuestDetails?.phone || "—"}</div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4">
+              <p className="text-sm text-slate-600 dark:text-slate-300 mb-3 font-medium">Similar existing customers</p>
+              {similarLoading && (
+                <p className="text-sm text-slate-500">Searching…</p>
+              )}
+              {similarError && (
+                <p className="text-sm text-red-600">Failed to search similar customers</p>
+              )}
+              {!similarLoading && !similarError && (similarCustomers?.length || 0) === 0 && (
+                <p className="text-sm text-slate-500">No similar customers found</p>
+              )}
+              {!similarLoading && !similarError && (similarCustomers?.length || 0) > 0 && (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {similarCustomers?.map((c: any) => (
+                    <div key={c.id} className="flex items-center justify-between gap-4 p-3 rounded-md border border-slate-200 dark:border-slate-700">
+                      <div className="min-w-0">
+                        <div className="font-medium text-slate-800 dark:text-slate-100 truncate">
+                          {c.profile?.full_name || c.guest_name || "Guest"}
+                        </div>
+                        <div className="text-sm text-slate-600 dark:text-slate-300 truncate">
+                          {(c.guest_email || c.profile?.email) && <span>{c.guest_email || c.profile?.email}</span>}
+                          {(c.guest_email || c.profile?.email) && (c.profile?.phone_number || c.guest_phone) && <span> • </span>}
+                          {(c.profile?.phone_number || c.guest_phone) && <span>{c.profile?.phone_number || c.guest_phone}</span>}
+                        </div>
+                      </div>
+                      <Button type="button" size="sm" onClick={() => finalizeBookingWithCustomer(c)}>
+                        Use this
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="sm:justify-between">
+            <div className="text-sm text-slate-600 dark:text-slate-300">You can also skip and only create the booking.</div>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={handleSkipAddingCustomer} disabled={isAddingCustomer || isLoading}>
+                Skip
+              </Button>
+              <Button type="button" onClick={handleAddNewCustomer} disabled={isAddingCustomer || isLoading}>
+                {isAddingCustomer ? "Adding…" : "Add as new customer"}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
