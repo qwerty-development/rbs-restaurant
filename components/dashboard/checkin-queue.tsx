@@ -153,6 +153,12 @@ export function CheckInQueue({
   const tableStatusService = useMemo(() => new TableStatusService(), [])
   const conflictService = useMemo(() => new BookingConflictService(), [])
 
+  // Add/Use customer prompt state for walk-ins
+  const [showAddCustomerPrompt, setShowAddCustomerPrompt] = useState(false)
+  const [pendingWalkInBooking, setPendingWalkInBooking] = useState<any | null>(null)
+  const [pendingGuestDetails, setPendingGuestDetails] = useState<{ name?: string | null; email?: string | null; phone?: string | null } | null>(null)
+  const [isAddingCustomer, setIsAddingCustomer] = useState(false)
+
   // Get current user for status updates
   const [userId, setUserId] = useState<string>("")
   useEffect(() => {
@@ -907,25 +913,8 @@ export function CheckInQueue({
     await proceedWithWalkIn()
   }
 
-  const proceedWithWalkIn = async () => {
-    const walkInBooking = walkInConfirmation.walkInData || {
-      customer_id: selectedCustomer?.id || null,
-      user_id: selectedCustomer?.user_id || null,
-      guest_name: selectedCustomer
-        ? (selectedCustomer.profile?.full_name || selectedCustomer.guest_name)
-        : (walkInData.guestName.trim() || `Walk-in ${format(currentTime, 'HH:mm')}`),
-      guest_phone: selectedCustomer
-        ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
-        : walkInData.guestPhone,
-      guest_email: selectedCustomer?.guest_email || null,
-      party_size: walkInData.partySize,
-      table_ids: selectedTableIds,
-      booking_time: currentTime.toISOString(),
-      turn_time_minutes: walkInData.estimatedDuration,
-      status: 'arrived',
-      table_preferences: walkInData.preferences
-    }
-
+  // Execute the existing walk-in flow from a prepared booking object
+  const executeWalkInFlow = async (walkInBooking: any) => {
     // Handle conflicting reservations
     let createdConflicts: any[] = []
     if (walkInConfirmation.conflictingReservations.length > 0) {
@@ -935,15 +924,15 @@ export function CheckInQueue({
           onTableSwitch(conflictingReservation.id, []) // Empty array removes table assignment
         }
       }
-      
+
       // Create conflict tracking after walk-in is seated
       const upcomingBookingIds = walkInConfirmation.conflictingReservations.map(r => r.id)
-      
+
       // Show immediate notification about reassigned bookings
       const conflictCount = walkInConfirmation.conflictingReservations.length
       const earliestBooking = walkInConfirmation.conflictingReservations
         .sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())[0]
-      
+
       toast.error(
         <div>
           <p className="font-medium">⚠️ Booking Conflicts Created</p>
@@ -987,9 +976,9 @@ export function CheckInQueue({
     if (walkInConfirmation.conflictingReservations.length > 0) {
       const nextBookingTime = walkInConfirmation.conflictingReservations
         .sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())[0]?.booking_time
-      
+
       const minutesToNext = differenceInMinutes(new Date(nextBookingTime), currentTime)
-      
+
       toast.success(
         <div>
           <p className="font-medium">Walk-in Seated with Conflicts</p>
@@ -1022,6 +1011,225 @@ export function CheckInQueue({
       selectedTables: [],
       walkInData: null
     })
+  }
+
+  const proceedWithWalkIn = async () => {
+    const walkInBooking = walkInConfirmation.walkInData || {
+      customer_id: selectedCustomer?.id || null,
+      user_id: selectedCustomer?.user_id || null,
+      guest_name: selectedCustomer
+        ? (selectedCustomer.profile?.full_name || selectedCustomer.guest_name)
+        : (walkInData.guestName.trim() || `Walk-in ${format(currentTime, 'HH:mm')}`),
+      guest_phone: selectedCustomer
+        ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
+        : walkInData.guestPhone,
+      guest_email: selectedCustomer?.guest_email || null,
+      party_size: walkInData.partySize,
+      table_ids: selectedTableIds,
+      booking_time: currentTime.toISOString(),
+      turn_time_minutes: walkInData.estimatedDuration,
+      status: 'arrived',
+      table_preferences: walkInData.preferences
+    }
+    // If no selected customer but guest info is provided, prompt to add/use existing
+    const hasGuestInfo = !!(walkInBooking.guest_name?.trim() || walkInBooking.guest_email?.trim() || walkInBooking.guest_phone?.trim())
+    if (!walkInBooking.customer_id && hasGuestInfo) {
+      setPendingWalkInBooking(walkInBooking)
+      setPendingGuestDetails({
+        name: walkInBooking.guest_name || null,
+        email: walkInBooking.guest_email || null,
+        phone: walkInBooking.guest_phone || null,
+      })
+      setShowAddCustomerPrompt(true)
+      return
+    }
+
+    await executeWalkInFlow(walkInBooking)
+  }
+
+  // Similar customers lookup when prompt open
+  const { data: similarCustomers, isLoading: similarLoading, error: similarError } = useQuery({
+    queryKey: [
+      "walkin-similar-restaurant-customers",
+      restaurantId,
+      showAddCustomerPrompt,
+      pendingGuestDetails?.email || "",
+      pendingGuestDetails?.phone || "",
+      pendingGuestDetails?.name || "",
+    ],
+    queryFn: async () => {
+      if (!showAddCustomerPrompt || !restaurantId) return []
+
+      const orFilters: string[] = []
+      if (pendingGuestDetails?.email) {
+        const email = pendingGuestDetails.email.replace(/'/g, "''")
+        orFilters.push(`guest_email.ilike.%${email}%`)
+      }
+      if (pendingGuestDetails?.phone) {
+        const digits = (pendingGuestDetails.phone || '').replace(/\D/g, '')
+        if (digits) {
+          orFilters.push(`guest_phone.ilike.%${digits}%`)
+        } else {
+          const phone = pendingGuestDetails.phone.replace(/'/g, "''")
+          orFilters.push(`guest_phone.ilike.%${phone}%`)
+        }
+      }
+      if (pendingGuestDetails?.name) {
+        const name = pendingGuestDetails.name.replace(/'/g, "''")
+        orFilters.push(`guest_name.ilike.%${name}%`)
+      }
+
+      if (orFilters.length === 0) return []
+
+      const { data, error } = await supabase
+        .from("restaurant_customers")
+        .select(`
+          *,
+          profile:profiles!restaurant_customers_user_id_fkey(
+            id,
+            full_name,
+            phone_number,
+            avatar_url
+          )
+        `)
+        .eq("restaurant_id", restaurantId)
+        .or(orFilters.join(","))
+        .limit(5)
+        .order("last_visit", { ascending: false })
+
+      if (error) throw error
+      return data || []
+    },
+    enabled: !!restaurantId && showAddCustomerPrompt,
+  })
+
+  const finalizeWalkInWithCustomer = async (customer: any) => {
+    if (!pendingWalkInBooking) return
+    const updated = {
+      ...pendingWalkInBooking,
+      customer_id: customer?.id || null,
+      user_id: customer?.user_id || null,
+      guest_name: customer?.profile?.full_name || customer?.guest_name || pendingWalkInBooking.guest_name,
+      guest_phone: customer?.profile?.phone_number || customer?.guest_phone || pendingWalkInBooking.guest_phone,
+      guest_email: customer?.guest_email || pendingWalkInBooking.guest_email,
+    }
+    setShowAddCustomerPrompt(false)
+    setPendingWalkInBooking(null)
+    setPendingGuestDetails(null)
+    await executeWalkInFlow(updated)
+  }
+
+  const handleSkipAddingCustomer = async () => {
+    if (!pendingWalkInBooking) return
+    setShowAddCustomerPrompt(false)
+    const toSubmit = { ...pendingWalkInBooking }
+    setPendingWalkInBooking(null)
+    setPendingGuestDetails(null)
+    await executeWalkInFlow(toSubmit)
+  }
+
+  const handleAddNewCustomer = async () => {
+    if (!pendingWalkInBooking || !restaurantId) return
+    const name = pendingGuestDetails?.name || pendingWalkInBooking.guest_name || null
+    const email = pendingGuestDetails?.email || pendingWalkInBooking.guest_email || null
+    const phone = pendingGuestDetails?.phone || pendingWalkInBooking.guest_phone || null
+
+    if (!name && !email && !phone) {
+      toast.error("Provide at least a name, email, or phone to add a customer")
+      return
+    }
+
+    setIsAddingCustomer(true)
+    try {
+      // First: try to find existing exact match to avoid duplicates
+      let existingQuery = supabase
+        .from("restaurant_customers")
+        .select(`
+          *,
+          profile:profiles!restaurant_customers_user_id_fkey(
+            id,
+            full_name,
+            phone_number,
+            avatar_url
+          )
+        `)
+        .eq("restaurant_id", restaurantId)
+        .limit(1)
+
+      if (email && phone) {
+        existingQuery = existingQuery.eq("guest_email", email).eq("guest_phone", phone)
+      } else if (email) {
+        existingQuery = existingQuery.eq("guest_email", email)
+      } else if (phone) {
+        existingQuery = existingQuery.eq("guest_phone", phone)
+      }
+
+      const { data: existing } = await existingQuery.single()
+      if (existing) {
+        toast.success("Using existing customer record")
+        await finalizeWalkInWithCustomer(existing)
+        return
+      }
+
+      // Insert new customer; if a race creates it, handle unique violation gracefully
+      const { data, error } = await supabase
+        .from("restaurant_customers")
+        .insert({
+          restaurant_id: restaurantId,
+          guest_name: name,
+          guest_email: email,
+          guest_phone: phone,
+          first_visit: new Date().toISOString(),
+          last_visit: new Date().toISOString(),
+        })
+        .select(`
+          *,
+          profile:profiles!restaurant_customers_user_id_fkey(
+            id,
+            full_name,
+            phone_number,
+            avatar_url
+          )
+        `)
+        .single()
+
+      if (error) {
+        // If duplicate, fetch existing and use it
+        // @ts-ignore Supabase error shape
+        if (error?.code === '23505') {
+          const { data: dupExisting } = await supabase
+            .from("restaurant_customers")
+            .select(`
+              *,
+              profile:profiles!restaurant_customers_user_id_fkey(
+                id,
+                full_name,
+                phone_number,
+                avatar_url
+              )
+            `)
+            .eq("restaurant_id", restaurantId)
+            .eq("guest_email", email)
+            .eq("guest_phone", phone)
+            .single()
+
+          if (dupExisting) {
+            toast.success("Customer already exists. Using existing record.")
+            await finalizeWalkInWithCustomer(dupExisting)
+            return
+          }
+        }
+        throw error
+      }
+
+      toast.success("Customer added to restaurant")
+      await finalizeWalkInWithCustomer(data)
+    } catch (err) {
+      console.error("Error adding restaurant customer:", err)
+      toast.error("Failed to add customer")
+    } finally {
+      setIsAddingCustomer(false)
+    }
   }
 
   const getBookingStatus = (booking: any) => {
@@ -2118,6 +2326,83 @@ export function CheckInQueue({
                 : 'Confirm Seating'
               }
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add/Use customer prompt for walk-ins */}
+      <Dialog
+        open={showAddCustomerPrompt}
+        onOpenChange={(open) => {
+          if (!open) {
+            // Treat closing as skipping adding a customer
+            handleSkipAddingCustomer()
+          } else {
+            setShowAddCustomerPrompt(true)
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add guest to restaurant customers?</DialogTitle>
+            <DialogDescription>
+              This walk-in has guest info. You can save them as a customer for future use, or select an existing similar customer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border p-4">
+              <p className="text-sm text-muted-foreground mb-2 font-medium">Guest details</p>
+              <div className="text-sm">
+                <div><span className="text-muted-foreground">Name:</span> {pendingGuestDetails?.name || "—"}</div>
+                <div><span className="text-muted-foreground">Email:</span> {pendingGuestDetails?.email || "—"}</div>
+                <div><span className="text-muted-foreground">Phone:</span> {pendingGuestDetails?.phone || "—"}</div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border p-4">
+              <p className="text-sm text-muted-foreground mb-3 font-medium">Similar existing customers</p>
+              {similarLoading && (
+                <p className="text-sm text-muted-foreground">Searching…</p>
+              )}
+              {similarError && (
+                <p className="text-sm text-destructive">Failed to search similar customers</p>
+              )}
+              {!similarLoading && !similarError && (similarCustomers?.length || 0) === 0 && (
+                <p className="text-sm text-muted-foreground">No similar customers found</p>
+              )}
+              {!similarLoading && !similarError && (similarCustomers?.length || 0) > 0 && (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {similarCustomers?.map((c: any) => (
+                    <div key={c.id} className="flex items-center justify-between gap-4 p-3 rounded-md border border-border">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">
+                          {c.profile?.full_name || c.guest_name || "Guest"}
+                        </div>
+                        <div className="text-sm text-muted-foreground truncate">
+                          {(c.guest_email || c.profile?.email) && <span>{c.guest_email || c.profile?.email}</span>}
+                          {(c.guest_email || c.profile?.email) && (c.profile?.phone_number || c.guest_phone) && <span> • </span>}
+                          {(c.profile?.phone_number || c.guest_phone) && <span>{c.profile?.phone_number || c.guest_phone}</span>}
+                        </div>
+                      </div>
+                      <Button type="button" size="sm" onClick={() => finalizeWalkInWithCustomer(c)}>
+                        Use this
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="sm:justify-between">
+            <div className="text-sm text-muted-foreground">You can also skip and only create the walk-in booking.</div>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={handleSkipAddingCustomer} disabled={isAddingCustomer}>
+                Skip
+              </Button>
+              <Button type="button" onClick={handleAddNewCustomer} disabled={isAddingCustomer}>
+                {isAddingCustomer ? "Adding…" : "Add as new customer"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
