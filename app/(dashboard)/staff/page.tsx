@@ -90,14 +90,30 @@ type User = {
 
 // Form schemas
 const staffFormSchema = z.object({
-  fullName: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.string().email("Invalid email address"),
-  phoneNumber: z.string().optional(),
+  selectedUserId: z.string().min(1, "Please select a user"),
   role: z.enum(["manager", "staff", "viewer"]),
   permissions: z.array(z.string()).min(1, "Select at least one permission"),
 })
 
 type StaffFormData = z.infer<typeof staffFormSchema>
+
+// Edit Staff form schema
+const editStaffFormSchema = z.object({
+  role: z.enum(["owner", "manager", "staff", "viewer"]),
+  permissions: z.array(z.string()).min(1, "Select at least one permission"),
+})
+
+type EditStaffFormData = z.infer<typeof editStaffFormSchema>
+
+// User search types
+type SearchedUser = {
+  id: string
+  email: string
+  full_name: string
+  phone_number: string | null
+  avatar_url: string | null
+  isAlreadyStaff?: boolean
+}
 
 // Constants
 const ROLES = [
@@ -220,14 +236,30 @@ export default function StaffPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
+  
+  // User search state
+  const [emailSearch, setEmailSearch] = useState("")
+  const [searchedUsers, setSearchedUsers] = useState<SearchedUser[]>([])
+  const [selectedUser, setSelectedUser] = useState<SearchedUser | null>(null)
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false)
+
+  // Edit staff state
+  const [isEditingStaff, setIsEditingStaff] = useState(false)
+  const [staffToEdit, setStaffToEdit] = useState<StaffMember | null>(null)
 
   // Form
   const form = useForm<StaffFormData>({
     resolver: zodResolver(staffFormSchema),
     defaultValues: {
-      fullName: "",
-      email: "",
-      phoneNumber: "",
+      selectedUserId: "",
+      role: "staff",
+      permissions: restaurantAuth.getDefaultPermissions("staff"),
+    },
+  })
+
+  const editForm = useForm<EditStaffFormData>({
+    resolver: zodResolver(editStaffFormSchema),
+    defaultValues: {
       role: "staff",
       permissions: restaurantAuth.getDefaultPermissions("staff"),
     },
@@ -240,6 +272,25 @@ export default function StaffPage() {
       form.setValue("permissions", restaurantAuth.getDefaultPermissions(watchedRole))
     }
   }, [watchedRole, form])
+
+  // Search users when email changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (emailSearch && !selectedUser) {
+        searchUsers(emailSearch)
+      }
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [emailSearch, selectedUser])
+
+  // Watch edit role changes to update permissions
+  const editWatchedRole = editForm.watch("role")
+  useEffect(() => {
+    if (editWatchedRole && isEditingStaff) {
+      editForm.setValue("permissions", restaurantAuth.getDefaultPermissions(editWatchedRole))
+    }
+  }, [editWatchedRole, editForm, isEditingStaff])
 
   const loadInitialData = async () => {
     try {
@@ -321,28 +372,129 @@ export default function StaffPage() {
     }
   }
 
+  // Search for users by email
+  const searchUsers = async (email: string) => {
+    if (!email || email.length < 3) {
+      setSearchedUsers([])
+      return
+    }
+
+    try {
+      setIsSearchingUsers(true)
+
+      // Query profiles by email directly via Supabase client
+      const { data: profileUsers, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, full_name, phone_number, avatar_url, email')
+        .ilike('email', `%${email}%`)
+        .limit(20)
+
+      if (profileError) throw profileError
+
+      let users: SearchedUser[] = (profileUsers || []) as any
+
+      // Mark users already staff for this restaurant
+      if (users.length > 0 && restaurantId) {
+        const userIds = users.map(u => u.id)
+        const { data: existingStaff, error: staffCheckError } = await supabase
+          .from('restaurant_staff')
+          .select('user_id')
+          .eq('restaurant_id', restaurantId)
+          .in('user_id', userIds)
+
+        if (!staffCheckError) {
+          const staffUserIds = new Set((existingStaff || []).map(s => s.user_id))
+          users = users.map(u => ({ ...u, isAlreadyStaff: staffUserIds.has(u.id) }))
+        }
+      }
+
+      setSearchedUsers(users)
+
+    } catch (error: any) {
+      console.error('Error searching users:', error)
+      toast.error(error.message || 'Failed to search users')
+      setSearchedUsers([])
+    } finally {
+      setIsSearchingUsers(false)
+    }
+  }
+
+  // Handle user selection
+  const handleUserSelect = (user: SearchedUser) => {
+    setSelectedUser(user)
+    form.setValue('selectedUserId', user.id)
+    setEmailSearch(user.email)
+    setSearchedUsers([])
+  }
+
+  // Clear user selection
+  const clearUserSelection = () => {
+    setSelectedUser(null)
+    setEmailSearch("")
+    setSearchedUsers([])
+    form.setValue('selectedUserId', "")
+  }
+
+  // Open Edit Staff dialog
+  const handleOpenEdit = (staff: StaffMember) => {
+    setStaffToEdit(staff)
+    editForm.reset({
+      role: staff.role,
+      permissions: staff.permissions || [],
+    })
+    setIsEditingStaff(true)
+  }
+
+  // Close Edit Staff dialog
+  const handleCloseEdit = () => {
+    setIsEditingStaff(false)
+    setStaffToEdit(null)
+  }
+
+  // Save edits
+  const handleSaveEdit = async (data: EditStaffFormData) => {
+    if (!currentUser || !staffToEdit) return
+    try {
+      setLoading(true)
+      await restaurantAuth.updateStaffMember(
+        staffToEdit.id,
+        {
+          // Only pass columns that exist in restaurant_staff
+          role: data.role as any,
+          permissions: data.permissions as any,
+        } as any,
+        currentUser.id
+      )
+      toast.success("Staff member updated")
+      handleCloseEdit()
+      await loadStaffMembers(restaurantId)
+    } catch (error: any) {
+      console.error('Error updating staff:', error)
+      toast.error(error.message || 'Failed to update staff')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Add staff member
   const handleAddStaff = async (data: StaffFormData) => {
-    if (!currentUser || !restaurantId) return
+    if (!currentUser || !restaurantId || !selectedUser) return
 
     try {
       setLoading(true)
       
-      await restaurantAuth.addStaffMember(
+      await restaurantAuth.addExistingUserAsStaff(
         restaurantId,
-        {
-          fullName: data.fullName,
-          email: data.email,
-          phoneNumber: data.phoneNumber,
-          role: data.role,
-          permissions: data.permissions
-        },
+        data.selectedUserId,
+        data.role,
+        data.permissions,
         currentUser.id
       )
 
-      toast.success("Staff member added successfully")
+      toast.success(`${selectedUser.full_name} added as staff member successfully`)
       setIsAddingStaff(false)
       form.reset()
+      clearUserSelection()
       await loadStaffMembers(restaurantId)
 
     } catch (error: any) {
@@ -470,7 +622,13 @@ export default function StaffPage() {
           </p>
         </div>
         
-        <Dialog open={isAddingStaff} onOpenChange={setIsAddingStaff}>
+        <Dialog open={isAddingStaff} onOpenChange={(open) => {
+          setIsAddingStaff(open)
+          if (!open) {
+            clearUserSelection()
+            form.reset()
+          }
+        }}>
           <DialogTrigger asChild>
             <Button>
               <UserPlus className="mr-2 h-4 w-4" />
@@ -486,52 +644,106 @@ export default function StaffPage() {
             </DialogHeader>
             
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleAddStaff)} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+              <form onSubmit={form.handleSubmit(handleAddStaff)} className="space-y-6">
+                {/* User Search Section */}
+                <div className="space-y-4">
+                  <div>
+                    <FormLabel>Search User by Email</FormLabel>
+                    <div className="relative">
+                      <Input
+                        type="email"
+                        placeholder="Enter email to search for existing users..."
+                        value={emailSearch}
+                        onChange={(e) => setEmailSearch(e.target.value)}
+                        className="pr-10"
+                      />
+                      {isSearchingUsers && (
+                        <div className="absolute right-3 top-3">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        </div>
+                      )}
+                      {selectedUser && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-2 top-2 h-6 w-6 p-0"
+                          onClick={clearUserSelection}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Selected User Display */}
+                  {selectedUser && (
+                    <div className="p-4 border rounded-lg bg-muted/50">
+                      <div className="flex items-center space-x-3">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-sm font-semibold">
+                            {selectedUser.full_name.split(' ').map(n => n[0]).join('')}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-medium">{selectedUser.full_name}</h4>
+                          <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
+                          {selectedUser.phone_number && (
+                            <p className="text-sm text-muted-foreground">{selectedUser.phone_number}</p>
+                          )}
+                        </div>
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Search Results */}
+                  {searchedUsers.length > 0 && !selectedUser && (
+                    <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg">
+                      {searchedUsers.map((user) => (
+                        <div
+                          key={user.id}
+                          className={`p-3 cursor-pointer hover:bg-muted/50 border-b last:border-b-0 ${
+                            user.isAlreadyStaff ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
+                          onClick={() => !user.isAlreadyStaff && handleUserSelect(user)}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                              <span className="text-xs font-semibold">
+                                {user.full_name.split(' ').map(n => n[0]).join('')}
+                              </span>
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium">{user.full_name}</div>
+                              <div className="text-sm text-muted-foreground">{user.email}</div>
+                              {user.phone_number && (
+                                <div className="text-sm text-muted-foreground">{user.phone_number}</div>
+                              )}
+                              {user.isAlreadyStaff && (
+                                <div className="text-xs text-orange-600 font-medium">Already staff member</div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Hidden form field for selected user */}
                   <FormField
                     control={form.control}
-                    name="fullName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Full Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="John Doe" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input type="email" placeholder="john@restaurant.com" {...field} />
-                        </FormControl>
+                    name="selectedUserId"
+                    render={() => (
+                      <FormItem className="hidden">
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="phoneNumber"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Phone Number (Optional)</FormLabel>
-                        <FormControl>
-                          <Input type="tel" placeholder="+961 70 123456" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
+                {/* Role Selection */}
+                {selectedUser && (
                   <FormField
                     control={form.control}
                     name="role"
@@ -562,19 +774,21 @@ export default function StaffPage() {
                       </FormItem>
                     )}
                   />
-                </div>
+                )}
 
-                <FormField
-                  control={form.control}
-                  name="permissions"
-                  render={() => (
-                    <FormItem>
-                      <div className="mb-4">
-                        <FormLabel className="text-base">Permissions</FormLabel>
-                        <FormDescription>
-                          Select what this staff member can do
-                        </FormDescription>
-                      </div>
+                {/* Permissions Section */}
+                {selectedUser && (
+                  <FormField
+                    control={form.control}
+                    name="permissions"
+                    render={() => (
+                      <FormItem>
+                        <div className="mb-4">
+                          <FormLabel className="text-base">Permissions</FormLabel>
+                          <FormDescription>
+                            Select what this staff member can do
+                          </FormDescription>
+                        </div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-64 overflow-y-auto border rounded-lg p-4">
                         {Object.entries(
@@ -633,6 +847,7 @@ export default function StaffPage() {
                     </FormItem>
                   )}
                 />
+                )}
 
                 <DialogFooter>
                   <Button
@@ -642,7 +857,7 @@ export default function StaffPage() {
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={loading}>
+                  <Button type="submit" disabled={loading || !selectedUser}>
                     {loading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -812,6 +1027,14 @@ export default function StaffPage() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => handleOpenEdit(staff)}
+                        >
+                          <Edit className="h-4 w-4 mr-1" /> Edit
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleToggleStatus(staff.id, staff.is_active)}
                         >
                           {staff.is_active ? 'Deactivate' : 'Activate'}
@@ -836,6 +1059,145 @@ export default function StaffPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Staff Dialog */}
+      <Dialog open={isEditingStaff} onOpenChange={(open) => {
+        setIsEditingStaff(open)
+        if (!open) handleCloseEdit()
+      }}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Edit Staff</DialogTitle>
+            <DialogDescription>
+              Update role and permissions for this staff member
+            </DialogDescription>
+          </DialogHeader>
+
+          {staffToEdit && (
+            <div className="space-y-4">
+              <div className="p-3 border rounded-lg bg-muted/50">
+                <div className="flex items-center space-x-3">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                    <span className="text-sm font-semibold">
+                      {staffToEdit.user.full_name.split(' ').map(n => n[0]).join('')}
+                    </span>
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium">{staffToEdit.user.full_name}</div>
+                    <div className="text-sm text-muted-foreground">{staffToEdit.user.email || 'No email'}</div>
+                  </div>
+                </div>
+              </div>
+
+              <Form {...editForm}>
+                <form onSubmit={editForm.handleSubmit(handleSaveEdit)} className="space-y-6">
+                  <FormField
+                    control={editForm.control}
+                    name="role"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Role</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a role" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {ROLES.map((role) => (
+                              <SelectItem key={role.value} value={role.value}>
+                                <div className="flex items-center space-x-2">
+                                  <role.icon className="w-4 h-4" />
+                                  <div>
+                                    <div className="font-medium">{role.label}</div>
+                                    <div className="text-sm text-muted-foreground">{role.description}</div>
+                                  </div>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={editForm.control}
+                    name="permissions"
+                    render={() => (
+                      <FormItem>
+                        <div className="mb-2">
+                          <FormLabel>Permissions</FormLabel>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-64 overflow-y-auto border rounded-lg p-4">
+                          {Object.entries(
+                            PERMISSIONS.reduce((acc, permission) => {
+                              if (!acc[permission.category]) acc[permission.category] = []
+                              acc[permission.category].push(permission)
+                              return acc
+                            }, {} as Record<string, typeof PERMISSIONS>)
+                          ).map(([category, permissions]) => (
+                            <div key={category} className="space-y-3">
+                              <h4 className="font-medium text-sm">{category}</h4>
+                              <div className="space-y-3">
+                                {permissions.map((permission) => (
+                                  <FormField
+                                    key={permission.id}
+                                    control={editForm.control}
+                                    name="permissions"
+                                    render={({ field }) => (
+                                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                        <FormControl>
+                                          <Checkbox
+                                            checked={field.value?.includes(permission.id)}
+                                            onCheckedChange={(checked) => {
+                                              return checked
+                                                ? field.onChange([...(field.value || []), permission.id])
+                                                : field.onChange((field.value || []).filter((v: string) => v !== permission.id))
+                                            }}
+                                          />
+                                        </FormControl>
+                                        <div className="space-y-1 leading-none">
+                                          <FormLabel className="text-sm font-normal">
+                                            {permission.label}
+                                          </FormLabel>
+                                          <p className="text-xs text-muted-foreground">{permission.description}</p>
+                                        </div>
+                                      </FormItem>
+                                    )}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={handleCloseEdit}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={loading}>
+                      {loading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        'Save Changes'
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

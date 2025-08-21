@@ -94,7 +94,8 @@ class RestaurantAuth {
           id,
           full_name,
           phone_number,
-          avatar_url
+          avatar_url,
+          email
         )
       `)
       .eq('restaurant_id', restaurantId)
@@ -105,78 +106,31 @@ class RestaurantAuth {
       throw new Error('Failed to fetch restaurant staff')
     }
 
-    // For now, add a placeholder email - we'll get it from the user_id later
+    // If email is not in profiles, we'll fetch it from a separate API call if needed
     const staffWithEmails = data?.map(staff => ({
       ...staff,
       user: {
         ...staff.user,
-        email: `user-${staff.user_id.slice(0, 8)}@example.com` // Placeholder
+        email: (staff.user as any)?.email || null // Use email from profiles if available
       }
     })) || []
 
     return staffWithEmails as any[]
   }
 
-  // Add staff member
-  async addStaffMember(restaurantId: string, staffData: AddStaffMemberData, createdBy: string): Promise<void> {
+  // Add existing user as staff member (preferred method)
+  async addExistingUserAsStaff(restaurantId: string, userId: string, role: Role, permissions: string[], createdBy: string): Promise<void> {
     try {
-      // Check if user with email already exists in auth.users
-      const { data: authUsers, error: authError } = await this.supabase.auth.admin.listUsers()
-      
-      if (authError) {
-        throw new Error('Failed to check existing users')
-      }
-      
-      const existingUser = authUsers.users.find(user => user.email === staffData.email)
+      // Check if they're already staff at this restaurant
+      const { data: existingStaff } = await this.supabase
+        .from('restaurant_staff')
+        .select('id')
+        .eq('restaurant_id', restaurantId)
+        .eq('user_id', userId)
+        .single()
 
-      let userId: string
-
-      if (existingUser) {
-        // User exists, just add them to restaurant staff
-        userId = existingUser.id
-        
-        // Check if they're already staff at this restaurant
-        const { data: existingStaff } = await this.supabase
-          .from('restaurant_staff')
-          .select('id')
-          .eq('restaurant_id', restaurantId)
-          .eq('user_id', userId)
-          .single()
-
-        if (existingStaff) {
-          throw new Error('This user is already a staff member at this restaurant')
-        }
-      } else {
-        // Create new user account
-        const { data: authData, error: authError } = await this.supabase.auth.admin.createUser({
-          email: staffData.email,
-          password: this.generateTemporaryPassword(),
-          email_confirm: true,
-          user_metadata: {
-            full_name: staffData.fullName,
-            phone_number: staffData.phoneNumber
-          }
-        })
-
-        if (authError || !authData.user) {
-          throw new Error('Failed to create user account')
-        }
-
-        userId = authData.user.id
-
-        // Create profile
-        const { error: profileError } = await this.supabase
-          .from('profiles')
-          .insert({
-            id: userId,
-            full_name: staffData.fullName,
-            phone_number: staffData.phoneNumber
-          })
-
-        if (profileError) {
-          console.error('Error creating profile:', profileError)
-          // Continue anyway as profile might be created by trigger
-        }
+      if (existingStaff) {
+        throw new Error('This user is already a staff member at this restaurant')
       }
 
       // Add to restaurant staff
@@ -185,8 +139,8 @@ class RestaurantAuth {
         .insert({
           restaurant_id: restaurantId,
           user_id: userId,
-          role: staffData.role,
-          permissions: staffData.permissions,
+          role: role,
+          permissions: permissions,
           created_by: createdBy,
           is_active: true
         })
@@ -196,13 +150,15 @@ class RestaurantAuth {
         throw new Error('Failed to add staff member to restaurant')
       }
 
-      // Send invitation email (you can implement this)
-      // await this.sendInvitationEmail(staffData.email, staffData.fullName, restaurantId)
-
     } catch (error: any) {
-      console.error('Error in addStaffMember:', error)
+      console.error('Error in addExistingUserAsStaff:', error)
       throw error
     }
+  }
+
+  // Add staff member (legacy method - creates new accounts, not recommended for client use)
+  async addStaffMember(restaurantId: string, staffData: AddStaffMemberData, createdBy: string): Promise<void> {
+    throw new Error('This method requires admin privileges. Use addExistingUserAsStaff instead.')
   }
 
   // Update staff member
