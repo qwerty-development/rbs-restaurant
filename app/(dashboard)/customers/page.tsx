@@ -153,6 +153,7 @@ export default function CustomersPage() {
           profile:profiles!restaurant_customers_user_id_fkey(
             id,
             full_name,
+            email,
             phone_number,
             avatar_url,
             allergies,
@@ -196,45 +197,17 @@ export default function CustomersPage() {
       // Create a Set of VIP user IDs for quick lookup
       const vipUserIds = new Set(vipData?.map(vip => vip.user_id) || [])
       
-      // Get email addresses for customers with user accounts
-      const customerUserIds = customersData?.filter(c => c.user_id).map(c => c.user_id) || []
-      let userEmails: any[] = []
-      
-      if (customerUserIds.length > 0) {
-        try {
-          const { data: emailData, error: emailError } = await supabase.auth.admin.listUsers()
-          if (emailData?.users && !emailError) {
-            userEmails = emailData.users
-              .filter(user => customerUserIds.includes(user.id))
-              .map(user => ({ 
-                id: user.id, 
-                email: user.email, 
-                email_confirmed: !!user.email_confirmed_at,
-                phone: user.phone,
-                created_at: user.created_at
-              }))
-          }
-        } catch (error) {
-          console.log('Could not fetch user emails:', error)
-          // Continue without emails if there's an error
-        }
-      }
-      
-      const emailMap = new Map(userEmails.map(u => [u.id, u]))
+      // Email is now included in the profiles query above
 
       // Transform the data and check VIP status
       const transformedData = customersData?.map(customer => {
         // Check if customer has active VIP status
         const isVip = customer.vip_status || (customer.user_id && vipUserIds.has(customer.user_id))
-        const emailInfo = customer.user_id ? emailMap.get(customer.user_id) : null
         
         return {
           ...customer,
           vip_status: isVip, // Override with combined VIP status
-          tags: customer.tags?.map((t: any) => t.tag) || [],
-          email: emailInfo?.email || customer.guest_email,
-          email_confirmed: emailInfo?.email_confirmed || false,
-          auth_phone: emailInfo?.phone
+          tags: customer.tags?.map((t: any) => t.tag) || []
         }
       }) || []
 
@@ -269,8 +242,8 @@ export default function CustomersPage() {
       const search = filters.search.toLowerCase()
       filtered = filtered.filter(customer => {
         const name = (customer.profile?.full_name || customer.guest_name || '').toLowerCase()
-        const email = (customer.email || customer.guest_email || '').toLowerCase()
-        const phone = (customer.profile?.phone_number || customer.guest_phone || customer.auth_phone || '').toLowerCase()
+        const email = (customer.profile?.email || customer.guest_email || '').toLowerCase()
+        const phone = (customer.profile?.phone_number || customer.guest_phone || '').toLowerCase()
         return name.includes(search) || email.includes(search) || phone.includes(search)
       })
     }
@@ -458,9 +431,9 @@ export default function CustomersPage() {
     ]
     const rows = filteredCustomers.map(customer => [
       customer.profile?.full_name || customer.guest_name || '',
-      customer.email || customer.guest_email || '',
-      customer.email_confirmed ? 'Yes' : 'No',
-      customer.profile?.phone_number || customer.guest_phone || customer.auth_phone || '',
+      customer.profile?.email || customer.guest_email || '',
+      customer.profile?.email ? 'Yes' : 'No',
+      customer.profile?.phone_number || customer.guest_phone || '',
       customer.total_bookings,
       customer.profile?.completed_bookings || 0,
       customer.profile?.cancelled_bookings || 0,
@@ -744,19 +717,16 @@ export default function CustomersPage() {
                         </div>
                         
                         <div className="flex items-center gap-4 text-sm text-gray-600">
-                          {(customer.email || customer.guest_email) && (
+                          {(customer.profile?.email || customer.guest_email) && (
                             <span className="flex items-center gap-1">
                               <Mail className="h-3 w-3" />
-                              <span className="truncate max-w-[200px]">{customer.email || customer.guest_email}</span>
-                              {customer.email_confirmed && (
-                                <div className="h-2 w-2 bg-green-500 rounded-full ml-1" title="Email verified" />
-                              )}
+                              <span className="truncate max-w-[200px]">{customer.profile?.email || customer.guest_email}</span>
                             </span>
                           )}
-                          {(customer.profile?.phone_number || customer.guest_phone || customer.auth_phone) && (
+                          {(customer.profile?.phone_number || customer.guest_phone) && (
                             <span className="flex items-center gap-1">
                               <Phone className="h-3 w-3" />
-                              {customer.profile?.phone_number || customer.guest_phone || customer.auth_phone}
+                              {customer.profile?.phone_number || customer.guest_phone}
                             </span>
                           )}
                         </div>

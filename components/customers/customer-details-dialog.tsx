@@ -113,30 +113,8 @@ export function CustomerDetailsDialog({
     try {
       setLoading(true)
 
-      // Fetch email information for the customer if they have a user_id
-      let updatedCustomer = { ...customer }
-      if (customer.user_id) {
-        try {
-          const { data: emailData, error: emailError } = await supabase.auth.admin.listUsers()
-          if (emailData?.users && !emailError) {
-            const userEmail = emailData.users.find(user => user.id === customer.user_id)
-            if (userEmail) {
-              updatedCustomer = {
-                ...customer,
-                email: userEmail.email,
-                email_confirmed: !!userEmail.email_confirmed_at,
-                auth_phone: userEmail.phone
-              }
-            }
-          }
-        } catch (error) {
-          console.log('Could not fetch user email:', error)
-          // Continue without email if there's an error
-        }
-      }
-      
-      // Update the customer with email information
-      setCustomerWithEmail(updatedCustomer)
+      // Email is already included in the customer data from profiles
+      setCustomerWithEmail(customer)
 
       // Load relationships
       const { data: relationshipsData } = await supabase
@@ -405,19 +383,16 @@ export function CustomerDetailsDialog({
               </div>
               
               <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-600">
-                {(customerWithEmail.email || customerWithEmail.guest_email) && (
+                {(customerWithEmail.profile?.email || customerWithEmail.guest_email) && (
                   <span className="flex items-center gap-1">
                     <Mail className="h-3 w-3" />
-                    <span>{customerWithEmail.email || customerWithEmail.guest_email}</span>
-                    {customerWithEmail.email_confirmed && (
-                      <div className="h-2 w-2 bg-green-500 rounded-full ml-1" title="Email verified" />
-                    )}
+                    <span>{customerWithEmail.profile?.email || customerWithEmail.guest_email}</span>
                   </span>
                 )}
-                {(customerWithEmail.profile?.phone_number || customerWithEmail.guest_phone || customerWithEmail.auth_phone) && (
+                {(customerWithEmail.profile?.phone_number || customerWithEmail.guest_phone) && (
                   <span className="flex items-center gap-1">
                     <Phone className="h-3 w-3" />
-                    {customerWithEmail.profile?.phone_number || customerWithEmail.guest_phone || customerWithEmail.auth_phone}
+                    {customerWithEmail.profile?.phone_number || customerWithEmail.guest_phone}
                   </span>
                 )}
                 {customerWithEmail.first_visit && (
@@ -656,24 +631,18 @@ export function CustomerDetailsDialog({
                           </div>
                         )}
                         
-                        {customer.email_confirmed !== undefined && (
+                        {customer.profile?.email && (
                           <div>
                             <Label className="text-sm font-medium">Email Status</Label>
                             <div className="flex items-center gap-2 mt-1">
-                              {customer.email_confirmed ? (
-                                <Badge variant="outline" className="text-green-600 border-green-600">
-                                  ✓ Verified
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className="text-orange-600 border-orange-600">
-                                  ! Unverified
-                                </Badge>
-                              )}
+                              <Badge variant="outline" className="text-green-600 border-green-600">
+                                ✓ Registered User
+                              </Badge>
                             </div>
                           </div>
                         )}
                         
-                        {!customer.profile.notification_preferences && !customer.email_confirmed && (
+                        {!customer.profile.notification_preferences && !customer.profile?.email && (
                           <p className="text-sm text-muted-foreground">No communication preferences available</p>
                         )}
                       </div>
