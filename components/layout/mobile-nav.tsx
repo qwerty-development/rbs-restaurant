@@ -82,18 +82,7 @@ const navigationItems = [
     icon: BarChart3,
     permission: 'analytics.view',
   },
-  {
-    title: 'Kitchen',
-    href: '/kitchen',
-    icon: ChefHat,
-    permission: 'kitchen.view',
-  },
-  {
-    title: 'Orders',
-    href: '/orders',
-    icon: Receipt,
-    permission: 'orders.view',
-  },
+
   {
     title: 'Reviews',
     href: '/reviews',

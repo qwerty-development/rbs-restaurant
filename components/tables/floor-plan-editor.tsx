@@ -14,7 +14,8 @@ import {
   Grid3X3, 
   Settings, 
   Copy,
-  Trash2
+  Trash2,
+  Printer
 } from "lucide-react"
 import type { RestaurantTable } from "@/types"
 
@@ -619,6 +620,17 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
     }
   }, [isDragging, isResizing])
 
+  // Print handler
+  const handlePrint = useCallback(() => {
+    // Deselect any selected table for clean print
+    setSelectedTable(null)
+    
+    // Brief delay to ensure deselection renders
+    setTimeout(() => {
+      window.print()
+    }, 100)
+  }, [])
+
   // Keyboard shortcuts with optimized movement
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -687,8 +699,161 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
 
   return (
     <div className="space-y-6">
+      {/* Print Styles */}
+      <style jsx global>{`
+        @media print {
+          /* Set landscape orientation with no margins to maximize space */
+          @page {
+            size: landscape;
+            margin: 0;
+          }
+          
+          /* Remove all browser headers and footers */
+          html {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          
+          body {
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          
+          /* Hide everything except the floor plan */
+          body * {
+            visibility: hidden;
+          }
+          
+          /* Show only the floor plan container and its children */
+          .print-floor-plan,
+          .print-floor-plan * {
+            visibility: visible;
+          }
+          
+          /* Position the floor plan container properly */
+          .print-floor-plan {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            margin: 0 !important;
+            padding: 10px !important;
+            box-sizing: border-box !important;
+            background: white !important;
+            overflow: hidden !important;
+          }
+          
+          /* Hide toolbar and controls in print */
+          .print-hide {
+            display: none !important;
+          }
+          
+          /* Create minimal title area */
+          .print-floor-plan::before {
+            content: "Restaurant Floor Plan";
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            font-weight: bold;
+            color: #000;
+            z-index: 1000;
+            text-align: center;
+          }
+          
+          /* Optimize floor plan container for print */
+          .print-floor-plan > div {
+            padding: 0 !important;
+            margin: 0 !important;
+            height: 100vh !important;
+            width: 100vw !important;
+          }
+          
+          /* Optimize floor plan area - maximize space */
+          .print-floor-plan .relative {
+            height: calc(100vh - 30px) !important;
+            width: calc(100vw - 20px) !important;
+            margin-top: 30px !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            background: white !important;
+            border: 2px solid #000 !important;
+            border-radius: 0 !important;
+            box-sizing: border-box !important;
+          }
+          
+          /* Ensure tables are visible and properly sized */
+          .print-floor-plan [data-table-id] {
+            transform: none !important;
+            border: 2px solid #333 !important;
+            background: white !important;
+            color: black !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+            font-size: 11px !important;
+            line-height: 1.3 !important;
+            border-radius: 8px !important;
+          }
+          
+          /* Hide all interactive elements */
+          .print-floor-plan button,
+          .print-floor-plan [data-resize-handle],
+          .print-floor-plan .absolute.bottom-6,
+          .print-floor-plan .absolute.-top-12 {
+            display: none !important;
+          }
+          
+          /* Optimize table text for print */
+          .print-floor-plan .font-bold {
+            font-weight: bold !important;
+            font-size: 10px !important;
+          }
+          
+          .print-floor-plan .text-xs {
+            font-size: 8px !important;
+          }
+          
+          .print-floor-plan .text-sm {
+            font-size: 9px !important;
+          }
+          
+          /* Remove hover effects, transitions, and interactive styles */
+          .print-floor-plan *,
+          .print-floor-plan *:hover,
+          .print-floor-plan *:focus {
+            transition: none !important;
+            animation: none !important;
+            transform: none !important;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
+            cursor: default !important;
+          }
+          
+          /* Ensure grid is visible if enabled */
+          .print-floor-plan .opacity-20 {
+            opacity: 0.15 !important;
+          }
+          
+          /* Remove any selection indicators */
+          .print-floor-plan .ring-2,
+          .print-floor-plan .ring-4,
+          .print-floor-plan .shadow-lg,
+          .print-floor-plan .shadow-2xl {
+            box-shadow: none !important;
+            ring: none !important;
+          }
+          
+          /* Optimize spacing */
+          .print-floor-plan * {
+            margin: 0 !important;
+          }
+        }
+      `}</style>
+
       {/* Toolbar */}
-      <Card>
+      <Card className="print-hide">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -784,7 +949,16 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
                 onClick={() => setShowGrid(!showGrid)}
               >
                 <Grid3X3 className="h-4 w-4 mr-2" />
-                Grid
+                Gridsf
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePrint}
+                className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                Print
               </Button>
             </div>
           </div>
@@ -805,7 +979,7 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
       </Card>
 
       {/* Floor Plan */}
-      <Card className="overflow-hidden">
+      <Card className="overflow-hidden print-floor-plan">
         <CardContent className="p-0">
           <div
             ref={containerRef}

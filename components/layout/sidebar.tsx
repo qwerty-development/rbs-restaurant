@@ -97,18 +97,8 @@ const navigationItems = [
     icon: Clock,
     permission: 'bookings.view',
   },
-  {
-    title: 'Kitchen',
-    href: '/kitchen',
-    icon: ChefHat,
-    permission: 'kitchen.view',
-  },
-  {
-    title: 'Orders',
-    href: '/orders',
-    icon: Receipt,
-    permission: 'orders.view',
-  },
+
+
   {
     title: 'Reviews',
     href: '/reviews',
