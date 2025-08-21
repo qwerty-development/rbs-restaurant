@@ -1,30 +1,43 @@
 // app/(dashboard)/dashboard/page.tsx
-"use client"
+"use client";
 
-import { useState, useEffect, useCallback } from "react"
-import { createClient } from "@/lib/supabase/client"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { format, startOfDay, endOfDay, addMinutes, differenceInMinutes, addDays } from "date-fns"
-import { UnifiedFloorPlan } from "@/components/dashboard/unified-floor-plan"
-import { CanvasFloorPlan } from "@/components/dashboard/CanvasFloorPlan"
-import { CheckInQueue } from "@/components/dashboard/checkin-queue"
-import { PendingRequestsPanel } from "@/components/dashboard/pending-requests-panel"
-import { CriticalAlerts } from "@/components/dashboard/critical-alerts"
-import { TodaysTimeline } from "@/components/dashboard/todays-timeline"
-import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
-import { InstallPrompt } from "@/components/pwa/install-prompt"
-import { BookingDetails } from "@/components/bookings/booking-details"
-import { BookingConflictAlerts } from "@/components/dashboard/booking-conflict-alerts"
-import { TableAvailabilityService } from "@/lib/table-availability"
-import { TableStatusService, type DiningStatus } from "@/lib/table-status"
-import { BookingRequestService } from "@/lib/booking-request-service"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
-import { toast } from "react-hot-toast"
-import { 
-  RefreshCw, 
-  Clock, 
+import { useState, useEffect, useCallback } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  format,
+  startOfDay,
+  endOfDay,
+  addMinutes,
+  differenceInMinutes,
+  addDays,
+} from "date-fns";
+import { UnifiedFloorPlan } from "@/components/dashboard/unified-floor-plan";
+import { CanvasFloorPlan } from "@/components/dashboard/CanvasFloorPlan";
+import { CheckInQueue } from "@/components/dashboard/checkin-queue";
+import { PendingRequestsPanel } from "@/components/dashboard/pending-requests-panel";
+import { CriticalAlerts } from "@/components/dashboard/critical-alerts";
+import { TodaysTimeline } from "@/components/dashboard/todays-timeline";
+import { ManualBookingForm } from "@/components/bookings/manual-booking-form";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { BookingDetails } from "@/components/bookings/booking-details";
+import { BookingConflictAlerts } from "@/components/dashboard/booking-conflict-alerts";
+import { TableAvailabilityService } from "@/lib/table-availability";
+import { TableStatusService, type DiningStatus } from "@/lib/table-status";
+import { BookingRequestService } from "@/lib/booking-request-service";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { toast } from "react-hot-toast";
+import {
+  RefreshCw,
+  Clock,
   AlertCircle,
   Activity,
   UserPlus,
@@ -37,168 +50,225 @@ import {
   Info,
   Calendar,
   BarChart3,
-  AlertTriangle
-} from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Input } from "@/components/ui/input"
+  AlertTriangle,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 
 export default function DashboardPage() {
-  const [currentTime, setCurrentTime] = useState(new Date())
-  const [showManualBooking, setShowManualBooking] = useState(false)
-  const [selectedBooking, setSelectedBooking] = useState<any>(null)
-  const [restaurantId, setRestaurantId] = useState<string>("")
-  const [userId, setUserId] = useState<string>("")
-  const [showCheckInDialog, setShowCheckInDialog] = useState(false)
-  const [checkInBookingId, setCheckInBookingId] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [quickFilter, setQuickFilter] = useState<"all" | "needs-table" | "dining" | "arriving">("all")
-  const [showTimeline, setShowTimeline] = useState(false)
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [showManualBooking, setShowManualBooking] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<any>(null);
+  const [restaurantId, setRestaurantId] = useState<string>("");
+  const [userId, setUserId] = useState<string>("");
+  const [showCheckInDialog, setShowCheckInDialog] = useState(false);
+  const [checkInBookingId, setCheckInBookingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [quickFilter, setQuickFilter] = useState<
+    "all" | "needs-table" | "dining" | "arriving"
+  >("all");
+  const [showTimeline, setShowTimeline] = useState(false);
   const [confirmationDialog, setConfirmationDialog] = useState<{
-    show: boolean
-    booking?: any
-    tableIds?: string[]
-    warnings: string[]
-    onConfirm: () => void
-  }>({ show: false, warnings: [], onConfirm: () => {} })
-  const [useCanvasMode, setUseCanvasMode] = useState(false)
-  
-  const supabase = createClient()
-  const queryClient = useQueryClient()
-  const tableService = new TableAvailabilityService()
-  const statusService = new TableStatusService()
-  const requestService = new BookingRequestService()
+    show: boolean;
+    booking?: any;
+    tableIds?: string[];
+    warnings: string[];
+    onConfirm: () => void;
+  }>({ show: false, warnings: [], onConfirm: () => {} });
+  const [useCanvasMode, setUseCanvasMode] = useState(false);
+
+  // Debug logging to ensure state is working
+  useEffect(() => {
+    console.log("Canvas Mode State:", useCanvasMode);
+  }, [useCanvasMode]);
+
+  const supabase = createClient();
+  const queryClient = useQueryClient();
+  const tableService = new TableAvailabilityService();
+  const statusService = new TableStatusService();
+  const requestService = new BookingRequestService();
 
   // Comprehensive table availability validation
-  const validateTableAvailability = (tableIds: string[], bookingId: string, partySize: number): { valid: boolean; errors: string[]; warnings: string[] } => {
-    const errors: string[] = []
-    const warnings: string[] = []
+  const validateTableAvailability = (
+    tableIds: string[],
+    bookingId: string,
+    partySize: number
+  ): { valid: boolean; errors: string[]; warnings: string[] } => {
+    const errors: string[] = [];
+    const warnings: string[] = [];
 
     if (!tableIds || tableIds.length === 0) {
-      errors.push("No tables selected")
-      return { valid: false, errors, warnings }
+      errors.push("No tables selected");
+      return { valid: false, errors, warnings };
     }
 
     for (const tableId of tableIds) {
-      const table = tables.find(t => t.id === tableId)
+      const table = tables.find((t) => t.id === tableId);
       if (!table) {
-        errors.push(`Table not found`)
-        continue
+        errors.push(`Table not found`);
+        continue;
       }
 
       // Check if table is active
       if (!table.is_active) {
-        errors.push(`Table ${table.table_number} is not active`)
-        continue
+        errors.push(`Table ${table.table_number} is not active`);
+        continue;
       }
 
       // Check if table is currently occupied
-      const isOccupied = todaysBookings.some(booking => {
-        if (booking.id === bookingId) return false // Exclude current booking
-        const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
-        return occupiedStatuses.includes(booking.status) && 
-               booking.tables?.some((t: any) => t.id === tableId)
-      })
+      const isOccupied = todaysBookings.some((booking) => {
+        if (booking.id === bookingId) return false; // Exclude current booking
+        const occupiedStatuses = [
+          "arrived",
+          "seated",
+          "ordered",
+          "appetizers",
+          "main_course",
+          "dessert",
+          "payment",
+        ];
+        return (
+          occupiedStatuses.includes(booking.status) &&
+          booking.tables?.some((t: any) => t.id === tableId)
+        );
+      });
 
       if (isOccupied) {
-        const occupyingBooking = todaysBookings.find(booking => 
-          booking.id !== bookingId &&
-          ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status) && 
-          booking.tables?.some((t: any) => t.id === tableId)
-        )
-        const guestName = occupyingBooking?.user?.full_name || occupyingBooking?.guest_name || 'Unknown'
-        errors.push(`Table ${table.table_number} is occupied by ${guestName}`)
-        continue
+        const occupyingBooking = todaysBookings.find(
+          (booking) =>
+            booking.id !== bookingId &&
+            [
+              "arrived",
+              "seated",
+              "ordered",
+              "appetizers",
+              "main_course",
+              "dessert",
+              "payment",
+            ].includes(booking.status) &&
+            booking.tables?.some((t: any) => t.id === tableId)
+        );
+        const guestName =
+          occupyingBooking?.user?.full_name ||
+          occupyingBooking?.guest_name ||
+          "Unknown";
+        errors.push(`Table ${table.table_number} is occupied by ${guestName}`);
+        continue;
       }
 
       // Check upcoming reservations (within next 2 hours)
-      const upcomingBooking = todaysBookings.find(booking => {
-        if (booking.id === bookingId) return false
-        const bookingTime = new Date(booking.booking_time)
-        const timeDiff = differenceInMinutes(bookingTime, currentTime)
-        return booking.status === 'confirmed' && 
-               timeDiff > 0 && timeDiff <= 120 &&
-               booking.tables?.some((t: any) => t.id === tableId)
-      })
+      const upcomingBooking = todaysBookings.find((booking) => {
+        if (booking.id === bookingId) return false;
+        const bookingTime = new Date(booking.booking_time);
+        const timeDiff = differenceInMinutes(bookingTime, currentTime);
+        return (
+          booking.status === "confirmed" &&
+          timeDiff > 0 &&
+          timeDiff <= 120 &&
+          booking.tables?.some((t: any) => t.id === tableId)
+        );
+      });
 
       if (upcomingBooking) {
-        const bookingTime = format(new Date(upcomingBooking.booking_time), 'h:mm a')
-        const guestName = upcomingBooking.user?.full_name || upcomingBooking.guest_name || 'Unknown'
-        warnings.push(`Table ${table.table_number} has reservation at ${bookingTime} for ${guestName}`)
+        const bookingTime = format(
+          new Date(upcomingBooking.booking_time),
+          "h:mm a"
+        );
+        const guestName =
+          upcomingBooking.user?.full_name ||
+          upcomingBooking.guest_name ||
+          "Unknown";
+        warnings.push(
+          `Table ${table.table_number} has reservation at ${bookingTime} for ${guestName}`
+        );
       }
     }
 
     // Check total capacity vs party size
     const totalCapacity = tableIds
-      .map(id => tables.find(t => t.id === id))
+      .map((id) => tables.find((t) => t.id === id))
       .filter(Boolean)
-      .reduce((sum, table) => sum + (table?.max_capacity || 0), 0)
+      .reduce((sum, table) => sum + (table?.max_capacity || 0), 0);
 
     if (totalCapacity < partySize) {
-      errors.push(`Selected tables can seat ${totalCapacity} but party size is ${partySize}`)
+      errors.push(
+        `Selected tables can seat ${totalCapacity} but party size is ${partySize}`
+      );
     }
 
-    return { valid: errors.length === 0, errors, warnings }
-  }
+    return { valid: errors.length === 0, errors, warnings };
+  };
 
   // Update current time every second
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentTime(new Date())
-    }, 1000) // Update every second for live clock
-    return () => clearInterval(interval)
-  }, [])
+      setCurrentTime(new Date());
+    }, 1000); // Update every second for live clock
+    return () => clearInterval(interval);
+  }, []);
 
   // Touch-optimized clear handlers
   useEffect(() => {
     const handleEscape = () => {
-      setSearchQuery("")
-      setSelectedBooking(null)
-      setShowManualBooking(false)
-    }
-    
+      setSearchQuery("");
+      setSelectedBooking(null);
+      setShowManualBooking(false);
+    };
+
     // Only keep essential escape functionality for modals
     const handleKeyPress = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        handleEscape()
+      if (e.key === "Escape") {
+        handleEscape();
       }
-    }
-    
-    window.addEventListener('keydown', handleKeyPress)
-    return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [])
+    };
+
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
+  }, []);
 
   // Get restaurant and user ID
   useEffect(() => {
     async function getIds() {
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (user) {
-        setUserId(user.id)
+        setUserId(user.id);
         const { data: staffData } = await supabase
           .from("restaurant_staff")
           .select("restaurant_id")
           .eq("user_id", user.id)
-          .single()
-        
+          .single();
+
         if (staffData) {
-          setRestaurantId(staffData.restaurant_id)
+          setRestaurantId(staffData.restaurant_id);
         }
       }
     }
-    getIds()
-  }, [supabase])
+    getIds();
+  }, [supabase]);
 
   // Fetch today's bookings
-  const { data: todaysBookings = [], isLoading: bookingsLoading, refetch: refetchBookings } = useQuery({
-    queryKey: ["todays-bookings", restaurantId, format(currentTime, 'yyyy-MM-dd')],
+  const {
+    data: todaysBookings = [],
+    isLoading: bookingsLoading,
+    refetch: refetchBookings,
+  } = useQuery({
+    queryKey: [
+      "todays-bookings",
+      restaurantId,
+      format(currentTime, "yyyy-MM-dd"),
+    ],
     queryFn: async () => {
-      if (!restaurantId) return []
-      
-      const todayStart = startOfDay(currentTime)
-      const todayEnd = endOfDay(currentTime)
-      
+      if (!restaurantId) return [];
+
+      const todayStart = startOfDay(currentTime);
+      const todayEnd = endOfDay(currentTime);
+
       const { data, error } = await supabase
         .from("bookings")
-        .select(`
+        .select(
+          `
           *,
           profiles!bookings_user_id_fkey(
             id,
@@ -213,205 +283,232 @@ export default function DashboardPage() {
             changed_at,
             metadata
           )
-        `)
+        `
+        )
         .eq("restaurant_id", restaurantId)
         .gte("booking_time", todayStart.toISOString())
         .lte("booking_time", todayEnd.toISOString())
-        .order("booking_time", { ascending: true })
+        .order("booking_time", { ascending: true });
 
       if (error) {
-        console.error('Error fetching bookings:', error)
-        throw error
+        console.error("Error fetching bookings:", error);
+        throw error;
       }
 
-      const transformedData = data?.map((booking: any) => ({
-        ...booking,
-        user: booking.profiles || null,
-        tables: booking.booking_tables?.map((bt: { table: any }) => bt.table).filter(Boolean) || []
-      })) || []
+      const transformedData =
+        data?.map((booking: any) => ({
+          ...booking,
+          user: booking.profiles || null,
+          tables:
+            booking.booking_tables
+              ?.map((bt: { table: any }) => bt.table)
+              .filter(Boolean) || [],
+        })) || [];
 
-      return transformedData
+      return transformedData;
     },
     enabled: !!restaurantId,
     refetchInterval: 30000,
-  })
+  });
 
   // Fetch all tables
   const { data: tables = [], isLoading: tablesLoading } = useQuery({
     queryKey: ["restaurant-tables", restaurantId],
     queryFn: async () => {
-      if (!restaurantId) return []
-      
+      if (!restaurantId) return [];
+
       const { data, error } = await supabase
         .from("restaurant_tables")
         .select("*")
         .eq("restaurant_id", restaurantId)
-        .order("table_number", { ascending: true })
+        .order("table_number", { ascending: true });
 
-      if (error) throw error
-      return data || []
+      if (error) throw error;
+      return data || [];
     },
     enabled: !!restaurantId,
-  })
+  });
 
   // Fetch customer data
   const { data: customersData = {} } = useQuery({
-    queryKey: ["dashboard-customers", restaurantId, todaysBookings.map(b => b.user?.id).filter(Boolean)],
+    queryKey: [
+      "dashboard-customers",
+      restaurantId,
+      todaysBookings.map((b) => b.user?.id).filter(Boolean),
+    ],
     queryFn: async () => {
-      if (!restaurantId || todaysBookings.length === 0) return {}
-      
+      if (!restaurantId || todaysBookings.length === 0) return {};
+
       const userIds = todaysBookings
-        .map(booking => booking.user?.id)
+        .map((booking) => booking.user?.id)
         .filter(Boolean)
-        .filter((id, index, self) => self.indexOf(id) === index)
-      
-      if (userIds.length === 0) return {}
+        .filter((id, index, self) => self.indexOf(id) === index);
+
+      if (userIds.length === 0) return {};
 
       const { data, error } = await supabase
         .from("restaurant_customers")
-        .select(`
+        .select(
+          `
           user_id,
           vip_status,
           blacklisted,
           blacklist_reason,
           total_bookings,
           no_show_count
-        `)
+        `
+        )
         .eq("restaurant_id", restaurantId)
-        .in("user_id", userIds)
+        .in("user_id", userIds);
 
       if (error) {
-        console.error('Error fetching customer data:', error)
-        return {}
+        console.error("Error fetching customer data:", error);
+        return {};
       }
 
-      const customerMap: Record<string, any> = {}
-      data?.forEach(customer => {
-        customerMap[customer.user_id] = customer
-      })
+      const customerMap: Record<string, any> = {};
+      data?.forEach((customer) => {
+        customerMap[customer.user_id] = customer;
+      });
 
-      return customerMap
+      return customerMap;
     },
     enabled: !!restaurantId && todaysBookings.length > 0,
-  })
+  });
 
   // Update booking status
   const updateBookingMutation = useMutation({
-    mutationFn: async ({ bookingId, updates }: { bookingId: string; updates: any }) => {
-      if (updates.status === 'confirmed') {
-        const booking = todaysBookings.find(b => b.id === bookingId)
-        if (booking?.status === 'pending') {
+    mutationFn: async ({
+      bookingId,
+      updates,
+    }: {
+      bookingId: string;
+      updates: any;
+    }) => {
+      if (updates.status === "confirmed") {
+        const booking = todaysBookings.find((b) => b.id === bookingId);
+        if (booking?.status === "pending") {
           const result = await requestService.acceptRequest(
             bookingId,
             userId,
             updates.tableIds || [],
-            { 
+            {
               suggestAlternatives: true,
-              skipTableAssignment: !updates.tableIds 
+              skipTableAssignment: !updates.tableIds,
             }
-          )
-          
+          );
+
           if (!result.success) {
             if (result.alternatives) {
-              const alternativeTables = result.alternatives.tables?.length || 0
-              const alternativeTimes = result.alternatives.times?.length || 0
-              
+              const alternativeTables = result.alternatives.tables?.length || 0;
+              const alternativeTimes = result.alternatives.times?.length || 0;
+
               toast.error(
                 <div>
                   <p className="font-medium">{result.error}</p>
                   {(alternativeTables > 0 || alternativeTimes > 0) && (
                     <p className="text-sm mt-1">
-                      Found {alternativeTables} alternative table{alternativeTables !== 1 ? 's' : ''} and {alternativeTimes} time slot{alternativeTimes !== 1 ? 's' : ''}
+                      Found {alternativeTables} alternative table
+                      {alternativeTables !== 1 ? "s" : ""} and{" "}
+                      {alternativeTimes} time slot
+                      {alternativeTimes !== 1 ? "s" : ""}
                     </p>
                   )}
                 </div>,
                 { duration: 5000 }
-              )
+              );
             } else {
-              toast.error(result.error || "Failed to accept request")
+              toast.error(result.error || "Failed to accept request");
             }
-            
-            throw new Error(result.error || "Failed to accept request")
+
+            throw new Error(result.error || "Failed to accept request");
           }
-          
-          return
+
+          return;
         }
       }
-      
-      if (updates.status === 'declined_by_restaurant') {
-        const booking = todaysBookings.find(b => b.id === bookingId)
-        if (booking?.status === 'pending') {
+
+      if (updates.status === "declined_by_restaurant") {
+        const booking = todaysBookings.find((b) => b.id === bookingId);
+        if (booking?.status === "pending") {
           const result = await requestService.declineRequest(
             bookingId,
             userId,
             "Restaurant declined",
             true
-          )
-          
+          );
+
           if (!result.success) {
-            throw new Error(result.error || "Failed to decline request")
+            throw new Error(result.error || "Failed to decline request");
           }
-          
+
           if (result.alternatives) {
-            toast.success("Request declined. Alternative suggestions sent to customer.")
+            toast.success(
+              "Request declined. Alternative suggestions sent to customer."
+            );
           }
-          
-          return
+
+          return;
         }
       }
-      
+
       if (updates.status) {
         await statusService.updateBookingStatus(
           bookingId,
           updates.status as DiningStatus,
           userId,
           updates.metadata
-        )
+        );
       } else {
         const { error } = await supabase
           .from("bookings")
-          .update({ 
+          .update({
             ...updates,
-            updated_at: new Date().toISOString() 
+            updated_at: new Date().toISOString(),
           })
-          .eq("id", bookingId)
+          .eq("id", bookingId);
 
-        if (error) throw error
+        if (error) throw error;
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
-      toast.success("Booking updated")
+      queryClient.invalidateQueries({ queryKey: ["todays-bookings"] });
+      toast.success("Booking updated");
     },
     onError: (error: any) => {
-      console.error("Update error:", error)
+      console.error("Update error:", error);
     },
-  })
+  });
 
   // Handle check-in
   const handleCheckIn = async (bookingId: string, tableIds?: string[]) => {
     try {
-      const booking = todaysBookings.find(b => b.id === bookingId)
+      const booking = todaysBookings.find((b) => b.id === bookingId);
       if (!booking) {
-        toast.error("Booking not found")
-        return
+        toast.error("Booking not found");
+        return;
       }
 
-      const finalTableIds = tableIds || booking.tables?.map((t: any) => t.id) || []
-      
+      const finalTableIds =
+        tableIds || booking.tables?.map((t: any) => t.id) || [];
+
       if (finalTableIds.length === 0) {
-        setCheckInBookingId(bookingId)
-        setShowCheckInDialog(true)
-        return
+        setCheckInBookingId(bookingId);
+        setShowCheckInDialog(true);
+        return;
       }
 
       // Validate table availability
-      const validation = validateTableAvailability(finalTableIds, bookingId, booking.party_size)
-      
+      const validation = validateTableAvailability(
+        finalTableIds,
+        bookingId,
+        booking.party_size
+      );
+
       if (!validation.valid) {
         // Show errors
-        validation.errors.forEach(error => toast.error(error))
-        return
+        validation.errors.forEach((error) => toast.error(error));
+        return;
       }
 
       // Show warnings and ask for confirmation if any exist
@@ -422,147 +519,178 @@ export default function DashboardPage() {
           tableIds: finalTableIds,
           warnings: validation.warnings,
           onConfirm: async () => {
-            setConfirmationDialog({ show: false, warnings: [], onConfirm: () => {} })
-            await proceedWithCheckIn(booking, finalTableIds)
-          }
-        })
-        return
+            setConfirmationDialog({
+              show: false,
+              warnings: [],
+              onConfirm: () => {},
+            });
+            await proceedWithCheckIn(booking, finalTableIds);
+          },
+        });
+        return;
       }
 
-      await proceedWithCheckIn(booking, finalTableIds)
+      await proceedWithCheckIn(booking, finalTableIds);
     } catch (error) {
-      console.error("Check-in error:", error)
-      toast.error("Failed to check in guest")
+      console.error("Check-in error:", error);
+      toast.error("Failed to check in guest");
     }
-  }
+  };
 
   // Separate function to handle the actual check-in process
   const proceedWithCheckIn = async (booking: any, finalTableIds: string[]) => {
     try {
       // If booking is already 'arrived' (waiting for seating), seat them directly
-      if (booking.status === 'arrived') {
+      if (booking.status === "arrived") {
         // Ensure table assignments exist if provided
-        if (finalTableIds.length > 0 && (!booking.tables || booking.tables.length === 0)) {
+        if (
+          finalTableIds.length > 0 &&
+          (!booking.tables || booking.tables.length === 0)
+        ) {
           const tableAssignments = finalTableIds.map((tableId: string) => ({
             booking_id: booking.id,
-            table_id: tableId
-          }))
-          
+            table_id: tableId,
+          }));
+
           const { error: tableError } = await supabase
             .from("booking_tables")
-            .insert(tableAssignments)
-            
+            .insert(tableAssignments);
+
           if (tableError) {
-            console.error("Table assignment error:", tableError)
-            toast.error("Failed to assign tables")
-            return
+            console.error("Table assignment error:", tableError);
+            toast.error("Failed to assign tables");
+            return;
           }
         }
-        
-        await statusService.updateBookingStatus(booking.id, 'seated', userId)
-        
+
+        await statusService.updateBookingStatus(booking.id, "seated", userId);
+
         // Success message with table info
         const tableNumbers = finalTableIds
-          .map((id: string) => tables.find(t => t.id === id)?.table_number)
+          .map((id: string) => tables.find((t) => t.id === id)?.table_number)
           .filter(Boolean)
-          .join(', ')
-        toast.success(`Guest seated at Table ${tableNumbers}`)
+          .join(", ");
+        toast.success(`Guest seated at Table ${tableNumbers}`);
       } else {
         // For other statuses, use the standard check-in flow
-        await statusService.checkInBooking(booking.id, finalTableIds, userId)
-        toast.success("Guest checked in successfully")
+        await statusService.checkInBooking(booking.id, finalTableIds, userId);
+        toast.success("Guest checked in successfully");
       }
 
       // Force immediate refresh of bookings data
-      await queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
-      
+      await queryClient.invalidateQueries({ queryKey: ["todays-bookings"] });
+
       // Force refetch to ensure UI updates immediately
-      await refetchBookings()
+      await refetchBookings();
     } catch (error) {
-      console.error("Proceed check-in error:", error)
-      toast.error("Failed to complete check-in")
+      console.error("Proceed check-in error:", error);
+      toast.error("Failed to complete check-in");
     }
-  }
+  };
 
   // Handle table switch
-  const handleTableSwitch = async (bookingId: string, newTableIds: string[]) => {
+  const handleTableSwitch = async (
+    bookingId: string,
+    newTableIds: string[]
+  ) => {
     try {
-      const booking = todaysBookings.find(b => b.id === bookingId)
+      const booking = todaysBookings.find((b) => b.id === bookingId);
       if (!booking) {
-        toast.error("Booking not found")
-        return
+        toast.error("Booking not found");
+        return;
       }
 
       // Use our comprehensive validation
-      const validation = validateTableAvailability(newTableIds, bookingId, booking.party_size)
-      
+      const validation = validateTableAvailability(
+        newTableIds,
+        bookingId,
+        booking.party_size
+      );
+
       if (!validation.valid) {
-        validation.errors.forEach(error => toast.error(error))
-        return
+        validation.errors.forEach((error) => toast.error(error));
+        return;
       }
 
       // Show warnings but allow proceeding
       if (validation.warnings.length > 0) {
-        validation.warnings.forEach(warning => toast.error(warning, { 
-          duration: 4000,
-          style: { backgroundColor: '#7A2E4A', color: 'white' } 
-        }))
+        validation.warnings.forEach((warning) =>
+          toast.error(warning, {
+            duration: 4000,
+            style: { backgroundColor: "#7A2E4A", color: "white" },
+          })
+        );
       }
 
-      await statusService.switchTables(bookingId, newTableIds, userId, "Table switch requested")
-      await queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
-      
+      await statusService.switchTables(
+        bookingId,
+        newTableIds,
+        userId,
+        "Table switch requested"
+      );
+      await queryClient.invalidateQueries({ queryKey: ["todays-bookings"] });
+
       const tableNumbers = newTableIds
-        .map((id: string) => tables.find(t => t.id === id)?.table_number)
+        .map((id: string) => tables.find((t) => t.id === id)?.table_number)
         .filter(Boolean)
-        .join(', ')
-      toast.success(`Table switched to ${tableNumbers}`)
+        .join(", ");
+      toast.success(`Table switched to ${tableNumbers}`);
     } catch (error) {
-      console.error("Table switch error:", error)
-      toast.error("Failed to switch tables")
+      console.error("Table switch error:", error);
+      toast.error("Failed to switch tables");
     }
-  }
+  };
 
   // Table position update mutation - FIXED TABLE NAME
   const updateTablePositionMutation = useMutation({
-    mutationFn: async ({ tableId, position }: { tableId: string; position: { x: number; y: number } }) => {
+    mutationFn: async ({
+      tableId,
+      position,
+    }: {
+      tableId: string;
+      position: { x: number; y: number };
+    }) => {
       const { error } = await supabase
-        .from('restaurant_tables') // FIXED: Changed from 'tables' to 'restaurant_tables'
+        .from("restaurant_tables") // FIXED: Changed from 'tables' to 'restaurant_tables'
         .update({
           x_position: position.x,
           y_position: position.y,
-   
         })
-        .eq('id', tableId)
+        .eq("id", tableId);
 
-      if (error) throw error
+      if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['restaurant-tables', restaurantId] })
-      toast.success('Table position updated')
+      queryClient.invalidateQueries({
+        queryKey: ["restaurant-tables", restaurantId],
+      });
+      toast.success("Table position updated");
     },
     onError: (error) => {
-      console.error('Table position update error:', error)
-      toast.error('Failed to update table position')
-    }
-  })
+      console.error("Table position update error:", error);
+      toast.error("Failed to update table position");
+    },
+  });
 
   const createManualBookingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error("Must be logged in to create bookings")
-      
-      const bookingTime = new Date(bookingData.booking_time)
-      const isWalkIn = bookingData.status === 'arrived' || bookingTime <= new Date()
-      
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Must be logged in to create bookings");
+
+      const bookingTime = new Date(bookingData.booking_time);
+      const isWalkIn =
+        bookingData.status === "arrived" || bookingTime <= new Date();
+
       // For walk-ins with selected customers, we need special handling
-      let finalUserId = user.id // Default to staff user
-      
+      let finalUserId = user.id; // Default to staff user
+
       if (bookingData.customer_id && bookingData.user_id) {
         // If the selected customer has a user_id, use that
-        finalUserId = bookingData.user_id
+        finalUserId = bookingData.user_id;
       }
-      
+
       const result = await requestService.createBookingRequest({
         restaurantId,
         userId: finalUserId,
@@ -574,22 +702,25 @@ export default function DashboardPage() {
         guestName: bookingData.guest_name,
         guestEmail: bookingData.guest_email,
         guestPhone: bookingData.guest_phone,
-        preApproved: bookingData.status === 'confirmed' || bookingData.status === 'arrived',
-        isWalkIn
-      })
+        preApproved:
+          bookingData.status === "confirmed" ||
+          bookingData.status === "arrived",
+        isWalkIn,
+      });
 
-      const booking = result.booking
+      const booking = result.booking;
 
       // If we have a customer_id from a selected customer, link the booking to that customer
       if (bookingData.customer_id) {
-        
         // Update the restaurant customer's stats
-        const { error: updateError } = await supabase
-          .rpc('increment_customer_bookings', {
+        const { error: updateError } = await supabase.rpc(
+          "increment_customer_bookings",
+          {
             customer_id: bookingData.customer_id,
-            visit_time: bookingTime.toISOString()
-          })
-        
+            visit_time: bookingTime.toISOString(),
+          }
+        );
+
         // If RPC doesn't exist, fall back to manual increment
         if (updateError) {
           // Get current total_bookings and increment
@@ -597,163 +728,234 @@ export default function DashboardPage() {
             .from("restaurant_customers")
             .select("total_bookings")
             .eq("id", bookingData.customer_id)
-            .single()
-          
+            .single();
+
           if (currentCustomer) {
             await supabase
               .from("restaurant_customers")
               .update({
                 total_bookings: (currentCustomer.total_bookings || 0) + 1,
                 last_visit: bookingTime.toISOString(),
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
               })
-              .eq("id", bookingData.customer_id)
+              .eq("id", bookingData.customer_id);
           }
         }
       }
 
-      if (bookingData.table_ids && bookingData.table_ids.length > 0 && booking.status !== 'pending') {
-        const tableAssignments = bookingData.table_ids.map((tableId: string) => ({
-          booking_id: booking.id,
-          table_id: tableId,
-        }))
+      if (
+        bookingData.table_ids &&
+        bookingData.table_ids.length > 0 &&
+        booking.status !== "pending"
+      ) {
+        const tableAssignments = bookingData.table_ids.map(
+          (tableId: string) => ({
+            booking_id: booking.id,
+            table_id: tableId,
+          })
+        );
 
         const { error: tableError } = await supabase
           .from("booking_tables")
-          .insert(tableAssignments)
+          .insert(tableAssignments);
 
         if (tableError) {
-          await supabase.from("bookings").delete().eq("id", booking.id)
-          throw tableError
+          await supabase.from("bookings").delete().eq("id", booking.id);
+          throw tableError;
         }
       }
 
-      if (bookingData.status === 'arrived') {
-        await statusService.updateBookingStatus(booking.id, 'seated', userId)
+      if (bookingData.status === "arrived") {
+        await statusService.updateBookingStatus(booking.id, "seated", userId);
       }
 
-      return booking
+      return booking;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
-      toast.success("Booking created successfully")
-      setShowManualBooking(false)
+      queryClient.invalidateQueries({ queryKey: ["todays-bookings"] });
+      toast.success("Booking created successfully");
+      setShowManualBooking(false);
     },
     onError: (error: any) => {
-      console.error("Create booking error:", error)
-      toast.error(error.message || "Failed to create booking")
+      console.error("Create booking error:", error);
+      toast.error(error.message || "Failed to create booking");
     },
-  })
+  });
 
   const handleQuickSeat = (guestData: any, tableIds: string[]) => {
     // Validate table availability for walk-in
-    const validation = validateTableAvailability(tableIds, '', guestData.party_size)
-    
+    const validation = validateTableAvailability(
+      tableIds,
+      "",
+      guestData.party_size
+    );
+
     if (!validation.valid) {
-      validation.errors.forEach(error => toast.error(error))
-      return
+      validation.errors.forEach((error) => toast.error(error));
+      return;
     }
 
     // Show warnings but allow proceeding
     if (validation.warnings.length > 0) {
-      validation.warnings.forEach(warning => toast.error(warning, { 
-        duration: 4000,
-        style: { backgroundColor: '#7A2E4A', color: 'white' }
-      }))
+      validation.warnings.forEach((warning) =>
+        toast.error(warning, {
+          duration: 4000,
+          style: { backgroundColor: "#7A2E4A", color: "white" },
+        })
+      );
     }
 
     const bookingData = {
       ...guestData,
       booking_time: new Date().toISOString(),
-      status: 'arrived',
-      table_ids: tableIds
-    }
-    createManualBookingMutation.mutate(bookingData)
-  }
+      status: "arrived",
+      table_ids: tableIds,
+    };
+    createManualBookingMutation.mutate(bookingData);
+  };
 
   // Filter bookings
-  const activeBookings = todaysBookings.filter(b => 
-    !['completed', 'no_show', 'cancelled_by_user', 'declined_by_restaurant', 'auto_declined'].includes(b.status)
-  )
-  
-  const currentlyDining = activeBookings.filter(booking => {
-    const diningStatuses = ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
-    return diningStatuses.includes(booking.status)
-  })
+  const activeBookings = todaysBookings.filter(
+    (b) =>
+      ![
+        "completed",
+        "no_show",
+        "cancelled_by_user",
+        "declined_by_restaurant",
+        "auto_declined",
+      ].includes(b.status)
+  );
+
+  const currentlyDining = activeBookings.filter((booking) => {
+    const diningStatuses = [
+      "seated",
+      "ordered",
+      "appetizers",
+      "main_course",
+      "dessert",
+      "payment",
+    ];
+    return diningStatuses.includes(booking.status);
+  });
 
   // Calculate comprehensive stats
   const stats = {
-    pendingCount: activeBookings.filter(b => b.status === 'pending').length,
-    arrivingSoonCount: activeBookings.filter(booking => {
-      const bookingTime = new Date(booking.booking_time)
-      const minutesUntil = differenceInMinutes(bookingTime, currentTime)
-      return booking.status === 'confirmed' && minutesUntil > -15 && minutesUntil <= 30
+    pendingCount: activeBookings.filter((b) => b.status === "pending").length,
+    arrivingSoonCount: activeBookings.filter((booking) => {
+      const bookingTime = new Date(booking.booking_time);
+      const minutesUntil = differenceInMinutes(bookingTime, currentTime);
+      return (
+        booking.status === "confirmed" &&
+        minutesUntil > -15 &&
+        minutesUntil <= 30
+      );
     }).length,
-    awaitingCheckIn: activeBookings.filter(b => b.status === 'arrived').length,
+    awaitingCheckIn: activeBookings.filter((b) => b.status === "arrived")
+      .length,
     currentGuests: currentlyDining.reduce((sum, b) => sum + b.party_size, 0),
-    availableTables: tables.filter(t => {
-      const isOccupied = currentlyDining.some(booking => 
+    availableTables: tables.filter((t) => {
+      const isOccupied = currentlyDining.some((booking) =>
         booking.tables?.some((bt: any) => bt.id === t.id)
-      )
-      return t.is_active && !isOccupied
+      );
+      return t.is_active && !isOccupied;
     }).length,
-    totalCompleted: todaysBookings.filter(b => b.status === 'completed').length,
-    tablesInUse: currentlyDining.reduce((count, booking) => count + (booking.tables?.length || 0), 0),
-    occupancyRate: Math.round((tables.filter(t => t.is_active).length - tables.filter(t => {
-      const isOccupied = currentlyDining.some(booking => 
-        booking.tables?.some((bt: any) => bt.id === t.id)
-      )
-      return t.is_active && !isOccupied
-    }).length) / tables.filter(t => t.is_active).length * 100),
-    vipCount: activeBookings.filter(b => {
-      const customerData = b.user?.id ? customersData[b.user.id] : null
-      return customerData?.vip_status
+    totalCompleted: todaysBookings.filter((b) => b.status === "completed")
+      .length,
+    tablesInUse: currentlyDining.reduce(
+      (count, booking) => count + (booking.tables?.length || 0),
+      0
+    ),
+    occupancyRate: Math.round(
+      ((tables.filter((t) => t.is_active).length -
+        tables.filter((t) => {
+          const isOccupied = currentlyDining.some((booking) =>
+            booking.tables?.some((bt: any) => bt.id === t.id)
+          );
+          return t.is_active && !isOccupied;
+        }).length) /
+        tables.filter((t) => t.is_active).length) *
+        100
+    ),
+    vipCount: activeBookings.filter((b) => {
+      const customerData = b.user?.id ? customersData[b.user.id] : null;
+      return customerData?.vip_status;
     }).length,
-    needingTables: activeBookings.filter(b => !b.tables || b.tables.length === 0).length
-  }
+    needingTables: activeBookings.filter(
+      (b) => !b.tables || b.tables.length === 0
+    ).length,
+  };
 
   // Filtered bookings based on search and quick filter
-  const filteredBookings = activeBookings.filter(booking => {
+  const filteredBookings = activeBookings.filter((booking) => {
     // Apply quick filter first
-    switch(quickFilter) {
+    switch (quickFilter) {
       case "needs-table":
-        if (booking.tables && booking.tables.length > 0) return false
-        break
+        if (booking.tables && booking.tables.length > 0) return false;
+        break;
       case "dining":
-        const diningStatuses = ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
-        if (!diningStatuses.includes(booking.status)) return false
-        break
+        const diningStatuses = [
+          "seated",
+          "ordered",
+          "appetizers",
+          "main_course",
+          "dessert",
+          "payment",
+        ];
+        if (!diningStatuses.includes(booking.status)) return false;
+        break;
       case "arriving":
-        const bookingTime = new Date(booking.booking_time)
-        const minutesUntil = differenceInMinutes(bookingTime, currentTime)
-        if (booking.status !== 'confirmed' || minutesUntil < -15 || minutesUntil > 30) return false
-        break
+        const bookingTime = new Date(booking.booking_time);
+        const minutesUntil = differenceInMinutes(bookingTime, currentTime);
+        if (
+          booking.status !== "confirmed" ||
+          minutesUntil < -15 ||
+          minutesUntil > 30
+        )
+          return false;
+        break;
     }
-    
+
     // Then apply search query
-    if (!searchQuery) return true
-    
-    const query = searchQuery.toLowerCase()
-    const guestName = (booking.user?.full_name || booking.guest_name || '').toLowerCase()
-    const phone = (booking.user?.phone_number || booking.guest_phone || '').toLowerCase()
-    const tableNumbers = booking.tables?.map((t: any) => `t${t.table_number}`).join(' ').toLowerCase() || ''
-    const confirmationCode = (booking.confirmation_code || '').toLowerCase()
-    const status = booking.status.toLowerCase()
-    const partySize = booking.party_size.toString()
-    const specialRequests = (booking.special_requests || '').toLowerCase()
-    
-    return guestName.includes(query) || 
-           phone.includes(query) || 
-           tableNumbers.includes(query) ||
-           confirmationCode.includes(query) ||
-           status.includes(query) ||
-           partySize.includes(query) ||
-           specialRequests.includes(query)
-  })
+    if (!searchQuery) return true;
+
+    const query = searchQuery.toLowerCase();
+    const guestName = (
+      booking.user?.full_name ||
+      booking.guest_name ||
+      ""
+    ).toLowerCase();
+    const phone = (
+      booking.user?.phone_number ||
+      booking.guest_phone ||
+      ""
+    ).toLowerCase();
+    const tableNumbers =
+      booking.tables
+        ?.map((t: any) => `t${t.table_number}`)
+        .join(" ")
+        .toLowerCase() || "";
+    const confirmationCode = (booking.confirmation_code || "").toLowerCase();
+    const status = booking.status.toLowerCase();
+    const partySize = booking.party_size.toString();
+    const specialRequests = (booking.special_requests || "").toLowerCase();
+
+    return (
+      guestName.includes(query) ||
+      phone.includes(query) ||
+      tableNumbers.includes(query) ||
+      confirmationCode.includes(query) ||
+      status.includes(query) ||
+      partySize.includes(query) ||
+      specialRequests.includes(query)
+    );
+  });
 
   if (!restaurantId || !userId) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-background to-card" suppressHydrationWarning>
+      <div
+        className="flex items-center justify-center h-screen bg-gradient-to-br from-background to-card"
+        suppressHydrationWarning
+      >
         <div className="text-center">
           <div className="relative">
             <div className="animate-spin rounded-full h-16 w-16 border-4 border-border mx-auto mb-4" />
@@ -761,15 +963,59 @@ export default function DashboardPage() {
               <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/80 animate-pulse" />
             </div>
           </div>
-          <p className="text-lg font-medium text-foreground">Loading restaurant data...</p>
-          <p className="text-sm text-muted-foreground mt-1">Preparing your dashboard</p>
+          <p className="text-lg font-medium text-foreground">
+            Loading restaurant data...
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Preparing your dashboard
+          </p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-background to-card overflow-hidden">
+      {/* SUPER VISIBLE CANVAS TOGGLE - ALWAYS ON TOP */}
+      <div
+        className="fixed top-2 right-2 z-[9999]"
+        style={{
+          position: "fixed !important",
+          top: "8px !important",
+          right: "8px !important",
+          zIndex: "9999 !important",
+          display: "block !important",
+          visibility: "visible !important",
+        }}
+      >
+        <Button
+          onClick={() => {
+            console.log("SUPER Toggle clicked! Current state:", useCanvasMode);
+            setUseCanvasMode(!useCanvasMode);
+          }}
+          className={cn(
+            "px-4 py-2 text-base font-bold rounded-lg border-4 shadow-2xl min-w-[120px]",
+            useCanvasMode
+              ? "bg-green-600 hover:bg-green-700 text-white border-green-400"
+              : "bg-red-600 hover:bg-red-700 text-white border-red-400"
+          )}
+          style={{
+            display: "flex !important",
+            visibility: "visible !important",
+            opacity: "1 !important",
+            minWidth: "120px",
+            height: "44px",
+            fontSize: "16px",
+            fontWeight: "bold",
+            backgroundColor: useCanvasMode ? "#059669" : "#dc2626",
+            color: "white",
+            border: "4px solid " + (useCanvasMode ? "#10b981" : "#f87171"),
+          }}
+        >
+          🔧 {useCanvasMode ? "🎨 CANVAS" : "📊 LEGACY"}
+        </Button>
+      </div>
+
       {/* Ultra-Compact Header - Optimized for 8-inch tablets */}
       <header className="bg-gradient-to-br from-primary via-primary/90 to-primary text-primary-foreground shadow-lg px-2 py-1 flex-shrink-0 border-b border-primary/30">
         <div className="flex items-center justify-between gap-2">
@@ -779,25 +1025,43 @@ export default function DashboardPage() {
             <div className="hidden sm:flex items-center gap-2 bg-primary/20 backdrop-blur-xl rounded-md px-2 py-0.5 border border-primary/30">
               <div className="flex items-center gap-1">
                 <div className="h-1.5 w-1.5 bg-emerald-400 rounded-full animate-pulse" />
-                <span className="text-xs font-bold text-emerald-400">{stats.currentGuests}</span>
+                <span className="text-xs font-bold text-emerald-400">
+                  {stats.currentGuests}
+                </span>
                 <span className="text-xs text-slate-400">dining</span>
               </div>
               <div className="w-px h-3.5 bg-slate-600" />
               <div className="flex items-center gap-1">
                 <Table2 className="h-3 w-3 text-blue-400" />
-                <span className="text-xs font-bold text-blue-400">{stats.availableTables}</span>
+                <span className="text-xs font-bold text-blue-400">
+                  {stats.availableTables}
+                </span>
                 <span className="text-xs text-slate-400">free</span>
               </div>
               <div className="w-px h-3.5 bg-slate-600" />
               <div className="flex items-center gap-1">
-                <div className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  stats.occupancyRate > 80 ? "bg-red-400" : stats.occupancyRate > 60 ? "bg-yellow-400" : "bg-green-400"
-                )} />
-                <span className={cn(
-                  "text-xs font-bold",
-                  stats.occupancyRate > 80 ? "text-red-400" : stats.occupancyRate > 60 ? "text-yellow-400" : "text-green-400"
-                )}>{stats.occupancyRate}%</span>
+                <div
+                  className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    stats.occupancyRate > 80
+                      ? "bg-red-400"
+                      : stats.occupancyRate > 60
+                      ? "bg-yellow-400"
+                      : "bg-green-400"
+                  )}
+                />
+                <span
+                  className={cn(
+                    "text-xs font-bold",
+                    stats.occupancyRate > 80
+                      ? "text-red-400"
+                      : stats.occupancyRate > 60
+                      ? "text-yellow-400"
+                      : "text-green-400"
+                  )}
+                >
+                  {stats.occupancyRate}%
+                </span>
                 <span className="text-xs text-slate-400">full</span>
               </div>
             </div>
@@ -834,8 +1098,8 @@ export default function DashboardPage() {
               size="sm"
               className={cn(
                 "px-2 py-1 h-6 text-xs font-medium rounded-md transition-all duration-300",
-                showTimeline 
-                  ? "bg-blue-600 hover:bg-blue-700 text-white shadow-lg" 
+                showTimeline
+                  ? "bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
                   : "bg-slate-700/80 hover:bg-slate-600 text-slate-200 border border-slate-600/50"
               )}
             >
@@ -847,17 +1111,32 @@ export default function DashboardPage() {
               onClick={() => setUseCanvasMode(!useCanvasMode)}
               size="sm"
               className={cn(
-                "px-2 py-1 h-6 text-xs font-medium rounded-md transition-all duration-300",
-                useCanvasMode 
-                  ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg" 
-                  : "bg-slate-700/80 hover:bg-slate-600 text-slate-200 border border-slate-600/50"
+                "px-3 py-1 h-8 text-sm font-bold rounded-md transition-all duration-300 border-3 shadow-xl min-w-[80px] flex items-center justify-center",
+                useCanvasMode
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-400"
+                  : "bg-orange-600 hover:bg-orange-700 text-white border-orange-400"
               )}
-              title={useCanvasMode ? "Switch to Legacy View" : "Switch to Canvas View"}
+              title={
+                useCanvasMode
+                  ? "Switch to Legacy View"
+                  : "Switch to Canvas View"
+              }
+              style={{
+                display: "flex !important",
+                visibility: "visible !important",
+                opacity: "1 !important",
+                minWidth: "80px",
+                height: "32px",
+                fontSize: "14px",
+                fontWeight: "bold",
+              }}
             >
-              <Activity className="h-3 w-3 mr-1" />
-              <span className="hidden sm:inline">{useCanvasMode ? "Canvas" : "Legacy"}</span>
+              <Activity className="h-4 w-4 mr-1 flex-shrink-0" />
+              <span style={{ display: "inline !important" }}>
+                {useCanvasMode ? "🎨 Canvas" : "📊 Legacy"}
+              </span>
             </Button>
-            
+
             <Button
               onClick={() => setShowManualBooking(true)}
               size="sm"
@@ -896,17 +1175,21 @@ export default function DashboardPage() {
               userId={userId}
               onTableClick={(table, statusInfo) => {
                 if (statusInfo.current) {
-                  setSelectedBooking(todaysBookings.find(b => b.id === statusInfo.current.id))
+                  setSelectedBooking(
+                    todaysBookings.find((b) => b.id === statusInfo.current.id)
+                  );
                 } else if (statusInfo.upcoming) {
-                  setSelectedBooking(todaysBookings.find(b => b.id === statusInfo.upcoming.id))
+                  setSelectedBooking(
+                    todaysBookings.find((b) => b.id === statusInfo.upcoming.id)
+                  );
                 }
               }}
-              onStatusUpdate={(bookingId, status) => 
+              onStatusUpdate={(bookingId, status) =>
                 updateBookingMutation.mutate({ bookingId, updates: { status } })
               }
               onTableSwitch={handleTableSwitch}
               onCheckIn={handleCheckIn}
-              onTableUpdate={(tableId, position) => 
+              onTableUpdate={(tableId, position) =>
                 updateTablePositionMutation.mutate({ tableId, position })
               }
               searchQuery={searchQuery}
@@ -920,17 +1203,21 @@ export default function DashboardPage() {
               userId={userId}
               onTableClick={(table, statusInfo) => {
                 if (statusInfo.current) {
-                  setSelectedBooking(todaysBookings.find(b => b.id === statusInfo.current.id))
+                  setSelectedBooking(
+                    todaysBookings.find((b) => b.id === statusInfo.current.id)
+                  );
                 } else if (statusInfo.upcoming) {
-                  setSelectedBooking(todaysBookings.find(b => b.id === statusInfo.upcoming.id))
+                  setSelectedBooking(
+                    todaysBookings.find((b) => b.id === statusInfo.upcoming.id)
+                  );
                 }
               }}
-              onStatusUpdate={(bookingId, status) => 
+              onStatusUpdate={(bookingId, status) =>
                 updateBookingMutation.mutate({ bookingId, updates: { status } })
               }
               onTableSwitch={handleTableSwitch}
               onCheckIn={handleCheckIn}
-              onTableUpdate={(tableId, position) => 
+              onTableUpdate={(tableId, position) =>
                 updateTablePositionMutation.mutate({ tableId, position })
               }
               searchQuery={searchQuery}
@@ -959,7 +1246,11 @@ export default function DashboardPage() {
                   bookings={todaysBookings}
                   restaurantId={restaurantId}
                   userId={userId}
-                  onUpdate={() => queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })}
+                  onUpdate={() =>
+                    queryClient.invalidateQueries({
+                      queryKey: ["todays-bookings"],
+                    })
+                  }
                 />
               </div>
             </div>
@@ -973,15 +1264,15 @@ export default function DashboardPage() {
               currentTime={currentTime}
               onSelectBooking={setSelectedBooking}
               onOpenTableSwitch={(bookingId) => {
-                const booking = activeBookings.find(b => b.id === bookingId)
+                const booking = activeBookings.find((b) => b.id === bookingId);
                 if (booking) {
                   // Select the booking to trigger table switch options
-                  setSelectedBooking(booking)
+                  setSelectedBooking(booking);
                 }
               }}
             />
           </div>
-          
+
           {/* Check-in Queue - Takes remaining space */}
           <div className="flex-1 overflow-hidden">
             <CheckInQueue
@@ -1004,9 +1295,17 @@ export default function DashboardPage() {
 
       {/* Modals - Streamlined */}
       {/* Confirmation Dialog for Warnings */}
-      <Dialog open={confirmationDialog.show} onOpenChange={(open) => 
-        !open && setConfirmationDialog({ show: false, warnings: [], onConfirm: () => {} })
-      }>
+      <Dialog
+        open={confirmationDialog.show}
+        onOpenChange={(open) =>
+          !open &&
+          setConfirmationDialog({
+            show: false,
+            warnings: [],
+            onConfirm: () => {},
+          })
+        }
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-600">
@@ -1019,16 +1318,27 @@ export default function DashboardPage() {
           </DialogHeader>
           <div className="space-y-2 py-4">
             {confirmationDialog.warnings.map((warning, index) => (
-              <div key={index} className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div
+                key={index}
+                className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg"
+              >
                 <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-600" />
-                <p className="text-sm text-amber-800 leading-relaxed">{warning}</p>
+                <p className="text-sm text-amber-800 leading-relaxed">
+                  {warning}
+                </p>
               </div>
             ))}
           </div>
           <div className="flex gap-3 pt-2">
             <Button
               variant="outline"
-              onClick={() => setConfirmationDialog({ show: false, warnings: [], onConfirm: () => {} })}
+              onClick={() =>
+                setConfirmationDialog({
+                  show: false,
+                  warnings: [],
+                  onConfirm: () => {},
+                })
+              }
               className="flex-1 border-border text-foreground hover:bg-muted"
             >
               Cancel
@@ -1062,7 +1372,7 @@ export default function DashboardPage() {
               bookings={todaysBookings}
               currentTime={currentTime}
               onSelectBooking={setSelectedBooking}
-              onUpdateStatus={(bookingId, status) => 
+              onUpdateStatus={(bookingId, status) =>
                 updateBookingMutation.mutate({ bookingId, updates: { status } })
               }
               customersData={customersData}
@@ -1103,10 +1413,10 @@ export default function DashboardPage() {
           booking={selectedBooking}
           onClose={() => setSelectedBooking(null)}
           onUpdate={(updates) => {
-            updateBookingMutation.mutate({ 
-              bookingId: selectedBooking.id, 
-              updates 
-            })
+            updateBookingMutation.mutate({
+              bookingId: selectedBooking.id,
+              updates,
+            });
           }}
         />
       )}
@@ -1125,13 +1435,13 @@ export default function DashboardPage() {
           </DialogHeader>
           <div className="grid grid-cols-3 gap-2 py-4">
             {tables
-              .filter(table => {
-                const isOccupied = currentlyDining.some(booking => 
+              .filter((table) => {
+                const isOccupied = currentlyDining.some((booking) =>
                   booking.tables?.some((t: any) => t.id === table.id)
-                )
-                return !isOccupied && table.is_active
+                );
+                return !isOccupied && table.is_active;
               })
-              .map(table => (
+              .map((table) => (
                 <Button
                   key={table.id}
                   variant="outline"
@@ -1139,22 +1449,24 @@ export default function DashboardPage() {
                   className="h-12 flex flex-col gap-1"
                   onClick={() => {
                     if (checkInBookingId) {
-                      handleCheckIn(checkInBookingId, [table.id])
-                      setShowCheckInDialog(false)
-                      setCheckInBookingId(null)
+                      handleCheckIn(checkInBookingId, [table.id]);
+                      setShowCheckInDialog(false);
+                      setCheckInBookingId(null);
                     }
                   }}
                 >
                   <span className="font-bold">T{table.table_number}</span>
-                  <span className="text-xs text-muted-foreground">{table.max_capacity} seats</span>
+                  <span className="text-xs text-muted-foreground">
+                    {table.max_capacity} seats
+                  </span>
                 </Button>
               ))}
           </div>
-          {tables.filter(table => {
-            const isOccupied = currentlyDining.some(booking => 
+          {tables.filter((table) => {
+            const isOccupied = currentlyDining.some((booking) =>
               booking.tables?.some((t: any) => t.id === table.id)
-            )
-            return !isOccupied && table.is_active
+            );
+            return !isOccupied && table.is_active;
           }).length === 0 && (
             <Alert>
               <AlertCircle className="h-4 w-4" />
@@ -1166,5 +1478,5 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }
