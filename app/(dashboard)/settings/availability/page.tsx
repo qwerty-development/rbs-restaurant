@@ -63,6 +63,7 @@ interface Closure {
 // Schema for a single shift
 const shiftSchema = z.object({
   id: z.string().optional(),
+  name: z.string().optional(),
   is_open: z.boolean(),
   open_time: z.string().optional(),
   close_time: z.string().optional(),
@@ -172,13 +173,13 @@ export default function EnhancedAvailabilitySettingsPage() {
   const regularHoursForm = useForm<RegularHoursFormData>({
     resolver: zodResolver(regularHoursSchema),
     defaultValues: {
-      monday: [{ is_open: true, open_time: "09:00", close_time: "22:00" }],
-      tuesday: [{ is_open: true, open_time: "09:00", close_time: "22:00" }],
-      wednesday: [{ is_open: true, open_time: "09:00", close_time: "22:00" }],
-      thursday: [{ is_open: true, open_time: "09:00", close_time: "22:00" }],
-      friday: [{ is_open: true, open_time: "09:00", close_time: "22:00" }],
-      saturday: [{ is_open: true, open_time: "09:00", close_time: "22:00" }],
-      sunday: [{ is_open: true, open_time: "09:00", close_time: "22:00" }],
+      monday: [{ name: "", is_open: true, open_time: "09:00", close_time: "22:00" }],
+      tuesday: [{ name: "", is_open: true, open_time: "09:00", close_time: "22:00" }],
+      wednesday: [{ name: "", is_open: true, open_time: "09:00", close_time: "22:00" }],
+      thursday: [{ name: "", is_open: true, open_time: "09:00", close_time: "22:00" }],
+      friday: [{ name: "", is_open: true, open_time: "09:00", close_time: "22:00" }],
+      saturday: [{ name: "", is_open: true, open_time: "09:00", close_time: "22:00" }],
+      sunday: [{ name: "", is_open: true, open_time: "09:00", close_time: "22:00" }],
     },
   })
 
@@ -208,13 +209,14 @@ export default function EnhancedAvailabilitySettingsPage() {
         if (dayShifts.length > 0) {
           formData[day] = dayShifts.map(shift => ({
             id: shift.id,
+            name: shift.name || "",
             is_open: shift.is_open,
             open_time: shift.open_time || "09:00",
             close_time: shift.close_time || "22:00",
           }))
         } else {
           // Default closed day
-          formData[day] = [{ is_open: false, open_time: "09:00", close_time: "22:00" }]
+          formData[day] = [{ name: "", is_open: false, open_time: "09:00", close_time: "22:00" }]
         }
       })
       
@@ -244,6 +246,7 @@ export default function EnhancedAvailabilitySettingsPage() {
           allShifts.push({
             restaurant_id: restaurantId,
             day_of_week: day,
+            name: shift.name || null,
             is_open: shift.is_open,
             open_time: shift.is_open ? shift.open_time : null,
             close_time: shift.is_open ? shift.close_time : null,
@@ -421,7 +424,7 @@ export default function EnhancedAvailabilitySettingsPage() {
                               const currentShifts = regularHoursForm.getValues(day)
                               regularHoursForm.setValue(day, [
                                 ...currentShifts,
-                                { is_open: true, open_time: "17:00", close_time: "23:00" }
+                                { name: "", is_open: true, open_time: "17:00", close_time: "23:00" }
                               ])
                             }}
                           >
@@ -431,7 +434,9 @@ export default function EnhancedAvailabilitySettingsPage() {
                         </div>
                         
                         <div className="space-y-3">
-                          {shifts.map((_, shiftIndex) => (
+                          {shifts.map((_, shiftIndex) => {
+                            const shiftName = shifts[shiftIndex]?.name
+                            return (
                             <div key={shiftIndex} className="flex items-center gap-4 p-4 border rounded-lg">
                               <div className="flex items-center space-x-2">
                                 <FormField
@@ -452,6 +457,23 @@ export default function EnhancedAvailabilitySettingsPage() {
                                   )}
                                 />
                               </div>
+
+                              <FormField
+                                control={regularHoursForm.control}
+                                name={`${day}.${shiftIndex}.name`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <Input
+                                        placeholder="Shift name (e.g., Lunch, Dinner)"
+                                        {...field}
+                                        className="w-44"
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
 
                               {shifts[shiftIndex]?.is_open && (
                                 <>
@@ -508,7 +530,8 @@ export default function EnhancedAvailabilitySettingsPage() {
                                 </Button>
                               )}
                             </div>
-                          ))}
+                          )
+                          })}
                         </div>
                       </div>
                     )

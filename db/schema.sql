@@ -1,48 +1,6 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
-CREATE TABLE public.booking_archive (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  restaurant_id uuid NOT NULL,
-  booking_time timestamp with time zone NOT NULL,
-  party_size integer NOT NULL CHECK (party_size > 0),
-  status text NOT NULL CHECK (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'cancelled_by_user'::text, 'declined_by_restaurant'::text, 'completed'::text, 'no_show'::text])),
-  special_requests text,
-  occasion text,
-  dietary_notes ARRAY,
-  confirmation_code text UNIQUE,
-  table_preferences ARRAY,
-  reminder_sent boolean DEFAULT false,
-  checked_in_at timestamp with time zone,
-  loyalty_points_earned integer DEFAULT 0,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  applied_offer_id uuid,
-  expected_loyalty_points integer DEFAULT 0,
-  guest_name text,
-  guest_email text,
-  guest_phone text,
-  is_group_booking boolean DEFAULT false,
-  organizer_id uuid,
-  attendees integer DEFAULT 1,
-  turn_time_minutes integer NOT NULL DEFAULT 120,
-  archived_at timestamp with time zone DEFAULT now(),
-  archived_by uuid,
-  CONSTRAINT booking_archive_pkey PRIMARY KEY (id),
-  CONSTRAINT booking_archive_archived_by_fkey FOREIGN KEY (archived_by) REFERENCES public.profiles(id)
-);
-CREATE TABLE public.booking_attendees (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  booking_id uuid NOT NULL,
-  user_id uuid NOT NULL,
-  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'declined'::text, 'cancelled'::text])),
-  is_organizer boolean DEFAULT false,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT booking_attendees_pkey PRIMARY KEY (id),
-  CONSTRAINT booking_attendees_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
-  CONSTRAINT booking_attendees_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
-);
 CREATE TABLE public.booking_invites (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   booking_id uuid NOT NULL,
@@ -53,9 +11,9 @@ CREATE TABLE public.booking_invites (
   created_at timestamp with time zone DEFAULT now(),
   responded_at timestamp with time zone,
   CONSTRAINT booking_invites_pkey PRIMARY KEY (id),
+  CONSTRAINT booking_invites_from_user_id_fkey FOREIGN KEY (from_user_id) REFERENCES public.profiles(id),
   CONSTRAINT booking_invites_to_user_id_fkey FOREIGN KEY (to_user_id) REFERENCES public.profiles(id),
-  CONSTRAINT booking_invites_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
-  CONSTRAINT booking_invites_from_user_id_fkey FOREIGN KEY (from_user_id) REFERENCES public.profiles(id)
+  CONSTRAINT booking_invites_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id)
 );
 CREATE TABLE public.booking_status_history (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -67,8 +25,8 @@ CREATE TABLE public.booking_status_history (
   reason text,
   metadata jsonb DEFAULT '{}'::jsonb,
   CONSTRAINT booking_status_history_pkey PRIMARY KEY (id),
-  CONSTRAINT booking_status_history_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES public.profiles(id),
-  CONSTRAINT booking_status_history_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id)
+  CONSTRAINT booking_status_history_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
+  CONSTRAINT booking_status_history_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.booking_tables (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -117,10 +75,10 @@ CREATE TABLE public.bookings (
   suggested_alternative_tables ARRAY,
   CONSTRAINT bookings_pkey PRIMARY KEY (id),
   CONSTRAINT bookings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
-  CONSTRAINT bookings_applied_loyalty_rule_id_fkey FOREIGN KEY (applied_loyalty_rule_id) REFERENCES public.restaurant_loyalty_rules(id),
+  CONSTRAINT bookings_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
   CONSTRAINT bookings_organizer_id_fkey FOREIGN KEY (organizer_id) REFERENCES public.profiles(id),
   CONSTRAINT bookings_applied_offer_id_fkey FOREIGN KEY (applied_offer_id) REFERENCES public.special_offers(id),
-  CONSTRAINT bookings_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id)
+  CONSTRAINT bookings_applied_loyalty_rule_id_fkey FOREIGN KEY (applied_loyalty_rule_id) REFERENCES public.restaurant_loyalty_rules(id)
 );
 CREATE TABLE public.customer_notes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -155,8 +113,8 @@ CREATE TABLE public.customer_relationships (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT customer_relationships_pkey PRIMARY KEY (id),
   CONSTRAINT customer_relationships_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.restaurant_customers(id),
-  CONSTRAINT customer_relationships_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id),
-  CONSTRAINT customer_relationships_related_customer_id_fkey FOREIGN KEY (related_customer_id) REFERENCES public.restaurant_customers(id)
+  CONSTRAINT customer_relationships_related_customer_id_fkey FOREIGN KEY (related_customer_id) REFERENCES public.restaurant_customers(id),
+  CONSTRAINT customer_relationships_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.customer_tag_assignments (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -166,8 +124,8 @@ CREATE TABLE public.customer_tag_assignments (
   assigned_at timestamp with time zone DEFAULT now(),
   CONSTRAINT customer_tag_assignments_pkey PRIMARY KEY (id),
   CONSTRAINT customer_tag_assignments_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.restaurant_customers(id),
-  CONSTRAINT customer_tag_assignments_assigned_by_fkey FOREIGN KEY (assigned_by) REFERENCES public.profiles(id),
-  CONSTRAINT customer_tag_assignments_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES public.customer_tags(id)
+  CONSTRAINT customer_tag_assignments_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES public.customer_tags(id),
+  CONSTRAINT customer_tag_assignments_assigned_by_fkey FOREIGN KEY (assigned_by) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.customer_tags (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -178,16 +136,6 @@ CREATE TABLE public.customer_tags (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT customer_tags_pkey PRIMARY KEY (id),
   CONSTRAINT customer_tags_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id)
-);
-CREATE TABLE public.data_export_requests (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid,
-  status text DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'failed'::text])),
-  requested_at timestamp with time zone DEFAULT now(),
-  completed_at timestamp with time zone,
-  download_url text,
-  CONSTRAINT data_export_requests_pkey PRIMARY KEY (id),
-  CONSTRAINT data_export_requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.favorites (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -219,8 +167,8 @@ CREATE TABLE public.friend_requests (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT friend_requests_pkey PRIMARY KEY (id),
-  CONSTRAINT friend_requests_from_user_id_fkey FOREIGN KEY (from_user_id) REFERENCES public.profiles(id),
-  CONSTRAINT friend_requests_to_user_id_fkey FOREIGN KEY (to_user_id) REFERENCES public.profiles(id)
+  CONSTRAINT friend_requests_to_user_id_fkey FOREIGN KEY (to_user_id) REFERENCES public.profiles(id),
+  CONSTRAINT friend_requests_from_user_id_fkey FOREIGN KEY (from_user_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.friends (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -230,6 +178,51 @@ CREATE TABLE public.friends (
   CONSTRAINT friends_pkey PRIMARY KEY (id),
   CONSTRAINT friends_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
   CONSTRAINT friends_friend_id_fkey FOREIGN KEY (friend_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.kitchen_assignments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  order_item_id uuid NOT NULL,
+  station_id uuid NOT NULL,
+  assigned_to uuid,
+  assigned_at timestamp with time zone DEFAULT now(),
+  started_at timestamp with time zone,
+  completed_at timestamp with time zone,
+  notes text,
+  CONSTRAINT kitchen_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT kitchen_assignments_station_id_fkey FOREIGN KEY (station_id) REFERENCES public.kitchen_stations(id),
+  CONSTRAINT kitchen_assignments_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.profiles(id),
+  CONSTRAINT kitchen_assignments_order_item_id_fkey FOREIGN KEY (order_item_id) REFERENCES public.order_items(id)
+);
+CREATE TABLE public.kitchen_display_settings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  restaurant_id uuid NOT NULL,
+  station_id uuid,
+  display_name text NOT NULL,
+  show_prep_times boolean DEFAULT true,
+  show_dietary_info boolean DEFAULT true,
+  show_special_instructions boolean DEFAULT true,
+  auto_advance_orders boolean DEFAULT false,
+  sound_notifications boolean DEFAULT true,
+  color_scheme text DEFAULT 'default'::text,
+  font_size text DEFAULT 'medium'::text CHECK (font_size = ANY (ARRAY['small'::text, 'medium'::text, 'large'::text])),
+  orders_per_page integer DEFAULT 10,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT kitchen_display_settings_pkey PRIMARY KEY (id),
+  CONSTRAINT kitchen_display_settings_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
+  CONSTRAINT kitchen_display_settings_station_id_fkey FOREIGN KEY (station_id) REFERENCES public.kitchen_stations(id)
+);
+CREATE TABLE public.kitchen_stations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  restaurant_id uuid NOT NULL,
+  name text NOT NULL,
+  description text,
+  station_type text NOT NULL CHECK (station_type = ANY (ARRAY['cold'::text, 'hot'::text, 'grill'::text, 'fryer'::text, 'pastry'::text, 'beverage'::text, 'expo'::text])),
+  is_active boolean DEFAULT true,
+  display_order integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT kitchen_stations_pkey PRIMARY KEY (id),
+  CONSTRAINT kitchen_stations_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id)
 );
 CREATE TABLE public.loyalty_activities (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -243,22 +236,9 @@ CREATE TABLE public.loyalty_activities (
   metadata jsonb DEFAULT '{}'::jsonb,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT loyalty_activities_pkey PRIMARY KEY (id),
-  CONSTRAINT loyalty_activities_related_review_id_fkey FOREIGN KEY (related_review_id) REFERENCES public.reviews(id),
+  CONSTRAINT loyalty_activities_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
   CONSTRAINT loyalty_activities_related_booking_id_fkey FOREIGN KEY (related_booking_id) REFERENCES public.bookings(id),
-  CONSTRAINT loyalty_activities_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
-);
-CREATE TABLE public.loyalty_audit_log (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  action text NOT NULL,
-  restaurant_id uuid,
-  user_id uuid,
-  booking_id uuid,
-  points_amount integer,
-  balance_before integer,
-  balance_after integer,
-  metadata jsonb,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT loyalty_audit_log_pkey PRIMARY KEY (id)
+  CONSTRAINT loyalty_activities_related_review_id_fkey FOREIGN KEY (related_review_id) REFERENCES public.reviews(id)
 );
 CREATE TABLE public.loyalty_redemptions (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -275,10 +255,10 @@ CREATE TABLE public.loyalty_redemptions (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT loyalty_redemptions_pkey PRIMARY KEY (id),
-  CONSTRAINT loyalty_redemptions_offer_id_fkey FOREIGN KEY (offer_id) REFERENCES public.special_offers(id),
-  CONSTRAINT loyalty_redemptions_reward_id_fkey FOREIGN KEY (reward_id) REFERENCES public.loyalty_rewards(id),
   CONSTRAINT loyalty_redemptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
-  CONSTRAINT loyalty_redemptions_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id)
+  CONSTRAINT loyalty_redemptions_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
+  CONSTRAINT loyalty_redemptions_offer_id_fkey FOREIGN KEY (offer_id) REFERENCES public.special_offers(id),
+  CONSTRAINT loyalty_redemptions_reward_id_fkey FOREIGN KEY (reward_id) REFERENCES public.loyalty_rewards(id)
 );
 CREATE TABLE public.loyalty_rewards (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -333,17 +313,143 @@ CREATE TABLE public.menu_items (
   CONSTRAINT menu_items_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
   CONSTRAINT menu_items_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.menu_categories(id)
 );
+CREATE TABLE public.notification_delivery_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  outbox_id uuid NOT NULL,
+  provider text,
+  status text,
+  error text,
+  provider_message_id text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT notification_delivery_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT notification_delivery_logs_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES public.notification_outbox(id)
+);
+CREATE TABLE public.notification_outbox (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  notification_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  channel text NOT NULL CHECK (channel = ANY (ARRAY['push'::text, 'email'::text, 'sms'::text, 'inapp'::text])),
+  payload jsonb NOT NULL,
+  status text NOT NULL DEFAULT 'queued'::text CHECK (status = ANY (ARRAY['queued'::text, 'sent'::text, 'failed'::text, 'skipped'::text])),
+  attempts integer NOT NULL DEFAULT 0,
+  error text,
+  created_at timestamp with time zone DEFAULT now(),
+  sent_at timestamp with time zone,
+  CONSTRAINT notification_outbox_pkey PRIMARY KEY (id),
+  CONSTRAINT notification_outbox_notification_id_fkey FOREIGN KEY (notification_id) REFERENCES public.notifications(id),
+  CONSTRAINT notification_outbox_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.notification_preferences (
+  user_id uuid NOT NULL,
+  booking boolean DEFAULT true,
+  booking_reminders boolean DEFAULT true,
+  waitlist boolean DEFAULT true,
+  offers boolean DEFAULT true,
+  reviews boolean DEFAULT true,
+  loyalty boolean DEFAULT true,
+  marketing boolean DEFAULT false,
+  system boolean DEFAULT true,
+  security boolean DEFAULT true,
+  quiet_hours jsonb DEFAULT '{"end": "08:00", "start": "22:00", "enabled": false}'::jsonb,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT notification_preferences_pkey PRIMARY KEY (user_id),
+  CONSTRAINT notification_preferences_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
 CREATE TABLE public.notifications (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   user_id uuid NOT NULL,
-  type text NOT NULL CHECK (type = ANY (ARRAY['friend_request'::text, 'friend_request_accepted'::text, 'booking_shared'::text, 'shared_booking_accepted'::text, 'booking_reminder'::text, 'booking_confirmed'::text, 'booking_cancelled'::text])),
+  type text NOT NULL CHECK (length(type) > 0),
   title text NOT NULL,
   message text NOT NULL,
   data jsonb,
   read boolean DEFAULT false,
   created_at timestamp with time zone DEFAULT now(),
+  category text,
+  read_at timestamp with time zone,
+  deeplink text,
   CONSTRAINT notifications_pkey PRIMARY KEY (id),
   CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.order_items (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL,
+  menu_item_id uuid NOT NULL,
+  quantity integer NOT NULL CHECK (quantity > 0),
+  unit_price numeric NOT NULL,
+  total_price numeric NOT NULL,
+  special_instructions text,
+  dietary_modifications ARRAY DEFAULT '{}'::text[],
+  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'preparing'::text, 'ready'::text, 'served'::text, 'cancelled'::text])),
+  estimated_prep_time integer,
+  actual_prep_time integer,
+  started_preparing_at timestamp with time zone,
+  ready_at timestamp with time zone,
+  served_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT order_items_pkey PRIMARY KEY (id),
+  CONSTRAINT order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id),
+  CONSTRAINT order_items_menu_item_id_fkey FOREIGN KEY (menu_item_id) REFERENCES public.menu_items(id)
+);
+CREATE TABLE public.order_modifications (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  order_item_id uuid NOT NULL,
+  modification_type text NOT NULL CHECK (modification_type = ANY (ARRAY['add'::text, 'remove'::text, 'substitute'::text, 'extra'::text, 'less'::text, 'on_side'::text])),
+  description text NOT NULL,
+  price_adjustment numeric DEFAULT 0,
+  created_by uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT order_modifications_pkey PRIMARY KEY (id),
+  CONSTRAINT order_modifications_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id),
+  CONSTRAINT order_modifications_order_item_id_fkey FOREIGN KEY (order_item_id) REFERENCES public.order_items(id)
+);
+CREATE TABLE public.order_status_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL,
+  order_item_id uuid,
+  old_status text,
+  new_status text NOT NULL,
+  changed_by uuid NOT NULL,
+  changed_at timestamp with time zone DEFAULT now(),
+  notes text,
+  station_id uuid,
+  estimated_completion timestamp with time zone,
+  CONSTRAINT order_status_history_pkey PRIMARY KEY (id),
+  CONSTRAINT order_status_history_station_id_fkey FOREIGN KEY (station_id) REFERENCES public.kitchen_stations(id),
+  CONSTRAINT order_status_history_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES public.profiles(id),
+  CONSTRAINT order_status_history_order_item_id_fkey FOREIGN KEY (order_item_id) REFERENCES public.order_items(id),
+  CONSTRAINT order_status_history_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id)
+);
+CREATE TABLE public.orders (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  booking_id uuid NOT NULL,
+  restaurant_id uuid NOT NULL,
+  table_id uuid,
+  order_number text NOT NULL,
+  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'preparing'::text, 'ready'::text, 'served'::text, 'completed'::text, 'cancelled'::text])),
+  order_type text NOT NULL DEFAULT 'dine_in'::text CHECK (order_type = ANY (ARRAY['dine_in'::text, 'takeaway'::text, 'delivery'::text])),
+  course_type text CHECK (course_type = ANY (ARRAY['appetizer'::text, 'main_course'::text, 'dessert'::text, 'beverage'::text, 'all_courses'::text])),
+  subtotal numeric NOT NULL DEFAULT 0,
+  tax_amount numeric NOT NULL DEFAULT 0,
+  total_amount numeric NOT NULL DEFAULT 0,
+  special_instructions text,
+  dietary_requirements ARRAY DEFAULT '{}'::text[],
+  estimated_prep_time integer,
+  actual_prep_time integer,
+  priority_level integer DEFAULT 1 CHECK (priority_level >= 1 AND priority_level <= 5),
+  created_by uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  confirmed_at timestamp with time zone,
+  started_preparing_at timestamp with time zone,
+  ready_at timestamp with time zone,
+  served_at timestamp with time zone,
+  completed_at timestamp with time zone,
+  CONSTRAINT orders_pkey PRIMARY KEY (id),
+  CONSTRAINT orders_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
+  CONSTRAINT orders_table_id_fkey FOREIGN KEY (table_id) REFERENCES public.restaurant_tables(id),
+  CONSTRAINT orders_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id),
+  CONSTRAINT orders_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id)
 );
 CREATE TABLE public.playlist_collaborators (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -354,9 +460,9 @@ CREATE TABLE public.playlist_collaborators (
   invited_at timestamp with time zone DEFAULT now(),
   accepted_at timestamp with time zone,
   CONSTRAINT playlist_collaborators_pkey PRIMARY KEY (id),
-  CONSTRAINT playlist_collaborators_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
   CONSTRAINT playlist_collaborators_playlist_id_fkey FOREIGN KEY (playlist_id) REFERENCES public.restaurant_playlists(id),
-  CONSTRAINT playlist_collaborators_invited_by_fkey FOREIGN KEY (invited_by) REFERENCES public.profiles(id)
+  CONSTRAINT playlist_collaborators_invited_by_fkey FOREIGN KEY (invited_by) REFERENCES public.profiles(id),
+  CONSTRAINT playlist_collaborators_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.playlist_items (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -367,9 +473,9 @@ CREATE TABLE public.playlist_items (
   note text,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT playlist_items_pkey PRIMARY KEY (id),
-  CONSTRAINT playlist_items_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
   CONSTRAINT playlist_items_playlist_id_fkey FOREIGN KEY (playlist_id) REFERENCES public.restaurant_playlists(id),
-  CONSTRAINT playlist_items_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id)
+  CONSTRAINT playlist_items_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id),
+  CONSTRAINT playlist_items_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id)
 );
 CREATE TABLE public.post_comments (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -378,8 +484,8 @@ CREATE TABLE public.post_comments (
   comment text NOT NULL,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT post_comments_pkey PRIMARY KEY (id),
-  CONSTRAINT post_comments_post_id_fkey FOREIGN KEY (post_id) REFERENCES public.posts(id),
-  CONSTRAINT post_comments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+  CONSTRAINT post_comments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
+  CONSTRAINT post_comments_post_id_fkey FOREIGN KEY (post_id) REFERENCES public.posts(id)
 );
 CREATE TABLE public.post_images (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -396,8 +502,8 @@ CREATE TABLE public.post_likes (
   user_id uuid,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT post_likes_pkey PRIMARY KEY (id),
-  CONSTRAINT post_likes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
-  CONSTRAINT post_likes_post_id_fkey FOREIGN KEY (post_id) REFERENCES public.posts(id)
+  CONSTRAINT post_likes_post_id_fkey FOREIGN KEY (post_id) REFERENCES public.posts(id),
+  CONSTRAINT post_likes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.post_tags (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -405,8 +511,8 @@ CREATE TABLE public.post_tags (
   tagged_user_id uuid,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT post_tags_pkey PRIMARY KEY (id),
-  CONSTRAINT post_tags_post_id_fkey FOREIGN KEY (post_id) REFERENCES public.posts(id),
-  CONSTRAINT post_tags_tagged_user_id_fkey FOREIGN KEY (tagged_user_id) REFERENCES public.profiles(id)
+  CONSTRAINT post_tags_tagged_user_id_fkey FOREIGN KEY (tagged_user_id) REFERENCES public.profiles(id),
+  CONSTRAINT post_tags_post_id_fkey FOREIGN KEY (post_id) REFERENCES public.posts(id)
 );
 CREATE TABLE public.posts (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -418,9 +524,9 @@ CREATE TABLE public.posts (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT posts_pkey PRIMARY KEY (id),
-  CONSTRAINT posts_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
   CONSTRAINT posts_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
-  CONSTRAINT posts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+  CONSTRAINT posts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
+  CONSTRAINT posts_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id)
 );
 CREATE TABLE public.profiles (
   id uuid NOT NULL,
@@ -443,8 +549,16 @@ CREATE TABLE public.profiles (
   cancelled_bookings integer DEFAULT 0,
   no_show_bookings integer DEFAULT 0,
   rating_last_updated timestamp with time zone DEFAULT now(),
+  email text UNIQUE CHECK (email IS NULL OR email ~ '.+@.+'::text),
   CONSTRAINT profiles_pkey PRIMARY KEY (id),
   CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.rbs_admins (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  user_id uuid DEFAULT auth.uid(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT rbs_admins_pkey PRIMARY KEY (id),
+  CONSTRAINT rbs_admins_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.restaurant_availability (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -490,8 +604,8 @@ CREATE TABLE public.restaurant_customers (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT restaurant_customers_pkey PRIMARY KEY (id),
-  CONSTRAINT restaurant_customers_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
-  CONSTRAINT restaurant_customers_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+  CONSTRAINT restaurant_customers_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
+  CONSTRAINT restaurant_customers_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id)
 );
 CREATE TABLE public.restaurant_hours (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -502,6 +616,7 @@ CREATE TABLE public.restaurant_hours (
   close_time time without time zone,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  name text DEFAULT ''::text,
   CONSTRAINT restaurant_hours_pkey PRIMARY KEY (id),
   CONSTRAINT restaurant_hours_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id)
 );
@@ -551,9 +666,9 @@ CREATE TABLE public.restaurant_loyalty_transactions (
   created_at timestamp with time zone DEFAULT now(),
   metadata jsonb DEFAULT '{}'::jsonb,
   CONSTRAINT restaurant_loyalty_transactions_pkey PRIMARY KEY (id),
-  CONSTRAINT restaurant_loyalty_transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
+  CONSTRAINT restaurant_loyalty_transactions_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
   CONSTRAINT restaurant_loyalty_transactions_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
-  CONSTRAINT restaurant_loyalty_transactions_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id)
+  CONSTRAINT restaurant_loyalty_transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.restaurant_playlists (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -580,8 +695,8 @@ CREATE TABLE public.restaurant_special_hours (
   created_at timestamp with time zone DEFAULT now(),
   created_by uuid NOT NULL,
   CONSTRAINT restaurant_special_hours_pkey PRIMARY KEY (id),
-  CONSTRAINT restaurant_special_hours_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
-  CONSTRAINT restaurant_special_hours_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
+  CONSTRAINT restaurant_special_hours_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id),
+  CONSTRAINT restaurant_special_hours_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id)
 );
 CREATE TABLE public.restaurant_staff (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -597,9 +712,9 @@ CREATE TABLE public.restaurant_staff (
   created_by uuid,
   last_login_at timestamp with time zone,
   CONSTRAINT restaurant_staff_pkey PRIMARY KEY (id),
-  CONSTRAINT restaurant_staff_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
+  CONSTRAINT restaurant_staff_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id),
   CONSTRAINT restaurant_staff_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
-  CONSTRAINT restaurant_staff_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
+  CONSTRAINT restaurant_staff_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.restaurant_tables (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -642,8 +757,8 @@ CREATE TABLE public.restaurant_vip_users (
   valid_until timestamp with time zone,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT restaurant_vip_users_pkey PRIMARY KEY (id),
-  CONSTRAINT restaurant_vip_users_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
-  CONSTRAINT restaurant_vip_users_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+  CONSTRAINT restaurant_vip_users_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
+  CONSTRAINT restaurant_vip_users_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id)
 );
 CREATE TABLE public.restaurants (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -698,9 +813,9 @@ CREATE TABLE public.review_replies (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT review_replies_pkey PRIMARY KEY (id),
+  CONSTRAINT review_replies_review_id_fkey FOREIGN KEY (review_id) REFERENCES public.reviews(id),
   CONSTRAINT review_replies_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
-  CONSTRAINT review_replies_replied_by_fkey FOREIGN KEY (replied_by) REFERENCES public.profiles(id),
-  CONSTRAINT review_replies_review_id_fkey FOREIGN KEY (review_id) REFERENCES public.reviews(id)
+  CONSTRAINT review_replies_replied_by_fkey FOREIGN KEY (replied_by) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.reviews (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -720,8 +835,8 @@ CREATE TABLE public.reviews (
   tags ARRAY,
   photos ARRAY,
   CONSTRAINT reviews_pkey PRIMARY KEY (id),
-  CONSTRAINT reviews_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
   CONSTRAINT reviews_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
+  CONSTRAINT reviews_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
   CONSTRAINT reviews_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.spatial_ref_sys (
@@ -757,17 +872,6 @@ CREATE TABLE public.staff_permission_templates (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT staff_permission_templates_pkey PRIMARY KEY (id)
 );
-CREATE TABLE public.table_availability (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  table_id uuid NOT NULL,
-  date date NOT NULL,
-  time_slot time without time zone NOT NULL,
-  is_available boolean DEFAULT true,
-  booking_id uuid,
-  CONSTRAINT table_availability_pkey PRIMARY KEY (id),
-  CONSTRAINT table_availability_table_id_fkey FOREIGN KEY (table_id) REFERENCES public.restaurant_tables(id),
-  CONSTRAINT table_availability_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id)
-);
 CREATE TABLE public.table_combinations (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   restaurant_id uuid NOT NULL,
@@ -777,9 +881,9 @@ CREATE TABLE public.table_combinations (
   is_active boolean DEFAULT true,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT table_combinations_pkey PRIMARY KEY (id),
-  CONSTRAINT table_combinations_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
   CONSTRAINT table_combinations_primary_table_id_fkey FOREIGN KEY (primary_table_id) REFERENCES public.restaurant_tables(id),
-  CONSTRAINT table_combinations_secondary_table_id_fkey FOREIGN KEY (secondary_table_id) REFERENCES public.restaurant_tables(id)
+  CONSTRAINT table_combinations_secondary_table_id_fkey FOREIGN KEY (secondary_table_id) REFERENCES public.restaurant_tables(id),
+  CONSTRAINT table_combinations_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id)
 );
 CREATE TABLE public.tier_benefits (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -790,6 +894,20 @@ CREATE TABLE public.tier_benefits (
   is_active boolean DEFAULT true,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT tier_benefits_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.user_devices (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  device_id text NOT NULL,
+  expo_push_token text,
+  platform text CHECK (platform = ANY (ARRAY['ios'::text, 'android'::text, 'web'::text])),
+  app_version text,
+  locale text,
+  timezone text,
+  enabled boolean DEFAULT true,
+  last_seen timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_devices_pkey PRIMARY KEY (id),
+  CONSTRAINT user_devices_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.user_loyalty_rule_usage (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -814,8 +932,8 @@ CREATE TABLE public.user_offers (
   redemption_code text DEFAULT encode(gen_random_bytes(8), 'hex'::text),
   status text DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'used'::text, 'expired'::text, 'cancelled'::text])),
   CONSTRAINT user_offers_pkey PRIMARY KEY (id),
-  CONSTRAINT user_offers_offer_id_fkey FOREIGN KEY (offer_id) REFERENCES public.special_offers(id),
   CONSTRAINT user_offers_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
+  CONSTRAINT user_offers_offer_id_fkey FOREIGN KEY (offer_id) REFERENCES public.special_offers(id),
   CONSTRAINT user_offers_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.user_privacy_settings (
@@ -841,8 +959,8 @@ CREATE TABLE public.user_rating_history (
   change_reason text NOT NULL,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT user_rating_history_pkey PRIMARY KEY (id),
-  CONSTRAINT user_rating_history_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
-  CONSTRAINT user_rating_history_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+  CONSTRAINT user_rating_history_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
+  CONSTRAINT user_rating_history_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id)
 );
 CREATE TABLE public.waitlist (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -857,151 +975,4 @@ CREATE TABLE public.waitlist (
   CONSTRAINT waitlist_pkey PRIMARY KEY (id),
   CONSTRAINT waitlist_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
   CONSTRAINT waitlist_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
-);
-
--- Order Management System Tables
-
-CREATE TABLE public.orders (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  booking_id uuid NOT NULL,
-  restaurant_id uuid NOT NULL,
-  table_id uuid,
-  order_number text NOT NULL,
-  status text NOT NULL DEFAULT 'pending' CHECK (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'preparing'::text, 'ready'::text, 'served'::text, 'completed'::text, 'cancelled'::text])),
-  order_type text NOT NULL DEFAULT 'dine_in' CHECK (order_type = ANY (ARRAY['dine_in'::text, 'takeaway'::text, 'delivery'::text])),
-  course_type text CHECK (course_type = ANY (ARRAY['appetizer'::text, 'main_course'::text, 'dessert'::text, 'beverage'::text, 'all_courses'::text])),
-  subtotal numeric NOT NULL DEFAULT 0,
-  tax_amount numeric NOT NULL DEFAULT 0,
-  total_amount numeric NOT NULL DEFAULT 0,
-  special_instructions text,
-  dietary_requirements ARRAY DEFAULT '{}'::text[],
-  estimated_prep_time integer, -- in minutes
-  actual_prep_time integer, -- in minutes
-  priority_level integer DEFAULT 1 CHECK (priority_level >= 1 AND priority_level <= 5),
-  created_by uuid NOT NULL,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  confirmed_at timestamp with time zone,
-  started_preparing_at timestamp with time zone,
-  ready_at timestamp with time zone,
-  served_at timestamp with time zone,
-  completed_at timestamp with time zone,
-  CONSTRAINT orders_pkey PRIMARY KEY (id),
-  CONSTRAINT orders_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
-  CONSTRAINT orders_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
-  CONSTRAINT orders_table_id_fkey FOREIGN KEY (table_id) REFERENCES public.restaurant_tables(id),
-  CONSTRAINT orders_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
-);
-
-CREATE TABLE public.order_items (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  order_id uuid NOT NULL,
-  menu_item_id uuid NOT NULL,
-  quantity integer NOT NULL CHECK (quantity > 0),
-  unit_price numeric NOT NULL,
-  total_price numeric NOT NULL,
-  special_instructions text,
-  dietary_modifications ARRAY DEFAULT '{}'::text[],
-  status text NOT NULL DEFAULT 'pending' CHECK (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'preparing'::text, 'ready'::text, 'served'::text, 'cancelled'::text])),
-  estimated_prep_time integer, -- in minutes
-  actual_prep_time integer, -- in minutes
-  started_preparing_at timestamp with time zone,
-  ready_at timestamp with time zone,
-  served_at timestamp with time zone,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT order_items_pkey PRIMARY KEY (id),
-  CONSTRAINT order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE CASCADE,
-  CONSTRAINT order_items_menu_item_id_fkey FOREIGN KEY (menu_item_id) REFERENCES public.menu_items(id)
-);
-
-CREATE TABLE public.kitchen_stations (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  restaurant_id uuid NOT NULL,
-  name text NOT NULL,
-  description text,
-  station_type text NOT NULL CHECK (station_type = ANY (ARRAY['cold'::text, 'hot'::text, 'grill'::text, 'fryer'::text, 'pastry'::text, 'beverage'::text, 'expo'::text])),
-  is_active boolean DEFAULT true,
-  display_order integer DEFAULT 0,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT kitchen_stations_pkey PRIMARY KEY (id),
-  CONSTRAINT kitchen_stations_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id)
-);
-
-CREATE TABLE public.order_status_history (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  order_id uuid NOT NULL,
-  order_item_id uuid,
-  old_status text,
-  new_status text NOT NULL,
-  changed_by uuid NOT NULL,
-  changed_at timestamp with time zone DEFAULT now(),
-  notes text,
-  station_id uuid,
-  estimated_completion timestamp with time zone,
-  CONSTRAINT order_status_history_pkey PRIMARY KEY (id),
-  CONSTRAINT order_status_history_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id),
-  CONSTRAINT order_status_history_order_item_id_fkey FOREIGN KEY (order_item_id) REFERENCES public.order_items(id),
-  CONSTRAINT order_status_history_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES public.profiles(id),
-  CONSTRAINT order_status_history_station_id_fkey FOREIGN KEY (station_id) REFERENCES public.kitchen_stations(id)
-);
-
-CREATE TABLE public.kitchen_assignments (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  order_item_id uuid NOT NULL,
-  station_id uuid NOT NULL,
-  assigned_to uuid,
-  assigned_at timestamp with time zone DEFAULT now(),
-  started_at timestamp with time zone,
-  completed_at timestamp with time zone,
-  notes text,
-  CONSTRAINT kitchen_assignments_pkey PRIMARY KEY (id),
-  CONSTRAINT kitchen_assignments_order_item_id_fkey FOREIGN KEY (order_item_id) REFERENCES public.order_items(id),
-  CONSTRAINT kitchen_assignments_station_id_fkey FOREIGN KEY (station_id) REFERENCES public.kitchen_stations(id),
-  CONSTRAINT kitchen_assignments_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.profiles(id)
-);
-
-CREATE TABLE public.menu_item_stations (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  menu_item_id uuid NOT NULL,
-  station_id uuid NOT NULL,
-  is_primary boolean DEFAULT false,
-  preparation_order integer DEFAULT 1,
-  estimated_time integer, -- in minutes
-  CONSTRAINT menu_item_stations_pkey PRIMARY KEY (id),
-  CONSTRAINT menu_item_stations_menu_item_id_fkey FOREIGN KEY (menu_item_id) REFERENCES public.menu_items(id),
-  CONSTRAINT menu_item_stations_station_id_fkey FOREIGN KEY (station_id) REFERENCES public.kitchen_stations(id)
-);
-
-CREATE TABLE public.order_modifications (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  order_item_id uuid NOT NULL,
-  modification_type text NOT NULL CHECK (modification_type = ANY (ARRAY['add'::text, 'remove'::text, 'substitute'::text, 'extra'::text, 'less'::text, 'on_side'::text])),
-  description text NOT NULL,
-  price_adjustment numeric DEFAULT 0,
-  created_by uuid NOT NULL,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT order_modifications_pkey PRIMARY KEY (id),
-  CONSTRAINT order_modifications_order_item_id_fkey FOREIGN KEY (order_item_id) REFERENCES public.order_items(id),
-  CONSTRAINT order_modifications_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
-);
-
-CREATE TABLE public.kitchen_display_settings (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  restaurant_id uuid NOT NULL,
-  station_id uuid,
-  display_name text NOT NULL,
-  show_prep_times boolean DEFAULT true,
-  show_dietary_info boolean DEFAULT true,
-  show_special_instructions boolean DEFAULT true,
-  auto_advance_orders boolean DEFAULT false,
-  sound_notifications boolean DEFAULT true,
-  color_scheme text DEFAULT 'default',
-  font_size text DEFAULT 'medium' CHECK (font_size = ANY (ARRAY['small'::text, 'medium'::text, 'large'::text])),
-  orders_per_page integer DEFAULT 10,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT kitchen_display_settings_pkey PRIMARY KEY (id),
-  CONSTRAINT kitchen_display_settings_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
-  CONSTRAINT kitchen_display_settings_station_id_fkey FOREIGN KEY (station_id) REFERENCES public.kitchen_stations(id)
 );

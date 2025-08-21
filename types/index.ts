@@ -328,6 +328,7 @@ export interface Restaurant {
     id: string
     restaurant_id: string
     day_of_week: 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
+    name: string | null
     is_open: boolean
     open_time: string | null
     close_time: string | null
