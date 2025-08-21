@@ -1,0 +1,546 @@
+/* components/restaurant-canvas/restaurant-canvas.css */
+
+/* ============================================================================
+   RESTAURANT CANVAS STYLES
+   ============================================================================ */
+
+.restaurant-canvas-container {
+  --canvas-bg: #f8f9fa;
+  --canvas-border: #e9ecef;
+  --grid-major: #d1d5db;
+  --grid-minor: #f3f4f6;
+  --selection-color: #3b82f6;
+  --selection-bg: rgba(59, 130, 246, 0.1);
+  
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--canvas-bg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* ============================================================================
+   MAIN CANVAS
+   ============================================================================ */
+
+.restaurant-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: #ffffff;
+  border: 1px solid var(--canvas-border);
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.restaurant-canvas:focus {
+  outline: none;
+}
+
+.restaurant-canvas.dragging {
+  cursor: grabbing !important;
+}
+
+/* ============================================================================
+   GRID SYSTEM
+   ============================================================================ */
+
+.grid-system {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.grid-lines {
+  opacity: 0.6;
+}
+
+.grid-coordinates {
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 10px;
+  fill: #9ca3af;
+  pointer-events: none;
+}
+
+/* ============================================================================
+   RESTAURANT TABLE STYLES
+   ============================================================================ */
+
+.restaurant-table {
+  position: absolute;
+  user-select: none;
+  will-change: transform;
+  z-index: 10;
+}
+
+.restaurant-table:hover {
+  z-index: 15;
+}
+
+.restaurant-table.selected {
+  z-index: 20;
+}
+
+.restaurant-table.dragging {
+  z-index: 1000;
+}
+
+.restaurant-table .table-shape {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease-in-out;
+  cursor: grab;
+  will-change: transform, box-shadow;
+}
+
+.restaurant-table .table-shape:active {
+  cursor: grabbing;
+}
+
+.restaurant-table.dragging .table-shape {
+  transition: none;
+  cursor: grabbing;
+}
+
+/* ============================================================================
+   TABLE TYPES
+   ============================================================================ */
+
+.restaurant-table.round .table-shape {
+  border-radius: 50%;
+}
+
+.restaurant-table.square .table-shape {
+  border-radius: 8px;
+}
+
+.restaurant-table.rectangular .table-shape {
+  border-radius: 12px;
+}
+
+.restaurant-table.bar .table-shape {
+  border-radius: 20px;
+}
+
+/* ============================================================================
+   TABLE STATUS COLORS
+   ============================================================================ */
+
+.restaurant-table.available .table-shape {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border-color: #047857;
+  color: white;
+}
+
+.restaurant-table.occupied .table-shape {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  border-color: #b91c1c;
+  color: white;
+}
+
+.restaurant-table.reserved .table-shape {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border-color: #b45309;
+  color: white;
+}
+
+.restaurant-table.out-of-order .table-shape {
+  background: linear-gradient(135deg, #6b7280, #4b5563);
+  border-color: #374151;
+  color: white;
+}
+
+/* ============================================================================
+   TABLE LABELS
+   ============================================================================ */
+
+.table-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: white;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.table-number {
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.seat-count {
+  font-size: 10px;
+  opacity: 0.9;
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+/* ============================================================================
+   SELECTION HANDLES
+   ============================================================================ */
+
+.selection-handles {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  right: -6px;
+  bottom: -6px;
+  pointer-events: none;
+}
+
+.selection-handles .handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--selection-color);
+  border: 2px solid white;
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: all;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.selection-handles .handle:hover {
+  transform: scale(1.1);
+}
+
+.selection-handles .handle.top-left {
+  top: 0;
+  left: 0;
+  cursor: nw-resize;
+}
+
+.selection-handles .handle.top-right {
+  top: 0;
+  right: 0;
+  cursor: ne-resize;
+}
+
+.selection-handles .handle.bottom-left {
+  bottom: 0;
+  left: 0;
+  cursor: sw-resize;
+}
+
+.selection-handles .handle.bottom-right {
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+}
+
+/* ============================================================================
+   CHAIR INDICATORS
+   ============================================================================ */
+
+.chair-positions {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.chair-indicator {
+  position: absolute;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.restaurant-table:hover .chair-indicator {
+  transform: scale(1.1);
+}
+
+/* ============================================================================
+   STATUS INDICATORS
+   ============================================================================ */
+
+.status-indicator {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: bold;
+  text-align: center;
+  pointer-events: none;
+}
+
+.vip-indicator {
+  position: absolute;
+  animation: vipPulse 2s ease-in-out infinite;
+}
+
+@keyframes vipPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+/* ============================================================================
+   TOOLTIPS
+   ============================================================================ */
+
+.restaurant-table-tooltip {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  max-width: 250px;
+  z-index: 2000;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  animation: tooltipFadeIn 0.2s ease-out;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.restaurant-table-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: rgba(0, 0, 0, 0.9) transparent transparent transparent;
+}
+
+/* ============================================================================
+   SELECTION SYSTEM
+   ============================================================================ */
+
+.selection-box {
+  border: 2px dashed var(--selection-color);
+  background: var(--selection-bg);
+  pointer-events: none;
+  animation: selectionBoxAppear 0.2s ease-out;
+}
+
+@keyframes selectionBoxAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.selection-count-badge {
+  background: var(--selection-color);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: badgeSlideDown 0.3s ease-out;
+}
+
+@keyframes badgeSlideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* ============================================================================
+   LOADING STATES
+   ============================================================================ */
+
+.restaurant-canvas-container.loading {
+  pointer-events: none;
+}
+
+.restaurant-canvas-container.loading::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+/* ============================================================================
+   ANIMATIONS
+   ============================================================================ */
+
+@keyframes tableSelect {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.restaurant-table.just-selected {
+  animation: tableSelect 0.3s ease-out;
+}
+
+@keyframes tableDrop {
+  0% {
+    transform: scale(1.1);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.restaurant-table.just-dropped {
+  animation: tableDrop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(59, 130, 246, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.8);
+  }
+}
+
+.restaurant-table.pulsing {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .restaurant-canvas-container {
+    touch-action: none; /* Prevent default touch behaviors */
+  }
+  
+  .restaurant-table .table-label .table-number {
+    font-size: 12px;
+  }
+  
+  .restaurant-table .table-label .seat-count {
+    font-size: 9px;
+  }
+  
+  .selection-handles .handle {
+    width: 16px;
+    height: 16px;
+  }
+  
+  .chair-indicator {
+    width: 12px !important;
+    height: 12px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .restaurant-table .table-label .table-number {
+    font-size: 10px;
+  }
+  
+  .restaurant-table .table-label .seat-count {
+    font-size: 8px;
+  }
+  
+  .selection-handles .handle {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+/* ============================================================================
+   HIGH CONTRAST MODE
+   ============================================================================ */
+
+@media (prefers-contrast: high) {
+  .restaurant-table.available .table-shape {
+    background: #00aa00;
+    border: 3px solid #000000;
+  }
+  
+  .restaurant-table.occupied .table-shape {
+    background: #cc0000;
+    border: 3px solid #000000;
+  }
+  
+  .restaurant-table.reserved .table-shape {
+    background: #ff8800;
+    border: 3px solid #000000;
+  }
+  
+  .restaurant-table.out-of-order .table-shape {
+    background: #666666;
+    border: 3px solid #000000;
+  }
+}
+
+/* ============================================================================
+   REDUCED MOTION
+   ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .restaurant-table,
+  .restaurant-table .table-shape,
+  .chair-indicator,
+  .selection-box,
+  .selection-count-badge {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ============================================================================
+   PRINT STYLES
+   ============================================================================ */
+
+@media print {
+  .restaurant-canvas-container {
+    overflow: visible;
+    height: auto;
+  }
+  
+  .canvas-controls,
+  .selection-handles,
+  .selection-count-badge {
+    display: none !important;
+  }
+  
+  .restaurant-table .table-shape {
+    box-shadow: none !important;
+    border: 2px solid #000 !important;
+  }
+}

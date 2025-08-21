@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { format, startOfDay, endOfDay, addMinutes, differenceInMinutes, addDays } from "date-fns"
 import { UnifiedFloorPlan } from "@/components/dashboard/unified-floor-plan"
+import { CanvasFloorPlan } from "@/components/dashboard/CanvasFloorPlan"
 import { CheckInQueue } from "@/components/dashboard/checkin-queue"
 import { PendingRequestsPanel } from "@/components/dashboard/pending-requests-panel"
 import { CriticalAlerts } from "@/components/dashboard/critical-alerts"
@@ -59,6 +60,7 @@ export default function DashboardPage() {
     warnings: string[]
     onConfirm: () => void
   }>({ show: false, warnings: [], onConfirm: () => {} })
+  const [useCanvasMode, setUseCanvasMode] = useState(false)
   
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -840,6 +842,21 @@ export default function DashboardPage() {
               <BarChart3 className="h-3 w-3 mr-1" />
               <span className="hidden sm:inline">Timeline</span>
             </Button>
+
+            <Button
+              onClick={() => setUseCanvasMode(!useCanvasMode)}
+              size="sm"
+              className={cn(
+                "px-2 py-1 h-6 text-xs font-medium rounded-md transition-all duration-300",
+                useCanvasMode 
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg" 
+                  : "bg-slate-700/80 hover:bg-slate-600 text-slate-200 border border-slate-600/50"
+              )}
+              title={useCanvasMode ? "Switch to Legacy View" : "Switch to Canvas View"}
+            >
+              <Activity className="h-3 w-3 mr-1" />
+              <span className="hidden sm:inline">{useCanvasMode ? "Canvas" : "Legacy"}</span>
+            </Button>
             
             <Button
               onClick={() => setShowManualBooking(true)}
@@ -870,29 +887,55 @@ export default function DashboardPage() {
       <main className="flex-1 flex overflow-hidden">
         {/* Floor Plan - Takes up remaining space */}
         <div className="flex-1 min-w-0 overflow-hidden">
-          <UnifiedFloorPlan
-            tables={tables}
-            bookings={filteredBookings}
-            currentTime={currentTime}
-            restaurantId={restaurantId}
-            userId={userId}
-            onTableClick={(table, statusInfo) => {
-              if (statusInfo.current) {
-                setSelectedBooking(todaysBookings.find(b => b.id === statusInfo.current.id))
-              } else if (statusInfo.upcoming) {
-                setSelectedBooking(todaysBookings.find(b => b.id === statusInfo.upcoming.id))
+          {useCanvasMode ? (
+            <CanvasFloorPlan
+              tables={tables}
+              bookings={filteredBookings}
+              currentTime={currentTime}
+              restaurantId={restaurantId}
+              userId={userId}
+              onTableClick={(table, statusInfo) => {
+                if (statusInfo.current) {
+                  setSelectedBooking(todaysBookings.find(b => b.id === statusInfo.current.id))
+                } else if (statusInfo.upcoming) {
+                  setSelectedBooking(todaysBookings.find(b => b.id === statusInfo.upcoming.id))
+                }
+              }}
+              onStatusUpdate={(bookingId, status) => 
+                updateBookingMutation.mutate({ bookingId, updates: { status } })
               }
-            }}
-            onStatusUpdate={(bookingId, status) => 
-              updateBookingMutation.mutate({ bookingId, updates: { status } })
-            }
-            onTableSwitch={handleTableSwitch}
-            onCheckIn={handleCheckIn}
-            onTableUpdate={(tableId, position) => 
-              updateTablePositionMutation.mutate({ tableId, position })
-            }
-            searchQuery={searchQuery}
-          />
+              onTableSwitch={handleTableSwitch}
+              onCheckIn={handleCheckIn}
+              onTableUpdate={(tableId, position) => 
+                updateTablePositionMutation.mutate({ tableId, position })
+              }
+              searchQuery={searchQuery}
+            />
+          ) : (
+            <UnifiedFloorPlan
+              tables={tables}
+              bookings={filteredBookings}
+              currentTime={currentTime}
+              restaurantId={restaurantId}
+              userId={userId}
+              onTableClick={(table, statusInfo) => {
+                if (statusInfo.current) {
+                  setSelectedBooking(todaysBookings.find(b => b.id === statusInfo.current.id))
+                } else if (statusInfo.upcoming) {
+                  setSelectedBooking(todaysBookings.find(b => b.id === statusInfo.upcoming.id))
+                }
+              }}
+              onStatusUpdate={(bookingId, status) => 
+                updateBookingMutation.mutate({ bookingId, updates: { status } })
+              }
+              onTableSwitch={handleTableSwitch}
+              onCheckIn={handleCheckIn}
+              onTableUpdate={(tableId, position) => 
+                updateTablePositionMutation.mutate({ tableId, position })
+              }
+              searchQuery={searchQuery}
+            />
+          )}
         </div>
 
         {/* Check-in Queue - Properly sized for tablets */}
