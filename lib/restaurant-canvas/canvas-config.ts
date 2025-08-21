@@ -33,9 +33,9 @@ export const RESTAURANT_CANVAS_CONFIG = {
     defaultSeats: 4,
     colors: {
       available: "#28a745",
-      occupied: "#dc3545", 
+      occupied: "#dc3545",
       reserved: "#ffc107",
-      'out-of-order': "#6c757d",
+      "out-of-order": "#6c757d",
       selected: "#007bff",
     },
   },
@@ -57,41 +57,41 @@ export const RESTAURANT_CANVAS_CONFIG = {
 
 // Table type configuration matching your existing schema
 export const TABLE_TYPE_CONFIG = {
-  booth: { 
-    label: "Booth", 
-    color: "#4f46e5", 
+  booth: {
+    label: "Booth",
+    color: "#4f46e5",
     defaultSeats: 4,
-    defaultSize: { width: 4, height: 2 }
+    defaultSize: { width: 4, height: 2 },
   },
-  window: { 
-    label: "Window", 
-    color: "#059669", 
+  window: {
+    label: "Window",
+    color: "#059669",
     defaultSeats: 2,
-    defaultSize: { width: 3, height: 3 }
+    defaultSize: { width: 3, height: 3 },
   },
-  patio: { 
-    label: "Patio", 
-    color: "#dc2626", 
+  patio: {
+    label: "Patio",
+    color: "#dc2626",
     defaultSeats: 6,
-    defaultSize: { width: 4, height: 4 }
+    defaultSize: { width: 4, height: 4 },
   },
-  standard: { 
-    label: "Standard", 
-    color: "#6b7280", 
+  standard: {
+    label: "Standard",
+    color: "#6b7280",
     defaultSeats: 4,
-    defaultSize: { width: 3, height: 3 }
+    defaultSize: { width: 3, height: 3 },
   },
-  bar: { 
-    label: "Bar", 
-    color: "#7c3aed", 
+  bar: {
+    label: "Bar",
+    color: "#7c3aed",
     defaultSeats: 8,
-    defaultSize: { width: 6, height: 1 }
+    defaultSize: { width: 6, height: 1 },
   },
-  private: { 
-    label: "Private", 
-    color: "#be185d", 
+  private: {
+    label: "Private",
+    color: "#be185d",
     defaultSeats: 6,
-    defaultSize: { width: 4, height: 4 }
+    defaultSize: { width: 4, height: 4 },
   },
 };
 
@@ -108,24 +108,24 @@ export const STATUS_CONFIG = {
     label: "Available",
     color: "#28a745",
     icon: "✅",
-    priority: 1
+    priority: 1,
   },
   occupied: {
-    label: "Occupied", 
+    label: "Occupied",
     color: "#dc3545",
     icon: "👥",
-    priority: 4
+    priority: 4,
   },
   reserved: {
     label: "Reserved",
-    color: "#ffc107", 
+    color: "#ffc107",
     icon: "🏷️",
-    priority: 3
+    priority: 3,
   },
-  'out-of-order': {
+  "out-of-order": {
     label: "Out of Order",
     color: "#6c757d",
-    icon: "🚫", 
-    priority: 2
-  }
+    icon: "🚫",
+    priority: 2,
+  },
 };
