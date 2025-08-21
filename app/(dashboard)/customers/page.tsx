@@ -156,7 +156,17 @@ export default function CustomersPage() {
             phone_number,
             avatar_url,
             allergies,
-            dietary_restrictions
+            dietary_restrictions,
+            favorite_cuisines,
+            preferred_party_size,
+            loyalty_points,
+            membership_tier,
+            notification_preferences,
+            total_bookings,
+            completed_bookings,
+            cancelled_bookings,
+            no_show_bookings,
+            user_rating
           ),
           tags:customer_tag_assignments(
             tag:customer_tags(*)
@@ -185,16 +195,46 @@ export default function CustomersPage() {
 
       // Create a Set of VIP user IDs for quick lookup
       const vipUserIds = new Set(vipData?.map(vip => vip.user_id) || [])
+      
+      // Get email addresses for customers with user accounts
+      const customerUserIds = customersData?.filter(c => c.user_id).map(c => c.user_id) || []
+      let userEmails: any[] = []
+      
+      if (customerUserIds.length > 0) {
+        try {
+          const { data: emailData, error: emailError } = await supabase.auth.admin.listUsers()
+          if (emailData?.users && !emailError) {
+            userEmails = emailData.users
+              .filter(user => customerUserIds.includes(user.id))
+              .map(user => ({ 
+                id: user.id, 
+                email: user.email, 
+                email_confirmed: !!user.email_confirmed_at,
+                phone: user.phone,
+                created_at: user.created_at
+              }))
+          }
+        } catch (error) {
+          console.log('Could not fetch user emails:', error)
+          // Continue without emails if there's an error
+        }
+      }
+      
+      const emailMap = new Map(userEmails.map(u => [u.id, u]))
 
       // Transform the data and check VIP status
       const transformedData = customersData?.map(customer => {
         // Check if customer has active VIP status
         const isVip = customer.vip_status || (customer.user_id && vipUserIds.has(customer.user_id))
+        const emailInfo = customer.user_id ? emailMap.get(customer.user_id) : null
         
         return {
           ...customer,
           vip_status: isVip, // Override with combined VIP status
-          tags: customer.tags?.map((t: any) => t.tag) || []
+          tags: customer.tags?.map((t: any) => t.tag) || [],
+          email: emailInfo?.email || customer.guest_email,
+          email_confirmed: emailInfo?.email_confirmed || false,
+          auth_phone: emailInfo?.phone
         }
       }) || []
 
@@ -229,8 +269,8 @@ export default function CustomersPage() {
       const search = filters.search.toLowerCase()
       filtered = filtered.filter(customer => {
         const name = (customer.profile?.full_name || customer.guest_name || '').toLowerCase()
-        const email = (customer.guest_email || '').toLowerCase()
-        const phone = (customer.profile?.phone_number || customer.guest_phone || '').toLowerCase()
+        const email = (customer.email || customer.guest_email || '').toLowerCase()
+        const phone = (customer.profile?.phone_number || customer.guest_phone || customer.auth_phone || '').toLowerCase()
         return name.includes(search) || email.includes(search) || phone.includes(search)
       })
     }
@@ -411,14 +451,28 @@ export default function CustomersPage() {
 
   const handleExportCustomers = () => {
     // Convert customers to CSV
-    const headers = ['Name', 'Email', 'Phone', 'Total Bookings', 'Last Visit', 'VIP', 'Tags']
+    const headers = [
+      'Name', 'Email', 'Email Verified', 'Phone', 'Total Bookings', 'Completed Bookings', 
+      'Cancelled Bookings', 'No Shows', 'Last Visit', 'First Visit', 'VIP', 'Membership Tier',
+      'Loyalty Points', 'Dietary Restrictions', 'Allergies', 'Favorite Cuisines', 'Tags'
+    ]
     const rows = filteredCustomers.map(customer => [
       customer.profile?.full_name || customer.guest_name || '',
-      customer.guest_email || '',
-      customer.profile?.phone_number || customer.guest_phone || '',
+      customer.email || customer.guest_email || '',
+      customer.email_confirmed ? 'Yes' : 'No',
+      customer.profile?.phone_number || customer.guest_phone || customer.auth_phone || '',
       customer.total_bookings,
+      customer.profile?.completed_bookings || 0,
+      customer.profile?.cancelled_bookings || 0,
+      customer.profile?.no_show_bookings || 0,
       customer.last_visit ? format(new Date(customer.last_visit), 'yyyy-MM-dd') : '',
+      customer.first_visit ? format(new Date(customer.first_visit), 'yyyy-MM-dd') : '',
       customer.vip_status ? 'Yes' : 'No',
+      customer.profile?.membership_tier || 'Bronze',
+      customer.profile?.loyalty_points || 0,
+      customer.profile?.dietary_restrictions?.join('; ') || '',
+      customer.profile?.allergies?.join('; ') || '',
+      customer.profile?.favorite_cuisines?.join('; ') || '',
       customer.tags?.map(t => t.name).join(', ') || ''
     ])
 
@@ -690,17 +744,42 @@ export default function CustomersPage() {
                         </div>
                         
                         <div className="flex items-center gap-4 text-sm text-gray-600">
-                          {customer.guest_email && (
+                          {(customer.email || customer.guest_email) && (
                             <span className="flex items-center gap-1">
                               <Mail className="h-3 w-3" />
-                              {customer.guest_email}
+                              <span className="truncate max-w-[200px]">{customer.email || customer.guest_email}</span>
+                              {customer.email_confirmed && (
+                                <div className="h-2 w-2 bg-green-500 rounded-full ml-1" title="Email verified" />
+                              )}
                             </span>
                           )}
-                          {(customer.profile?.phone_number || customer.guest_phone) && (
+                          {(customer.profile?.phone_number || customer.guest_phone || customer.auth_phone) && (
                             <span className="flex items-center gap-1">
                               <Phone className="h-3 w-3" />
-                              {customer.profile?.phone_number || customer.guest_phone}
+                              {customer.profile?.phone_number || customer.guest_phone || customer.auth_phone}
                             </span>
+                          )}
+                        </div>
+                        
+                        {/* Additional customer info */}
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                          {customer.profile?.membership_tier && (
+                            <Badge variant="outline" className="text-xs">
+                              {customer.profile.membership_tier.charAt(0).toUpperCase() + customer.profile.membership_tier.slice(1)} Member
+                            </Badge>
+                          )}
+                          {(customer.profile?.loyalty_points || 0) > 0 && (
+                            <span>{customer.profile?.loyalty_points} pts</span>
+                          )}
+                          {(customer.profile?.dietary_restrictions?.length || 0) > 0 && (
+                            <Badge variant="outline" className="text-xs text-orange-600">
+                              Dietary: {customer.profile?.dietary_restrictions?.length} items
+                            </Badge>
+                          )}
+                          {(customer.profile?.allergies?.length || 0) > 0 && (
+                            <Badge variant="outline" className="text-xs text-red-600">
+                              Allergies: {customer.profile?.allergies?.length} items
+                            </Badge>
                           )}
                         </div>
                         
@@ -720,12 +799,42 @@ export default function CustomersPage() {
                     </div>
                     
                     <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <p className="text-sm font-medium">{customer.total_bookings} bookings</p>
+                      <div className="text-right space-y-1">
+                        <p className="text-sm font-medium">{customer.total_bookings} total bookings</p>
+                        
+                        {/* Booking breakdown */}
+                        <div className="flex items-center gap-2 text-xs">
+                          {(customer.profile?.completed_bookings || 0) > 0 && (
+                            <span className="text-green-600">{customer.profile?.completed_bookings} completed</span>
+                          )}
+                          {(customer.profile?.cancelled_bookings || 0) > 0 && (
+                            <span className="text-orange-600">{customer.profile?.cancelled_bookings} cancelled</span>
+                          )}
+                          {(customer.profile?.no_show_bookings || 0) > 0 && (
+                            <span className="text-red-600">{customer.profile?.no_show_bookings} no-shows</span>
+                          )}
+                        </div>
+                        
+                        {/* Customer rating */}
+                        {customer.profile?.user_rating && customer.profile.user_rating !== 5.0 && (
+                          <div className="flex items-center gap-1 text-xs">
+                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                            <span>Rating: {customer.profile.user_rating.toFixed(1)}</span>
+                          </div>
+                        )}
+                        
+                        {/* Last visit */}
                         {customer.last_visit && (
                           <p className="text-xs text-gray-600">
                             <Calendar className="inline h-3 w-3 mr-1" />
-                            {format(new Date(customer.last_visit), 'MMM d, yyyy')}
+                            Last: {format(new Date(customer.last_visit), 'MMM d, yyyy')}
+                          </p>
+                        )}
+                        
+                        {/* Total spent estimate */}
+                        {customer.total_spent > 0 && (
+                          <p className="text-xs text-gray-600">
+                            Est. spent: ${customer.total_spent.toFixed(0)}
                           </p>
                         )}
                       </div>

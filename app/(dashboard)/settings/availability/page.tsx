@@ -81,7 +81,7 @@ const regularHoursSchema = z.object({
 
 // Special hours schema
 const specialHoursSchema = z.object({
-  date: z.date(),
+  dates: z.array(z.date()).min(1, "Select at least one date"),
   is_closed: z.boolean(),
   open_time: z.string().optional(),
   close_time: z.string().optional(),
@@ -186,6 +186,7 @@ export default function EnhancedAvailabilitySettingsPage() {
   const specialHoursForm = useForm<SpecialHoursFormData>({
     resolver: zodResolver(specialHoursSchema),
     defaultValues: {
+      dates: [],
       is_closed: false,
       open_time: "09:00",
       close_time: "22:00",
@@ -273,17 +274,23 @@ export default function EnhancedAvailabilitySettingsPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
+      const rows = (data.dates || []).map((d) => ({
+        restaurant_id: restaurantId,
+        date: format(d, 'yyyy-MM-dd'),
+        is_closed: data.is_closed,
+        open_time: !data.is_closed ? data.open_time : null,
+        close_time: !data.is_closed ? data.close_time : null,
+        reason: data.reason,
+        created_by: user.id,
+      }))
+
+      if (rows.length === 0) {
+        throw new Error("Please select at least one date")
+      }
+
       const { error } = await supabase
         .from("restaurant_special_hours")
-        .upsert({
-          restaurant_id: restaurantId,
-          date: format(data.date, 'yyyy-MM-dd'),
-          is_closed: data.is_closed,
-          open_time: !data.is_closed ? data.open_time : null,
-          close_time: !data.is_closed ? data.close_time : null,
-          reason: data.reason,
-          created_by: user.id,
-        }, {
+        .upsert(rows, {
           onConflict: "restaurant_id,date",
         })
 
@@ -636,19 +643,19 @@ export default function EnhancedAvailabilitySettingsPage() {
           <DialogHeader>
             <DialogTitle>Add Special Hours</DialogTitle>
             <DialogDescription>
-              Set different operating hours for a specific date.
+              Set different operating hours for specific date(s).
             </DialogDescription>
           </DialogHeader>
           <Form {...specialHoursForm}>
             <form onSubmit={specialHoursForm.handleSubmit((data) => addSpecialHoursMutation.mutate(data))} className="space-y-4">
               <FormField
                 control={specialHoursForm.control}
-                name="date"
+                name="dates"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Date</FormLabel>
+                    <FormLabel>Dates</FormLabel>
                     <Calendar
-                      mode="single"
+                      mode="multiple"
                       selected={field.value}
                       onSelect={field.onChange}
                       disabled={(date) =>

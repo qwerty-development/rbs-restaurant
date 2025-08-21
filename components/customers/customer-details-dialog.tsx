@@ -44,7 +44,9 @@ import {
   Link2,
   StickyNote,
   Clock,
-  Ban
+  Ban,
+  Shield,
+  ShieldCheck
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { RestaurantCustomer, CustomerNote, CustomerRelationship, CustomerTag } from '@/types/customer'
@@ -90,10 +92,10 @@ export function CustomerDetailsDialog({
   const [availableTags, setAvailableTags] = useState<CustomerTag[]>([])
   const [customerTags, setCustomerTags] = useState<CustomerTag[]>(customer.tags || [])
   const [availableCustomers, setAvailableCustomers] = useState<CustomerForSelection[]>([])
+  const [customerWithEmail, setCustomerWithEmail] = useState<RestaurantCustomer>(customer)
   
   // Forms
   const [newNote, setNewNote] = useState({ note: '', category: 'general', is_important: false })
-  const [editingNote, setEditingNote] = useState<string | null>(null)
   const [newRelationship, setNewRelationship] = useState({
     related_customer_id: '',
     relationship_type: 'friend' as const,
@@ -110,6 +112,31 @@ export function CustomerDetailsDialog({
   const loadAdditionalData = async () => {
     try {
       setLoading(true)
+
+      // Fetch email information for the customer if they have a user_id
+      let updatedCustomer = { ...customer }
+      if (customer.user_id) {
+        try {
+          const { data: emailData, error: emailError } = await supabase.auth.admin.listUsers()
+          if (emailData?.users && !emailError) {
+            const userEmail = emailData.users.find(user => user.id === customer.user_id)
+            if (userEmail) {
+              updatedCustomer = {
+                ...customer,
+                email: userEmail.email,
+                email_confirmed: !!userEmail.email_confirmed_at,
+                auth_phone: userEmail.phone
+              }
+            }
+          }
+        } catch (error) {
+          console.log('Could not fetch user email:', error)
+          // Continue without email if there's an error
+        }
+      }
+      
+      // Update the customer with email information
+      setCustomerWithEmail(updatedCustomer)
 
       // Load relationships
       const { data: relationshipsData } = await supabase
@@ -329,7 +356,7 @@ export function CustomerDetailsDialog({
   }
 
   const getInitials = () => {
-    const name = customer.profile?.full_name || customer.guest_name || 'G'
+    const name = customerWithEmail.profile?.full_name || customerWithEmail.guest_name || 'G'
     return name.split(' ').map(n => n[0]).join('').toUpperCase()
   }
 
@@ -354,22 +381,22 @@ export function CustomerDetailsDialog({
           {/* Customer Header */}
           <div className="flex items-start gap-4">
             <Avatar className="h-16 w-16">
-              <AvatarImage src={customer.profile?.avatar_url} />
+              <AvatarImage src={customerWithEmail.profile?.avatar_url} />
               <AvatarFallback>{getInitials()}</AvatarFallback>
             </Avatar>
             
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <h2 className="text-2xl font-semibold">
-                  {customer.profile?.full_name || customer.guest_name || 'Guest Customer'}
+                  {customerWithEmail.profile?.full_name || customerWithEmail.guest_name || 'Guest Customer'}
                 </h2>
-                {customer.vip_status && (
+                {customerWithEmail.vip_status && (
                   <Badge variant="secondary">
                     <Star className="h-3 w-3 mr-1" />
                     VIP
                   </Badge>
                 )}
-                {customer.blacklisted && (
+                {customerWithEmail.blacklisted && (
                   <Badge variant="destructive">
                     <Ban className="h-3 w-3 mr-1" />
                     Blacklisted
@@ -378,22 +405,31 @@ export function CustomerDetailsDialog({
               </div>
               
               <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-600">
-                {customer.guest_email && (
+                {(customerWithEmail.email || customerWithEmail.guest_email) && (
                   <span className="flex items-center gap-1">
                     <Mail className="h-3 w-3" />
-                    {customer.guest_email}
+                    <span>{customerWithEmail.email || customerWithEmail.guest_email}</span>
+                    {customerWithEmail.email_confirmed && (
+                      <div className="h-2 w-2 bg-green-500 rounded-full ml-1" title="Email verified" />
+                    )}
                   </span>
                 )}
-                {(customer.profile?.phone_number || customer.guest_phone) && (
+                {(customerWithEmail.profile?.phone_number || customerWithEmail.guest_phone || customerWithEmail.auth_phone) && (
                   <span className="flex items-center gap-1">
                     <Phone className="h-3 w-3" />
-                    {customer.profile?.phone_number || customer.guest_phone}
+                    {customerWithEmail.profile?.phone_number || customerWithEmail.guest_phone || customerWithEmail.auth_phone}
                   </span>
                 )}
-                {customer.first_visit && (
+                {customerWithEmail.first_visit && (
                   <span className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    Customer since {format(new Date(customer.first_visit), 'MMM yyyy')}
+                    Customer since {format(new Date(customerWithEmail.first_visit), 'MMM yyyy')}
+                  </span>
+                )}
+                {customerWithEmail.profile?.membership_tier && (
+                  <span className="flex items-center gap-1">
+                    <Star className="h-3 w-3" />
+                    {customerWithEmail.profile.membership_tier.charAt(0).toUpperCase() + customerWithEmail.profile.membership_tier.slice(1)} Member
                   </span>
                 )}
               </div>
@@ -414,9 +450,7 @@ export function CustomerDetailsDialog({
                     variant="ghost"
                     size="sm"
                     className="h-6"
-                    onClick={() => {
-                      // Show tag selection
-                    }}
+                    onClick={() => setActiveTab('tags')}
                   >
                     <Plus className="h-3 w-3" />
                   </Button>
@@ -426,45 +460,100 @@ export function CustomerDetailsDialog({
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
               <CardHeader className="p-4">
                 <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
               </CardHeader>
               <CardContent className="p-4 pt-0">
                 <div className="text-2xl font-bold">{customer.total_bookings}</div>
+                {customer.profile?.completed_bookings !== undefined && (
+                  <p className="text-xs text-green-600 mt-1">
+                    {customer.profile.completed_bookings} completed
+                  </p>
+                )}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="p-4">
-                <CardTitle className="text-sm font-medium">Avg Party Size</CardTitle>
+                <CardTitle className="text-sm font-medium">Loyalty Points</CardTitle>
               </CardHeader>
               <CardContent className="p-4 pt-0">
                 <div className="text-2xl font-bold">
-                  {customer.average_party_size?.toFixed(1) || '0'}
+                  {customer.profile?.loyalty_points || 0}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">points earned</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="p-4">
+                <CardTitle className="text-sm font-medium">Reliability</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-2xl font-bold">
+                  {customer.profile?.user_rating?.toFixed(1) || '5.0'}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">out of 5.0</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="p-4">
+                <CardTitle className="text-sm font-medium">Issues</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-2xl font-bold text-red-600">
+                  {customer.no_show_count + customer.cancelled_count}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {customer.no_show_count} no-shows, {customer.cancelled_count} cancellations
                 </div>
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader className="p-4">
-                <CardTitle className="text-sm font-medium">No Shows</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="text-2xl font-bold">{customer.no_show_count}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="p-4">
-                <CardTitle className="text-sm font-medium">Cancellations</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="text-2xl font-bold">{customer.cancelled_count}</div>
-              </CardContent>
-            </Card>
           </div>
+          
+          {/* Additional Profile Info Cards */}
+          {customer.profile && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {customer.profile.preferred_party_size && customer.profile.preferred_party_size !== 2 && (
+                <Card>
+                  <CardHeader className="p-4">
+                    <CardTitle className="text-sm font-medium">Preferred Party Size</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <div className="text-xl font-bold">{customer.profile.preferred_party_size}</div>
+                    <p className="text-xs text-muted-foreground mt-1">typical group size</p>
+                  </CardContent>
+                </Card>
+              )}
+              
+              {customer.total_spent > 0 && (
+                <Card>
+                  <CardHeader className="p-4">
+                    <CardTitle className="text-sm font-medium">Est. Total Spent</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <div className="text-xl font-bold">${customer.total_spent.toFixed(0)}</div>
+                    <p className="text-xs text-muted-foreground mt-1">lifetime value</p>
+                  </CardContent>
+                </Card>
+              )}
+              
+              {customer.average_party_size > 0 && (
+                <Card>
+                  <CardHeader className="p-4">
+                    <CardTitle className="text-sm font-medium">Avg Party Size</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <div className="text-xl font-bold">{customer.average_party_size.toFixed(1)}</div>
+                    <p className="text-xs text-muted-foreground mt-1">actual average</p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -477,76 +566,233 @@ export function CustomerDetailsDialog({
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4">
-              {/* Dietary Restrictions and Allergies */}
+              {/* Customer Profile Information */}
               {customer.profile && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Dietary Information</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {customer.profile.dietary_restrictions && customer.profile.dietary_restrictions.length > 0 && (
-                        <div>
-                          <Label className="text-sm font-medium">Dietary Restrictions</Label>
-                          <div className="flex flex-wrap gap-2 mt-1">
-                            {customer.profile.dietary_restrictions.map((restriction, idx) => (
-                              <Badge key={idx} variant="secondary">
-                                {restriction}
-                              </Badge>
-                            ))}
+                <div className="grid gap-4 md:grid-cols-2">
+                  {/* Dietary Information */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Dietary Information</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {customer.profile.dietary_restrictions && customer.profile.dietary_restrictions.length > 0 && (
+                          <div>
+                            <Label className="text-sm font-medium">Dietary Restrictions</Label>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {customer.profile.dietary_restrictions.map((restriction, idx) => (
+                                <Badge key={idx} variant="outline" className="text-orange-600 border-orange-600">
+                                  {restriction}
+                                </Badge>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                      
-                      {customer.profile.allergies && customer.profile.allergies.length > 0 && (
-                        <div>
-                          <Label className="text-sm font-medium">Allergies</Label>
-                          <div className="flex flex-wrap gap-2 mt-1">
-                            {customer.profile.allergies.map((allergy, idx) => (
-                              <Badge key={idx} variant="destructive">
-                                {allergy}
-                              </Badge>
-                            ))}
+                        )}
+                        
+                        {customer.profile.allergies && customer.profile.allergies.length > 0 && (
+                          <div>
+                            <Label className="text-sm font-medium">Allergies</Label>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {customer.profile.allergies.map((allergy, idx) => (
+                                <Badge key={idx} variant="destructive">
+                                  {allergy}
+                                </Badge>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                        )}
+                        
+                        {customer.profile.favorite_cuisines && customer.profile.favorite_cuisines.length > 0 && (
+                          <div>
+                            <Label className="text-sm font-medium">Favorite Cuisines</Label>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {customer.profile.favorite_cuisines.map((cuisine, idx) => (
+                                <Badge key={idx} variant="secondary" className="bg-blue-50 text-blue-700">
+                                  {cuisine}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {(!customer.profile.dietary_restrictions || customer.profile.dietary_restrictions.length === 0) &&
+                         (!customer.profile.allergies || customer.profile.allergies.length === 0) &&
+                         (!customer.profile.favorite_cuisines || customer.profile.favorite_cuisines.length === 0) && (
+                          <p className="text-sm text-muted-foreground">No dietary information available</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Communication Preferences */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Communication Preferences</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {customer.profile.notification_preferences && (
+                          <div>
+                            <Label className="text-sm font-medium">Notifications</Label>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {customer.profile.notification_preferences.email && (
+                                <Badge variant="outline" className="text-blue-600 border-blue-600">
+                                  <Mail className="h-3 w-3 mr-1" />
+                                  Email
+                                </Badge>
+                              )}
+                              {customer.profile.notification_preferences.sms && (
+                                <Badge variant="outline" className="text-green-600 border-green-600">
+                                  <Phone className="h-3 w-3 mr-1" />
+                                  SMS
+                                </Badge>
+                              )}
+                              {customer.profile.notification_preferences.push && (
+                                <Badge variant="outline" className="text-purple-600 border-purple-600">
+                                  Push
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {customer.email_confirmed !== undefined && (
+                          <div>
+                            <Label className="text-sm font-medium">Email Status</Label>
+                            <div className="flex items-center gap-2 mt-1">
+                              {customer.email_confirmed ? (
+                                <Badge variant="outline" className="text-green-600 border-green-600">
+                                  ✓ Verified
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                  ! Unverified
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {!customer.profile.notification_preferences && !customer.email_confirmed && (
+                          <p className="text-sm text-muted-foreground">No communication preferences available</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               )}
 
               {/* Customer Insights */}
               <Card>
                 <CardHeader>
                   <CardTitle>Customer Insights</CardTitle>
+                  <CardDescription>
+                    Key information and behavioral patterns
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-2 text-sm">
-                    {customer.last_visit && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Last Visit</span>
-                        <span className="font-medium">
-                          {format(new Date(customer.last_visit), 'MMM d, yyyy')}
-                        </span>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {/* Visit Information */}
+                    <div className="space-y-3">
+                      <h4 className="font-medium text-sm">Visit History</h4>
+                      <div className="space-y-2 text-sm">
+                        {customer.last_visit && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Last Visit</span>
+                            <span className="font-medium">
+                              {format(new Date(customer.last_visit), 'MMM d, yyyy')}
+                            </span>
+                          </div>
+                        )}
+                        {customer.first_visit && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">First Visit</span>
+                            <span className="font-medium">
+                              {format(new Date(customer.first_visit), 'MMM d, yyyy')}
+                            </span>
+                          </div>
+                        )}
+                        {customer.profile?.total_bookings !== undefined && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Success Rate</span>
+                            <span className="font-medium">
+                              {customer.profile.total_bookings > 0 ? 
+                                ((((customer.profile.completed_bookings || 0) / customer.profile.total_bookings) * 100).toFixed(1) + '%') : 
+                                'N/A'
+                              }
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                    {customer.preferred_table_types && customer.preferred_table_types.length > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Preferred Tables</span>
-                        <span className="font-medium">
-                          {customer.preferred_table_types.join(', ')}
-                        </span>
+                    </div>
+                    
+                    {/* Preferences */}
+                    <div className="space-y-3">
+                      <h4 className="font-medium text-sm">Preferences</h4>
+                      <div className="space-y-2 text-sm">
+                        {customer.preferred_table_types && customer.preferred_table_types.length > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Preferred Tables</span>
+                            <span className="font-medium">
+                              {customer.preferred_table_types.join(', ')}
+                            </span>
+                          </div>
+                        )}
+                        {customer.preferred_time_slots && customer.preferred_time_slots.length > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Preferred Times</span>
+                            <span className="font-medium">
+                              {customer.preferred_time_slots.join(', ')}
+                            </span>
+                          </div>
+                        )}
+                        {customer.profile?.preferred_party_size && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Preferred Party Size</span>
+                            <span className="font-medium">
+                              {customer.profile.preferred_party_size} people
+                            </span>
+                          </div>
+                        )}
+                        {customer.average_party_size > 0 && customer.profile?.preferred_party_size && 
+                         customer.average_party_size !== customer.profile.preferred_party_size && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Actual Avg Party Size</span>
+                            <span className="font-medium">
+                              {customer.average_party_size.toFixed(1)} people
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                    {customer.preferred_time_slots && customer.preferred_time_slots.length > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Preferred Times</span>
-                        <span className="font-medium">
-                          {customer.preferred_time_slots.join(', ')}
-                        </span>
-                      </div>
-                    )}
+                    </div>
                   </div>
+                  
+                  {/* Special Notes */}
+                  {customer.blacklisted && (
+                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="flex items-center gap-2 text-red-800">
+                        <AlertCircle className="h-4 w-4" />
+                        <span className="font-medium">Blacklisted Customer</span>
+                      </div>
+                      {customer.blacklist_reason && (
+                        <p className="text-sm text-red-700 mt-1">
+                          Reason: {customer.blacklist_reason}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  
+                  {customer.vip_status && (
+                    <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <div className="flex items-center gap-2 text-yellow-800">
+                        <Star className="h-4 w-4" />
+                        <span className="font-medium">VIP Customer</span>
+                      </div>
+                      <p className="text-sm text-yellow-700 mt-1">
+                        This customer receives priority booking and special treatment.
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -886,40 +1132,81 @@ export function CustomerDetailsDialog({
               <Card>
                 <CardHeader>
                   <CardTitle>Recent Bookings</CardTitle>
+                  <CardDescription>
+                    Last 10 bookings for this customer
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {bookingHistory.map((booking) => (
                       <div
                         key={booking.id}
-                        className="flex items-center justify-between p-3 border rounded-lg"
+                        className="flex items-start justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
                       >
-                        <div>
+                        <div className="space-y-1">
                           <p className="font-medium">
                             {format(new Date(booking.booking_time), 'MMM d, yyyy - h:mm a')}
                           </p>
-                          <p className="text-sm text-gray-600">
-                            Party of {booking.party_size} • {booking.status}
-                          </p>
+                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                            <span className="flex items-center gap-1">
+                              <Users className="h-3 w-3" />
+                              Party of {booking.party_size}
+                            </span>
+                            {booking.occasion && (
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {booking.occasion}
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {format(new Date(booking.created_at), 'MMM d')}
+                            </span>
+                          </div>
+                          {booking.special_requests && (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Special requests: {booking.special_requests}
+                            </p>
+                          )}
+                          {booking.dietary_notes && booking.dietary_notes.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {booking.dietary_notes.map((note: string, idx: number) => (
+                                <Badge key={idx} variant="outline" className="text-xs">
+                                  {note}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         
-                        <Badge
-                          variant={
-                            booking.status === 'completed' ? 'default' :
-                            booking.status === 'cancelled_by_user' ? 'destructive' :
-                            booking.status === 'no_show' ? 'destructive' :
-                            'secondary'
-                          }
-                        >
-                          {booking.status}
-                        </Badge>
+                        <div className="flex flex-col items-end gap-2">
+                          <Badge
+                            variant={
+                              booking.status === 'completed' ? 'default' :
+                              booking.status === 'confirmed' ? 'secondary' :
+                              booking.status === 'cancelled_by_user' || booking.status === 'cancelled_by_restaurant' ? 'destructive' :
+                              booking.status === 'no_show' ? 'destructive' :
+                              'outline'
+                            }
+                          >
+                            {booking.status.replace('_', ' ')}
+                          </Badge>
+                          {booking.confirmation_code && (
+                            <span className="text-xs text-muted-foreground">
+                              #{booking.confirmation_code}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     ))}
                     
                     {bookingHistory.length === 0 && (
-                      <p className="text-center text-gray-500 py-4">
-                        No booking history found.
-                      </p>
+                      <div className="text-center py-8">
+                        <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-muted-foreground">
+                          No booking history found.
+                        </p>
+                      </div>
                     )}
                   </div>
                 </CardContent>

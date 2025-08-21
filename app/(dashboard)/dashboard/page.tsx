@@ -13,6 +13,7 @@ import { TodaysTimeline } from "@/components/dashboard/todays-timeline"
 import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
 import { InstallPrompt } from "@/components/pwa/install-prompt"
 import { BookingDetails } from "@/components/bookings/booking-details"
+import { BookingConflictAlerts } from "@/components/dashboard/booking-conflict-alerts"
 import { TableAvailabilityService } from "@/lib/table-availability"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
 import { BookingRequestService } from "@/lib/booking-request-service"
@@ -920,6 +921,23 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+
+          {/* Booking Conflict Alerts */}
+          <div className="px-2 py-1 flex-shrink-0">
+            <BookingConflictAlerts
+              bookings={activeBookings}
+              tables={tables}
+              currentTime={currentTime}
+              onSelectBooking={setSelectedBooking}
+              onOpenTableSwitch={(bookingId) => {
+                const booking = activeBookings.find(b => b.id === bookingId)
+                if (booking) {
+                  // Select the booking to trigger table switch options
+                  setSelectedBooking(booking)
+                }
+              }}
+            />
+          </div>
           
           {/* Check-in Queue - Takes remaining space */}
           <div className="flex-1 overflow-hidden">

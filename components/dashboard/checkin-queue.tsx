@@ -34,11 +34,13 @@ import {
   Play,
   Activity,
   TrendingUp,
-  Users
+  Users,
+  Info
 } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
+import { BookingConflictService } from "@/lib/services/booking-conflict-service"
 
 const TABLE_TYPE_COLORS: Record<string, string> = {
   booth: "bg-gradient-to-br from-primary/80 to-primary text-primary-foreground border-primary/70",
@@ -149,6 +151,7 @@ export function CheckInQueue({
   const supabase = createClient()
   const queryClient = useQueryClient()
   const tableStatusService = useMemo(() => new TableStatusService(), [])
+  const conflictService = useMemo(() => new BookingConflictService(), [])
 
   // Get current user for status updates
   const [userId, setUserId] = useState<string>("")
@@ -923,20 +926,89 @@ export function CheckInQueue({
       table_preferences: walkInData.preferences
     }
 
+    // Handle conflicting reservations
+    let createdConflicts: any[] = []
+    if (walkInConfirmation.conflictingReservations.length > 0) {
+      // Remove table assignments from conflicting bookings
+      if (onTableSwitch) {
+        for (const conflictingReservation of walkInConfirmation.conflictingReservations) {
+          onTableSwitch(conflictingReservation.id, []) // Empty array removes table assignment
+        }
+      }
+      
+      // Create conflict tracking after walk-in is seated
+      const upcomingBookingIds = walkInConfirmation.conflictingReservations.map(r => r.id)
+      
+      // Show immediate notification about reassigned bookings
+      const conflictCount = walkInConfirmation.conflictingReservations.length
+      const earliestBooking = walkInConfirmation.conflictingReservations
+        .sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())[0]
+      
+      toast.error(
+        <div>
+          <p className="font-medium">⚠️ Booking Conflicts Created</p>
+          <p className="text-sm mt-1">
+            {conflictCount} reservation{conflictCount > 1 ? 's' : ''} reassigned. 
+            Next arrival: {format(new Date(earliestBooking.booking_time), 'h:mm a')}
+          </p>
+          <p className="text-xs mt-1 opacity-80">
+            Walk-in must vacate before then. Find alternative tables!
+          </p>
+        </div>,
+        { duration: 8000, style: { backgroundColor: '#7f1d1d', color: 'white' } }
+      )
+    }
+
     onQuickSeat(walkInBooking, selectedTableIds)
+
+    // Create conflict tracking after walk-in is seated (if conflicts exist)
+    if (walkInConfirmation.conflictingReservations.length > 0) {
+      // Wait for the booking to be created, then create conflicts
+      setTimeout(async () => {
+        try {
+          const upcomingBookingIds = walkInConfirmation.conflictingReservations.map(r => r.id)
+          await conflictService.createConflict(
+            walkInBooking.guest_name, // This will be the walk-in booking ID after it's created
+            upcomingBookingIds,
+            selectedTableIds
+          )
+        } catch (error) {
+          console.error('Failed to create conflict tracking:', error)
+        }
+      }, 2000) // Give time for the booking to be created
+    }
 
     const tableNumbers = selectedTableIds
       .map(id => tableStatus.find(t => t.id === id)?.table_number)
       .filter(Boolean)
       .join(', ')
 
-    toast.success(
-      <div>
-        <p className="font-medium">Walk-in Seated</p>
-        <p className="text-sm mt-1">{walkInBooking.guest_name} → Table {tableNumbers}</p>
-      </div>,
-      { duration: 3000 }
-    )
+    // Enhanced success toast with conflict info
+    if (walkInConfirmation.conflictingReservations.length > 0) {
+      const nextBookingTime = walkInConfirmation.conflictingReservations
+        .sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())[0]?.booking_time
+      
+      const minutesToNext = differenceInMinutes(new Date(nextBookingTime), currentTime)
+      
+      toast.success(
+        <div>
+          <p className="font-medium">Walk-in Seated with Conflicts</p>
+          <p className="text-sm mt-1">{walkInBooking.guest_name} → Table {tableNumbers}</p>
+          <p className="text-xs mt-1 font-medium text-accent-foreground">
+            🕒 Must vacate in {minutesToNext} min (at {format(new Date(nextBookingTime), 'h:mm a')})
+          </p>
+        </div>,
+        { duration: 6000 }
+      )
+    } else {
+      toast.success(
+        <div>
+          <p className="font-medium">Walk-in Seated</p>
+          <p className="text-sm mt-1">{walkInBooking.guest_name} → Table {tableNumbers}</p>
+        </div>,
+        { duration: 3000 }
+      )
+    }
 
     // Reset form and close confirmation
     setWalkInData({ guestName: "", guestPhone: "", partySize: 2, estimatedDuration: 120, preferences: [] })
@@ -1125,8 +1197,6 @@ export function CheckInQueue({
     const progress = TableStatusService.getDiningProgress(booking.status as DiningStatus)
     const bookingTime = new Date(booking.booking_time)
     const elapsedMinutes = differenceInMinutes(currentTime, bookingTime)
-    const estimatedTotal = booking.turn_time_minutes || 120
-    const remainingMinutes = Math.max(0, estimatedTotal - elapsedMinutes)
 
     // Get valid next transitions
     const validTransitions = tableStatusService.getValidTransitions(booking.status as DiningStatus)
@@ -1521,24 +1591,34 @@ export function CheckInQueue({
                         
                         const nextBooking = table.upcomingBookings?.[0]
                         const minutesUntilNext = nextBooking ? differenceInMinutes(new Date(nextBooking.booking_time), currentTime) : null
+                        const hasUrgentBooking = nextBooking && minutesUntilNext! <= 60
+                        const hasBookingSoon = nextBooking && minutesUntilNext! <= 120
 
                         let statusColor = "border-border"
                         let bgColor = "bg-card"
+                        let statusText = "Available"
 
                         if (table.isOccupied) {
                           statusColor = "border-destructive"
                           bgColor = "bg-destructive/20"
-                        } else if (nextBooking && minutesUntilNext! <= 60) {
-                          statusColor = "border-accent"
-                          bgColor = "bg-accent/30"
+                          statusText = "Occupied"
+                        } else if (hasUrgentBooking) {
+                          statusColor = "border-destructive border-2"
+                          bgColor = "bg-destructive/30"
+                          statusText = `Booked ${minutesUntilNext}m`
+                        } else if (hasBookingSoon) {
+                          statusColor = "border-orange-500 border-2"
+                          bgColor = "bg-orange-500/20"
+                          statusText = `Booked ${minutesUntilNext}m`
                         } else {
                           statusColor = "border-accent"
                           bgColor = "bg-accent/20"
+                          statusText = "Free"
                         }
                         
                         if (isSelected) {
-                          statusColor = "border-primary"
-                          bgColor = "bg-primary/20"
+                          statusColor = "border-primary border-2"
+                          bgColor = "bg-primary/30"
                         }
                         
                         return (
@@ -1565,13 +1645,30 @@ export function CheckInQueue({
                               }
                             }}
                           >
-                            <div className="w-full h-full flex flex-col items-center justify-center">
-                              <div className="font-bold text-xs text-white">
+                            <div className="w-full h-full flex flex-col items-center justify-center relative">
+                              {/* Warning indicator for urgent bookings */}
+                              {hasUrgentBooking && (
+                                <div className="absolute -top-1 -right-1">
+                                  <AlertTriangle className="h-3 w-3 text-destructive fill-current" />
+                                </div>
+                              )}
+                              
+                              <div className="font-bold text-xs">
                                 T{table.table_number}
                               </div>
-                              <div className="text-xs text-muted-foreground">
+                              <div className="text-xs">
                                 {table.max_capacity}p
                               </div>
+                              <div className="text-xs font-medium mt-0.5">
+                                {statusText}
+                              </div>
+                              
+                              {/* Show next booking time if exists */}
+                              {nextBooking && (
+                                <div className="text-xs mt-0.5 opacity-75">
+                                  {format(new Date(nextBooking.booking_time), 'h:mm')}
+                                </div>
+                              )}
                             </div>
                           </Button>
                         )
@@ -1863,7 +1960,7 @@ export function CheckInQueue({
             </DialogTitle>
             <DialogDescription>
               {walkInConfirmation.type === 'upcoming_reservations'
-                ? 'The selected table(s) have upcoming reservations. Are you sure you want to proceed?'
+                ? 'IMPORTANT: This will seat walk-ins at tables with confirmed reservations. Both parties must be managed carefully to avoid conflicts.'
                 : (() => {
                     const totalCapacity = walkInConfirmation.selectedTables.reduce((sum: number, table: any) =>
                       sum + (table?.max_capacity || 0), 0)
@@ -1885,33 +1982,80 @@ export function CheckInQueue({
           <div className="py-4">
             {walkInConfirmation.type === 'upcoming_reservations' && (
               <div className="space-y-3">
-                <Alert className="border-accent bg-accent/10">
-                  <AlertCircle className="h-4 w-4" />
+                <Alert className="border-destructive bg-destructive/10">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
                   <AlertDescription>
-                    <strong>Conflicting Reservations:</strong>
+                    <strong className="text-destructive">⚠️ BOOKING CONFLICT WARNING</strong>
+                    <p className="text-sm mt-1 text-muted-foreground">
+                      You are seating a walk-in at tables with confirmed reservations. The walk-in guests MUST vacate these tables before the booking arrives.
+                    </p>
                   </AlertDescription>
                 </Alert>
 
-                <div className="space-y-2">
-                  {walkInConfirmation.conflictingReservations.map((reservation, index) => (
-                    <div key={index} className="p-3 bg-muted rounded-lg border border-border">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-sm">
-                            {reservation.guest_name || reservation.user?.full_name || 'Anonymous'}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Table {reservation.table.table_number} • {format(new Date(reservation.booking_time), 'h:mm a')}
-                            ({differenceInMinutes(new Date(reservation.booking_time), currentTime)} min)
-                          </p>
+                <div className="space-y-3">
+                  <h4 className="font-medium text-sm text-destructive">Upcoming Reservations to Reassign:</h4>
+                  {walkInConfirmation.conflictingReservations.map((reservation, index) => {
+                    const minutesUntilArrival = differenceInMinutes(new Date(reservation.booking_time), currentTime)
+                    const isUrgent = minutesUntilArrival <= 60
+                    
+                    return (
+                      <div key={index} className={cn(
+                        "p-3 rounded-lg border-2",
+                        isUrgent 
+                          ? "border-destructive bg-destructive/5" 
+                          : "border-accent bg-accent/5"
+                      )}>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-medium text-sm">
+                                {reservation.guest_name || reservation.user?.full_name || 'Anonymous'}
+                              </p>
+                              {isUrgent && (
+                                <Badge className="bg-destructive text-destructive-foreground text-xs px-1 py-0">
+                                  URGENT
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mb-2">
+                              Table {reservation.table.table_number} • Arriving at {format(new Date(reservation.booking_time), 'h:mm a')}
+                            </p>
+                            <div className={cn(
+                              "text-xs font-medium px-2 py-1 rounded inline-block",
+                              isUrgent 
+                                ? "bg-destructive/20 text-destructive" 
+                                : "bg-accent/20 text-accent-foreground"
+                            )}>
+                              {minutesUntilArrival > 0 
+                                ? `Arrives in ${minutesUntilArrival} minutes` 
+                                : `${Math.abs(minutesUntilArrival)} minutes overdue`}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <Badge variant="outline" className="text-xs mb-1">
+                              {reservation.party_size}p
+                            </Badge>
+                            <div className="text-xs text-muted-foreground">
+                              Will be reassigned
+                            </div>
+                          </div>
                         </div>
-                        <Badge variant="outline" className="text-xs">
-                          {reservation.party_size}p
-                        </Badge>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
+                
+                <Alert className="border-accent bg-accent/10">
+                  <Info className="h-4 w-4 text-accent-foreground" />
+                  <AlertDescription>
+                    <strong>Host Action Required:</strong>
+                    <ul className="text-sm mt-1 space-y-1 list-disc list-inside">
+                      <li>Notify walk-in guests about table time limits</li>
+                      <li>Find alternative tables for arriving bookings</li>
+                      <li>Set reminders to check on both parties</li>
+                    </ul>
+                  </AlertDescription>
+                </Alert>
               </div>
             )}
 
@@ -1968,9 +2112,9 @@ export function CheckInQueue({
               onClick={proceedWithWalkIn}
               className="bg-accent hover:bg-accent/80 text-accent-foreground"
             >
-              <CheckCircle className="h-4 w-4 mr-2" />
+              <AlertTriangle className="h-4 w-4 mr-2" />
               {walkInConfirmation.type === 'upcoming_reservations'
-                ? 'Proceed Anyway'
+                ? 'Seat Walk-In & Reassign Bookings'
                 : 'Confirm Seating'
               }
             </Button>

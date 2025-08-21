@@ -624,11 +624,80 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
   const handlePrint = useCallback(() => {
     // Deselect any selected table for clean print
     setSelectedTable(null)
-    
-    // Brief delay to ensure deselection renders
+
+    // Build a dedicated print document to avoid in-app layout quirks
     setTimeout(() => {
-      window.print()
-    }, 100)
+      const printWindow = window.open('', '_blank', 'width=1200,height=800')
+      if (!printWindow) {
+        window.print()
+        return
+      }
+
+      const safeTables = (tables || []).filter(t => t.is_active)
+      const getPos = (id: string, fallback: {x:number;y:number}) => finalPositionsRef.current[id] || fallback
+      const getSize = (id: string, fallback: {width:number;height:number}) => finalSizesRef.current[id] || fallback
+
+      const tablesHtml = safeTables.map((t) => {
+        const pos = getPos(t.id, { x: t.x_position, y: t.y_position })
+        const size = getSize(t.id, { width: t.width || 60, height: t.height || 40 })
+        const radius = t.shape === 'circle' ? '50%' : '8px'
+        const icon = (TABLE_TYPE_ICONS as any)[t.table_type] || ''
+        return `
+          <div class="tbl" style="left:${pos.x}%; top:${pos.y}%; width:${size.width}px; height:${size.height}px; border-radius:${radius};">
+            <div class="num">${icon} ${t.table_number}</div>
+            <div class="cap">${t.min_capacity}-${t.max_capacity} seats</div>
+          </div>
+        `
+      }).join('')
+
+      const gridHtml = `
+        <div class="grid"></div>
+      `
+
+      const doc = printWindow.document
+      doc.open()
+      doc.write(`<!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <title>Restaurant Floor Plan</title>
+            <style>
+              @media print {
+                @page { size: landscape; margin: 0; }
+                html, body { margin: 0; padding: 0; }
+              }
+              html, body { margin:0; padding:0; background:#fff; }
+              body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial, sans-serif; }
+              .fp { width: 100vw; height: 100vh; overflow: hidden; }
+              .area { position: relative; width: 100vw; height: 100vh; background: #ffffff; }
+              .grid { position:absolute; inset:0; opacity:0.15; background-image:
+                linear-gradient(to right, #cbd5e1 1px, transparent 1px),
+                linear-gradient(to bottom, #cbd5e1 1px, transparent 1px);
+                background-size: 30px 30px; }
+              .tbl { position:absolute; box-sizing:border-box; border:2px solid #333; background:#fff; color:#000;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:6px; }
+              .num { font-weight:700; font-size:11px; margin-bottom:2px; }
+              .cap { font-size:9px; opacity:0.8; }
+            </style>
+          </head>
+          <body>
+            <div class="fp">
+              <div class="area">
+                ${showGrid ? gridHtml : ''}
+                ${tablesHtml}
+              </div>
+            </div>
+          </body>
+        </html>`)
+      doc.close()
+
+      // Give styles a moment to apply before printing
+      setTimeout(() => {
+        printWindow.focus()
+        printWindow.print()
+        setTimeout(() => printWindow.close(), 500)
+      }, 250)
+    }, 50)
   }, [])
 
   // Keyboard shortcuts with optimized movement
@@ -708,10 +777,37 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
             margin: 0;
           }
           
+          /* When we add 'printing-floor-plan' to body, isolate print to the clone */
+          body.printing-floor-plan > *:not(#print-root) {
+            display: none !important;
+          }
+          #print-root {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            background: white !important;
+            display: block !important;
+          }
+
+          /* Prevent page breaks */
+          * {
+            page-break-before: avoid !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          
           /* Remove all browser headers and footers */
           html {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+            height: 100% !important;
           }
           
           body {
@@ -719,31 +815,30 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
             padding: 0 !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+            height: 100% !important;
+            overflow: hidden !important;
           }
           
-          /* Hide everything except the floor plan */
-          body * {
-            visibility: hidden;
-          }
-          
-          /* Show only the floor plan container and its children */
-          .print-floor-plan,
-          .print-floor-plan * {
-            visibility: visible;
-          }
+          /* Hide toolbars and non-essential UI in print */
+          .print-hide { display: none !important; }
           
           /* Position the floor plan container properly */
           .print-floor-plan {
-            position: fixed !important;
+            position: absolute !important;
             top: 0 !important;
             left: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
             margin: 0 !important;
-            padding: 10px !important;
+            padding: 0 !important;
             box-sizing: border-box !important;
             background: white !important;
             overflow: hidden !important;
+            page-break-before: avoid !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
           }
           
           /* Hide toolbar and controls in print */
@@ -751,39 +846,36 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
             display: none !important;
           }
           
-          /* Create minimal title area */
+          /* Remove title in print to maximize space */
           .print-floor-plan::before {
-            content: "Restaurant Floor Plan";
-            position: absolute;
-            top: 5px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 14px;
-            font-weight: bold;
-            color: #000;
-            z-index: 1000;
-            text-align: center;
+            display: none !important;
+            content: '' !important;
           }
           
           /* Optimize floor plan container for print */
           .print-floor-plan > div {
+            position: relative !important;
             padding: 0 !important;
             margin: 0 !important;
-            height: 100vh !important;
-            width: 100vw !important;
+            height: 100% !important;
+            width: 100% !important;
           }
           
           /* Optimize floor plan area - maximize space */
-          .print-floor-plan .relative {
-            height: calc(100vh - 30px) !important;
-            width: calc(100vw - 20px) !important;
-            margin-top: 30px !important;
-            margin-left: 0 !important;
-            margin-right: 0 !important;
+          .print-floor-plan [data-floor-plan-container="true"] {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            height: auto !important;
+            width: auto !important;
+            margin: 0 !important;
             background: white !important;
-            border: 2px solid #000 !important;
+            border: none !important;
             border-radius: 0 !important;
             box-sizing: border-box !important;
+            overflow: hidden !important;
           }
           
           /* Ensure tables are visible and properly sized */
@@ -949,7 +1041,7 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
                 onClick={() => setShowGrid(!showGrid)}
               >
                 <Grid3X3 className="h-4 w-4 mr-2" />
-                Gridsf
+                Gridsfdddf
               </Button>
               <Button
                 variant="outline"
@@ -991,6 +1083,7 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
               // Optimize for touch scrolling when no active drag/resize
               touchAction: isDragging || isResizing ? "none" : "auto"
             }}
+            data-floor-plan-container="true"
             onClick={handleContainerClick}
             onTouchEnd={handleContainerClick}
           >

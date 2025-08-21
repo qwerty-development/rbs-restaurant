@@ -22,6 +22,11 @@ export interface RestaurantCustomer {
   created_at: string
   updated_at: string
   
+  // Additional fields for enhanced display
+  email?: string
+  email_confirmed?: boolean
+  auth_phone?: string
+  
   // Relations
   profile?: {
     id: string
@@ -30,6 +35,20 @@ export interface RestaurantCustomer {
     avatar_url?: string
     allergies?: string[]
     dietary_restrictions?: string[]
+    favorite_cuisines?: string[]
+    preferred_party_size?: number
+    loyalty_points?: number
+    membership_tier?: string
+    notification_preferences?: {
+      sms?: boolean
+      push?: boolean
+      email?: boolean
+    }
+    total_bookings?: number
+    completed_bookings?: number
+    cancelled_bookings?: number
+    no_show_bookings?: number
+    user_rating?: number
   }
   tags?: CustomerTag[]
   notes?: CustomerNote[]
