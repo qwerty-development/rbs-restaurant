@@ -28,6 +28,7 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { CustomerTermsCheckbox } from '@/components/ui/terms-checkbox'
 
 interface AddCustomerDialogProps {
   open: boolean
@@ -44,6 +45,9 @@ const customerSchema = z.object({
   vip_status: z.boolean().default(false).optional(),
   dietary_restrictions: z.string().optional(),
   allergies: z.string().optional(),
+  acceptTerms: z.boolean().refine((val) => val === true, {
+    message: "You must consent to data processing to add this customer",
+  }),
 })
 
 type CustomerFormData = z.infer<typeof customerSchema>
@@ -67,7 +71,8 @@ export function AddCustomerDialog({
   } = useForm<CustomerFormData>({
     resolver: zodResolver(customerSchema),
     defaultValues: {
-      vip_status: false
+      vip_status: false,
+      acceptTerms: false
     }
   })
 
@@ -269,6 +274,18 @@ export function AddCustomerDialog({
                 {...register('notes')}
               />
             </div>
+
+            {/* Terms Acceptance */}
+            <div>
+              <CustomerTermsCheckbox
+                checked={watch('acceptTerms')}
+                onCheckedChange={(checked) => setValue('acceptTerms', checked)}
+                disabled={loading}
+              />
+              {errors.acceptTerms && (
+                <p className="text-sm text-red-500 mt-1">{errors.acceptTerms.message}</p>
+              )}
+            </div>
           </div>
 
           <DialogFooter>
@@ -283,7 +300,7 @@ export function AddCustomerDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || !watch('acceptTerms')}>
               {loading ? 'Adding...' : 'Add Customer'}
             </Button>
           </DialogFooter>

@@ -598,7 +598,9 @@ export default function BookingsPage() {
           <CardContent>
             <div className="space-y-3">
               {diningProgress.slice(0, 5).map((booking) => {
-                const elapsedTime = differenceInMinutes(new Date(), new Date(booking.booking_time))
+                // Use checked_in_at for elapsed time if guest has checked in, otherwise use booking_time
+                const timeReference = booking.checked_in_at ? new Date(booking.checked_in_at) : new Date(booking.booking_time)
+                const elapsedTime = differenceInMinutes(new Date(), timeReference)
                 const estimatedRemaining = statusService.estimateRemainingTime(
                   booking.status as DiningStatus,
                   booking.turn_time_minutes || 120

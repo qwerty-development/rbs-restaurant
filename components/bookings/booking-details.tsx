@@ -252,7 +252,10 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
   // Calculate dining time
   const bookingTime = new Date(booking.booking_time)
   const now = new Date()
-  const elapsedMinutes = differenceInMinutes(now, bookingTime)
+  
+  // Use checked_in_at for elapsed time if guest has checked in, otherwise use booking_time
+  const timeReference = booking.checked_in_at ? new Date(booking.checked_in_at) : bookingTime
+  const elapsedMinutes = differenceInMinutes(now, timeReference)
   const isCurrentlyDining = ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status)
 
   return (

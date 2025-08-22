@@ -339,7 +339,10 @@ export function BookingList({
         const StatusIcon = statusConfig.icon
         const isDining = isDiningStatus(booking.status)
         const diningProgress = isDining ? TableStatusService.getDiningProgress(booking.status as DiningStatus) : 0
-        const elapsedMinutes = differenceInMinutes(now, bookingTime)
+        
+        // Use checked_in_at for elapsed time if guest has checked in, otherwise use booking_time
+        const timeReference = booking.checked_in_at ? new Date(booking.checked_in_at) : bookingTime
+        const elapsedMinutes = differenceInMinutes(now, timeReference)
         const isLate = booking.status === 'confirmed' && elapsedMinutes > 15
         const validTransitions = getValidTransitions(booking.status)
 

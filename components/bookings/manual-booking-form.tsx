@@ -52,6 +52,7 @@ import {
   UserCheck
 } from "lucide-react"
 import { toast } from "react-hot-toast"
+import { BookingTermsCheckbox } from "@/components/ui/terms-checkbox"
 
 // Updated form schema with proper null handling
 const formSchema = z.object({
@@ -67,6 +68,7 @@ const formSchema = z.object({
   occasion: z.string().optional(),
   table_ids: z.array(z.string()).optional(),
   status: z.enum(["pending", "confirmed", "completed"]),
+  acceptTerms: z.boolean().optional().default(true), // Optional for staff bookings, but recommended
 })
 
 type FormData = z.infer<typeof formSchema>
@@ -138,6 +140,7 @@ export function ManualBookingForm({
       status: "confirmed",
       booking_date: prefillData?.booking_date || new Date(),
       booking_time: prefillData?.booking_time || format(new Date(), "HH:mm"),
+      acceptTerms: true, // Default to true for staff-created bookings
     },
   })
 
@@ -1351,6 +1354,18 @@ export function ManualBookingForm({
               disabled={isLoading}
             />
           </div>
+        </div>
+
+        {/* Terms and Conditions */}
+        <div className="space-y-4 rounded-xl border border-slate-200/60 dark:border-slate-700/60 p-6 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm dark:shadow-slate-900/20">
+          <BookingTermsCheckbox
+            checked={watch("acceptTerms") || false}
+            onCheckedChange={(checked) => setValue("acceptTerms", checked)}
+            disabled={isLoading}
+          />
+          {errors.acceptTerms && (
+            <p className="text-sm text-red-500 mt-1">{errors.acceptTerms.message}</p>
+          )}
         </div>
 
         {/* Actions */}

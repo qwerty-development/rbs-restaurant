@@ -1,4 +1,4 @@
-// app/(dashboard)/dashboard/page.tsx
+// app/(dashboard)/dashboard/page.tsx - UPDATED WITH WAITLIST
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { format, startOfDay, endOfDay, addMinutes, differenceInMinutes, addDays } from "date-fns"
 import { UnifiedFloorPlan } from "@/components/dashboard/unified-floor-plan"
 import { CheckInQueue } from "@/components/dashboard/checkin-queue"
+import { WaitlistPanel } from "@/components/dashboard/waitlist-panel"
 import { PendingRequestsPanel } from "@/components/dashboard/pending-requests-panel"
 import { CriticalAlerts } from "@/components/dashboard/critical-alerts"
 import { TodaysTimeline } from "@/components/dashboard/todays-timeline"
@@ -20,6 +21,7 @@ import { BookingRequestService } from "@/lib/booking-request-service"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "react-hot-toast"
 import { 
   RefreshCw, 
@@ -36,7 +38,9 @@ import {
   Info,
   Calendar,
   BarChart3,
-  AlertTriangle
+  AlertTriangle,
+  List,
+  Badge
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -52,6 +56,7 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [quickFilter, setQuickFilter] = useState<"all" | "needs-table" | "dining" | "arriving">("all")
   const [showTimeline, setShowTimeline] = useState(false)
+  const [sidebarView, setSidebarView] = useState<"queue" | "waitlist">("queue")
   const [confirmationDialog, setConfirmationDialog] = useState<{
     show: boolean
     booking?: any
@@ -83,15 +88,13 @@ export default function DashboardPage() {
         continue
       }
 
-      // Check if table is active
       if (!table.is_active) {
         errors.push(`Table ${table.table_number} is not active`)
         continue
       }
 
-      // Check if table is currently occupied
       const isOccupied = todaysBookings.some(booking => {
-        if (booking.id === bookingId) return false // Exclude current booking
+        if (booking.id === bookingId) return false
         const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
         return occupiedStatuses.includes(booking.status) && 
                booking.tables?.some((t: any) => t.id === tableId)
@@ -108,7 +111,6 @@ export default function DashboardPage() {
         continue
       }
 
-      // Check upcoming reservations (within next 2 hours)
       const upcomingBooking = todaysBookings.find(booking => {
         if (booking.id === bookingId) return false
         const bookingTime = new Date(booking.booking_time)
@@ -125,7 +127,6 @@ export default function DashboardPage() {
       }
     }
 
-    // Check total capacity vs party size
     const totalCapacity = tableIds
       .map(id => tables.find(t => t.id === id))
       .filter(Boolean)
@@ -142,11 +143,10 @@ export default function DashboardPage() {
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(new Date())
-    }, 1000) // Update every second for live clock
+    }, 1000)
     return () => clearInterval(interval)
   }, [])
 
-  // Touch-optimized clear handlers
   useEffect(() => {
     const handleEscape = () => {
       setSearchQuery("")
@@ -154,7 +154,6 @@ export default function DashboardPage() {
       setShowManualBooking(false)
     }
     
-    // Only keep essential escape functionality for modals
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         handleEscape()
@@ -229,6 +228,35 @@ export default function DashboardPage() {
       })) || []
 
       return transformedData
+    },
+    enabled: !!restaurantId,
+    refetchInterval: 30000,
+  })
+
+  // Fetch waitlist count
+  const { data: waitlistStats = { active: 0, notified: 0, total: 0 } } = useQuery({
+    queryKey: ["waitlist-stats", restaurantId, format(currentTime, 'yyyy-MM-dd')],
+    queryFn: async () => {
+      if (!restaurantId) return { active: 0, notified: 0, total: 0 }
+      
+      const { data, error } = await supabase
+        .from('waitlist')
+        .select('status')
+        .eq('restaurant_id', restaurantId)
+        .eq('desired_date', format(currentTime, 'yyyy-MM-dd'))
+      
+      if (error) {
+        console.error('Error fetching waitlist stats:', error)
+        return { active: 0, notified: 0, total: 0 }
+      }
+      
+      const stats = {
+        active: data?.filter(e => e.status === 'active').length || 0,
+        notified: data?.filter(e => e.status === 'notified').length || 0,
+        total: data?.length || 0
+      }
+      
+      return stats
     },
     enabled: !!restaurantId,
     refetchInterval: 30000,
@@ -403,16 +431,13 @@ export default function DashboardPage() {
         return
       }
 
-      // Validate table availability
       const validation = validateTableAvailability(finalTableIds, bookingId, booking.party_size)
       
       if (!validation.valid) {
-        // Show errors
         validation.errors.forEach(error => toast.error(error))
         return
       }
 
-      // Show warnings and ask for confirmation if any exist
       if (validation.warnings.length > 0) {
         setConfirmationDialog({
           show: true,
@@ -434,12 +459,9 @@ export default function DashboardPage() {
     }
   }
 
-  // Separate function to handle the actual check-in process
   const proceedWithCheckIn = async (booking: any, finalTableIds: string[]) => {
     try {
-      // If booking is already 'arrived' (waiting for seating), seat them directly
       if (booking.status === 'arrived') {
-        // Ensure table assignments exist if provided
         if (finalTableIds.length > 0 && (!booking.tables || booking.tables.length === 0)) {
           const tableAssignments = finalTableIds.map((tableId: string) => ({
             booking_id: booking.id,
@@ -459,26 +481,52 @@ export default function DashboardPage() {
         
         await statusService.updateBookingStatus(booking.id, 'seated', userId)
         
-        // Success message with table info
         const tableNumbers = finalTableIds
           .map((id: string) => tables.find(t => t.id === id)?.table_number)
           .filter(Boolean)
           .join(', ')
         toast.success(`Guest seated at Table ${tableNumbers}`)
       } else {
-        // For other statuses, use the standard check-in flow
         await statusService.checkInBooking(booking.id, finalTableIds, userId)
         toast.success("Guest checked in successfully")
       }
 
-      // Force immediate refresh of bookings data
       await queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
-      
-      // Force refetch to ensure UI updates immediately
       await refetchBookings()
     } catch (error) {
       console.error("Proceed check-in error:", error)
       toast.error("Failed to complete check-in")
+    }
+  }
+
+  // Handle waitlist conversion to booking
+  const handleWaitlistToBooking = async (entry: any, tableIds?: string[]) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error("Must be logged in")
+      
+      // Parse time range
+      const [startTime] = entry.desired_time_range.split('-')
+      const bookingTime = new Date(`${entry.desired_date}T${startTime}:00`)
+      
+      // Create booking from waitlist
+      const { data, error } = await supabase
+        .rpc('convert_waitlist_to_booking', {
+          p_waitlist_id: entry.id,
+          p_staff_user_id: user.id
+        })
+      
+      if (error) throw error
+      
+      toast.success("Waitlist entry converted to booking")
+      
+      // Refresh data
+      await queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+      await queryClient.invalidateQueries({ queryKey: ["waitlist-stats"] })
+      
+    } catch (error) {
+      console.error("Waitlist conversion error:", error)
+      toast.error("Failed to convert waitlist entry")
     }
   }
 
@@ -491,7 +539,6 @@ export default function DashboardPage() {
         return
       }
 
-      // Use our comprehensive validation
       const validation = validateTableAvailability(newTableIds, bookingId, booking.party_size)
       
       if (!validation.valid) {
@@ -499,7 +546,6 @@ export default function DashboardPage() {
         return
       }
 
-      // Show warnings but allow proceeding
       if (validation.warnings.length > 0) {
         validation.warnings.forEach(warning => toast.error(warning, { 
           duration: 4000,
@@ -521,15 +567,14 @@ export default function DashboardPage() {
     }
   }
 
-  // Table position update mutation - FIXED TABLE NAME
+  // Table position update mutation
   const updateTablePositionMutation = useMutation({
     mutationFn: async ({ tableId, position }: { tableId: string; position: { x: number; y: number } }) => {
       const { error } = await supabase
-        .from('restaurant_tables') // FIXED: Changed from 'tables' to 'restaurant_tables'
+        .from('restaurant_tables')
         .update({
           x_position: position.x,
           y_position: position.y,
-   
         })
         .eq('id', tableId)
 
@@ -553,11 +598,9 @@ export default function DashboardPage() {
       const bookingTime = new Date(bookingData.booking_time)
       const isWalkIn = bookingData.status === 'arrived' || bookingTime <= new Date()
       
-      // For walk-ins with selected customers, we need special handling
-      let finalUserId = user.id // Default to staff user
+      let finalUserId = user.id
       
       if (bookingData.customer_id && bookingData.user_id) {
-        // If the selected customer has a user_id, use that
         finalUserId = bookingData.user_id
       }
       
@@ -578,19 +621,14 @@ export default function DashboardPage() {
 
       const booking = result.booking
 
-      // If we have a customer_id from a selected customer, link the booking to that customer
       if (bookingData.customer_id) {
-        
-        // Update the restaurant customer's stats
         const { error: updateError } = await supabase
           .rpc('increment_customer_bookings', {
             customer_id: bookingData.customer_id,
             visit_time: bookingTime.toISOString()
           })
         
-        // If RPC doesn't exist, fall back to manual increment
         if (updateError) {
-          // Get current total_bookings and increment
           const { data: currentCustomer } = await supabase
             .from("restaurant_customers")
             .select("total_bookings")
@@ -644,7 +682,6 @@ export default function DashboardPage() {
   })
 
   const handleQuickSeat = (guestData: any, tableIds: string[]) => {
-    // Validate table availability for walk-in
     const validation = validateTableAvailability(tableIds, '', guestData.party_size)
     
     if (!validation.valid) {
@@ -652,7 +689,6 @@ export default function DashboardPage() {
       return
     }
 
-    // Show warnings but allow proceeding
     if (validation.warnings.length > 0) {
       validation.warnings.forEach(warning => toast.error(warning, { 
         duration: 4000,
@@ -679,7 +715,7 @@ export default function DashboardPage() {
     return diningStatuses.includes(booking.status)
   })
 
-  // Calculate comprehensive stats
+  // Calculate comprehensive stats including waitlist
   const stats = {
     pendingCount: activeBookings.filter(b => b.status === 'pending').length,
     arrivingSoonCount: activeBookings.filter(booking => {
@@ -707,12 +743,15 @@ export default function DashboardPage() {
       const customerData = b.user?.id ? customersData[b.user.id] : null
       return customerData?.vip_status
     }).length,
-    needingTables: activeBookings.filter(b => !b.tables || b.tables.length === 0).length
+    needingTables: activeBookings.filter(b => !b.tables || b.tables.length === 0).length,
+    // Waitlist stats
+    waitlistActive: waitlistStats.active,
+    waitlistNotified: waitlistStats.notified,
+    waitlistTotal: waitlistStats.total
   }
 
   // Filtered bookings based on search and quick filter
   const filteredBookings = activeBookings.filter(booking => {
-    // Apply quick filter first
     switch(quickFilter) {
       case "needs-table":
         if (booking.tables && booking.tables.length > 0) return false
@@ -728,7 +767,6 @@ export default function DashboardPage() {
         break
     }
     
-    // Then apply search query
     if (!searchQuery) return true
     
     const query = searchQuery.toLowerCase()
@@ -768,12 +806,12 @@ export default function DashboardPage() {
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-background to-card overflow-hidden">
-      {/* Ultra-Compact Header - Optimized for 8-inch tablets */}
+      {/* Ultra-Compact Header with Waitlist Stats */}
       <header className="bg-gradient-to-br from-primary via-primary/90 to-primary text-primary-foreground shadow-lg px-2 py-1 flex-shrink-0 border-b border-primary/30">
         <div className="flex items-center justify-between gap-2">
           {/* Left Side - Brand & Live Stats */}
           <div className="flex items-center gap-2">
-            {/* Enhanced Live Stats */}
+            {/* Enhanced Live Stats including Waitlist */}
             <div className="hidden sm:flex items-center gap-2 bg-primary/20 backdrop-blur-xl rounded-md px-2 py-0.5 border border-primary/30">
               <div className="flex items-center gap-1">
                 <div className="h-1.5 w-1.5 bg-emerald-400 rounded-full animate-pulse" />
@@ -786,6 +824,16 @@ export default function DashboardPage() {
                 <span className="text-xs font-bold text-blue-400">{stats.availableTables}</span>
                 <span className="text-xs text-slate-400">free</span>
               </div>
+              {stats.waitlistActive > 0 && (
+                <>
+                  <div className="w-px h-3.5 bg-slate-600" />
+                  <div className="flex items-center gap-1">
+                    <Timer className="h-3 w-3 text-orange-400" />
+                    <span className="text-xs font-bold text-orange-400">{stats.waitlistActive}</span>
+                    <span className="text-xs text-slate-400">waiting</span>
+                  </div>
+                </>
+              )}
               <div className="w-px h-3.5 bg-slate-600" />
               <div className="flex items-center gap-1">
                 <div className={cn(
@@ -866,9 +914,9 @@ export default function DashboardPage() {
         <InstallPrompt />
       </div>
 
-      {/* Main Content Area - Properly sized for tablets */}
+      {/* Main Content Area */}
       <main className="flex-1 flex overflow-hidden">
-        {/* Floor Plan - Takes up remaining space */}
+        {/* Floor Plan */}
         <div className="flex-1 min-w-0 overflow-hidden">
           <UnifiedFloorPlan
             tables={tables}
@@ -895,7 +943,7 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Check-in Queue - Properly sized for tablets */}
+        {/* Right Sidebar with Tabs for Queue and Waitlist */}
         <div className="w-[260px] border-l border-border bg-card flex flex-col flex-shrink-0 overflow-hidden">
           {/* Pending Requests Section */}
           {stats.pendingCount > 0 && (
@@ -932,34 +980,67 @@ export default function DashboardPage() {
               onOpenTableSwitch={(bookingId) => {
                 const booking = activeBookings.find(b => b.id === bookingId)
                 if (booking) {
-                  // Select the booking to trigger table switch options
                   setSelectedBooking(booking)
                 }
               }}
             />
           </div>
           
-          {/* Check-in Queue - Takes remaining space */}
-          <div className="flex-1 overflow-hidden">
-            <CheckInQueue
-              bookings={activeBookings}
-              tables={tables}
-              currentTime={currentTime}
-              onCheckIn={handleCheckIn}
-              onQuickSeat={handleQuickSeat}
-              onTableSwitch={handleTableSwitch}
-              onStatusUpdate={(bookingId, status) =>
-                updateBookingMutation.mutate({ bookingId, updates: { status } })
-              }
-              customersData={customersData}
-              onSelectBooking={setSelectedBooking}
-              restaurantId={restaurantId}
-            />
-          </div>
+          {/* Tabs for Queue and Waitlist */}
+          <Tabs value={sidebarView} onValueChange={(v) => setSidebarView(v as "queue" | "waitlist")} className="flex-1 flex flex-col overflow-hidden">
+            <TabsList className="grid w-full grid-cols-2 px-2 pt-1">
+              <TabsTrigger value="queue" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                Queue
+                {(stats.awaitingCheckIn > 0 || stats.arrivingSoonCount > 0) && (
+                  <Badge className="ml-1 h-4 px-1 text-xs">
+                    {stats.awaitingCheckIn + stats.arrivingSoonCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="waitlist" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                Waitlist
+                {stats.waitlistActive > 0 && (
+                  <Badge className="ml-1 h-4 px-1 text-xs bg-orange-100 text-orange-800">
+                    {stats.waitlistActive}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="queue" className="flex-1 overflow-hidden m-0 p-0">
+              <CheckInQueue
+                bookings={activeBookings}
+                tables={tables}
+                currentTime={currentTime}
+                onCheckIn={handleCheckIn}
+                onQuickSeat={handleQuickSeat}
+                onTableSwitch={handleTableSwitch}
+                onStatusUpdate={(bookingId, status) =>
+                  updateBookingMutation.mutate({ bookingId, updates: { status } })
+                }
+                customersData={customersData}
+                onSelectBooking={setSelectedBooking}
+                restaurantId={restaurantId}
+              />
+            </TabsContent>
+            
+            <TabsContent value="waitlist" className="flex-1 overflow-hidden m-0 p-0">
+              <WaitlistPanel
+                restaurantId={restaurantId}
+                currentTime={currentTime}
+                tables={tables}
+                bookings={activeBookings}
+                onConvertToBooking={handleWaitlistToBooking}
+                onRefresh={() => {
+                  queryClient.invalidateQueries({ queryKey: ["waitlist-stats"] })
+                }}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
 
-      {/* Modals - Streamlined */}
+      {/* All modals remain the same */}
       {/* Confirmation Dialog for Warnings */}
       <Dialog open={confirmationDialog.show} onOpenChange={(open) => 
         !open && setConfirmationDialog({ show: false, warnings: [], onConfirm: () => {} })

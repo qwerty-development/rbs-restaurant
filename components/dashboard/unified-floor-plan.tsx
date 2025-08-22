@@ -561,7 +561,10 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
     const StatusIcon = current ? STATUS_ICONS[current.status as DiningStatus] : Table2
     const isHighlighted = isTableHighlighted(table, current)
     const bookingTime = current ? new Date(current.booking_time) : null
-    const minutesSinceArrival = bookingTime ? differenceInMinutes(currentTime, bookingTime) : 0
+    
+    // Use checked_in_at for elapsed time if guest has checked in, otherwise use booking_time
+    const timeReference = current?.checked_in_at ? new Date(current.checked_in_at) : bookingTime
+    const minutesSinceArrival = timeReference ? differenceInMinutes(currentTime, timeReference) : 0
 
     return (
       <TooltipProvider key={table.id}>

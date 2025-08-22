@@ -1,29 +1,23 @@
-// app/(dashboard)/waitlist/page.tsx
-
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
   Clock, 
   Users, 
   Calendar,
   Phone,
   Mail,
-  Filter,
   Search,
   CheckCircle,
   XCircle,
   AlertCircle,
-  MoreVertical,
-  User
+  RefreshCw,
+  Plus
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
-import { format, parseISO, isToday, isTomorrow, isFuture, isPast } from 'date-fns'
-import { ContextualActions, QuickActionBar } from '@/components/workflow/contextual-actions'
-import { getUnifiedWorkflow } from '@/lib/services/unified-restaurant-workflow'
+import { format, parseISO, isToday, isTomorrow } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,14 +31,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -52,148 +38,60 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { WaitlistEntryCard } from '@/components/waitlist/waitlist-entry-card'
-import { EmptyWaitlist } from '@/components/waitlist/empty-waitlist'
-import { WaitlistSetupRequired } from '@/components/waitlist/waitlist-setup-required'
-import { ManualBookingForm } from '@/components/bookings/manual-booking-form'
-import type { WaitlistEntry } from '@/types'
+
+// Types
+interface WaitlistEntry {
+  id: string
+  user_id: string | null
+  restaurant_id: string
+  desired_date: string
+  desired_time_range: string
+  party_size: number
+  table_type: string
+  status: 'active' | 'notified' | 'booked' | 'expired' | 'cancelled'
+  guest_name?: string
+  guest_email?: string
+  guest_phone?: string
+  special_requests?: string
+  notified_at?: string
+  notification_expires_at?: string
+  expires_at?: string
+  created_at: string
+  user?: {
+    id: string
+    full_name: string
+    phone_number?: string
+    avatar_url?: string
+  }
+}
 
 export default function WaitlistPage() {
   const router = useRouter()
   const supabase = createClient()
-  const queryClient = useQueryClient()
   
   // State
   const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [restaurantId, setRestaurantId] = useState<string>('')
-  const [tableNotFound, setTableNotFound] = useState(false)
-  const [showBookingForm, setShowBookingForm] = useState(false)
-  const [selectedWaitlistEntry, setSelectedWaitlistEntry] = useState<WaitlistEntry | null>(null)
-  
-  // Status history for undo functionality
-  const [statusHistory, setStatusHistory] = useState<Record<string, string>>({})
-  const [undoTimers, setUndoTimers] = useState<Record<string, NodeJS.Timeout>>({})
-  
-  // Clear undo history after 5 minutes
-  const clearUndoAfterDelay = (entryId: string) => {
-    // Clear existing timer if any
-    if (undoTimers[entryId]) {
-      clearTimeout(undoTimers[entryId])
-    }
-    
-    // Set new timer
-    const timer = setTimeout(() => {
-      setStatusHistory(prev => {
-        const newHistory = { ...prev }
-        delete newHistory[entryId]
-        return newHistory
-      })
-      setUndoTimers(prev => {
-        const newTimers = { ...prev }
-        delete newTimers[entryId]
-        return newTimers
-      })
-    }, 5 * 60 * 1000) // 5 minutes
-    
-    setUndoTimers(prev => ({
-      ...prev,
-      [entryId]: timer
-    }))
-  }
-  
-  // Filters
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [dateFilter, setDateFilter] = useState<string>('all')
-  const [activeTab, setActiveTab] = useState('all')
-
-  // Create booking mutation
-  const createBookingMutation = useMutation({
-    mutationFn: async (bookingData: any) => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error("Must be logged in to create bookings")
-      
-      // Verify user exists in profiles table
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', user.id)
-        .single()
-      
-      if (profileError || !profile) {
-        throw new Error("User profile not found. Please ensure your profile is set up correctly.")
-      }
-      
-      // Generate confirmation code
-      const confirmationCode = `${restaurantId.slice(0, 4).toUpperCase()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`
-
-      // Create booking
-      const { data: booking, error } = await supabase
-        .from("bookings")
-        .insert({
-          restaurant_id: restaurantId,
-          user_id: user.id, // Always use the current logged-in user (staff member)
-          guest_name: bookingData.guest_name,
-          guest_email: bookingData.guest_email,
-          guest_phone: bookingData.guest_phone,
-          booking_time: bookingData.booking_time,
-          party_size: bookingData.party_size,
-          turn_time_minutes: bookingData.turn_time_minutes || 120,
-          status: bookingData.status || "confirmed",
-          special_requests: bookingData.special_requests,
-          occasion: bookingData.occasion,
-          confirmation_code: confirmationCode,
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-
-      // Assign tables if provided
-      if (bookingData.table_ids && bookingData.table_ids.length > 0) {
-        const tableAssignments = bookingData.table_ids.map((tableId: string) => ({
-          booking_id: booking.id,
-          table_id: tableId,
-        }))
-
-        const { error: tableError } = await supabase
-          .from("booking_tables")
-          .insert(tableAssignments)
-
-        if (tableError) {
-          // Rollback booking if table assignment fails
-          await supabase.from("bookings").delete().eq("id", booking.id)
-          throw tableError
-        }
-      }
-
-      // Update waitlist entry status to 'booked' if this was from waitlist
-      if (selectedWaitlistEntry) {
-        await supabase
-          .from('waitlist')
-          .update({ status: 'booked' })
-          .eq('id', selectedWaitlistEntry.id)
-      }
-
-      return booking
-    },
-    onSuccess: () => {
-      toast.success("Booking created successfully from waitlist")
-      setShowBookingForm(false)
-      setSelectedWaitlistEntry(null)
-      // Refresh waitlist data
-      if (restaurantId) {
-        loadWaitlistEntries(restaurantId)
-      }
-    },
-    onError: (error: any) => {
-      console.error("Create booking error:", error)
-      toast.error(error.message || "Failed to create booking")
-    },
+  const [activeTab, setActiveTab] = useState('active')
+  const [showAddDialog, setShowAddDialog] = useState(false)
+  
+  // Form state for manual entry
+  const [manualEntry, setManualEntry] = useState({
+    guest_name: '',
+    guest_phone: '',
+    guest_email: '',
+    desired_date: '',
+    desired_time_range: '',
+    party_size: 2,
+    table_type: 'any',
+    special_requests: ''
   })
 
-  // Get restaurant ID using the same pattern as bookings page
+  // Get restaurant ID
   useEffect(() => {
     async function getRestaurantId() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -210,18 +108,19 @@ export default function WaitlistPage() {
       }
     }
     getRestaurantId()
-  }, [supabase])
+  }, [])
 
-  // Load waitlist entries when restaurant ID is available
-  useEffect(() => {
-    if (restaurantId) {
-      loadWaitlistEntries(restaurantId)
-    }
-  }, [restaurantId])
-
-  const loadWaitlistEntries = useCallback(async (restaurantId: string) => {
+  // Load waitlist entries
+  const loadWaitlistEntries = useCallback(async () => {
+    if (!restaurantId) return
+    
     try {
       setLoading(true)
+      
+      // First, run automation to expire old entries
+      await supabase.rpc('process_waitlist_automation')
+      
+      // Then fetch current entries
       const { data, error } = await supabase
         .from('waitlist')
         .select(`
@@ -238,216 +137,167 @@ export default function WaitlistPage() {
 
       if (error) {
         console.error('Error loading waitlist:', error)
-        
-        // Check if it's a missing table error
-        if (error.message?.includes('relation "public.waitlist" does not exist')) {
-          setTableNotFound(true)
-          return
-        }
-        
-        // Check if it's a missing enum type error
-        if (error.message?.includes('type "waiting_status" does not exist') || 
-            error.message?.includes('type "table_type" does not exist')) {
-          toast.error('Waitlist database types are not properly set up. Please run the setup script.')
-          setTableNotFound(true)
-          return
-        }
-        
-        toast.error(`Failed to load waiting list: ${error.message}`)
+        toast.error('Failed to load waitlist')
         return
       }
 
       setWaitlistEntries(data || [])
-      // Clear status history and timers when refreshing data
-      Object.values(undoTimers).forEach(timer => clearTimeout(timer))
-      setUndoTimers({})
-      setStatusHistory({})
     } catch (error) {
-      console.error('Error loading waitlist:', error)
-      toast.error('Failed to load waiting list')
+      console.error('Error:', error)
+      toast.error('Failed to load waitlist')
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }, [undoTimers])
+  }, [restaurantId])
 
-  // Cleanup timers on unmount
+  // Load entries when restaurant ID is available
   useEffect(() => {
-    return () => {
-      Object.values(undoTimers).forEach(timer => clearTimeout(timer))
+    if (restaurantId) {
+      loadWaitlistEntries()
     }
-  }, [undoTimers])
+  }, [restaurantId, loadWaitlistEntries])
 
-  const updateWaitlistStatus = async (entryId: string, newStatus: string) => {
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (restaurantId && !refreshing) {
+        loadWaitlistEntries()
+      }
+    }, 30000)
+    
+    return () => clearInterval(interval)
+  }, [restaurantId, refreshing, loadWaitlistEntries])
+
+  // Update waitlist status
+  const updateStatus = async (entryId: string, newStatus: string) => {
     try {
-      // Store current status in history before updating
-      const currentEntry = waitlistEntries.find(entry => entry.id === entryId)
-      if (currentEntry) {
-        setStatusHistory(prev => ({
-          ...prev,
-          [entryId]: currentEntry.status
-        }))
-        
-        // Set timer to clear undo after 5 minutes
-        clearUndoAfterDelay(entryId)
+      const updateData: any = { status: newStatus }
+      
+      // Add notification expiration if marking as notified
+      if (newStatus === 'notified') {
+        updateData.notified_at = new Date().toISOString()
+        updateData.notification_expires_at = new Date(Date.now() + 15 * 60 * 1000).toISOString()
       }
 
       const { error } = await supabase
         .from('waitlist')
-        .update({ status: newStatus })
+        .update(updateData)
         .eq('id', entryId)
-        .eq('restaurant_id', restaurantId)
 
-      if (error) {
-        console.error('Error updating waitlist status:', error)
-        toast.error('Failed to update status')
-        return
-      }
+      if (error) throw error
 
-      // Update local state
-      setWaitlistEntries(prev => 
-        prev.map(entry => 
-          entry.id === entryId 
-            ? { ...entry, status: newStatus as any }
-            : entry
-        )
-      )
-
-      toast.success(
-        `Status updated to ${newStatus}. ${['notified', 'booked'].includes(newStatus) ? 'You can undo this action if needed.' : ''}`,
-        {
-          duration: 5000, // Show for 5 seconds for undo actions
-          icon: ['notified', 'booked'].includes(newStatus) ? '↩️' : '✅'
-        }
-      )
+      toast.success(`Status updated to ${newStatus}`)
+      loadWaitlistEntries()
     } catch (error) {
-      console.error('Error updating waitlist status:', error)
+      console.error('Error updating status:', error)
       toast.error('Failed to update status')
     }
   }
 
-  const undoStatusChange = async (entryId: string) => {
+  // Convert to booking
+  const convertToBooking = async (entryId: string) => {
     try {
-      const previousStatus = statusHistory[entryId]
-      if (!previousStatus) {
-        toast.error('No previous status to restore')
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        toast.error('You must be logged in')
         return
       }
 
-      const { error } = await supabase
-        .from('waitlist')
-        .update({ status: previousStatus })
-        .eq('id', entryId)
-        .eq('restaurant_id', restaurantId)
-
-      if (error) {
-        console.error('Error undoing status change:', error)
-        toast.error('Failed to undo status change')
-        return
-      }
-
-      // Update local state
-      setWaitlistEntries(prev => 
-        prev.map(entry => 
-          entry.id === entryId 
-            ? { ...entry, status: previousStatus as any }
-            : entry
-        )
-      )
-
-      // Remove from history as it's been undone
-      setStatusHistory(prev => {
-        const newHistory = { ...prev }
-        delete newHistory[entryId]
-        return newHistory
-      })
-      
-      // Clear the timer
-      if (undoTimers[entryId]) {
-        clearTimeout(undoTimers[entryId])
-        setUndoTimers(prev => {
-          const newTimers = { ...prev }
-          delete newTimers[entryId]
-          return newTimers
+      const { data, error } = await supabase
+        .rpc('convert_waitlist_to_booking', {
+          p_waitlist_id: entryId,
+          p_staff_user_id: user.id
         })
-      }
 
-      toast.success(`Status restored to ${previousStatus}`)
+      if (error) throw error
+
+      toast.success('Successfully converted to booking!')
+      loadWaitlistEntries()
     } catch (error) {
-      console.error('Error undoing status change:', error)
-      toast.error('Failed to undo status change')
+      console.error('Error converting to booking:', error)
+      toast.error('Failed to convert to booking')
     }
   }
 
-  const handleCreateBooking = (entry: WaitlistEntry) => {
-    setSelectedWaitlistEntry(entry)
-    setShowBookingForm(true)
+  // Add manual waitlist entry
+  const addManualEntry = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      const { error } = await supabase
+        .from('waitlist')
+        .insert({
+          restaurant_id: restaurantId,
+          user_id: null, // Manual entry, no user account
+          ...manualEntry,
+          status: 'active'
+        })
+
+      if (error) throw error
+
+      toast.success('Waitlist entry added successfully')
+      setShowAddDialog(false)
+      setManualEntry({
+        guest_name: '',
+        guest_phone: '',
+        guest_email: '',
+        desired_date: '',
+        desired_time_range: '',
+        party_size: 2,
+        table_type: 'any',
+        special_requests: ''
+      })
+      loadWaitlistEntries()
+    } catch (error) {
+      console.error('Error adding entry:', error)
+      toast.error('Failed to add waitlist entry')
+    }
   }
 
-  const clearFilters = () => {
-    setSearchTerm('')
-    setStatusFilter('all')
-    setDateFilter('all')
-  }
-
-  const hasActiveFilters = !!(searchTerm || statusFilter !== 'all' || dateFilter !== 'all')
-
-  // Filter waitlist entries
+  // Filter entries
   const filteredEntries = waitlistEntries.filter(entry => {
     // Search filter
     if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase()
-      const userName = entry.user?.full_name?.toLowerCase() || ''
-      const userPhone = entry.user?.phone_number?.toLowerCase() || ''
-      if (!userName.includes(searchLower) && !userPhone.includes(searchLower)) {
-        return false
-      }
+      const search = searchTerm.toLowerCase()
+      const name = (entry.user?.full_name || entry.guest_name || '').toLowerCase()
+      const phone = (entry.user?.phone_number || entry.guest_phone || '').toLowerCase()
+      if (!name.includes(search) && !phone.includes(search)) return false
     }
 
     // Status filter
-    if (statusFilter !== 'all' && entry.status !== statusFilter) {
-      return false
-    }
-
-    // Date filter
-    if (dateFilter !== 'all') {
-      const entryDate = parseISO(entry.desired_date)
-      switch (dateFilter) {
-        case 'today':
-          if (!isToday(entryDate)) return false
-          break
-        case 'tomorrow':
-          if (!isTomorrow(entryDate)) return false
-          break
-        case 'future':
-          if (!isFuture(entryDate) || isToday(entryDate)) return false
-          break
-        case 'past':
-          if (!isPast(entryDate) || isToday(entryDate)) return false
-          break
-      }
-    }
+    if (statusFilter !== 'all' && entry.status !== statusFilter) return false
 
     // Tab filter
-    if (activeTab !== 'all') {
-      switch (activeTab) {
-        case 'active':
-          if (entry.status !== 'active') return false
-          break
-        case 'notified':
-          if (entry.status !== 'notified') return false
-          break
-        case 'completed':
-          if (!['booked', 'expired'].includes(entry.status)) return false
-          break
-      }
-    }
+    if (activeTab === 'active' && !['active', 'notified'].includes(entry.status)) return false
+    if (activeTab === 'completed' && !['booked', 'expired', 'cancelled'].includes(entry.status)) return false
 
     return true
   })
 
-  // Get stats for tabs
+  // Get status color
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active': return 'bg-blue-100 text-blue-800'
+      case 'notified': return 'bg-yellow-100 text-yellow-800'
+      case 'booked': return 'bg-green-100 text-green-800'
+      case 'expired': return 'bg-gray-100 text-gray-800'
+      case 'cancelled': return 'bg-red-100 text-red-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  // Format date
+  const formatDate = (date: string) => {
+    const d = parseISO(date)
+    if (isToday(d)) return 'Today'
+    if (isTomorrow(d)) return 'Tomorrow'
+    return format(d, 'MMM d')
+  }
+
+  // Stats
   const stats = {
-    all: waitlistEntries.length,
+    total: waitlistEntries.length,
     active: waitlistEntries.filter(e => e.status === 'active').length,
     notified: waitlistEntries.filter(e => e.status === 'notified').length,
     completed: waitlistEntries.filter(e => ['booked', 'expired'].includes(e.status)).length
@@ -456,16 +306,9 @@ export default function WaitlistPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <Clock className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
-          <p className="text-muted-foreground">Loading waiting list...</p>
-        </div>
+        <Clock className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
-  }
-
-  if (tableNotFound) {
-    return <WaitlistSetupRequired />
   }
 
   return (
@@ -474,65 +317,56 @@ export default function WaitlistPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Waiting List</h1>
-          <p className="text-muted-foreground">
-            Manage customer waiting list for your restaurant. 
-            {Object.keys(statusHistory).length > 0 && (
-              <span className="text-orange-600 font-medium">
-                {' '}• {Object.keys(statusHistory).length} recent change{Object.keys(statusHistory).length !== 1 ? 's' : ''} can be undone
-              </span>
-            )}
-          </p>
+          <p className="text-muted-foreground">Manage your restaurant's waitlist</p>
         </div>
-        {Object.keys(statusHistory).length > 0 && (
+        <div className="flex gap-2">
           <Button
             variant="outline"
-            size="sm"
             onClick={() => {
-              // Clear all timers
-              Object.values(undoTimers).forEach(timer => clearTimeout(timer))
-              setUndoTimers({})
-              setStatusHistory({})
+              setRefreshing(true)
+              loadWaitlistEntries()
             }}
-            className="text-orange-700 border-orange-200 hover:bg-orange-50"
+            disabled={refreshing}
           >
-            Clear Undo History
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
           </Button>
-        )}
+          <Button onClick={() => setShowAddDialog(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Entry
+          </Button>
+        </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Entries</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Total</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.all}</div>
+            <div className="text-2xl font-bold">{stats.total}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Active</CardTitle>
-            <AlertCircle className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">{stats.active}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Notified</CardTitle>
-            <Phone className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">{stats.notified}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Completed</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
@@ -541,143 +375,228 @@ export default function WaitlistPage() {
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Filters</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Search</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name or phone..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Status</label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="notified">Notified</SelectItem>
-                  <SelectItem value="booked">Booked</SelectItem>
-                  <SelectItem value="expired">Expired</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Date</label>
-              <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All dates" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Dates</SelectItem>
-                  <SelectItem value="today">Today</SelectItem>
-                  <SelectItem value="tomorrow">Tomorrow</SelectItem>
-                  <SelectItem value="future">Future</SelectItem>
-                  <SelectItem value="past">Past</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Actions</label>
-              <Button 
-                variant="outline" 
-                onClick={() => loadWaitlistEntries(restaurantId)}
-                className="w-full"
-              >
-                Refresh
-              </Button>
-            </div>
+      <div className="flex gap-4">
+        <div className="flex-1">
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name or phone..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="notified">Notified</SelectItem>
+            <SelectItem value="booked">Booked</SelectItem>
+            <SelectItem value="expired">Expired</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="all">All ({stats.all})</TabsTrigger>
-          <TabsTrigger value="active">Active ({stats.active})</TabsTrigger>
-          <TabsTrigger value="notified">Notified ({stats.notified})</TabsTrigger>
-          <TabsTrigger value="completed">Completed ({stats.completed})</TabsTrigger>
+        <TabsList>
+          <TabsTrigger value="active">Active</TabsTrigger>
+          <TabsTrigger value="completed">Completed</TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab} className="space-y-4">
           {filteredEntries.length === 0 ? (
-            <EmptyWaitlist 
-              hasFilters={hasActiveFilters}
-              onClearFilters={hasActiveFilters ? clearFilters : undefined}
-            />
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">No waitlist entries found</p>
+              </CardContent>
+            </Card>
           ) : (
-            <div className="space-y-4">
-              {filteredEntries.map((entry) => (
-                <WaitlistEntryCard
-                  key={entry.id}
-                  entry={entry}
-                  onStatusUpdate={updateWaitlistStatus}
-                  onCreateBooking={handleCreateBooking}
-                  previousStatus={statusHistory[entry.id]}
-                  onUndo={undoStatusChange}
-                  restaurantId={restaurantId}
-                />
-              ))}
-            </div>
+            filteredEntries.map((entry) => (
+              <Card key={entry.id}>
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-4">
+                      <Avatar>
+                        <AvatarImage src={entry.user?.avatar_url} />
+                        <AvatarFallback>
+                          {(entry.user?.full_name || entry.guest_name || 'G')[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold">
+                            {entry.user?.full_name || entry.guest_name || 'Guest'}
+                          </h3>
+                          <Badge className={getStatusColor(entry.status)}>
+                            {entry.status}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {formatDate(entry.desired_date)}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {entry.desired_time_range}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Users className="h-3 w-3" />
+                            {entry.party_size} people
+                          </span>
+                        </div>
+                        {(entry.user?.phone_number || entry.guest_phone) && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <Phone className="h-3 w-3" />
+                            {entry.user?.phone_number || entry.guest_phone}
+                          </div>
+                        )}
+                        {entry.notification_expires_at && entry.status === 'notified' && (
+                          <p className="text-sm text-yellow-600">
+                            Expires: {format(parseISO(entry.notification_expires_at), 'h:mm a')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      {entry.status === 'active' && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateStatus(entry.id, 'notified')}
+                          >
+                            <AlertCircle className="h-4 w-4 mr-1" />
+                            Notify
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => convertToBooking(entry.id)}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Book
+                          </Button>
+                        </>
+                      )}
+                      {entry.status === 'notified' && (
+                        <Button
+                          size="sm"
+                          onClick={() => convertToBooking(entry.id)}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Convert to Booking
+                        </Button>
+                      )}
+                      {['active', 'notified'].includes(entry.status) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600"
+                          onClick={() => updateStatus(entry.id, 'expired')}
+                        >
+                          <XCircle className="h-4 w-4 mr-1" />
+                          Expire
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
           )}
         </TabsContent>
       </Tabs>
 
-      {/* Create Booking Modal */}
-      <Dialog open={showBookingForm} onOpenChange={setShowBookingForm}>
-        <DialogContent className="max-w-4xl w-full h-[95vh] flex flex-col p-0">
-          <div className="flex-shrink-0 px-6 py-4 border-b">
-            <DialogHeader>
-              <DialogTitle>Create Booking from Waitlist</DialogTitle>
-              <DialogDescription>
-                Create a booking for {selectedWaitlistEntry?.user?.full_name || 'this customer'} from the waitlist
-              </DialogDescription>
-            </DialogHeader>
-          </div>
-          <div className="flex-1 overflow-y-auto px-6 py-4">
-            {selectedWaitlistEntry && (
-              <ManualBookingForm
-                restaurantId={restaurantId}
-                onSubmit={(data) => createBookingMutation.mutate(data)}
-                onCancel={() => {
-                  setShowBookingForm(false)
-                  setSelectedWaitlistEntry(null)
-                }}
-                isLoading={createBookingMutation.isPending}
-                currentBookings={waitlistEntries.filter(e => e.status === 'booked').map(e => ({
-                  id: e.id,
-                  booking_time: e.desired_date + 'T' + (e.desired_time_range.includes('-') 
-                    ? e.desired_time_range.split('-')[0].trim()
-                    : e.desired_time_range) + ':00',
-                  turn_time_minutes: 120,
-                  status: 'confirmed',
-                  tables: []
-                }))}
-                prefillData={{
-                  guest_name: selectedWaitlistEntry.user?.full_name || '',
-                  guest_phone: selectedWaitlistEntry.user?.phone_number || '',
-                  party_size: selectedWaitlistEntry.party_size,
-                  booking_date: new Date(selectedWaitlistEntry.desired_date),
-                  booking_time: selectedWaitlistEntry.desired_time_range.includes('-') 
-                    ? selectedWaitlistEntry.desired_time_range.split('-')[0].trim()
-                    : selectedWaitlistEntry.desired_time_range,
-                  user: selectedWaitlistEntry.user
-                }}
+      {/* Add Entry Dialog */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Waitlist Entry</DialogTitle>
+            <DialogDescription>
+              Manually add a customer to the waitlist
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Guest Name</label>
+              <Input
+                value={manualEntry.guest_name}
+                onChange={(e) => setManualEntry({ ...manualEntry, guest_name: e.target.value })}
+                placeholder="John Doe"
               />
-            )}
+            </div>
+            <div>
+              <label className="text-sm font-medium">Phone Number</label>
+              <Input
+                value={manualEntry.guest_phone}
+                onChange={(e) => setManualEntry({ ...manualEntry, guest_phone: e.target.value })}
+                placeholder="+1234567890"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Date</label>
+                <Input
+                  type="date"
+                  value={manualEntry.desired_date}
+                  onChange={(e) => setManualEntry({ ...manualEntry, desired_date: e.target.value })}
+                  min={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Time Range</label>
+                <Input
+                  value={manualEntry.desired_time_range}
+                  onChange={(e) => setManualEntry({ ...manualEntry, desired_time_range: e.target.value })}
+                  placeholder="19:00-21:00"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Party Size</label>
+                <Input
+                  type="number"
+                  value={manualEntry.party_size}
+                  onChange={(e) => setManualEntry({ ...manualEntry, party_size: parseInt(e.target.value) || 1 })}
+                  min="1"
+                  max="20"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Table Type</label>
+                <Select 
+                  value={manualEntry.table_type} 
+                  onValueChange={(value) => setManualEntry({ ...manualEntry, table_type: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">Any</SelectItem>
+                    <SelectItem value="indoor">Indoor</SelectItem>
+                    <SelectItem value="outdoor">Outdoor</SelectItem>
+                    <SelectItem value="bar">Bar</SelectItem>
+                    <SelectItem value="private">Private</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={addManualEntry}>
+                Add Entry
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

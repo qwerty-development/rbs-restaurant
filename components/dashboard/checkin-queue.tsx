@@ -1404,7 +1404,10 @@ export function CheckInQueue({
     // Calculate dining progress and time
     const progress = TableStatusService.getDiningProgress(booking.status as DiningStatus)
     const bookingTime = new Date(booking.booking_time)
-    const elapsedMinutes = differenceInMinutes(currentTime, bookingTime)
+    
+    // Use checked_in_at for elapsed time if guest has checked in, otherwise use booking_time
+    const timeReference = booking.checked_in_at ? new Date(booking.checked_in_at) : bookingTime
+    const elapsedMinutes = differenceInMinutes(currentTime, timeReference)
 
     // Get valid next transitions
     const validTransitions = tableStatusService.getValidTransitions(booking.status as DiningStatus)

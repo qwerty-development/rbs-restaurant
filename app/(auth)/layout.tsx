@@ -1,6 +1,7 @@
 // app/(auth)/layout.tsx
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { Footer } from "@/components/layout/footer"
 
 export default async function AuthLayout({
   children,
@@ -16,10 +17,13 @@ export default async function AuthLayout({
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-secondary/10">
-      <div className="w-full max-w-md p-8">
-        {children}
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-primary/10 via-background to-secondary/10">
+      <div className="flex-1 flex items-center justify-center">
+        <div className="w-full max-w-md p-8">
+          {children}
+        </div>
       </div>
+      <Footer variant="auth" />
     </div>
   )
 }

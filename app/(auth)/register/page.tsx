@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/select"
 import { toast } from "react-hot-toast"
 import { Loader2, Store } from "lucide-react"
+import { RegistrationTermsCheckbox } from "@/components/ui/terms-checkbox"
 
 const formSchema = z.object({
   // Restaurant details
@@ -50,6 +51,11 @@ const formSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   confirmPassword: z.string(),
+  
+  // Terms acceptance
+  acceptTerms: z.boolean().refine((val) => val === true, {
+    message: "You must accept the Terms and Conditions to register",
+  }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -91,6 +97,7 @@ export default function RegisterPage() {
       email: "",
       password: "",
       confirmPassword: "",
+      acceptTerms: false,
     },
   })
 
@@ -393,10 +400,30 @@ export default function RegisterPage() {
               </div>
             </div>
 
+            {/* Terms and Conditions */}
+            <div className="space-y-4">
+              <FormField
+                control={form.control}
+                name="acceptTerms"
+                render={({ field }) => (
+                  <FormItem className="space-y-3">
+                    <FormControl>
+                      <RegistrationTermsCheckbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={isLoading}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             <Button
               type="submit"
               className="w-full"
-              disabled={isLoading}
+              disabled={isLoading || !form.watch("acceptTerms")}
               size="lg"
             >
               {isLoading ? (
