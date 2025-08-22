@@ -39,6 +39,7 @@ import {
   X,
   ArrowLeft
 } from "lucide-react"
+import { EnhancedRestaurantImageUpload } from "@/components/ui/enhanced-restaurant-image-upload"
 
 // Type definitions
 type Restaurant = {
@@ -58,6 +59,7 @@ type Restaurant = {
   outdoor_seating: boolean
   shisha_available: boolean
   main_image_url?: string
+  image_urls?: string[]
 }
 
 // Form schema
@@ -69,7 +71,7 @@ const profileFormSchema = z.object({
   website_url: z.string().url().optional().or(z.literal("")),
   instagram_handle: z.string().optional(),
   address: z.string().min(5, "Address is required"),
-  cuisine_type: z.string(),
+  cuisine_type: z.string().min(1, "Please select a cuisine type"),
   price_range: z.number().min(1).max(4),
   dietary_options: z.array(z.string()),
   parking_available: z.boolean(),
@@ -111,9 +113,9 @@ export default function EditProfilePage() {
   const router = useRouter()
   const supabase = createClient()
   const queryClient = useQueryClient()
-  const [imageFile, setImageFile] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [restaurantId, setRestaurantId] = useState<string>("")
+  const [mainImageUrl, setMainImageUrl] = useState<string>("")
+  const [imageUrls, setImageUrls] = useState<string[]>([])
 
   useEffect(() => {
     async function getRestaurantId() {
@@ -182,24 +184,28 @@ export default function EditProfilePage() {
   useEffect(() => {
     if (restaurant) {
       form.reset({
-        name: restaurant.name,
+        name: restaurant.name || "",
         description: restaurant.description || "",
         phone_number: restaurant.phone_number || "",
         whatsapp_number: restaurant.whatsapp_number || "",
         website_url: restaurant.website_url || "",
         instagram_handle: restaurant.instagram_handle || "",
-        address: restaurant.address,
-        cuisine_type: restaurant.cuisine_type,
-        price_range: restaurant.price_range,
+        address: restaurant.address || "",
+        cuisine_type: restaurant.cuisine_type || "",
+        price_range: Number(restaurant.price_range) || 2,
         dietary_options: restaurant.dietary_options || [],
-        parking_available: restaurant.parking_available,
-        valet_parking: restaurant.valet_parking,
-        outdoor_seating: restaurant.outdoor_seating,
-        shisha_available: restaurant.shisha_available,
+        parking_available: Boolean(restaurant.parking_available),
+        valet_parking: Boolean(restaurant.valet_parking),
+        outdoor_seating: Boolean(restaurant.outdoor_seating),
+        shisha_available: Boolean(restaurant.shisha_available),
       })
       
+      // Set image states
       if (restaurant.main_image_url) {
-        setImagePreview(restaurant.main_image_url)
+        setMainImageUrl(restaurant.main_image_url)
+      }
+      if (restaurant.image_urls && restaurant.image_urls.length > 0) {
+        setImageUrls(restaurant.image_urls)
       }
     }
   }, [restaurant, form])
@@ -207,31 +213,12 @@ export default function EditProfilePage() {
   // Update restaurant mutation
   const updateRestaurantMutation = useMutation({
     mutationFn: async (data: ProfileFormData) => {
-      let main_image_url = restaurant?.main_image_url
-
-      // Upload image if changed
-      if (imageFile) {
-        const fileExt = imageFile.name.split('.').pop()
-        const fileName = `${restaurantId}-${Date.now()}.${fileExt}`
-        
-        const { error: uploadError, data: uploadData } = await supabase.storage
-          .from('restaurant-images')
-          .upload(fileName, imageFile)
-
-        if (uploadError) throw uploadError
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('restaurant-images')
-          .getPublicUrl(fileName)
-
-        main_image_url = publicUrl
-      }
-
       const { error } = await supabase
         .from("restaurants")
         .update({
           ...data,
-          main_image_url,
+          main_image_url: mainImageUrl || null,
+          image_urls: imageUrls.length > 0 ? imageUrls : null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", restaurantId)
@@ -249,28 +236,7 @@ export default function EditProfilePage() {
     },
   })
 
-  // Handle image upload
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error("Image must be less than 5MB")
-        return
-      }
-      
-      setImageFile(file)
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string)
-      }
-      reader.readAsDataURL(file)
-    }
-  }
 
-  const removeImage = () => {
-    setImageFile(null)
-    setImagePreview(restaurant?.main_image_url || null)
-  }
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>
@@ -298,53 +264,24 @@ export default function EditProfilePage() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit((data) => updateRestaurantMutation.mutate(data))} className="space-y-6">
-          {/* Main Image Upload */}
+          {/* Restaurant Images Upload */}
           <Card>
             <CardHeader>
-              <CardTitle>Restaurant Image</CardTitle>
+              <CardTitle>Restaurant Images</CardTitle>
               <CardDescription>
-                Upload a main image for your restaurant (max 5MB)
+                Upload and manage your restaurant images. Select any image as your main image (logo) and reorder gallery images as needed.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-6">
-                <Avatar className="h-24 w-24 rounded-lg">
-                  <AvatarImage src={imagePreview || undefined} className="object-cover" />
-                  <AvatarFallback className="rounded-lg">
-                    <Store className="h-12 w-12" />
-                  </AvatarFallback>
-                </Avatar>
-                
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => document.getElementById("image-upload")?.click()}
-                  >
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload Image
-                  </Button>
-                  
-                  {imagePreview && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={removeImage}
-                    >
-                      <X className="mr-2 h-4 w-4" />
-                      Remove
-                    </Button>
-                  )}
-                  
-                  <input
-                    id="image-upload"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                    className="hidden"
-                  />
-                </div>
-              </div>
+              <EnhancedRestaurantImageUpload
+                restaurantId={restaurantId}
+                mainImageUrl={mainImageUrl}
+                images={imageUrls}
+                onMainImageChange={setMainImageUrl}
+                onImagesChange={setImageUrls}
+                maxImages={10}
+                maxFileSize={5}
+              />
             </CardContent>
           </Card>
 
@@ -395,7 +332,7 @@ export default function EditProfilePage() {
                     <FormItem>
                       <FormLabel>Cuisine Type</FormLabel>
                       <Select
-                        value={field.value}
+                        value={field.value || ""}
                         onValueChange={field.onChange}
                         disabled={updateRestaurantMutation.isPending}
                       >
@@ -424,13 +361,13 @@ export default function EditProfilePage() {
                     <FormItem>
                       <FormLabel>Price Range</FormLabel>
                       <Select
-                        value={field.value.toString()}
+                        value={field.value ? field.value.toString() : "2"}
                         onValueChange={(value) => field.onChange(parseInt(value))}
                         disabled={updateRestaurantMutation.isPending}
                       >
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue />
+                            <SelectValue placeholder="Select price range" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>

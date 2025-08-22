@@ -471,11 +471,23 @@ export default function ProfilePage() {
       {/* Restaurant Information (if staff) */}
       {staffData && (
         <Card>
-          <CardHeader>
-            <CardTitle>Restaurant Information</CardTitle>
-            <CardDescription>
-              Your role and permissions at {staffData.restaurant?.name}
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Restaurant Information</CardTitle>
+              <CardDescription>
+                Your role and permissions at {staffData.restaurant?.name}
+              </CardDescription>
+            </div>
+            {(staffData.role === 'owner' || staffData.role === 'manager') && (
+              <Button
+                variant="outline"
+                onClick={() => router.push("/profile/edit")}
+                className="ml-4"
+              >
+                <Edit className="mr-2 h-4 w-4" />
+                Edit Restaurant
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -502,6 +514,39 @@ export default function ProfilePage() {
                         {permission.replace(".", " ").replace(/_/g, " ")}
                       </Badge>
                     ))
+                  )}
+                </div>
+              </div>
+            )}
+            
+            {/* Restaurant Quick Info */}
+            {staffData.restaurant && (
+              <div className="pt-4 border-t">
+                <div className="flex items-center gap-4">
+                  {staffData.restaurant.main_image_url && (
+                    <div className="flex-shrink-0">
+                      <Avatar className="h-12 w-12 rounded-lg">
+                        <AvatarImage 
+                          src={staffData.restaurant.main_image_url} 
+                          alt={`${staffData.restaurant.name} logo`}
+                          className="object-cover"
+                        />
+                        <AvatarFallback className="rounded-lg">
+                          <Building className="h-6 w-6" />
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <h4 className="font-semibold">{staffData.restaurant.name}</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Restaurant Profile
+                    </p>
+                  </div>
+                  {(staffData.role === 'owner' || staffData.role === 'manager') && (
+                    <div className="text-xs text-muted-foreground">
+                      Click "Edit Restaurant" to manage images, details, and settings
+                    </div>
                   )}
                 </div>
               </div>

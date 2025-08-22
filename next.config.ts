@@ -3,13 +3,40 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Image optimization configuration
   images: {
-    domains: [
-      'localhost',
-      // Add your CDN domain here
-      process.env.CDN_DOMAIN || '',
-      // Supabase storage domain
-      process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('https://', '')?.replace('.supabase.co', '.supabase.co') || '',
-    ].filter(Boolean),
+    remotePatterns: [
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'unsplash.com',
+        port: '',
+        pathname: '/**',
+      },
+      // Supabase storage pattern
+      ...(process.env.NEXT_PUBLIC_SUPABASE_URL ? [{
+        protocol: 'https' as const,
+        hostname: process.env.NEXT_PUBLIC_SUPABASE_URL.replace('https://', '').replace('.supabase.co', '.supabase.co'),
+        port: '',
+        pathname: '/storage/v1/object/public/**',
+      }] : []),
+      // CDN pattern if configured
+      ...(process.env.CDN_DOMAIN ? [{
+        protocol: 'https' as const,
+        hostname: process.env.CDN_DOMAIN,
+        port: '',
+        pathname: '/**',
+      }] : []),
+    ],
     formats: ['image/webp', 'image/avif'],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
