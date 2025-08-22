@@ -10,10 +10,16 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { format, parseISO, differenceInMinutes, isToday, isTomorrow } from "date-fns"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "react-hot-toast"
+import { useQuery } from "@tanstack/react-query"
+import { TableAvailabilityService } from "@/lib/table-availability"
+import { RestaurantAvailability } from "@/lib/restaurant-availability"
 import {
   Clock,
   Users,
@@ -31,7 +37,13 @@ import {
   Filter,
   ChevronRight,
   Info,
-  RefreshCw
+  RefreshCw,
+  CalendarIcon,
+  UserCheck,
+  Star,
+  X,
+  Edit,
+  Trash
 } from "lucide-react"
 
 interface WaitlistEntry {
@@ -80,26 +92,87 @@ export function WaitlistPanel({
 }: WaitlistPanelProps) {
   const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([])
   const [loading, setLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("active")
+  
+  // Dialog states
   const [showAddDialog, setShowAddDialog] = useState(false)
-  const [selectedEntry, setSelectedEntry] = useState<WaitlistEntry | null>(null)
+  const [showConvertDialog, setShowConvertDialog] = useState(false)
+  const [showEditDialog, setShowEditDialog] = useState(false)
   const [showNotifyDialog, setShowNotifyDialog] = useState(false)
+  
+  // Selected entries
+  const [selectedEntry, setSelectedEntry] = useState<WaitlistEntry | null>(null)
+  const [convertingEntry, setConvertingEntry] = useState<WaitlistEntry | null>(null)
+  const [editingEntry, setEditingEntry] = useState<WaitlistEntry | null>(null)
   const [notifyingEntry, setNotifyingEntry] = useState<WaitlistEntry | null>(null)
+
+  // Customer search
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
+  const [customerSearch, setCustomerSearch] = useState("")
+  const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState("")
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+
+  // Conversion state
+  const [selectedTime, setSelectedTime] = useState('')
+  const [selectedTables, setSelectedTables] = useState<string[]>([])
+  const [checkingAvailability, setCheckingAvailability] = useState(false)
+  const [isConverting, setIsConverting] = useState(false)
+
+  // Form state for manual entry
+  const [manualEntry, setManualEntry] = useState({
+    guest_name: '',
+    guest_phone: '',
+    guest_email: '',
+    desired_date: new Date(),
+    desired_time_start: '19:00',
+    desired_time_end: '21:00',
+    party_size: 2,
+    table_type: 'any',
+    special_requests: ''
+  })
   
   const supabase = createClient()
+  const tableService = new TableAvailabilityService()
+  const availabilityService = new RestaurantAvailability()
 
-  // Load waitlist entries
-  const loadWaitlist = useCallback(async () => {
+  // Load waitlist entries with better error handling
+  const loadWaitlist = useCallback(async (silent = false) => {
     if (!restaurantId) return
     
     try {
-      setLoading(true)
+      if (!silent) {
+        setLoading(true)
+      } else {
+        setRefreshing(true)
+      }
       
-      // Run automation first
-      await supabase.rpc('process_waitlist_automation')
+      // Expire stale notified entries first
+      try {
+        const nowIso = new Date().toISOString()
+        const { data: staleNotified } = await supabase
+          .from('waitlist')
+          .select('id')
+          .eq('restaurant_id', restaurantId)
+          .eq('status', 'notified')
+          .lt('notification_expires_at', nowIso)
+
+        if ((staleNotified?.length || 0) > 0) {
+          await supabase
+            .from('waitlist')
+            .update({ status: 'expired' })
+            .in('id', staleNotified!.map((e: any) => e.id))
+        }
+      } catch (e) {
+        console.warn('Local waitlist expiry skipped:', e)
+      }
       
-      // Fetch entries
+      // Fetch entries for today and tomorrow (use fresh date each time)
+      const now = new Date()
+      const today = format(now, 'yyyy-MM-dd')
+      const tomorrow = format(new Date(now.getTime() + 24 * 60 * 60 * 1000), 'yyyy-MM-dd')
+      
       const { data, error } = await supabase
         .from('waitlist')
         .select(`
@@ -112,30 +185,99 @@ export function WaitlistPanel({
           )
         `)
         .eq('restaurant_id', restaurantId)
-        .eq('desired_date', format(currentTime, 'yyyy-MM-dd'))
+        .in('desired_date', [today, tomorrow])
         .order('created_at', { ascending: false })
 
       if (error) {
         console.error('Error loading waitlist:', error)
+        if (!silent) {
+          toast.error('Failed to load waitlist')
+        }
         return
       }
 
       setWaitlistEntries(data || [])
+    } catch (error) {
+      console.error('Error:', error)
+      if (!silent) {
+        toast.error('Failed to load waitlist')
+      }
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }, [restaurantId, currentTime])
+  }, [restaurantId])
 
   // Load on mount and when restaurant changes
   React.useEffect(() => {
     loadWaitlist()
   }, [loadWaitlist])
 
-  // Auto-refresh every 30 seconds
+  // Auto-refresh every 3 minutes (reduced from 30 seconds)
   React.useEffect(() => {
-    const interval = setInterval(loadWaitlist, 30000)
+    const interval = setInterval(() => {
+      if (restaurantId && !refreshing) {
+        loadWaitlist(true) // Silent refresh
+      }
+    }, 180000) // 3 minutes
+    
     return () => clearInterval(interval)
-  }, [loadWaitlist])
+  }, [restaurantId, refreshing, loadWaitlist])
+
+  // Debounce customer search
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedCustomerSearch(customerSearch)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [customerSearch])
+
+  // Fetch customers for search
+  const { data: customers, error: customersError, isLoading: customersLoading } = useQuery({
+    queryKey: ["restaurant-customers", restaurantId, debouncedCustomerSearch],
+    queryFn: async () => {
+      if (!debouncedCustomerSearch.trim() || debouncedCustomerSearch.length < 2) return []
+      
+      const { data, error } = await supabase
+        .from("restaurant_customers")
+        .select(`
+          *,
+          profile:profiles!restaurant_customers_user_id_fkey(
+            id,
+            full_name,
+            phone_number,
+            avatar_url
+          )
+        `)
+        .eq("restaurant_id", restaurantId)
+        .or(`guest_name.ilike.%${debouncedCustomerSearch}%,guest_email.ilike.%${debouncedCustomerSearch}%,guest_phone.ilike.%${debouncedCustomerSearch}%`)
+        .limit(10)
+        .order("last_visit", { ascending: false })
+
+      if (error) throw error
+      return data || []
+    },
+    enabled: debouncedCustomerSearch.length >= 2 && !!restaurantId,
+  })
+
+  // Fetch all tables for conversion
+  const { data: allTables } = useQuery({
+    queryKey: ["restaurant-tables", restaurantId],
+    queryFn: async () => {
+      if (!restaurantId) return []
+      
+      const { data, error } = await supabase
+        .from("restaurant_tables")
+        .select("*")
+        .eq("restaurant_id", restaurantId)
+        .eq("is_active", true)
+        .order("table_number")
+
+      if (error) throw error
+      return data || []
+    },
+    enabled: !!restaurantId,
+  })
 
   // Update status
   const updateStatus = async (entryId: string, newStatus: string) => {
@@ -162,6 +304,58 @@ export function WaitlistPanel({
     }
   }
 
+  // Delete entry
+  const deleteEntry = async (entryId: string) => {
+    try {
+      const { error } = await supabase
+        .from('waitlist')
+        .delete()
+        .eq('id', entryId)
+
+      if (error) throw error
+
+      toast.success('Entry deleted successfully')
+      loadWaitlist()
+    } catch (error) {
+      console.error('Error deleting entry:', error)
+      toast.error('Failed to delete entry')
+    }
+  }
+
+  // Handle customer selection
+  const handleCustomerSelect = (customer: any) => {
+    setSelectedCustomer(customer)
+    setCustomerSearch(customer.profile?.full_name || customer.guest_name || "")
+    setShowCustomerDropdown(false)
+    
+    if (!customer.user_id) {
+      setManualEntry(prev => ({
+        ...prev,
+        guest_name: customer.guest_name || "",
+        guest_email: customer.guest_email || "",
+        guest_phone: customer.guest_phone || ""
+      }))
+    } else {
+      setManualEntry(prev => ({
+        ...prev,
+        guest_name: "",
+        guest_email: "",
+        guest_phone: ""
+      }))
+    }
+  }
+
+  const handleClearCustomer = () => {
+    setSelectedCustomer(null)
+    setCustomerSearch("")
+    setManualEntry(prev => ({
+      ...prev,
+      guest_name: "",
+      guest_email: "",
+      guest_phone: ""
+    }))
+  }
+
   // Check table availability for waitlist entry
   const checkAvailability = useCallback((entry: WaitlistEntry) => {
     // Find available tables for the party size
@@ -181,6 +375,104 @@ export function WaitlistPanel({
     return availableTables.length > 0
   }, [tables, bookings])
 
+  // Add manual waitlist entry
+  const addManualEntry = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      const startDateTime = new Date(manualEntry.desired_date)
+      const [startHours, startMinutes] = manualEntry.desired_time_start.split(':')
+      startDateTime.setHours(parseInt(startHours), parseInt(startMinutes))
+
+      const endDateTime = new Date(manualEntry.desired_date)
+      const [endHours, endMinutes] = manualEntry.desired_time_end.split(':')
+      endDateTime.setHours(parseInt(endHours), parseInt(endMinutes))
+
+      // Check if the desired time is in the past
+      const now = new Date()
+      if (startDateTime <= now) {
+        toast.error('Cannot create waitlist entry for past time. Please select a future date and time.')
+        return
+      }
+
+      if (endDateTime <= startDateTime) {
+        toast.error('End time must be after start time.')
+        return
+      }
+
+      const startAvailability = await availabilityService.isRestaurantOpen(
+        restaurantId,
+        startDateTime,
+        manualEntry.desired_time_start
+      )
+
+      const endAvailability = await availabilityService.isRestaurantOpen(
+        restaurantId,
+        endDateTime,
+        manualEntry.desired_time_end
+      )
+
+      if (!startAvailability.isOpen) {
+        toast.error(`Restaurant is closed at ${manualEntry.desired_time_start}. ${startAvailability.reason || ''}`)
+        return
+      }
+
+      if (!endAvailability.isOpen) {
+        toast.error(`Restaurant is closed at ${manualEntry.desired_time_end}. ${endAvailability.reason || ''}`)
+        return
+      }
+
+      const entryData = {
+        restaurant_id: restaurantId,
+        user_id: selectedCustomer?.user_id || null,
+        guest_name: selectedCustomer 
+          ? (selectedCustomer.profile?.full_name || selectedCustomer.guest_name)
+          : (manualEntry.guest_name || `Anonymous Guest ${format(new Date(), 'HH:mm')}`),
+        guest_phone: selectedCustomer 
+          ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
+          : (manualEntry.guest_phone || null),
+        guest_email: selectedCustomer?.guest_email || manualEntry.guest_email || null,
+        desired_date: format(manualEntry.desired_date, 'yyyy-MM-dd'),
+        desired_time_range: `${manualEntry.desired_time_start}-${manualEntry.desired_time_end}`,
+        party_size: manualEntry.party_size,
+        table_type: manualEntry.table_type,
+        special_requests: manualEntry.special_requests || null,
+        status: 'active'
+      }
+
+      const { error } = await supabase
+        .from('waitlist')
+        .insert(entryData)
+
+      if (error) throw error
+
+      toast.success('Waitlist entry added successfully')
+      setShowAddDialog(false)
+      resetForm()
+      loadWaitlist()
+    } catch (error) {
+      console.error('Error adding entry:', error)
+      toast.error('Failed to add waitlist entry')
+    }
+  }
+
+  // Reset form
+  const resetForm = () => {
+    setSelectedCustomer(null)
+    setCustomerSearch("")
+    setManualEntry({
+      guest_name: '',
+      guest_phone: '',
+      guest_email: '',
+      desired_date: new Date(),
+      desired_time_start: '19:00',
+      desired_time_end: '21:00',
+      party_size: 2,
+      table_type: 'any',
+      special_requests: ''
+    })
+  }
+
   // Notify customer
   const notifyCustomer = async (entry: WaitlistEntry) => {
     if (!checkAvailability(entry)) {
@@ -197,43 +489,182 @@ export function WaitlistPanel({
     if (!notifyingEntry) return
     
     await updateStatus(notifyingEntry.id, 'notified')
-    
-    // Send actual notification (SMS/Push/Email)
-    // This would integrate with your notification service
-    
     setShowNotifyDialog(false)
     setNotifyingEntry(null)
   }
 
-  // Convert to booking
-  const handleConvertToBooking = async (entry: WaitlistEntry) => {
-    // Find suitable tables
-    const availableTables = tables.filter(table => {
-      if (!table.is_active) return false
-      
-      const isOccupied = bookings.some(booking => {
-        const diningStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
-        return diningStatuses.includes(booking.status) && 
-               booking.tables?.some((t: any) => t.id === table.id)
-      })
-      
-      return !isOccupied && table.max_capacity >= entry.party_size
+  // Open convert dialog
+  const openConvertDialog = (entry: WaitlistEntry) => {
+    setConvertingEntry(entry)
+    setSelectedTime('')
+    setSelectedTables([])
+    setShowConvertDialog(true)
+  }
+
+  // Open edit dialog
+  const openEditDialog = (entry: WaitlistEntry) => {
+    setEditingEntry(entry)
+    setManualEntry({
+      guest_name: entry.guest_name || '',
+      guest_phone: entry.guest_phone || '',
+      guest_email: entry.guest_email || '',
+      desired_date: new Date(entry.desired_date),
+      desired_time_start: entry.desired_time_range.split('-')[0],
+      desired_time_end: entry.desired_time_range.split('-')[1],
+      party_size: entry.party_size,
+      table_type: entry.table_type,
+      special_requests: entry.special_requests || ''
     })
+    setShowEditDialog(true)
+  }
+
+  // Update entry
+  const updateEntry = async () => {
+    if (!editingEntry) return
+
+    try {
+      // Validate that the updated time is not in the past
+      const startDateTime = new Date(manualEntry.desired_date)
+      const [startHours, startMinutes] = manualEntry.desired_time_start.split(':')
+      startDateTime.setHours(parseInt(startHours), parseInt(startMinutes))
+
+      const endDateTime = new Date(manualEntry.desired_date)
+      const [endHours, endMinutes] = manualEntry.desired_time_end.split(':')
+      endDateTime.setHours(parseInt(endHours), parseInt(endMinutes))
+
+      const now = new Date()
+      if (startDateTime <= now) {
+        toast.error('Cannot update waitlist entry to past time. Please select a future date and time.')
+        return
+      }
+
+      if (endDateTime <= startDateTime) {
+        toast.error('End time must be after start time.')
+        return
+      }
+
+      const updateData = {
+        guest_name: manualEntry.guest_name || editingEntry.guest_name,
+        guest_phone: manualEntry.guest_phone || editingEntry.guest_phone,
+        guest_email: manualEntry.guest_email || editingEntry.guest_email,
+        desired_date: format(manualEntry.desired_date, 'yyyy-MM-dd'),
+        desired_time_range: `${manualEntry.desired_time_start}-${manualEntry.desired_time_end}`,
+        party_size: manualEntry.party_size,
+        table_type: manualEntry.table_type,
+        special_requests: manualEntry.special_requests
+      }
+
+      const { error } = await supabase
+        .from('waitlist')
+        .update(updateData)
+        .eq('id', editingEntry.id)
+
+      if (error) throw error
+
+      toast.success('Entry updated successfully')
+      setShowEditDialog(false)
+      setEditingEntry(null)
+      resetForm()
+      loadWaitlist()
+    } catch (error) {
+      console.error('Error updating entry:', error)
+      toast.error('Failed to update entry')
+    }
+  }
+
+  // Generate available time slots
+  const getAvailableTimeSlots = () => {
+    if (!convertingEntry) return []
+
+    const [startTime, endTime] = convertingEntry.desired_time_range.split('-')
+    const slots = []
     
-    if (availableTables.length === 0) {
-      toast.error("No suitable tables available")
-      return
+    const [startHour, startMin] = startTime.trim().split(':').map(Number)
+    const [endHour, endMin] = endTime.trim().split(':').map(Number)
+    
+    let currentHour = startHour
+    let currentMin = startMin
+    
+    while (currentHour < endHour || (currentHour === endHour && currentMin < endMin)) {
+      const timeString = `${currentHour.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}`
+      slots.push(timeString)
+      
+      currentMin += 30
+      if (currentMin >= 60) {
+        currentMin = 0
+        currentHour++
+      }
     }
     
-    // Auto-select best fitting table
-    const bestTable = availableTables.sort((a, b) => {
-      const aDiff = Math.abs(a.max_capacity - entry.party_size)
-      const bDiff = Math.abs(b.max_capacity - entry.party_size)
-      return aDiff - bDiff
-    })[0]
-    
-    onConvertToBooking(entry, [bestTable.id])
-    await updateStatus(entry.id, 'booked')
+    return slots
+  }
+
+  // Handle conversion to booking
+  const handleConvertToBooking = async () => {
+    if (!convertingEntry || !selectedTime || selectedTables.length === 0) {
+      toast.error('Please select a time and at least one table')
+      return
+    }
+
+    try {
+      setIsConverting(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        toast.error('You must be logged in')
+        return
+      }
+
+      const bookingDate = new Date(convertingEntry.desired_date)
+      const [hours, minutes] = selectedTime.split(':')
+      bookingDate.setHours(parseInt(hours), parseInt(minutes))
+
+      const confirmationCode = `${restaurantId.slice(0, 4).toUpperCase()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+
+      const { data: booking, error: bookingError } = await supabase
+        .from("bookings")
+        .insert({
+          restaurant_id: restaurantId,
+          user_id: convertingEntry.user_id || user.id,
+          guest_name: convertingEntry.user?.full_name || convertingEntry.guest_name,
+          guest_email: convertingEntry.guest_email,
+          guest_phone: convertingEntry.user?.phone_number || convertingEntry.guest_phone,
+          booking_time: bookingDate.toISOString(),
+          party_size: convertingEntry.party_size,
+          turn_time_minutes: 120,
+          status: 'confirmed',
+          special_requests: convertingEntry.special_requests,
+          confirmation_code: confirmationCode,
+        })
+        .select()
+        .single()
+
+      if (bookingError) throw bookingError
+
+      const tableAssignments = selectedTables.map((tableId: string) => ({
+        booking_id: booking.id,
+        table_id: tableId,
+      }))
+
+      const { error: tableError } = await supabase
+        .from("booking_tables")
+        .insert(tableAssignments)
+
+      if (tableError) throw tableError
+
+      await updateStatus(convertingEntry.id, 'booked')
+
+      toast.success('Successfully converted waitlist entry to booking!')
+      setShowConvertDialog(false)
+      setConvertingEntry(null)
+      setSelectedTime('')
+      setSelectedTables([])
+    } catch (error) {
+      console.error('Error converting to booking:', error)
+      toast.error('Failed to convert to booking')
+    } finally {
+      setIsConverting(false)
+    }
   }
 
   // Filter entries
@@ -284,7 +715,7 @@ export function WaitlistPanel({
       <div
         key={entry.id}
         className={cn(
-          "p-2 rounded-lg border transition-all",
+          "p-2 rounded-lg border transition-all group hover:shadow-sm",
           urgency === 'overdue' && "border-red-500 bg-red-50 dark:bg-red-900/20",
           urgency === 'urgent' && "border-orange-500 bg-orange-50 dark:bg-orange-900/20",
           urgency === 'soon' && "border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20",
@@ -294,95 +725,116 @@ export function WaitlistPanel({
         )}
       >
         <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            {/* Customer info */}
-            <div className="flex items-center gap-1 mb-1">
-              <p className="font-medium text-sm truncate">
-                {entry.user?.full_name || entry.guest_name || 'Guest'}
-              </p>
-              <Badge 
-                className={cn(
-                  "text-xs px-1 py-0 h-4",
-                  entry.status === 'active' && "bg-green-100 text-green-800",
-                  entry.status === 'notified' && "bg-blue-100 text-blue-800",
-                  entry.status === 'booked' && "bg-purple-100 text-purple-800",
-                  entry.status === 'expired' && "bg-gray-100 text-gray-800"
-                )}
-              >
-                {entry.status}
-              </Badge>
-            </div>
+          <div className="flex items-center gap-2 flex-1">
+            <Avatar className="h-6 w-6">
+              <AvatarImage src={entry.user?.avatar_url} />
+              <AvatarFallback className="text-xs">
+                {(entry.user?.full_name || entry.guest_name || 'G')[0]}
+              </AvatarFallback>
+            </Avatar>
             
-            {/* Details */}
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-0.5">
-                <Clock className="h-3 w-3" />
-                {entry.desired_time_range}
-              </span>
-              <span className="flex items-center gap-0.5">
-                <Users className="h-3 w-3" />
-                {entry.party_size}
-              </span>
-              {(entry.user?.phone_number || entry.guest_phone) && (
+            <div className="flex-1 min-w-0">
+              {/* Customer info */}
+              <div className="flex items-center gap-1 mb-1">
+                <p className="font-medium text-sm truncate">
+                  {entry.user?.full_name || entry.guest_name || 'Guest'}
+                </p>
+                <Badge 
+                  className={cn(
+                    "text-xs px-1 py-0 h-4",
+                    entry.status === 'active' && "bg-green-100 text-green-800",
+                    entry.status === 'notified' && "bg-blue-100 text-blue-800",
+                    entry.status === 'booked' && "bg-purple-100 text-purple-800",
+                    entry.status === 'expired' && "bg-gray-100 text-gray-800"
+                  )}
+                >
+                  {entry.status}
+                </Badge>
+              </div>
+              
+              {/* Details */}
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-0.5">
-                  <Phone className="h-3 w-3" />
-                  {entry.user?.phone_number || entry.guest_phone}
+                  <Clock className="h-3 w-3" />
+                  {entry.desired_time_range}
                 </span>
+                <span className="flex items-center gap-0.5">
+                  <Users className="h-3 w-3" />
+                  {entry.party_size}
+                </span>
+                {(entry.user?.phone_number || entry.guest_phone) && (
+                  <span className="flex items-center gap-0.5">
+                    <Phone className="h-3 w-3" />
+                    {(entry.user?.phone_number || entry.guest_phone)?.slice(-4)}
+                  </span>
+                )}
+              </div>
+              
+              {/* Notification expiry warning */}
+              {isNotified && entry.notification_expires_at && (
+                <div className="mt-1">
+                  <span className="text-xs text-blue-600 font-medium">
+                    Expires: {format(parseISO(entry.notification_expires_at), 'h:mm a')}
+                  </span>
+                </div>
               )}
             </div>
-            
-            {/* Notification expiry warning */}
-            {isNotified && entry.notification_expires_at && (
-              <div className="mt-1">
-                <span className="text-xs text-blue-600 font-medium">
-                  Expires: {format(parseISO(entry.notification_expires_at), 'h:mm a')}
-                </span>
-              </div>
-            )}
           </div>
           
           {/* Actions */}
-          <div className="flex flex-col gap-1">
-            {entry.status === 'active' && (
-              <>
-                {hasAvailability ? (
+          <div className="flex items-center gap-1">
+            {/* Main action buttons */}
+            {entry.status === 'active' && hasAvailability && (
+              <Button
+                size="sm"
+                onClick={() => notifyCustomer(entry)}
+                className="h-5 px-1 text-xs bg-blue-600 hover:bg-blue-700"
+              >
+                <Bell className="h-3 w-3" />
+              </Button>
+            )}
+            
+            {(entry.status === 'active' || entry.status === 'notified') && (
+              <Button
+                size="sm"
+                onClick={() => openConvertDialog(entry)}
+                className="h-5 px-1 text-xs bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle className="h-3 w-3" />
+              </Button>
+            )}
+            
+            {/* Secondary actions (visible on hover) */}
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+              {['active', 'notified'].includes(entry.status) && (
+                <>
                   <Button
                     size="sm"
-                    onClick={() => notifyCustomer(entry)}
-                    className="h-6 px-2 text-xs bg-blue-600 hover:bg-blue-700"
+                    variant="ghost"
+                    onClick={() => openEditDialog(entry)}
+                    className="h-5 px-1 text-xs text-blue-600 hover:text-blue-700"
                   >
-                    <Bell className="h-3 w-3 mr-1" />
-                    Notify
+                    <Edit className="h-3 w-3" />
                   </Button>
-                ) : (
-                  <Badge className="text-xs bg-gray-100 text-gray-600">
-                    No tables
-                  </Badge>
-                )}
-              </>
-            )}
-            
-            {entry.status === 'notified' && (
-              <Button
-                size="sm"
-                onClick={() => handleConvertToBooking(entry)}
-                className="h-6 px-2 text-xs bg-green-600 hover:bg-green-700"
-              >
-                <CheckCircle className="h-3 w-3 mr-1" />
-                Book
-              </Button>
-            )}
-            
-            {['active', 'notified'].includes(entry.status) && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => updateStatus(entry.id, 'expired')}
-                className="h-6 px-2 text-xs text-red-600 hover:text-red-700"
-              >
-                <XCircle className="h-3 w-3" />
-              </Button>
-            )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => updateStatus(entry.id, 'expired')}
+                    className="h-5 px-1 text-xs text-orange-600 hover:text-orange-700"
+                  >
+                    <XCircle className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => deleteEntry(entry.id)}
+                    className="h-5 px-1 text-xs text-red-600 hover:text-red-700"
+                  >
+                    <Trash className="h-3 w-3" />
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -401,14 +853,28 @@ export function WaitlistPanel({
               {stats.active}
             </Badge>
           </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={loadWaitlist}
-            className="h-5 w-5 p-0"
-          >
-            <RefreshCw className="h-3 w-3" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowAddDialog(true)}
+              className="h-5 w-5 p-0 text-green-600 hover:text-green-700"
+            >
+              <Plus className="h-3 w-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setRefreshing(true)
+                loadWaitlist(false)
+              }}
+              disabled={refreshing}
+              className="h-5 w-5 p-0"
+            >
+              <RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />
+            </Button>
+          </div>
         </div>
       </div>
       
@@ -473,6 +939,427 @@ export function WaitlistPanel({
         </div>
       </ScrollArea>
       
+      {/* Add Entry Dialog */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add Waitlist Entry</DialogTitle>
+            <DialogDescription>
+              Add a new customer to the waitlist
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Customer Search */}
+            <div className="space-y-2">
+              <Label>Customer Search (Optional)</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search existing customers..."
+                  value={customerSearch}
+                  onChange={(e) => {
+                    setCustomerSearch(e.target.value)
+                    setShowCustomerDropdown(e.target.value.length >= 2)
+                  }}
+                  onFocus={() => setShowCustomerDropdown(customerSearch.length >= 2)}
+                  onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
+                  className="pl-10"
+                />
+                {selectedCustomer && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 p-0"
+                    onClick={handleClearCustomer}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+              
+              {/* Customer dropdown */}
+              {showCustomerDropdown && customerSearch.length >= 2 && (
+                <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                  {customersLoading && (
+                    <div className="p-3 text-sm text-muted-foreground">Searching...</div>
+                  )}
+                  {customers && customers.length > 0 && (
+                    customers.map((customer) => (
+                      <div
+                        key={customer.id}
+                        className="p-2 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer"
+                        onClick={() => handleCustomerSelect(customer)}
+                      >
+                        <div className="font-medium text-sm">
+                          {customer.profile?.full_name || customer.guest_name}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {customer.guest_email || customer.guest_phone}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  {customers && customers.length === 0 && !customersLoading && (
+                    <div className="p-3 text-sm text-muted-foreground">No customers found</div>
+                  )}
+                </div>
+              )}
+
+              {selectedCustomer && (
+                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">
+                      {selectedCustomer.profile?.full_name || selectedCustomer.guest_name}
+                    </span>
+                    <Button variant="ghost" size="sm" onClick={handleClearCustomer}>
+                      Clear
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Guest Information */}
+            <div className="space-y-3">
+              <Label>Guest Information</Label>
+              <Input
+                placeholder="Guest name"
+                value={selectedCustomer 
+                  ? (selectedCustomer.profile?.full_name || selectedCustomer.guest_name || "")
+                  : manualEntry.guest_name
+                }
+                onChange={(e) => setManualEntry({ ...manualEntry, guest_name: e.target.value })}
+                disabled={!!selectedCustomer}
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  placeholder="Phone"
+                  value={selectedCustomer 
+                    ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone || "")
+                    : manualEntry.guest_phone
+                  }
+                  onChange={(e) => setManualEntry({ ...manualEntry, guest_phone: e.target.value })}
+                  disabled={!!selectedCustomer}
+                />
+                <Input
+                  placeholder="Email"
+                  value={selectedCustomer 
+                    ? (selectedCustomer.guest_email || "")
+                    : manualEntry.guest_email
+                  }
+                  onChange={(e) => setManualEntry({ ...manualEntry, guest_email: e.target.value })}
+                  disabled={!!selectedCustomer}
+                />
+              </div>
+            </div>
+
+            {/* Waitlist Details */}
+            <div className="space-y-3">
+              <Label>Waitlist Details</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {format(manualEntry.desired_date, "PPP")}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    mode="single"
+                    selected={manualEntry.desired_date}
+                    onSelect={(date) => date && setManualEntry({ ...manualEntry, desired_date: date })}
+                    disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                  />
+                </PopoverContent>
+              </Popover>
+              
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Start Time</Label>
+                  <Input
+                    type="time"
+                    value={manualEntry.desired_time_start}
+                    onChange={(e) => setManualEntry({ ...manualEntry, desired_time_start: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">End Time</Label>
+                  <Input
+                    type="time"
+                    value={manualEntry.desired_time_end}
+                    onChange={(e) => setManualEntry({ ...manualEntry, desired_time_end: e.target.value })}
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Party Size</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={manualEntry.party_size}
+                    onChange={(e) => setManualEntry({ ...manualEntry, party_size: parseInt(e.target.value) || 1 })}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Table Type</Label>
+                  <Select 
+                    value={manualEntry.table_type} 
+                    onValueChange={(value) => setManualEntry({ ...manualEntry, table_type: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any</SelectItem>
+                      <SelectItem value="indoor">Indoor</SelectItem>
+                      <SelectItem value="outdoor">Outdoor</SelectItem>
+                      <SelectItem value="bar">Bar</SelectItem>
+                      <SelectItem value="private">Private</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <Input
+                placeholder="Special requests"
+                value={manualEntry.special_requests}
+                onChange={(e) => setManualEntry({ ...manualEntry, special_requests: e.target.value })}
+              />
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowAddDialog(false)
+              resetForm()
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={addManualEntry}>
+              Add Entry
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Entry Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Waitlist Entry</DialogTitle>
+            <DialogDescription>
+              Update waitlist entry details
+            </DialogDescription>
+          </DialogHeader>
+          
+          {editingEntry && (
+            <div className="space-y-4">
+              <Input
+                placeholder="Guest name"
+                value={manualEntry.guest_name}
+                onChange={(e) => setManualEntry({ ...manualEntry, guest_name: e.target.value })}
+              />
+              
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  placeholder="Phone"
+                  value={manualEntry.guest_phone}
+                  onChange={(e) => setManualEntry({ ...manualEntry, guest_phone: e.target.value })}
+                />
+                <Input
+                  placeholder="Email"
+                  value={manualEntry.guest_email}
+                  onChange={(e) => setManualEntry({ ...manualEntry, guest_email: e.target.value })}
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Start Time</Label>
+                  <Input
+                    type="time"
+                    value={manualEntry.desired_time_start}
+                    onChange={(e) => setManualEntry({ ...manualEntry, desired_time_start: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">End Time</Label>
+                  <Input
+                    type="time"
+                    value={manualEntry.desired_time_end}
+                    onChange={(e) => setManualEntry({ ...manualEntry, desired_time_end: e.target.value })}
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Party Size</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={manualEntry.party_size}
+                    onChange={(e) => setManualEntry({ ...manualEntry, party_size: parseInt(e.target.value) || 1 })}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Table Type</Label>
+                  <Select 
+                    value={manualEntry.table_type} 
+                    onValueChange={(value) => setManualEntry({ ...manualEntry, table_type: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any</SelectItem>
+                      <SelectItem value="indoor">Indoor</SelectItem>
+                      <SelectItem value="outdoor">Outdoor</SelectItem>
+                      <SelectItem value="bar">Bar</SelectItem>
+                      <SelectItem value="private">Private</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <Input
+                placeholder="Special requests"
+                value={manualEntry.special_requests}
+                onChange={(e) => setManualEntry({ ...manualEntry, special_requests: e.target.value })}
+              />
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowEditDialog(false)
+              setEditingEntry(null)
+              resetForm()
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={updateEntry}>
+              Update Entry
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Convert to Booking Dialog */}
+      <Dialog open={showConvertDialog} onOpenChange={(open) => {
+        if (!open) {
+          setShowConvertDialog(false)
+          setConvertingEntry(null)
+          setSelectedTime('')
+          setSelectedTables([])
+        }
+      }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Convert to Booking</DialogTitle>
+            <DialogDescription>
+              {convertingEntry && (
+                <>
+                  Converting waitlist entry for {convertingEntry.user?.full_name || convertingEntry.guest_name || 'Guest'} - {convertingEntry.party_size} people
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {convertingEntry && (
+            <div className="space-y-6">
+              {/* Time Selection */}
+              <div className="space-y-3">
+                <Label>Select Time</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {getAvailableTimeSlots().map((timeSlot) => (
+                    <Button
+                      key={timeSlot}
+                      variant={selectedTime === timeSlot ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setSelectedTime(timeSlot)}
+                      className="text-sm"
+                    >
+                      {timeSlot}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Table Selection */}
+              <div className="space-y-3">
+                <Label>Select Tables (Capacity needed: {convertingEntry.party_size})</Label>
+                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                  {allTables?.map((table) => {
+                    const isSelected = selectedTables.includes(table.id)
+                    
+                    return (
+                      <label
+                        key={table.id}
+                        className={cn(
+                          "flex items-center p-2 border rounded cursor-pointer transition-all",
+                          isSelected && "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {
+                            setSelectedTables(prev => 
+                              prev.includes(table.id) 
+                                ? prev.filter(id => id !== table.id)
+                                : [...prev, table.id]
+                            )
+                          }}
+                          className="mr-2"
+                        />
+                        <div className="text-sm">
+                          <div className="font-medium">Table {table.table_number}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {table.capacity} seats • {table.table_type}
+                          </div>
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+                
+                {selectedTables.length > 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    Selected capacity: {
+                      allTables?.filter(t => selectedTables.includes(t.id))
+                        .reduce((sum, t) => sum + t.capacity, 0) || 0
+                    } seats
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowConvertDialog(false)
+              setConvertingEntry(null)
+              setSelectedTime('')
+              setSelectedTables([])
+            }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConvertToBooking}
+              disabled={!selectedTime || selectedTables.length === 0 || isConverting}
+            >
+              {isConverting ? "Converting..." : "Convert to Booking"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Notify confirmation dialog */}
       <Dialog open={showNotifyDialog} onOpenChange={setShowNotifyDialog}>
         <DialogContent className="max-w-sm">
