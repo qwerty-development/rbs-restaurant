@@ -263,7 +263,7 @@ export default function TermsPage() {
                   <h2 className="text-2xl font-semibold mb-4">10. Intellectual Property</h2>
                   <div className="space-y-3 text-muted-foreground">
                     <p>
-                      The service and its original content, features, and functionality are and will remain the exclusive property of RBS Restaurant Management System and its licensors.
+                      The service and its original content, features, and functionality are and will remain the exclusive property of Plate Management System and its licensors.
                     </p>
                     <ul className="list-disc pl-6 space-y-2">
                       <li>The service is protected by copyright, trademark, and other laws</li>

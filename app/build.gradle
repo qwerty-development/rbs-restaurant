@@ -24,7 +24,7 @@ def twaManifest = [
     applicationId: 'app.vercel.rbs_restaurant.twa',
     hostName: 'rbs-restaurant.vercel.app', // The domain being opened in the TWA.
     launchUrl: '/dashboard', // The start path for the TWA. Must be relative to the domain.
-    name: 'RBS Restaurant Management', // The application name.
+    name: 'Plate Management', // The application name.
     launcherName: 'RBS Rest', // The name shown on the Android Launcher.
     themeColor: '#7A2E4A', // Mulberry Velvet - The color used for the status bar.
     themeColorDark: '#5A1F34', // Darker Mulberry Velvet - The color used for the dark status bar.

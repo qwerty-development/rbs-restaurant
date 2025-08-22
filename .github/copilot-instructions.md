@@ -1,4 +1,4 @@
-# Restaurant Management System - AI Developer Guide
+# Plate System - AI Developer Guide
 
 ## Project Overview
 This is a comprehensive Next.js 15 restaurant management system with Supabase backend, featuring multi-tenant restaurant operations, social booking features, loyalty programs, staff management, and advanced table management. Uses App Router with TypeScript and Tailwind CSS.

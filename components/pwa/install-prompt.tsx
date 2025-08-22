@@ -102,7 +102,7 @@ export function InstallPrompt() {
             <div>
               <CardTitle className="text-lg">Install RBS Restaurant App</CardTitle>
               <CardDescription>
-                Get quick access to your restaurant management tools
+                Get quick access to your plate restaurant management tools
               </CardDescription>
             </div>
           </div>

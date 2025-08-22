@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Checkbox } from "@/components/ui/checkbox"
 import { BookingList } from "@/components/bookings/booking-list"
 import { BookingDetails } from "@/components/bookings/booking-details"
 import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
@@ -176,6 +177,11 @@ export default function BookingsPage() {
   const [showQuickStats, setShowQuickStats] = useState(true)
   const [lastRefresh, setLastRefresh] = useState(new Date())
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [showTableAssignment, setShowTableAssignment] = useState(false)
+  const [assignmentBookingId, setAssignmentBookingId] = useState<string | null>(null)
+  const [availableTablesForAssignment, setAvailableTablesForAssignment] = useState<any[]>([])
+  const [selectedTablesForAssignment, setSelectedTablesForAssignment] = useState<string[]>([])
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false)
   
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -567,6 +573,160 @@ export default function BookingsPage() {
     queryClient.invalidateQueries({ queryKey: ["tables"] })
     toast.success("Data refreshed")
   }, [queryClient])
+
+  // Table assignment functions
+  const openTableAssignment = useCallback(async (bookingId: string) => {
+    setAssignmentBookingId(bookingId)
+    setIsCheckingAvailability(true)
+    
+    const booking = bookings?.find(b => b.id === bookingId)
+    if (!booking) return
+    
+    try {
+      // Get all available tables for the booking time
+      const { data: allTables } = await supabase
+        .from("restaurant_tables")
+        .select("*")
+        .eq("restaurant_id", restaurantId)
+        .eq("is_active", true)
+        .order("table_number")
+      
+      if (!allTables) return
+      
+      // Check availability for each table
+      const availabilityPromises = allTables.map(async (table) => {
+        const availability = await tableService.checkTableAvailability(
+          restaurantId,
+          [table.id],
+          new Date(booking.booking_time),
+          booking.turn_time_minutes || 120
+        )
+        return {
+          ...table,
+          isAvailable: availability.available,
+          conflictReason: availability.conflicts?.[0]?.reason || (availability.available ? null : "Table unavailable")
+        }
+      })
+      
+      const tablesWithAvailability = await Promise.all(availabilityPromises)
+      setAvailableTablesForAssignment(tablesWithAvailability)
+      
+      // Pre-select currently assigned tables
+      const currentTableIds = booking.tables?.map(t => t.id) || []
+      setSelectedTablesForAssignment(currentTableIds)
+      
+      setShowTableAssignment(true)
+    } catch (error) {
+      console.error("Error checking table availability:", error)
+      toast.error("Failed to check table availability")
+    } finally {
+      setIsCheckingAvailability(false)
+    }
+  }, [bookings, restaurantId, supabase, tableService])
+
+  // Assign tables to booking
+  const assignTablesMutation = useMutation({
+    mutationFn: async ({ bookingId, tableIds }: { bookingId: string; tableIds: string[] }) => {
+      // First, remove existing table assignments
+      await supabase
+        .from("booking_tables")
+        .delete()
+        .eq("booking_id", bookingId)
+      
+      // Then add new table assignments if any
+      if (tableIds.length > 0) {
+        const assignments = tableIds.map(tableId => ({
+          booking_id: bookingId,
+          table_id: tableId
+        }))
+        
+        const { error } = await supabase
+          .from("booking_tables")
+          .insert(assignments)
+        
+        if (error) throw error
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["table-stats"] })
+      toast.success("Table assignment updated successfully")
+      setShowTableAssignment(false)
+      setAssignmentBookingId(null)
+      setSelectedTablesForAssignment([])
+    },
+    onError: (error) => {
+      console.error("Table assignment error:", error)
+      toast.error("Failed to update table assignment")
+    }
+  })
+
+  // Switch table for booking (move from one table to another)
+  const switchTableMutation = useMutation({
+    mutationFn: async ({ bookingId, fromTableId, toTableId }: { 
+      bookingId: string; 
+      fromTableId: string; 
+      toTableId: string 
+    }) => {
+      const booking = bookings?.find(b => b.id === bookingId)
+      if (!booking) throw new Error("Booking not found")
+      
+      // Check if target table is available
+      const availability = await tableService.checkTableAvailability(
+        restaurantId,
+        [toTableId],
+        new Date(booking.booking_time),
+        booking.turn_time_minutes || 120
+      )
+      
+      if (!availability.available) {
+        const reason = availability.conflicts?.[0]?.reason || "Table is not available"
+        throw new Error(`Table is not available: ${reason}`)
+      }
+      
+      // Update the table assignment
+      const { error } = await supabase
+        .from("booking_tables")
+        .update({ table_id: toTableId })
+        .eq("booking_id", bookingId)
+        .eq("table_id", fromTableId)
+      
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["table-stats"] })
+      toast.success("Table switched successfully")
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to switch table")
+    }
+  })
+
+  // Remove table assignment
+  const removeTableAssignmentMutation = useMutation({
+    mutationFn: async ({ bookingId, tableId }: { bookingId: string; tableId?: string }) => {
+      let query = supabase
+        .from("booking_tables")
+        .delete()
+        .eq("booking_id", bookingId)
+      
+      if (tableId) {
+        query = query.eq("table_id", tableId)
+      }
+      
+      const { error } = await query
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["table-stats"] })
+      toast.success("Table assignment removed")
+    },
+    onError: () => {
+      toast.error("Failed to remove table assignment")
+    }
+  })
   const createManualBookingMutation = useMutation({
     mutationFn: async (bookingData: any) => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -807,6 +967,32 @@ export default function BookingsPage() {
                 <XCircle className="mr-2 h-5 w-5" />
                 <span className="hidden tablet:inline">Cancel</span> ({selectedBookings.length})
               </Button>
+              
+              {/* Bulk Table Assignment */}
+              {(() => {
+                const bookingsWithoutTables = selectedBookings.filter(id => {
+                  const booking = bookings?.find(b => b.id === id)
+                  return booking && (!booking.tables || booking.tables.length === 0) && 
+                         ['confirmed', 'pending', 'arrived'].includes(booking.status)
+                })
+                return bookingsWithoutTables.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="default"
+                    onClick={() => {
+                      // Open table assignment for first booking without tables
+                      // Future enhancement: could open a bulk assignment modal
+                      const firstBookingId = bookingsWithoutTables[0]
+                      openTableAssignment(firstBookingId)
+                      toast.success(`Opening table assignment for ${bookingsWithoutTables.length} booking(s)`)
+                    }}
+                    className="min-h-touch-lg border-orange-300 text-orange-700 hover:bg-orange-50"
+                  >
+                    <Table2 className="mr-2 h-5 w-5" />
+                    <span className="hidden tablet:inline">Assign Tables</span> ({bookingsWithoutTables.length})
+                  </Button>
+                )
+              })()}
             </div>
           )}
 
@@ -1181,6 +1367,13 @@ export default function BookingsPage() {
             onUpdateStatus={(bookingId: any, status: any) => 
               updateBookingMutation.mutate({ bookingId, updates: { status } })
             }
+            onAssignTable={openTableAssignment}
+            onSwitchTable={(bookingId, fromTableId, toTableId) => 
+              switchTableMutation.mutate({ bookingId, fromTableId, toTableId })
+            }
+            onRemoveTable={(bookingId, tableId) => 
+              removeTableAssignmentMutation.mutate({ bookingId, tableId })
+            }
           />
         </TabsContent>
 
@@ -1299,6 +1492,13 @@ export default function BookingsPage() {
             onUpdateStatus={(bookingId: any, status: any) => 
               updateBookingMutation.mutate({ bookingId, updates: { status } })
             }
+            onAssignTable={openTableAssignment}
+            onSwitchTable={(bookingId, fromTableId, toTableId) => 
+              switchTableMutation.mutate({ bookingId, fromTableId, toTableId })
+            }
+            onRemoveTable={(bookingId, tableId) => 
+              removeTableAssignmentMutation.mutate({ bookingId, tableId })
+            }
           />
         </TabsContent>
 
@@ -1338,6 +1538,13 @@ export default function BookingsPage() {
                   onSelectBooking={setSelectedBooking}
                   onUpdateStatus={(bookingId: any, status: any) => 
                     updateBookingMutation.mutate({ bookingId, updates: { status } })
+                  }
+                  onAssignTable={openTableAssignment}
+                  onSwitchTable={(bookingId, fromTableId, toTableId) => 
+                    switchTableMutation.mutate({ bookingId, fromTableId, toTableId })
+                  }
+                  onRemoveTable={(bookingId, tableId) => 
+                    removeTableAssignmentMutation.mutate({ bookingId, tableId })
                   }
                   compact
                 />
@@ -1435,7 +1642,41 @@ export default function BookingsPage() {
                     }
 
                     return (
-                      <Card key={table.id} className={`p-4 tablet:p-6 ${cardStyle} hover:shadow-lg transition-all cursor-pointer min-h-[200px] tablet:min-h-[240px]`}>
+                      <Card 
+                        key={table.id} 
+                        className={`p-4 tablet:p-6 ${cardStyle} hover:shadow-lg transition-all cursor-pointer min-h-[200px] tablet:min-h-[240px]`}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          if (draggedBooking && !isCurrentlyOccupied) {
+                            e.currentTarget.classList.add('ring-2', 'ring-primary', 'ring-offset-2')
+                          }
+                        }}
+                        onDragLeave={(e) => {
+                          e.currentTarget.classList.remove('ring-2', 'ring-primary', 'ring-offset-2')
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          e.currentTarget.classList.remove('ring-2', 'ring-primary', 'ring-offset-2')
+                          
+                          if (draggedBooking && !isCurrentlyOccupied) {
+                            const draggedBookingData = bookings?.find(b => b.id === draggedBooking)
+                            if (draggedBookingData?.tables?.[0]?.id) {
+                              switchTableMutation.mutate({
+                                bookingId: draggedBooking,
+                                fromTableId: draggedBookingData.tables[0].id,
+                                toTableId: table.id
+                              })
+                            } else {
+                              // Assign table if no current assignment
+                              assignTablesMutation.mutate({
+                                bookingId: draggedBooking,
+                                tableIds: [table.id]
+                              })
+                            }
+                            setDraggedBooking(null)
+                          }
+                        }}
+                      >
                         <div className="text-center space-y-3">
                           {/* Table Header */}
                           <div className="flex items-center justify-center gap-2">
@@ -1460,8 +1701,25 @@ export default function BookingsPage() {
 
                           {/* Current Booking Info */}
                           {currentBooking && (
-                            <div className="mt-2 p-2 bg-red-100 rounded text-xs">
-                              <div className="font-medium text-red-800">Currently Occupied</div>
+                            <div 
+                              className="mt-2 p-2 bg-red-100 rounded text-xs cursor-move hover:bg-red-200 transition-colors"
+                              draggable
+                              onDragStart={(e) => {
+                                setDraggedBooking(currentBooking.id)
+                                e.dataTransfer.effectAllowed = 'move'
+                                e.dataTransfer.setData('text/plain', currentBooking.id)
+                                // Add visual feedback
+                                e.currentTarget.classList.add('opacity-50')
+                              }}
+                              onDragEnd={(e) => {
+                                e.currentTarget.classList.remove('opacity-50')
+                                setDraggedBooking(null)
+                              }}
+                            >
+                              <div className="font-medium text-red-800 flex items-center gap-1">
+                                <span>Currently Occupied</span>
+                                <span className="text-xs">🔄</span>
+                              </div>
                               <div className="text-red-700">
                                 {format(new Date(currentBooking.booking_time), "HH:mm")} - {format(addMinutes(new Date(currentBooking.booking_time), currentBooking.turn_time_minutes || 120), "HH:mm")}
                               </div>
@@ -1476,8 +1734,25 @@ export default function BookingsPage() {
 
                           {/* Next Booking Info */}
                           {!isCurrentlyOccupied && nextBooking && (
-                            <div className="mt-2 p-2 bg-yellow-100 rounded text-xs">
-                              <div className="font-medium text-yellow-800">Next Booking</div>
+                            <div 
+                              className="mt-2 p-2 bg-yellow-100 rounded text-xs cursor-move hover:bg-yellow-200 transition-colors"
+                              draggable
+                              onDragStart={(e) => {
+                                setDraggedBooking(nextBooking.id)
+                                e.dataTransfer.effectAllowed = 'move'
+                                e.dataTransfer.setData('text/plain', nextBooking.id)
+                                // Add visual feedback
+                                e.currentTarget.classList.add('opacity-50')
+                              }}
+                              onDragEnd={(e) => {
+                                e.currentTarget.classList.remove('opacity-50')
+                                setDraggedBooking(null)
+                              }}
+                            >
+                              <div className="font-medium text-yellow-800 flex items-center gap-1">
+                                <span>Next Booking</span>
+                                <span className="text-xs">🔄</span>
+                              </div>
                               <div className="text-yellow-700">
                                 {format(new Date(nextBooking.booking_time), "HH:mm")}
                               </div>
@@ -1696,6 +1971,243 @@ export default function BookingsPage() {
                 <p>• Ctrl combinations work on tablets with keyboards</p>
                 <p>• Long press cards for context menus</p>
                 <p>• Swipe gestures work on touch devices</p>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Table Assignment Modal */}
+      <Dialog open={showTableAssignment} onOpenChange={setShowTableAssignment}>
+        <DialogContent className="max-w-4xl w-[95vw] h-[90vh] tablet:h-[95vh] flex flex-col p-0">
+          <div className="flex-shrink-0 px-4 tablet:px-6 py-4 border-b">
+            <DialogHeader>
+              <DialogTitle className="text-lg tablet:text-xl flex items-center gap-2">
+                <Table2 className="h-6 w-6" />
+                Assign Tables
+              </DialogTitle>
+              <DialogDescription className="text-sm tablet:text-base">
+                {assignmentBookingId && (() => {
+                  const booking = bookings?.find(b => b.id === assignmentBookingId)
+                  return booking ? (
+                    <span>
+                      Assigning tables for <strong>{booking.guest_name || booking.user?.full_name}</strong> 
+                      {' '}({format(new Date(booking.booking_time), "MMM d, HH:mm")} • Party of {booking.party_size})
+                    </span>
+                  ) : null
+                })()}
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto px-4 tablet:px-6 py-4">
+            {isCheckingAvailability ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center space-y-4">
+                  <RefreshCw className="h-8 w-8 animate-spin mx-auto text-primary" />
+                  <p className="text-muted-foreground">Checking table availability...</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Selected Tables Summary */}
+                {selectedTablesForAssignment.length > 0 && (
+                  <Card className="bg-green-50 border-green-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        <span className="font-semibold text-green-800">
+                          Selected Tables ({selectedTablesForAssignment.length})
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedTablesForAssignment.map(tableId => {
+                          const table = availableTablesForAssignment.find(t => t.id === tableId)
+                          return table ? (
+                            <Badge key={tableId} variant="default" className="px-3 py-1">
+                              Table {table.table_number} ({table.capacity} seats)
+                            </Badge>
+                          ) : null
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Available Tables Grid */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">Available Tables</h3>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="h-3 w-3 bg-green-500 rounded-full" />
+                        <span>Available</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-3 w-3 bg-red-500 rounded-full" />
+                        <span>Unavailable</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-3 w-3 bg-blue-500 rounded-full" />
+                        <span>Currently Assigned</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="grid gap-4 grid-cols-2 tablet:grid-cols-3 lg:grid-cols-4">
+                    {availableTablesForAssignment.map((table) => {
+                      const isSelected = selectedTablesForAssignment.includes(table.id)
+                      const isCurrentlyAssigned = assignmentBookingId && 
+                        bookings?.find(b => b.id === assignmentBookingId)?.tables?.some(t => t.id === table.id)
+                      
+                      return (
+                        <Card 
+                          key={table.id} 
+                          className={cn(
+                            "cursor-pointer transition-all duration-200 hover:shadow-lg",
+                            isSelected 
+                              ? "border-primary bg-primary/5 shadow-md" 
+                              : table.isAvailable 
+                                ? "border-green-200 bg-green-50 hover:bg-green-100" 
+                                : "border-red-200 bg-red-50 opacity-60 cursor-not-allowed"
+                          )}
+                          onClick={() => {
+                            if (!table.isAvailable) return
+                            
+                            setSelectedTablesForAssignment(prev => 
+                              prev.includes(table.id)
+                                ? prev.filter(id => id !== table.id)
+                                : [...prev, table.id]
+                            )
+                          }}
+                        >
+                          <CardContent className="p-4 text-center">
+                            <div className="space-y-3">
+                              {/* Table Status Indicator */}
+                              <div className="flex items-center justify-center gap-2">
+                                <div className={cn(
+                                  "h-3 w-3 rounded-full",
+                                  isCurrentlyAssigned 
+                                    ? "bg-blue-500" 
+                                    : table.isAvailable 
+                                      ? "bg-green-500" 
+                                      : "bg-red-500"
+                                )} />
+                                {isSelected && <CheckCircle2 className="h-5 w-5 text-primary" />}
+                              </div>
+
+                              {/* Table Info */}
+                              <div>
+                                <div className="text-lg font-semibold">
+                                  Table {table.table_number}
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                  {table.capacity} seats • {table.table_type}
+                                </div>
+                              </div>
+
+                              {/* Status */}
+                              <div className="text-xs">
+                                {isCurrentlyAssigned ? (
+                                  <Badge variant="default" className="text-xs">
+                                    Currently Assigned
+                                  </Badge>
+                                ) : table.isAvailable ? (
+                                  <Badge variant="outline" className="text-xs border-green-500 text-green-600">
+                                    Available
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="destructive" className="text-xs">
+                                    Unavailable
+                                  </Badge>
+                                )}
+                              </div>
+
+                              {/* Conflict Reason */}
+                              {!table.isAvailable && table.conflictReason && (
+                                <div className="text-xs text-red-600 mt-2">
+                                  {table.conflictReason}
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* No Tables Available */}
+                {availableTablesForAssignment.length === 0 && (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Table2 className="mx-auto h-16 w-16 mb-6 opacity-50" />
+                    <div className="text-xl font-medium mb-3">No tables available</div>
+                    <p className="text-base">All tables are occupied during this time slot</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {/* Action Buttons */}
+          <div className="flex-shrink-0 px-4 tablet:px-6 py-4 border-t bg-muted/30">
+            <div className="flex justify-between items-center gap-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowTableAssignment(false)
+                  setAssignmentBookingId(null)
+                  setSelectedTablesForAssignment([])
+                }}
+                className="min-h-touch-lg"
+              >
+                Cancel
+              </Button>
+              
+              <div className="flex gap-3">
+                {/* Remove All Tables */}
+                {assignmentBookingId && (() => {
+                  const booking = bookings?.find(b => b.id === assignmentBookingId)
+                  return booking?.tables && booking.tables.length > 0
+                })() && (
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      if (assignmentBookingId) {
+                        assignTablesMutation.mutate({ 
+                          bookingId: assignmentBookingId, 
+                          tableIds: [] 
+                        })
+                      }
+                    }}
+                    disabled={assignTablesMutation.isPending}
+                    className="min-h-touch-lg"
+                  >
+                    <XCircle className="mr-2 h-4 w-4" />
+                    Remove All Tables
+                  </Button>
+                )}
+                
+                {/* Save Assignment */}
+                <Button
+                  onClick={() => {
+                    if (assignmentBookingId) {
+                      assignTablesMutation.mutate({ 
+                        bookingId: assignmentBookingId, 
+                        tableIds: selectedTablesForAssignment 
+                      })
+                    }
+                  }}
+                  disabled={assignTablesMutation.isPending || !assignmentBookingId}
+                  className="min-h-touch-lg bg-primary hover:bg-primary/90"
+                >
+                  {assignTablesMutation.isPending ? (
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                  )}
+                  Save Assignment ({selectedTablesForAssignment.length} tables)
+                </Button>
               </div>
             </div>
           </div>

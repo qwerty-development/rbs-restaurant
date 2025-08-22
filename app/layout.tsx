@@ -10,7 +10,7 @@ import { Analytics } from "@vercel/analytics/next"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Restaurant Management",
+  title: "Plate Management",
   description: "Complete restaurant management system",
   manifest: '/manifest.json',
   appleWebApp: {

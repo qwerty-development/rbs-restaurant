@@ -58,6 +58,9 @@ interface BookingListProps {
   onUpdateStatus: (bookingId: string, status: string) => void
   compact?: boolean
   restaurantId?: string
+  onAssignTable?: (bookingId: string) => void
+  onSwitchTable?: (bookingId: string, fromTableId: string, toTableId: string) => void
+  onRemoveTable?: (bookingId: string, tableId?: string) => void
 }
 
 // Fixed status configuration with all statuses
@@ -224,7 +227,10 @@ export function BookingList({
   onSelectBooking,
   onUpdateStatus,
   compact = false,
-  restaurantId
+  restaurantId,
+  onAssignTable,
+  onSwitchTable,
+  onRemoveTable
 }: BookingListProps) {
   // Initialize services as singletons
   const tableStatusService = useMemo(() => new TableStatusService(), [])
@@ -429,6 +435,51 @@ export function BookingList({
                     <DropdownMenuLabel>Quick Actions</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     
+                    {/* Table assignment actions */}
+                    {onAssignTable && ['confirmed', 'pending', 'arrived', 'seated'].includes(booking.status) && (
+                      <>
+                        {hasAssignedTables ? (
+                          <>
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onAssignTable(booking.id)
+                              }}
+                            >
+                              <Table2 className="mr-2 h-4 w-4" />
+                              Change Tables
+                            </DropdownMenuItem>
+                            {onRemoveTable && (
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (confirm("Remove all table assignments for this booking?")) {
+                                    onRemoveTable(booking.id)
+                                  }
+                                }}
+                                className="text-red-600"
+                              >
+                                <XCircle className="mr-2 h-4 w-4" />
+                                Remove Tables
+                              </DropdownMenuItem>
+                            )}
+                          </>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onAssignTable(booking.id)
+                            }}
+                            className="text-green-600"
+                          >
+                            <Table2 className="mr-2 h-4 w-4" />
+                            Assign Tables
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
+                    
                     {/* Status-specific actions */}
                     {booking.status === 'pending' && (
                       <>
@@ -585,17 +636,47 @@ export function BookingList({
 
                 <div className="flex items-center gap-3">
                   <Table2 className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  <span>
+                  <div className="flex items-center gap-2 flex-1">
                     {hasAssignedTables ? (
-                      <span className="font-semibold">
-                        Table {booking.tables.map((t: { table_number: any }) => t.table_number).join(", ")}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">
+                          Table {booking.tables.map((t: { table_number: any }) => t.table_number).join(", ")}
+                        </span>
+                        {onAssignTable && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onAssignTable(booking.id)
+                            }}
+                            className="h-6 px-2 text-xs"
+                          >
+                            Switch
+                          </Button>
+                        )}
+                      </div>
                     ) : (
-                      <Badge variant="destructive" className="px-3 py-1 text-sm font-medium">
-                        No table
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="destructive" className="px-3 py-1 text-sm font-medium">
+                          No table
+                        </Badge>
+                        {onAssignTable && ['confirmed', 'pending', 'arrived'].includes(booking.status) && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onAssignTable(booking.id)
+                            }}
+                            className="h-6 px-2 text-xs bg-primary hover:bg-primary/90"
+                          >
+                            Assign
+                          </Button>
+                        )}
+                      </div>
                     )}
-                  </span>
+                  </div>
                 </div>
               </div>
 

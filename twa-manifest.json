@@ -1,7 +1,7 @@
 {
   "packageId": "app.vercel.rbs_restaurant.twa",
   "host": "rbs-restaurant.vercel.app",
-  "name": "RBS Restaurant Management",
+  "name": "Plate Management",
   "launcherName": "RBS Rest",
   "display": "standalone",
   "themeColor": "#3B82F6",
