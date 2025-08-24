@@ -55,33 +55,48 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
 
   return (
     <>
-      {/* Mobile Header - Optimized for small tablets */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background">
-        <div className="flex h-12 sm:h-14 md:h-16 items-center px-3 sm:px-4">
+      {/* Enhanced Mobile Header with modern design */}
+      <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-glass-bg/80 backdrop-blur-xl">
+        <div className="flex h-14 sm:h-16 items-center px-4 sm:px-5">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setIsOpen(true)}
-            className="md:hidden h-8 w-8 sm:h-9 sm:w-9 touch-manipulation"
+            className={cn(
+              "md:hidden h-10 w-10 touch-manipulation rounded-xl",
+              "hover:bg-accent/20 hover:scale-105 active:scale-95",
+              "transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-ring/50 focus:ring-offset-2"
+            )}
           >
-            <Menu className="h-5 w-5 sm:h-6 sm:w-6" />
+            <Menu className="h-5 w-5" />
             <span className="sr-only">Toggle navigation menu</span>
           </Button>
-          
-          <div className="ml-3 sm:ml-4">
-            <h1 className="text-base sm:text-lg font-semibold truncate">{restaurant.name}</h1>
+
+          <div className="ml-4 flex-1">
+            <h1 className="text-lg sm:text-xl font-bold truncate bg-gradient-to-r from-primary to-primary/90 bg-clip-text text-transparent">
+              {restaurant.name}
+            </h1>
+            <p className="text-xs sm:text-sm text-muted-foreground font-medium capitalize">{role}</p>
           </div>
         </div>
       </header>
 
-      {/* Mobile Navigation Sheet - Optimized for tablets */}
+      {/* Enhanced Mobile Navigation Sheet */}
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetContent side="left" className="w-[260px] sm:w-[280px] p-0">
-          <SheetHeader className="p-3 sm:p-4 border-b">
+        <SheetContent
+          side="left"
+          className={cn(
+            "w-[280px] sm:w-[300px] p-0 bg-glass-bg/95 backdrop-blur-xl",
+            "border-r border-glass-border/50"
+          )}
+        >
+          <SheetHeader className="p-4 border-b border-glass-border/30 bg-white/5">
             <SheetTitle className="text-left">
               <div>
-                <div className="font-semibold text-sm sm:text-base">{restaurant.name}</div>
-                <div className="text-xs sm:text-sm text-muted-foreground capitalize">{role}</div>
+                <div className="font-bold text-lg bg-gradient-to-r from-primary to-primary/90 bg-clip-text text-transparent">
+                  {restaurant.name}
+                </div>
+                <div className="text-sm text-muted-foreground font-medium capitalize">{role}</div>
               </div>
             </SheetTitle>
           </SheetHeader>
@@ -90,7 +105,7 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
             {/* Navigation Items */}
             <nav className="flex-1 overflow-y-auto px-1.5 sm:px-2 py-3 sm:py-4">
               <div className="space-y-0.5 sm:space-y-1">
-                {filteredNavItems.map((item) => {
+                {filteredNavItems.map((item, index) => {
                   const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
                   return (
                     <Link
@@ -98,56 +113,88 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
                       href={item.href}
                       onClick={() => setIsOpen(false)}
                       className={cn(
-                        "flex items-center gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-2.5 sm:py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation",
+                        "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 touch-manipulation group",
+                        "hover:shadow-lg hover:translate-y-[-2px] active:scale-95",
                         isActive
-                          ? "bg-accent text-accent-foreground"
-                          : "text-foreground hover:bg-accent/50"
+                          ? "bg-primary/10 text-primary border border-primary/20 shadow-sm"
+                          : "text-foreground hover:bg-accent/20 hover:text-accent-foreground"
                       )}
+                      style={{
+                        animationDelay: `${index * 50}ms`
+                      }}
                     >
-                      <item.icon className="h-4 w-4 sm:h-5 sm:w-5" />
-                      <span className="text-xs sm:text-sm">{item.title}</span>
+                      <div className={cn(
+                        "p-2 rounded-lg transition-colors duration-200",
+                        isActive
+                          ? "bg-primary/20 text-primary"
+                          : "bg-accent/20 text-accent-foreground group-hover:bg-accent/30"
+                      )}>
+                        <item.icon className="h-4 w-4" />
+                      </div>
+                      <span className="font-semibold">{item.title}</span>
                     </Link>
                   )
                 })}
               </div>
             </nav>
 
-            {/* Bottom Items */}
-            <div className="border-t p-1.5 sm:p-2 space-y-0.5 sm:space-y-1">
-              {filteredBottomItems.map((item) => {
+            {/* Enhanced Bottom Items */}
+            <div className="border-t border-glass-border/30 p-3 space-y-2 bg-white/5">
+              {filteredBottomItems.map((item, index) => {
                 const isActive = pathname === item.href
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     onClick={() => setIsOpen(false)}
-                    className={cn(
-                      "flex items-center gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-2.5 sm:py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation",
-                      isActive
-                        ? "bg-accent text-accent-foreground"
-                        : "text-foreground hover:bg-accent/50"
-                    )}
+                                          className={cn(
+                        "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 touch-manipulation group",
+                        "hover:shadow-lg hover:translate-y-[-2px] active:scale-95",
+                        isActive
+                          ? "bg-accent/30 text-accent-foreground border border-accent/30 shadow-sm"
+                          : "text-foreground hover:bg-accent/20 hover:text-accent-foreground"
+                      )}
+                    style={{
+                      animationDelay: `${(index + filteredNavItems.length) * 50}ms`
+                    }}
                   >
                     <div className="relative">
-                      <item.icon className="h-4 w-4 sm:h-5 sm:w-5" />
+                      <div className={cn(
+                        "p-2 rounded-lg transition-colors duration-200",
+                        isActive
+                          ? "bg-accent/30 text-accent-foreground"
+                          : "bg-accent/20 text-accent-foreground group-hover:bg-accent/30"
+                      )}>
+                        <item.icon className="h-4 w-4" />
+                      </div>
                       {(item as any).badge && (item as any).badge > 0 && (
-                        <span className="absolute -right-1 -top-1 h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-red-600 text-[8px] sm:text-[9px] font-medium text-white flex items-center justify-center">
+                        <span className="badge-modern badge-destructive absolute -top-1 -right-1">
                           {(item as any).badge}
                         </span>
                       )}
                     </div>
-                    <span className="text-xs sm:text-sm">{item.title}</span>
+                    <span className="font-semibold">{item.title}</span>
                   </Link>
                 )
               })}
-              
+
               <Button
                 variant="ghost"
                 onClick={handleSignOut}
-                className="w-full justify-start gap-2.5 sm:gap-3 py-2.5 sm:py-2 h-auto touch-manipulation"
+                className={cn(
+                  "w-full justify-start gap-3 py-3 h-auto touch-manipulation rounded-xl",
+                  "hover:shadow-lg hover:translate-y-[-2px] active:scale-95",
+                  "text-destructive hover:bg-destructive/10 hover:text-destructive",
+                  "transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-destructive/50 focus:ring-offset-2"
+                )}
+                style={{
+                  animationDelay: `${(filteredBottomItems.length + filteredNavItems.length + 1) * 50}ms`
+                }}
               >
-                <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-xs sm:text-sm">Sign Out</span>
+                <div className="p-2 rounded-lg bg-destructive/10 text-destructive">
+                  <LogOut className="h-4 w-4" />
+                </div>
+                <span className="font-semibold">Sign Out</span>
               </Button>
             </div>
           </div>
