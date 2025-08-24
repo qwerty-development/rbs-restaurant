@@ -262,16 +262,20 @@ export default function DashboardPage() {
     refetchInterval: 30000,
   })
 
-  // Fetch all tables
+  // Fetch all tables with section information
   const { data: tables = [], isLoading: tablesLoading } = useQuery({
-    queryKey: ["restaurant-tables", restaurantId],
+    queryKey: ["restaurant-tables-with-sections", restaurantId],
     queryFn: async () => {
       if (!restaurantId) return []
       
       const { data, error } = await supabase
         .from("restaurant_tables")
-        .select("*")
+        .select(`
+          *,
+          section:restaurant_sections(*)
+        `)
         .eq("restaurant_id", restaurantId)
+        .eq("is_active", true)
         .order("table_number", { ascending: true })
 
       if (error) throw error
@@ -940,6 +944,7 @@ export default function DashboardPage() {
               updateTablePositionMutation.mutate({ tableId, position })
             }
             searchQuery={searchQuery}
+            defaultSectionId="all"
           />
         </div>
 

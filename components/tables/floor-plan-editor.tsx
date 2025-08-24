@@ -15,15 +15,42 @@ import {
   Settings, 
   Copy,
   Trash2,
-  Printer
+  Printer,
+  Layers,
+  ChevronLeft,
+  ChevronRight,
+  Home,
+  Trees,
+  Wine,
+  Lock,
+  Sparkles,
+  MapPin,
+  Building,
+  Eye,
+  EyeOff,
+  Maximize2,
+  Info
 } from "lucide-react"
-import type { RestaurantTable } from "@/types"
+import type { RestaurantTable, RestaurantSection } from "@/types"
+import { useQuery } from "@tanstack/react-query"
+import { createClient } from "@/lib/supabase/client"
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { Separator } from "@/components/ui/separator"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface FloorPlanEditorProps {
+  restaurantId: string
   tables: RestaurantTable[]
   onTableUpdate: (tableId: string, position: { x: number; y: number }) => void
   onTableResize?: (tableId: string, dimensions: { width: number; height: number }) => void
   onTableDelete?: (tableId: string) => void
+  onTableSectionChange?: (tableId: string, sectionId: string) => void
 }
 
 const TABLE_TYPE_COLORS = {
@@ -42,6 +69,19 @@ const TABLE_TYPE_ICONS = {
   standard: "🪑",
   bar: "🍺",
   private: "🔒",
+}
+
+const SECTION_ICONS = {
+  grid: Grid3X3,
+  home: Home,
+  trees: Trees,
+  wine: Wine,
+  lock: Lock,
+  sparkles: Sparkles,
+  mappin: MapPin,
+  building: Building,
+  layers: Layers,
+  utensils: Settings, // fallback for 'utensils' icon used in migration
 }
 
 interface DragState {
@@ -72,7 +112,14 @@ interface ResizeState {
   startTime: number
 }
 
-export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableDelete }: FloorPlanEditorProps) {
+export function FloorPlanEditor({ 
+  restaurantId,
+  tables, 
+  onTableUpdate, 
+  onTableResize, 
+  onTableDelete,
+  onTableSectionChange 
+}: FloorPlanEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const dragStateRef = useRef<DragState>({
     tableId: null,
@@ -103,12 +150,49 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
   })
   
   const [selectedTable, setSelectedTable] = useState<string | null>(null)
+  const [selectedSection, setSelectedSection] = useState<string>("all")
   const [zoom, setZoom] = useState(100)
   const [showGrid, setShowGrid] = useState(true)
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit")
   const [editMode, setEditMode] = useState<"move" | "resize">("move")
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
+  const [showMinimap, setShowMinimap] = useState(false)
+  const [sectionViewMode, setSectionViewMode] = useState<"tabs" | "dropdown">("tabs")
+  
+  const supabase = createClient()
+  
+  // Fetch sections
+  const { data: sections, isLoading: sectionsLoading } = useQuery({
+    queryKey: ["restaurant-sections", restaurantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("restaurant_sections")
+        .select("*")
+        .eq("restaurant_id", restaurantId)
+        .eq("is_active", true)
+        .order("display_order", { ascending: true })
+
+      if (error) throw error
+      return data as RestaurantSection[]
+    },
+    enabled: !!restaurantId,
+  })
+
+  // Filter tables by selected section
+  const filteredTables = selectedSection === "all" 
+    ? tables 
+    : tables.filter(table => table.section_id === selectedSection)
+
+  // Calculate section stats
+  const sectionStats = sections?.map(section => {
+    const sectionTables = tables.filter(t => t.section_id === section.id)
+    return {
+      ...section,
+      tableCount: sectionTables.length,
+      totalCapacity: sectionTables.reduce((sum, t) => sum + t.max_capacity, 0)
+    }
+  })
   
   // Store original positions and sizes for smooth updates
   const originalPositionsRef = useRef<Record<string, { x: number; y: number }>>({})
@@ -116,12 +200,27 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
   const originalSizesRef = useRef<Record<string, { width: number; height: number }>>({})
   const finalSizesRef = useRef<Record<string, { width: number; height: number }>>({})
 
+  // Section navigation helpers
+  const currentSectionIndex = sections?.findIndex(s => s.id === selectedSection) ?? -1
+  const hasNextSection = currentSectionIndex < (sections?.length ?? 0) - 1
+  const hasPrevSection = currentSectionIndex > 0
+
+  const navigateSection = (direction: 'next' | 'prev') => {
+    if (!sections) return
+    
+    if (direction === 'next' && hasNextSection) {
+      setSelectedSection(sections[currentSectionIndex + 1].id)
+    } else if (direction === 'prev' && hasPrevSection) {
+      setSelectedSection(sections[currentSectionIndex - 1].id)
+    }
+  }
+
   // Initialize positions and sizes
   useEffect(() => {
     const positions: Record<string, { x: number; y: number }> = {}
     const sizes: Record<string, { width: number; height: number }> = {}
     
-    tables.forEach(table => {
+    filteredTables.forEach(table => {
       positions[table.id] = { x: table.x_position, y: table.y_position }
       sizes[table.id] = { width: table.width || 60, height: table.height || 40 }
     })
@@ -130,7 +229,7 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
     finalPositionsRef.current = { ...positions }
     originalSizesRef.current = sizes
     finalSizesRef.current = { ...sizes }
-  }, [tables])
+  }, [filteredTables])
 
   // Constants for touch interaction thresholds
   const TOUCH_DRAG_THRESHOLD = 8 // pixels to move before confirming drag
@@ -739,8 +838,8 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
 
       if (deltaX !== 0 || deltaY !== 0) {
         const currentPos = finalPositionsRef.current[selectedTable] || 
-                          { x: tables.find(t => t.id === selectedTable)?.x_position || 0,
-                            y: tables.find(t => t.id === selectedTable)?.y_position || 0 }
+                          { x: filteredTables.find(t => t.id === selectedTable)?.x_position || 0,
+                            y: filteredTables.find(t => t.id === selectedTable)?.y_position || 0 }
         
         const newPos = {
           x: Math.max(0, Math.min(95, currentPos.x + deltaX)),
@@ -764,10 +863,200 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [selectedTable, isDragging, isResizing, viewMode, tables, onTableDelete, onTableUpdate])
+  }, [selectedTable, isDragging, isResizing, viewMode, filteredTables, onTableDelete, onTableUpdate])
+
+  // Minimap render function
+  const renderMinimap = () => {
+    if (!showMinimap) return null
 
   return (
-    <div className="space-y-6">
+      <Card className="absolute bottom-4 right-4 w-48 h-32 z-50 shadow-lg">
+        <CardContent className="p-2 relative h-full">
+          <div className="text-xs font-medium mb-1">Overview</div>
+          <div className="relative w-full h-20 bg-slate-100 rounded border">
+            {/* Mini representations of all sections */}
+            {sections?.map((section, idx) => {
+              const sectionTables = tables.filter(t => t.section_id === section.id)
+              const isActive = section.id === selectedSection
+              
+              return (
+                <div
+                  key={section.id}
+                  className={cn(
+                    "absolute cursor-pointer transition-all",
+                    isActive ? "ring-2 ring-blue-400 bg-blue-50" : "bg-white hover:bg-slate-50"
+                  )}
+                  style={{
+                    left: `${(idx * 30) % 90}%`,
+                    top: `${Math.floor(idx / 3) * 30}%`,
+                    width: "25%",
+                    height: "25%",
+                    border: `1px solid ${section.color}`,
+                    borderRadius: "2px"
+                  }}
+                  onClick={() => setSelectedSection(section.id)}
+                >
+                  <div className="text-[6px] text-center">{sectionTables.length}</div>
+                </div>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Section Selector */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Layers className="h-5 w-5" />
+              Floor Sections
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSectionViewMode(sectionViewMode === "tabs" ? "dropdown" : "tabs")}
+              >
+                {sectionViewMode === "tabs" ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowMinimap(!showMinimap)}
+              >
+                <Maximize2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {sectionViewMode === "tabs" ? (
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => navigateSection('prev')}
+                disabled={!hasPrevSection && selectedSection !== "all"}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              
+              <ScrollArea className="flex-1">
+                <Tabs value={selectedSection} onValueChange={setSelectedSection}>
+                  <TabsList className="w-full justify-start">
+                    <TabsTrigger value="all" className="gap-2">
+                      <Grid3X3 className="h-4 w-4" />
+                      All Sections
+                      <Badge variant="secondary" className="ml-1">
+                        {tables.length}
+                      </Badge>
+                    </TabsTrigger>
+                    
+                    {sections?.map(section => {
+                      const Icon = SECTION_ICONS[section.icon as keyof typeof SECTION_ICONS] || Grid3X3
+                      const tableCount = tables.filter(t => t.section_id === section.id).length
+                      
+                      return (
+                        <TabsTrigger key={section.id} value={section.id} className="gap-2">
+                          <Icon className="h-4 w-4" style={{ color: section.color }} />
+                          {section.name}
+                          <Badge variant="secondary" className="ml-1">
+                            {tableCount}
+                          </Badge>
+                        </TabsTrigger>
+                      )
+                    })}
+                  </TabsList>
+                </Tabs>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
+              
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => navigateSection('next')}
+                disabled={!hasNextSection}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <Select value={selectedSection} onValueChange={setSelectedSection}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  <div className="flex items-center gap-2">
+                    <Grid3X3 className="h-4 w-4" />
+                    All Sections ({tables.length} tables)
+                  </div>
+                </SelectItem>
+                <Separator />
+                {sections?.map(section => {
+                  const Icon = SECTION_ICONS[section.icon as keyof typeof SECTION_ICONS] || Grid3X3
+                  const tableCount = tables.filter(t => t.section_id === section.id).length
+                  
+                  return (
+                    <SelectItem key={section.id} value={section.id}>
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4" style={{ color: section.color }} />
+                        {section.name} ({tableCount} tables)
+                      </div>
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Section Info */}
+          {selectedSection !== "all" && sections && (
+            <div className="mt-3 p-3 bg-muted rounded-lg">
+              {(() => {
+                const section = sections.find(s => s.id === selectedSection)
+                if (!section) return null
+                
+                const stats = sectionStats?.find(s => s.id === selectedSection)
+                const Icon = SECTION_ICONS[section.icon as keyof typeof SECTION_ICONS] || Grid3X3
+                
+                return (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div 
+                        className="p-2 rounded-lg"
+                        style={{ backgroundColor: section.color + "20" }}
+                      >
+                        <Icon className="h-5 w-5" style={{ color: section.color }} />
+                      </div>
+                      <div>
+                        <h4 className="font-medium">{section.name}</h4>
+                        {section.description && (
+                          <p className="text-sm text-muted-foreground">{section.description}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <Badge variant="outline">
+                        {stats?.tableCount || 0} tables
+                      </Badge>
+                      <Badge variant="outline">
+                        {stats?.totalCapacity || 0} seats
+                      </Badge>
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Print Styles */}
       <style jsx global>{`
         @media print {
@@ -959,7 +1248,7 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-xs">
-                {tables.filter(t => t.is_active).length} Tables
+                {filteredTables.filter(t => t.is_active).length} Tables
               </Badge>
               <div className="flex items-center gap-2">
                 <Select value={viewMode} onValueChange={(value: "edit" | "preview") => setViewMode(value)}>
@@ -1041,7 +1330,7 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
                 onClick={() => setShowGrid(!showGrid)}
               >
                 <Grid3X3 className="h-4 w-4 mr-2" />
-                Gridsfdddf
+                Grid
               </Button>
               <Button
                 variant="outline"
@@ -1101,8 +1390,23 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
               />
             )}
 
+            {/* Empty State */}
+            {filteredTables.filter(t => t.is_active).length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <Info className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <h3 className="text-lg font-medium mb-2">No Tables in This Section</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedSection === "all" 
+                      ? "Add tables to get started"
+                      : "Add or move tables to this section"}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Tables */}
-            {tables.filter(t => t.is_active).map((table) => {
+            {filteredTables.filter(t => t.is_active).map((table) => {
               const colors = TABLE_TYPE_COLORS[table.table_type]
               const isSelected = selectedTable === table.id
               const isBeingDragged = dragStateRef.current.tableId === table.id
@@ -1281,7 +1585,7 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
                   </div>
                   {selectedTable && (
                     <Badge variant="secondary" className="text-xs">
-                      Table {tables.find(t => t.id === selectedTable)?.table_number} selected
+                      Table {filteredTables.find(t => t.id === selectedTable)?.table_number} selected
                     </Badge>
                   )}
                 </div>
@@ -1289,6 +1593,9 @@ export function FloorPlanEditor({ tables, onTableUpdate, onTableResize, onTableD
             </div>
           </div>
         </CardContent>
+        
+        {/* Minimap Overlay */}
+        {renderMinimap()}
       </Card>
     </div>
   )

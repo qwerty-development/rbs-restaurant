@@ -264,15 +264,18 @@ export default function BookingsPage() {
     refetchInterval: 30000, // Refresh every 30 seconds
   })
 
-  // Fetch all tables for table view
+  // Fetch all tables for table view with section information
   const { data: tables } = useQuery({
-    queryKey: ["restaurant-tables", restaurantId],
+    queryKey: ["restaurant-tables-with-sections", restaurantId],
     queryFn: async () => {
       if (!restaurantId) return []
       
       const { data, error } = await supabase
         .from("restaurant_tables")
-        .select("*")
+        .select(`
+          *,
+          section:restaurant_sections(*)
+        `)
         .eq("restaurant_id", restaurantId)
         .eq("is_active", true)
         .order("table_number")

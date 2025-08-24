@@ -66,6 +66,9 @@ export interface Restaurant {
     is_combinable: boolean
     combinable_with: string[]
     priority_score: number
+    // Section support
+    section_id?: string | null
+    section?: RestaurantSection
   }
   
   export interface Booking {
@@ -288,6 +291,22 @@ export interface Restaurant {
     updated_at: string
     tables?: RestaurantTable[]
   }
+
+  // New: Restaurant Sections
+export interface RestaurantSection {
+  id: string
+  restaurant_id: string
+  name: string
+  description?: string
+  display_order: number
+  is_active: boolean
+  color: string
+  icon: string
+  created_at: string
+  updated_at: string
+  // Virtual field for UI
+  table_count?: number
+}
   
   export interface RestaurantStaff {
     id: string;

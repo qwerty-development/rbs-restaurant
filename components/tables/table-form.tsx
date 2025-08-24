@@ -1,7 +1,7 @@
 // components/tables/table-form.tsx
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -17,10 +17,43 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { RestaurantTable } from "@/types"
+import type { RestaurantTable, RestaurantSection } from "@/types"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import { 
+  Grid3X3, 
+  Home, 
+  Trees, 
+  Wine, 
+  Lock, 
+  Sparkles, 
+  MapPin, 
+  Building, 
+  Layers,
+  Info,
+  Settings
+} from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useQuery } from "@tanstack/react-query"
+import { createClient } from "@/lib/supabase/client"
+
+const SECTION_ICONS = {
+  grid: Grid3X3,
+  home: Home,
+  trees: Trees,
+  wine: Wine,
+  lock: Lock,
+  sparkles: Sparkles,
+  mappin: MapPin,
+  building: Building,
+  layers: Layers,
+  utensils: Settings, // fallback for 'utensils' icon used in migration
+}
 
 const formSchema = z.object({
   table_number: z.string().min(1, "Table number is required"),
+  section_id: z.string().min(1, "Section is required"),
   table_type: z.enum(["booth", "window", "patio", "standard", "bar", "private"]),
   capacity: z.number().min(1).max(50),
   min_capacity: z.number().min(1).max(20),
@@ -46,9 +79,11 @@ type FormData = z.infer<typeof formSchema>
 interface TableFormProps {
   table?: RestaurantTable
   tables: RestaurantTable[]
+  restaurantId: string
   onSubmit: (data: Partial<RestaurantTable>) => void
   onCancel: () => void
   isLoading: boolean
+  defaultSectionId?: string
 }
 
 const TABLE_FEATURES = [
@@ -64,9 +99,36 @@ const TABLE_FEATURES = [
   "Covered",
 ]
 
-export function TableForm({ table, tables, onSubmit, onCancel, isLoading }: TableFormProps) {
+export function TableForm({ 
+  table, 
+  tables, 
+  restaurantId,
+  onSubmit, 
+  onCancel, 
+  isLoading,
+  defaultSectionId 
+}: TableFormProps) {
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>(table?.features || [])
   const [combinableWith, setCombinableWith] = useState<string[]>(table?.combinable_with || [])
+  
+  const supabase = createClient()
+
+  // Fetch sections
+  const { data: sections, isLoading: sectionsLoading } = useQuery({
+    queryKey: ["restaurant-sections", restaurantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("restaurant_sections")
+        .select("*")
+        .eq("restaurant_id", restaurantId)
+        .eq("is_active", true)
+        .order("display_order", { ascending: true })
+
+      if (error) throw error
+      return data as RestaurantSection[]
+    },
+    enabled: !!restaurantId,
+  })
 
   const {
     register,
@@ -78,6 +140,7 @@ export function TableForm({ table, tables, onSubmit, onCancel, isLoading }: Tabl
     resolver: zodResolver(formSchema),
     defaultValues: {
       table_number: table?.table_number || "",
+      section_id: table?.section_id || defaultSectionId || "",
       table_type: table?.table_type || "standard",
       capacity: table?.capacity || 4,
       min_capacity: table?.min_capacity || 2,
@@ -90,6 +153,15 @@ export function TableForm({ table, tables, onSubmit, onCancel, isLoading }: Tabl
   })
 
   const isCombinable = watch("is_combinable")
+  const selectedSectionId = watch("section_id")
+
+  // Set default section when sections load
+  useEffect(() => {
+    if (!table && sections && sections.length > 0 && !selectedSectionId) {
+      // Set the first section as default if no section is selected
+      setValue("section_id", defaultSectionId || sections[0].id)
+    }
+  }, [sections, table, selectedSectionId, setValue, defaultSectionId])
 
   const handleFormSubmit = (data: FormData) => {
     onSubmit({
@@ -99,8 +171,99 @@ export function TableForm({ table, tables, onSubmit, onCancel, isLoading }: Tabl
     })
   }
 
+  // Get the selected section details
+  const selectedSection = sections?.find(s => s.id === selectedSectionId)
+  const SectionIcon = selectedSection ? 
+    SECTION_ICONS[selectedSection.icon as keyof typeof SECTION_ICONS] || Grid3X3 : 
+    Grid3X3
+
+  // Filter combinable tables by section
+  const combinableTables = tables.filter(t => 
+    t.id !== table?.id && 
+    t.is_combinable && 
+    t.section_id === selectedSectionId
+  )
+
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
+      {/* Section Selection - Primary importance */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Section Assignment</CardTitle>
+          <CardDescription>
+            Assign this table to a section for better organization
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {sectionsLoading ? (
+            <div className="text-sm text-muted-foreground">Loading sections...</div>
+          ) : sections && sections.length > 0 ? (
+            <>
+              <Select
+                value={selectedSectionId}
+                onValueChange={(value) => setValue("section_id", value)}
+                disabled={isLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a section" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sections.map((section) => {
+                    const Icon = SECTION_ICONS[section.icon as keyof typeof SECTION_ICONS] || Grid3X3
+                    return (
+                      <SelectItem key={section.id} value={section.id}>
+                        <div className="flex items-center gap-2">
+                          <Icon 
+                            className="h-4 w-4" 
+                            style={{ color: section.color }}
+                          />
+                          <span>{section.name}</span>
+                          {section.description && (
+                            <span className="text-muted-foreground text-xs ml-2">
+                              ({section.description})
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+              
+              {selectedSection && (
+                <div className="mt-3 p-3 bg-muted rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <SectionIcon 
+                      className="h-4 w-4" 
+                      style={{ color: selectedSection.color }}
+                    />
+                    <span className="font-medium text-sm">{selectedSection.name}</span>
+                  </div>
+                  {selectedSection.description && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {selectedSection.description}
+                    </p>
+                  )}
+                </div>
+              )}
+              
+              {errors.section_id && (
+                <p className="text-sm text-red-600 mt-1">{errors.section_id.message}</p>
+              )}
+            </>
+          ) : (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                No sections found. Please create at least one section first.
+              </AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      <Separator />
+
       {/* Basic Information */}
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -282,38 +445,42 @@ export function TableForm({ table, tables, onSubmit, onCancel, isLoading }: Tabl
         </div>
       </div>
 
-      {/* Combinable With (only show if is_combinable is true) */}
-      {isCombinable && tables.length > 1 && (
+      {/* Combinable With - filtered by section */}
+      {isCombinable && combinableTables.length > 0 && (
         <div>
-          <Label>Can Combine With</Label>
+          <Label>Can Combine With (Same Section Only)</Label>
           <p className="text-sm text-muted-foreground mb-2">
-            Select tables that can be combined with this one
+            Select tables in the same section that can be combined
           </p>
           <div className="grid grid-cols-2 gap-2">
-            {tables
-              .filter(t => t.id !== table?.id && t.is_combinable)
-              .map((otherTable) => (
-                <label
-                  key={otherTable.id}
-                  className="flex items-center space-x-2 text-sm"
-                >
-                  <Checkbox
-                    checked={combinableWith.includes(otherTable.id)}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        setCombinableWith([...combinableWith, otherTable.id])
-                      } else {
-                        setCombinableWith(combinableWith.filter(id => id !== otherTable.id))
-                      }
-                    }}
-                    disabled={isLoading}
-                  />
-                  <span>
-                    Table {otherTable.table_number} ({otherTable.table_type})
-                  </span>
-                </label>
-              ))}
+            {combinableTables.map((otherTable) => (
+              <label
+                key={otherTable.id}
+                className="flex items-center space-x-2 text-sm"
+              >
+                <Checkbox
+                  checked={combinableWith.includes(otherTable.id)}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setCombinableWith([...combinableWith, otherTable.id])
+                    } else {
+                      setCombinableWith(combinableWith.filter(id => id !== otherTable.id))
+                    }
+                  }}
+                  disabled={isLoading}
+                />
+                <span>
+                  Table {otherTable.table_number} ({otherTable.table_type})
+                </span>
+              </label>
+            ))}
           </div>
+        </div>
+      )}
+
+      {isCombinable && combinableTables.length === 0 && selectedSectionId && (
+        <div className="text-sm text-muted-foreground">
+          No other combinable tables in this section
         </div>
       )}
 
@@ -327,7 +494,10 @@ export function TableForm({ table, tables, onSubmit, onCancel, isLoading }: Tabl
         >
           Cancel
         </Button>
-        <Button type="submit" disabled={isLoading}>
+        <Button 
+          type="submit" 
+          disabled={isLoading || !sections || sections.length === 0}
+        >
           {isLoading ? "Saving..." : table ? "Update Table" : "Create Table"}
         </Button>
       </div>

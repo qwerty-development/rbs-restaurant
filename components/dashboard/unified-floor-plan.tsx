@@ -5,6 +5,16 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { Card } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Table2,
   Users,
@@ -23,7 +33,19 @@ import {
   AlertTriangle,
   Calendar,
   Eye,
-  Move
+  Move,
+  Layers,
+  ChevronLeft,
+  ChevronRight,
+  Grid3X3,
+  Home,
+  Trees,
+  Wine,
+  Lock,
+  Sparkles,
+  MapPin,
+  Building,
+  Maximize2
 } from "lucide-react"
 import { format, addMinutes, differenceInMinutes } from "date-fns"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
@@ -33,6 +55,21 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { useQuery } from "@tanstack/react-query"
+import { createClient } from "@/lib/supabase/client"
+import type { RestaurantSection } from "@/types"
+
+const SECTION_ICONS = {
+  grid: Grid3X3,
+  home: Home,
+  trees: Trees,
+  wine: Wine,
+  lock: Lock,
+  sparkles: Sparkles,
+  mappin: MapPin,
+  building: Building,
+  layers: Layers,
+}
 
 // Drag state interface for better performance
 interface DragState {
@@ -62,6 +99,7 @@ interface UnifiedFloorPlanProps {
   onCheckIn?: (bookingId: string, tableIds: string[]) => void
   onTableUpdate?: (tableId: string, position: { x: number; y: number }) => void
   searchQuery?: string
+  defaultSectionId?: string
 }
 
 const STATUS_ICONS: any = {
@@ -114,7 +152,8 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
   onTableSwitch,
   onCheckIn,
   onTableUpdate,
-  searchQuery
+  searchQuery,
+  defaultSectionId
 }: UnifiedFloorPlanProps) {
   const [tableStatuses, setTableStatuses] = useState<Map<string, any>>(new Map())
   const [selectedTable, setSelectedTable] = useState<string | null>(null)
@@ -124,7 +163,12 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
   const [hoveredTable, setHoveredTable] = useState<string | null>(null)
   const [loadingTransition, setLoadingTransition] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
+  const [selectedSection, setSelectedSection] = useState<string>(defaultSectionId || "all")
+  const [sectionViewMode, setSectionViewMode] = useState<"tabs" | "dropdown">("tabs")
+  const [showSectionOverview, setShowSectionOverview] = useState(false)
   const floorPlanRef = useRef<HTMLDivElement>(null)
+  
+  const supabase = createClient()
 
   // Use refs for drag state to avoid re-renders and improve performance
   const dragStateRef = useRef<DragState>({
@@ -147,6 +191,72 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
   
   const tableStatusService = useMemo(() => new TableStatusService(), [])
 
+  // Fetch sections
+  const { data: sections } = useQuery({
+    queryKey: ["restaurant-sections", restaurantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("restaurant_sections")
+        .select("*")
+        .eq("restaurant_id", restaurantId)
+        .eq("is_active", true)
+        .order("display_order", { ascending: true })
+
+      if (error) throw error
+      return data as RestaurantSection[]
+    },
+    enabled: !!restaurantId,
+  })
+
+  // Filter tables by selected section
+  const filteredTables = useMemo(() => {
+    if (selectedSection === "all") {
+      return tables
+    }
+    return tables.filter(table => table.section_id === selectedSection)
+  }, [tables, selectedSection])
+
+  // Calculate section statistics
+  const sectionStats = useMemo(() => {
+    if (!sections) return []
+    
+    return sections.map(section => {
+      const sectionTables = tables.filter(t => t.section_id === section.id)
+      const occupiedTables = sectionTables.filter(table => {
+        const hasActiveBooking = bookings.some(booking => 
+          booking.tables?.some((t: any) => t.id === table.id) &&
+          ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status)
+        )
+        return hasActiveBooking
+      })
+      
+      return {
+        ...section,
+        tableCount: sectionTables.length,
+        occupiedCount: occupiedTables.length,
+        availableCount: sectionTables.length - occupiedTables.length,
+        occupancyRate: sectionTables.length > 0 
+          ? Math.round((occupiedTables.length / sectionTables.length) * 100)
+          : 0
+      }
+    })
+  }, [sections, tables, bookings])
+
+  // Section navigation
+  const currentSectionIndex = sections?.findIndex(s => s.id === selectedSection) ?? -1
+  const hasNextSection = currentSectionIndex < (sections?.length ?? 0) - 1
+  const hasPrevSection = currentSectionIndex > 0
+
+  const navigateSection = (direction: 'next' | 'prev') => {
+    if (!sections) return
+    
+    if (direction === 'next' && hasNextSection) {
+      setSelectedSection(sections[currentSectionIndex + 1].id)
+    } else if (direction === 'prev' && hasPrevSection) {
+      setSelectedSection(sections[currentSectionIndex - 1].id)
+    }
+  }
+
   // Initialize positions
   useEffect(() => {
     const positions: Record<string, { x: number; y: number }> = {}
@@ -155,6 +265,83 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
     })
     finalPositionsRef.current = { ...positions }
   }, [tables])
+
+  // Section overview component
+  const SectionOverview = () => {
+    if (!showSectionOverview || !sections) return null
+
+    return (
+      <Card className="absolute top-4 right-4 w-64 z-50 shadow-xl">
+        <div className="p-4">
+          <h3 className="font-semibold mb-3 flex items-center gap-2">
+            <Layers className="h-4 w-4" />
+            Section Overview
+          </h3>
+          <div className="space-y-2">
+            {sectionStats.map(stat => {
+              const Icon = SECTION_ICONS[stat.icon as keyof typeof SECTION_ICONS] || Grid3X3
+              const isActive = stat.id === selectedSection
+              
+              return (
+                <button
+                  key={stat.id}
+                  className={cn(
+                    "w-full p-2 rounded-lg border text-left transition-all",
+                    isActive 
+                      ? "bg-primary/10 border-primary shadow-sm" 
+                      : "hover:bg-muted border-border"
+                  )}
+                  onClick={() => setSelectedSection(stat.id)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Icon 
+                        className="h-4 w-4" 
+                        style={{ color: stat.color }}
+                      />
+                      <span className="font-medium text-sm">{stat.name}</span>
+                    </div>
+                    <Badge 
+                      variant={stat.occupancyRate > 80 ? "destructive" : 
+                               stat.occupancyRate > 50 ? "secondary" : "outline"}
+                      className="text-xs"
+                    >
+                      {stat.occupancyRate}%
+                    </Badge>
+                  </div>
+                  <div className="flex gap-2 mt-1">
+                    <span className="text-xs text-muted-foreground">
+                      {stat.occupiedCount}/{stat.tableCount} occupied
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
+            
+            <button
+              className={cn(
+                "w-full p-2 rounded-lg border text-left transition-all",
+                selectedSection === "all" 
+                  ? "bg-primary/10 border-primary shadow-sm" 
+                  : "hover:bg-muted border-border"
+              )}
+              onClick={() => setSelectedSection("all")}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Grid3X3 className="h-4 w-4" />
+                  <span className="font-medium text-sm">All Sections</span>
+                </div>
+                <Badge variant="outline" className="text-xs">
+                  {tables.length} tables
+                </Badge>
+              </div>
+            </button>
+          </div>
+        </div>
+      </Card>
+    )
+  }
 
   // Load table statuses
   useEffect(() => {
@@ -1003,9 +1190,162 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
 
   return (
     <div className="h-full w-full flex flex-col bg-gradient-to-br from-background to-card">
+      {/* Section Navigation Bar */}
+      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="p-3">
+          {sectionViewMode === "tabs" ? (
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => navigateSection('prev')}
+                disabled={!hasPrevSection && selectedSection !== "all"}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              
+              <ScrollArea className="flex-1">
+                <Tabs value={selectedSection} onValueChange={setSelectedSection}>
+                  <TabsList className="w-full justify-start">
+                    <TabsTrigger value="all" className="gap-2">
+                      <Grid3X3 className="h-4 w-4" />
+                      All
+                      <Badge variant="secondary" className="ml-1 text-xs">
+                        {tables.length}
+                      </Badge>
+                    </TabsTrigger>
+                    
+                    {sectionStats.map(stat => {
+                      const Icon = SECTION_ICONS[stat.icon as keyof typeof SECTION_ICONS] || Grid3X3
+                      
+                      return (
+                        <TabsTrigger key={stat.id} value={stat.id} className="gap-2">
+                          <Icon className="h-4 w-4" style={{ color: stat.color }} />
+                          {stat.name}
+                          <div className="flex gap-1 ml-1">
+                            <Badge 
+                              variant="secondary" 
+                              className="text-xs"
+                            >
+                              {stat.tableCount}
+                            </Badge>
+                            {stat.occupiedCount > 0 && (
+                              <Badge 
+                                variant="destructive" 
+                                className="text-xs"
+                              >
+                                {stat.occupiedCount}
+                              </Badge>
+                            )}
+                          </div>
+                        </TabsTrigger>
+                      )
+                    })}
+                  </TabsList>
+                </Tabs>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
+              
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => navigateSection('next')}
+                disabled={!hasNextSection}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSectionViewMode("dropdown")}
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+              
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowSectionOverview(!showSectionOverview)}
+              >
+                <Maximize2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Select value={selectedSection} onValueChange={setSelectedSection}>
+                <SelectTrigger className="w-[250px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    <div className="flex items-center gap-2">
+                      <Grid3X3 className="h-4 w-4" />
+                      All Sections ({tables.length} tables)
+                    </div>
+                  </SelectItem>
+                  {sectionStats.map(stat => {
+                    const Icon = SECTION_ICONS[stat.icon as keyof typeof SECTION_ICONS] || Grid3X3
+                    
+                    return (
+                      <SelectItem key={stat.id} value={stat.id}>
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-4 w-4" style={{ color: stat.color }} />
+                          {stat.name} ({stat.tableCount} tables, {stat.occupiedCount} occupied)
+                        </div>
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+              
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSectionViewMode("tabs")}
+              >
+                <Layers className="h-4 w-4" />
+              </Button>
+              
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowSectionOverview(!showSectionOverview)}
+              >
+                <Maximize2 className="h-4 w-4" />
+              </Button>
+              
+              {/* Section Stats Summary */}
+              <div className="ml-auto flex items-center gap-3 text-sm">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-green-500 rounded-full" />
+                  <span>Available: {filteredTables.filter(t => {
+                    const hasBooking = bookings.some(b => 
+                      b.tables?.some((bt: any) => bt.id === t.id) &&
+                      ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(b.status)
+                    )
+                    return !hasBooking
+                  }).length}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-red-500 rounded-full" />
+                  <span>Occupied: {filteredTables.filter(t => {
+                    const hasBooking = bookings.some(b => 
+                      b.tables?.some((bt: any) => bt.id === t.id) &&
+                      ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(b.status)
+                    )
+                    return hasBooking
+                  }).length}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Edit Mode Toggle */}
       {onTableUpdate && (
-        <div className="absolute top-10 left-20 z-50">
+        <div className="absolute top-20 left-4 z-50">
           <Button
             size="sm"
             variant={editMode ? "destructive" : "secondary"}
@@ -1039,7 +1379,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
         </div>
       )}
 
-      {/* Full-Screen Floor Plan Area */}
+      {/* Floor Plan Area */}
       <div className="flex-1 relative bg-gradient-to-br from-card to-muted overflow-auto" ref={floorPlanRef}>
         <div 
           className="relative w-full h-full"
@@ -1052,17 +1392,34 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
             }
           }}
         >
-          {tables.filter(t => t.is_active).map(renderTable)}
+          {/* Render filtered tables */}
+          {filteredTables.filter(t => t.is_active).map(renderTable)}
+          
+          {/* Empty state for sections */}
+          {filteredTables.length === 0 && selectedSection !== "all" && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center">
+                <Layers className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-lg font-medium mb-2">No Tables in This Section</h3>
+                <p className="text-sm text-muted-foreground">
+                  {sections?.find(s => s.id === selectedSection)?.name || "This section"} has no tables yet
+                </p>
+              </div>
+            </div>
+          )}
           
           {/* Enhanced accessibility overlay for screen readers */}
           <div className="sr-only" aria-live="polite" aria-atomic="true">
             {selectedTable && (() => {
-              const selectedTableData = tables.find(t => t.id === selectedTable)
+              const selectedTableData = filteredTables.find(t => t.id === selectedTable)
               const { current } = selectedTableData ? getTableBookingInfo(selectedTableData) : { current: null }
               return `Table ${selectedTableData?.table_number} selected. ${current ? `Occupied by ${current.guest_name || current.user?.full_name || 'Guest'}, status: ${current.status.replace(/_/g, ' ')}.` : 'Available for booking.'}`
             })()}
           </div>
         </div>
+        
+        {/* Section Overview Overlay */}
+        <SectionOverview />
       </div>
     </div>
   )
