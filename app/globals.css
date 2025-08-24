@@ -8,27 +8,68 @@
 
 @layer base {
   :root {
-    /* New Brand Color Palette */
+    /* Enhanced Brand Color Palette with Modern Design Tokens */
     --background: 45 29% 97%; /* off white */
     --foreground: 345 55% 31%; /* Mulberry Velvet */
+
+    /* Enhanced card system with gradients and depth */
     --card: 25 50% 96%; /* Light Blushed Linen */
     --card-foreground: 345 55% 31%; /* Mulberry Velvet */
+    --card-border: 25 30% 88%; /* Subtle Blushed Linen */
+    --card-shadow: 0 4px 6px -1px rgba(166, 43, 93, 0.1), 0 2px 4px -1px rgba(166, 43, 93, 0.06);
+    --card-hover-shadow: 0 10px 15px -3px rgba(166, 43, 93, 0.15), 0 4px 6px -2px rgba(166, 43, 93, 0.05);
+
     --popover: 0 0% 100%;
     --popover-foreground: 345 55% 31%; /* Mulberry Velvet */
+
+    /* Enhanced primary with gradient support */
     --primary: 345 55% 31%; /* Mulberry Velvet */
     --primary-foreground: 0 0% 100%;
+    --primary-gradient: linear-gradient(135deg, hsl(345 55% 31%) 0%, hsl(345 65% 45%) 100%);
+    --primary-hover: 345 65% 35%;
+
     --secondary: 25 100% 94%; /* Blushed Linen */
     --secondary-foreground: 345 55% 31%; /* Mulberry Velvet */
+    --secondary-gradient: linear-gradient(135deg, hsl(25 100% 94%) 0%, hsl(25 80% 96%) 100%);
+
     --muted: 25 50% 96%; /* Lighter Blushed Linen */
     --muted-foreground: 0 0% 47%; /* Charcoal Mood */
+
+    /* Enhanced accent with glass effect */
     --accent: 295 30% 81%; /* Lavender Fog */
     --accent-foreground: 345 55% 31%; /* Mulberry Velvet */
+    --accent-glass: rgba(229, 202, 236, 0.1);
+
     --destructive: 0 80% 57.70%;
     --destructive-foreground: 0 0% 100%;
+
     --border: 25 30% 88%; /* Subtle Blushed Linen */
+    --border-light: 25 20% 92%;
+    --border-focus: 345 55% 31%;
+
     --input: 25 30% 88%; /* Subtle Blushed Linen */
     --ring: 345 55% 31%; /* Mulberry Velvet */
-    --radius: 0.5rem;
+    --radius: 0.75rem;
+    --radius-sm: 0.5rem;
+    --radius-lg: 1rem;
+
+    /* Modern shadow system */
+    --shadow-sm: 0 1px 2px 0 rgba(166, 43, 93, 0.05);
+    --shadow: 0 1px 3px 0 rgba(166, 43, 93, 0.1), 0 1px 2px 0 rgba(166, 43, 93, 0.06);
+    --shadow-md: 0 4px 6px -1px rgba(166, 43, 93, 0.1), 0 2px 4px -1px rgba(166, 43, 93, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(166, 43, 93, 0.1), 0 4px 6px -2px rgba(166, 43, 93, 0.05);
+    --shadow-xl: 0 20px 25px -5px rgba(166, 43, 93, 0.1), 0 10px 10px -5px rgba(166, 43, 93, 0.04);
+    --shadow-2xl: 0 25px 50px -12px rgba(166, 43, 93, 0.25);
+
+    /* Glassmorphism effects */
+    --glass-bg: rgba(255, 255, 255, 0.8);
+    --glass-border: rgba(255, 255, 255, 0.2);
+    --glass-shadow: 0 8px 32px 0 rgba(166, 43, 93, 0.1);
+
+    /* Animation durations */
+    --duration-fast: 150ms;
+    --duration-normal: 200ms;
+    --duration-slow: 300ms;
   }
 }
 
@@ -36,8 +77,39 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Enhanced focus styles */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Modern scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: calc(var(--radius) * 2);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
   }
 }
 

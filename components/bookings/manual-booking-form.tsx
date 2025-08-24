@@ -68,10 +68,10 @@ const formSchema = z.object({
   occasion: z.string().optional(),
   table_ids: z.array(z.string()).optional(),
   status: z.enum(["pending", "confirmed", "completed"]),
-  acceptTerms: z.boolean().optional().default(true), // Optional for staff bookings, but recommended
+  acceptTerms: z.boolean().default(true), // Staff-created bookings default to accepted
 })
 
-type FormData = z.infer<typeof formSchema>
+type FormData = z.input<typeof formSchema>
 
 interface ManualBookingFormProps {
   restaurantId: string

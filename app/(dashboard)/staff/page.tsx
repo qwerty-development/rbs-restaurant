@@ -219,6 +219,18 @@ const PERMISSIONS = [
     label: 'Manage Staff', 
     category: 'Staff',
     description: 'Add, edit, and remove staff members'
+  },
+  { 
+    id: 'schedules.view', 
+    label: 'View Schedules', 
+    category: 'Schedules',
+    description: 'View staff schedules and time clock'
+  },
+  { 
+    id: 'schedules.manage', 
+    label: 'Manage Schedules', 
+    category: 'Schedules',
+    description: 'Create and edit staff schedules'
   }
 ]
 

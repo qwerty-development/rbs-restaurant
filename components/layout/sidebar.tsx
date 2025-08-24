@@ -6,29 +6,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useSidebar } from '@/lib/contexts/sidebar-context'
-import {
-  LayoutDashboard,
-  Calendar,
-  Users,
-  Utensils,
-  TableIcon,
-  BarChart3,
-  Settings,
-  Star,
-  DollarSign,
-  Gift,
-  Megaphone,
-  HelpCircle,
-  ChevronLeft,
-  ChevronRight,
-  LogOut,
-  Crown,
-  User,
-  Clock,
-  Bell,
-  ChefHat,
-  Receipt
-} from 'lucide-react'
+import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -37,6 +15,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Role } from '@/lib/restaurant-auth'
+import { NAV_ITEMS, BOTTOM_NAV_ITEMS } from '@/components/layout/nav-config'
 
 interface SidebarProps {
   restaurant: {
@@ -48,110 +27,7 @@ interface SidebarProps {
   permissions: string[]
 }
 
-const navigationItems = [
-  {
-    title: 'Dashboard',
-    href: '/dashboard',
-    icon: LayoutDashboard,
-    permission: null, // Always visible
-  },
-  {
-    title: 'Bookings',
-    href: '/bookings',
-    icon: Calendar,
-    permission: 'bookings.view',
-  },
-  {
-    title: 'Customers',
-    href: '/customers',
-    icon: Users,
-    permission: 'customers.view',
-  },
-  {
-    title: 'VIP Customers',
-    href: '/vip',
-    icon: Crown,
-    permission: 'vip.view',
-  },
-  {
-    title: 'Menu',
-    href: '/menu',
-    icon: Utensils,
-    permission: 'menu.view',
-  },
-  {
-    title: 'Tables',
-    href: '/tables',
-    icon: TableIcon,
-    permission: 'tables.view',
-  },
-  {
-    title: 'Analytics',
-    href: '/analytics',
-    icon: BarChart3,
-    permission: 'analytics.view',
-  },
-  {
-    title: 'Waiting List',
-    href: '/waitlist',
-    icon: Clock,
-    permission: 'bookings.view',
-  },
-
-
-  {
-    title: 'Reviews',
-    href: '/reviews',
-    icon: Star,
-    permission: 'reviews.view',
-  },
-  {
-    title: 'Loyalty',
-    href: '/loyalty',
-    icon: Gift,
-    permission: 'loyalty.view',
-  },
-  {
-    title: 'Offers',
-    href: '/offers',
-    icon: DollarSign,
-    permission: 'offers.view',
-  },
-  {
-    title: 'Staff',
-    href: '/staff',
-    icon: Users,
-    permission: null,
-  },
-  {
-    title: 'Profile',
-    href: '/profile',
-    icon: User,
-    permission: null, // Always visible
-  },
-  {
-    title: 'Settings',
-    href: '/settings',
-    icon: Settings,
-    permission: 'settings.view',
-  },
-]
-
-const bottomNavigationItems = [
-  {
-    title: 'Notifications',
-    href: '/notifications',
-    icon: Bell,
-    permission: null, // Always visible
-    badge: 3, // Notification count
-  },
-  {
-    title: 'Help & Support',
-    href: '/help',
-    icon: HelpCircle,
-    permission: null, // Always visible
-  },
-]
+// Navigation items sourced from centralized config
 
 export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
   const pathname = usePathname()
@@ -195,11 +71,11 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
     }
   }
 
-  const filteredNavItems = navigationItems.filter(item => 
+  const filteredNavItems = NAV_ITEMS.filter(item => 
     !item.permission || restaurantAuth.hasPermission(permissions, item.permission, role)
   )
 
-  const filteredBottomItems = bottomNavigationItems.filter(item => 
+  const filteredBottomItems = BOTTOM_NAV_ITEMS.filter(item => 
     !item.permission || restaurantAuth.hasPermission(permissions, item.permission, role)
   )
 

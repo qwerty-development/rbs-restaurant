@@ -797,7 +797,7 @@ export function FloorPlanEditor({
         setTimeout(() => printWindow.close(), 500)
       }, 250)
     }, 50)
-  }, [])
+  }, [showGrid, tables])
 
   // Keyboard shortcuts with optimized movement
   useEffect(() => {

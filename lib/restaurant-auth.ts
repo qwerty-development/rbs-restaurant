@@ -40,7 +40,13 @@ class RestaurantAuth {
         'customers.view', 'customers.manage',
         'analytics.view',
         'settings.view', 'settings.manage',
-        'staff.manage'
+        'staff.manage',
+        'schedules.view', 'schedules.manage',
+        // Additional feature areas
+        'reviews.view', 'reviews.manage',
+        'loyalty.view', 'loyalty.manage',
+        'offers.view', 'offers.manage',
+        'vip.view', 'vip.manage'
       ],
       manager: [
         'bookings.view', 'bookings.manage',
@@ -48,19 +54,29 @@ class RestaurantAuth {
         'tables.view', 'tables.manage',
         'customers.view', 'customers.manage',
         'analytics.view',
-        'settings.view'
+        'settings.view',
+        'schedules.view', 'schedules.manage',
+        'reviews.view', 'reviews.manage',
+        'loyalty.view', 'loyalty.manage',
+        'offers.view', 'offers.manage',
+        'vip.view'
       ],
       staff: [
         'bookings.view', 'bookings.manage',
         'menu.view',
         'tables.view',
-        'customers.view'
+        'customers.view',
+        'schedules.view',
+        'reviews.view',
+        'loyalty.view',
+        'offers.view'
       ],
       viewer: [
         'bookings.view',
         'menu.view',
         'tables.view',
-        'customers.view'
+        'customers.view',
+        'schedules.view'
       ]
     }
     return permissions[role] || []

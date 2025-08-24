@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -50,7 +50,8 @@ export function RestaurantImageUpload({
   const [currentImages, setCurrentImages] = useState<string[]>(images)
   const [currentMainImage, setCurrentMainImage] = useState<string | undefined>(mainImageUrl)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const supabase = createClient()
+  // Keep Supabase client stable across renders
+  const supabaseRef = useRef(createClient())
 
   const validateFile = (file: File): string | null => {
     // Check file type
@@ -92,7 +93,7 @@ export function RestaurantImageUpload({
       
       reader.onload = async () => {
         try {
-          const { error: uploadError, data } = await supabase.storage
+          const { error: uploadError, data } = await supabaseRef.current.storage
             .from(bucket)
             .upload(fileName, file, {
               cacheControl: '3600',
@@ -102,7 +103,7 @@ export function RestaurantImageUpload({
           if (uploadError) throw uploadError
 
           // Get public URL
-          const { data: { publicUrl } } = supabase.storage
+          const { data: { publicUrl } } = supabaseRef.current.storage
             .from(bucket)
             .getPublicUrl(fileName)
 
@@ -160,7 +161,7 @@ export function RestaurantImageUpload({
     })
   }
 
-  const handleFiles = async (files: FileList, forceMainImage: boolean = false) => {
+  const handleFiles = useCallback(async (files: FileList, forceMainImage: boolean = false) => {
     const fileArray = Array.from(files)
     
     // Check total images limit
@@ -218,7 +219,7 @@ export function RestaurantImageUpload({
     setTimeout(() => {
       setUploads(prev => prev.filter(u => u.error || !u.url))
     }, 2000)
-  }
+  }, [currentImages, currentMainImage, maxImages, maxFileSize, onImagesChange, onMainImageChange, uploadToSupabase])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -228,7 +229,7 @@ export function RestaurantImageUpload({
     if (files.length > 0) {
       handleFiles(files)
     }
-  }, [currentImages.length, currentMainImage])
+  }, [handleFiles])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -259,7 +260,7 @@ export function RestaurantImageUpload({
       const filePath = urlParts.slice(-2).join('/') // restaurantId/filename
       
       // Delete from Supabase storage
-      const { error } = await supabase.storage
+      const { error } = await supabaseRef.current.storage
         .from(bucket)
         .remove([filePath])
 

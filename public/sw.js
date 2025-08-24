@@ -1,8 +1,8 @@
-const CACHE_NAME = 'rbs-restaurant-v6'
+const CACHE_NAME = 'rbs-restaurant-v7'
 const urlsToCache = [
   '/',
   '/app',
-  '/manifest.json',
+  '/manifest.webmanifest',
   '/icon-192x192.png',
   '/icon-384x384.png',
   '/icon-512x512.png',

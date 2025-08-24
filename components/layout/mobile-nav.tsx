@@ -5,27 +5,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import {
-  Menu,
-  X,
-  LayoutDashboard,
-  Calendar,
-  Users,
-  Utensils,
-  TableIcon,
-  BarChart3,
-  Settings,
-  Star,
-  DollarSign,
-  Gift,
-  Megaphone,
-  HelpCircle,
-  LogOut,
-  Bell,
-  ChefHat,
-  Clock,
-  Receipt
-} from 'lucide-react'
+import { Menu, X, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -34,6 +14,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Role } from '@/lib/restaurant-auth'
+import { NAV_ITEMS, BOTTOM_NAV_ITEMS } from '@/components/layout/nav-config'
 
 interface MobileNavProps {
   restaurant: {
@@ -45,97 +26,7 @@ interface MobileNavProps {
   permissions: string[]
 }
 
-const navigationItems = [
-  {
-    title: 'Dashboard',
-    href: '/dashboard',
-    icon: LayoutDashboard,
-    permission: null,
-  },
-  {
-    title: 'Bookings',
-    href: '/bookings',
-    icon: Calendar,
-    permission: 'bookings.view',
-  },
-  {
-    title: 'Customers',
-    href: '/customers',
-    icon: Users,
-    permission: 'customers.view',
-  },
-  {
-    title: 'Menu',
-    href: '/menu',
-    icon: Utensils,
-    permission: 'menu.view',
-  },
-  {
-    title: 'Tables',
-    href: '/tables',
-    icon: TableIcon,
-    permission: 'tables.view',
-  },
-  {
-    title: 'Analytics',
-    href: '/analytics',
-    icon: BarChart3,
-    permission: 'analytics.view',
-  },
-
-  {
-    title: 'Reviews',
-    href: '/reviews',
-    icon: Star,
-    permission: 'reviews.view',
-  },
-  {
-    title: 'Loyalty',
-    href: '/loyalty',
-    icon: Gift,
-    permission: 'loyalty.view',
-  },
-  {
-    title: 'Offers',
-    href: '/offers',
-    icon: DollarSign,
-    permission: 'offers.view',
-  },
-  {
-    title: 'Marketing',
-    href: '/marketing',
-    icon: Megaphone,
-    permission: 'marketing.view',
-  },
-  {
-    title: 'Staff',
-    href: '/staff',
-    icon: Users,
-    permission: 'staff.manage',
-  },
-  {
-    title: 'Settings',
-    href: '/settings',
-    icon: Settings,
-    permission: 'settings.view',
-  },
-]
-
-const bottomNavigationItems = [
-  {
-    title: 'Notifications',
-    href: '/notifications',
-    icon: Bell,
-    permission: null,
-    badge: 3, // Notification count
-  },
-  {
-    title: 'Help & Support',
-    href: '/help',
-    icon: HelpCircle,
-    permission: null,
-  },
-]
+// Navigation items sourced from centralized config
 
 export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
   const pathname = usePathname()
@@ -154,11 +45,11 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
     }
   }
 
-  const filteredNavItems = navigationItems.filter(item => 
+  const filteredNavItems = NAV_ITEMS.filter(item => 
     !item.permission || restaurantAuth.hasPermission(permissions, item.permission, role)
   )
 
-  const filteredBottomItems = bottomNavigationItems.filter(item => 
+  const filteredBottomItems = BOTTOM_NAV_ITEMS.filter(item => 
     !item.permission || restaurantAuth.hasPermission(permissions, item.permission, role)
   )
 

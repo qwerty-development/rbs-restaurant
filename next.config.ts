@@ -74,7 +74,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' *.supabase.co; img-src 'self' data: https:; font-src 'self';",
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: ws: *.supabase.co vitals.vercel-analytics.com vercel.live; img-src 'self' data: https:; font-src 'self';",
           },
         ],
       },

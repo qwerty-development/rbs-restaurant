@@ -312,12 +312,18 @@ export interface RestaurantSection {
     id: string;
     restaurant_id: string;
     user_id: string;
-    role: "owner" | "manager" | "staff";
+    role: "owner" | "manager" | "staff" | "viewer";
     permissions: string[];
     is_active: boolean;
     created_at: string;
     // Relations
-    user?: Profile;
+    user?: {
+      id: string
+      full_name: string
+      phone_number?: string | null
+      email?: string | null
+      avatar_url?: string | null
+    };
   }
 
   export interface RestaurantTableCombination {
@@ -535,4 +541,139 @@ export interface RestaurantSection {
     created_at: string
     // Relations
     table?: RestaurantTable
+  }
+
+  // Staff Scheduling Types
+  export interface StaffSchedule {
+    id: string
+    restaurant_id: string
+    staff_id: string
+    name: string
+    description?: string
+    schedule_type: 'weekly' | 'monthly' | 'one_time'
+    start_date: string
+    end_date?: string
+    is_active: boolean
+    created_by: string
+    created_at: string
+    updated_at: string
+    // Relations
+    staff?: RestaurantStaff
+    created_by_user?: Profile
+    shifts?: StaffShift[]
+  }
+
+  export interface StaffShift {
+    id: string
+    restaurant_id: string
+    staff_id: string
+    schedule_id?: string
+    shift_date: string
+    start_time: string
+    end_time: string
+    break_duration_minutes: number
+    role?: string
+    station?: string
+    notes?: string
+    status: 'scheduled' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
+    hourly_rate?: number
+    created_by: string
+    created_at: string
+    updated_at: string
+    // Relations
+    staff?: RestaurantStaff
+    schedule?: StaffSchedule
+    created_by_user?: Profile
+    time_clock_entries?: TimeClockEntry[]
+  }
+
+  export interface TimeClockEntry {
+    id: string
+    restaurant_id: string
+    staff_id: string
+    shift_id?: string
+    clock_in_time: string
+    clock_out_time?: string
+    break_start_time?: string
+    break_end_time?: string
+    total_hours?: number
+    total_break_minutes: number
+    overtime_hours: number
+    gross_pay?: number
+    notes?: string
+    location_clock_in?: Record<string, any>
+    location_clock_out?: Record<string, any>
+    approved_by?: string
+    approved_at?: string
+    status: 'active' | 'completed' | 'approved' | 'disputed'
+    created_at: string
+    updated_at: string
+    // Relations
+    staff?: RestaurantStaff
+    shift?: StaffShift
+    approved_by_user?: Profile
+  }
+
+  export interface StaffAvailability {
+    id: string
+    restaurant_id: string
+    staff_id: string
+    day_of_week: number // 0 = Sunday, 6 = Saturday
+    start_time: string
+    end_time: string
+    availability_type: 'available' | 'preferred' | 'unavailable'
+    recurring: boolean
+    specific_date?: string
+    created_at: string
+    updated_at: string
+    // Relations
+    staff?: RestaurantStaff
+  }
+
+  export interface TimeOffRequest {
+    id: string
+    restaurant_id: string
+    staff_id: string
+    start_date: string
+    end_date: string
+    start_time?: string
+    end_time?: string
+    reason?: string
+    request_type: 'vacation' | 'sick' | 'personal' | 'emergency' | 'other'
+    status: 'pending' | 'approved' | 'denied' | 'cancelled'
+    approved_by?: string
+    approved_at?: string
+    denial_reason?: string
+    created_at: string
+    updated_at: string
+    // Relations
+    staff?: RestaurantStaff
+    approved_by_user?: Profile
+  }
+
+  export interface StaffPosition {
+    id: string
+    restaurant_id: string
+    name: string
+    description?: string
+    hourly_rate_min?: number
+    hourly_rate_max?: number
+    color: string
+    is_active: boolean
+    created_at: string
+    updated_at: string
+    // Virtual fields
+    staff_count?: number
+  }
+
+  export interface StaffPositionAssignment {
+    id: string
+    staff_id: string
+    position_id: string
+    hourly_rate?: number
+    is_primary: boolean
+    created_at: string
+    // Relations
+    staff?: RestaurantStaff
+    position?: StaffPosition
   }

@@ -197,7 +197,7 @@ export function EnhancedRestaurantImageUpload({
     })
   }
 
-  const handleFiles = async (files: FileList) => {
+  const handleFiles = useCallback(async (files: FileList) => {
     const fileArray = Array.from(files)
     
     if (allImages.length + fileArray.length > maxImages) {
@@ -259,7 +259,7 @@ export function EnhancedRestaurantImageUpload({
     setTimeout(() => {
       setUploads(prev => prev.filter(u => u.error || !u.url))
     }, 2000)
-  }
+  }, [allImages.length, maxImages, validateFile, generateFileName, uploadToSupabase])
 
   const updateImageArrays = (imageList: ImageItem[]) => {
     const mainImg = imageList.find(img => img.isMain)
@@ -347,7 +347,7 @@ export function EnhancedRestaurantImageUpload({
     if (files.length > 0) {
       handleFiles(files)
     }
-  }, [allImages.length])
+  }, [handleFiles])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()

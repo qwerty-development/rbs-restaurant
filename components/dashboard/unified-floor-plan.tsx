@@ -45,7 +45,9 @@ import {
   Sparkles,
   MapPin,
   Building,
-  Maximize2
+  Maximize2,
+  Pencil,
+  X
 } from "lucide-react"
 import { format, addMinutes, differenceInMinutes } from "date-fns"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
@@ -786,15 +788,15 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 // Shape
                 table.shape === "circle" ? "rounded-full" : "rounded-2xl",
                 // Interactive states
-                "transform-gpu will-change-transform"
+                "transform-gpu will-change-transform overflow-hidden text-xs"
               )}
               style={{
                 position: "absolute",
                 left: `${finalPositionsRef.current[table.id]?.x ?? table.x_position}%`,
                 top: `${finalPositionsRef.current[table.id]?.y ?? table.y_position}%`,
-                width: `${(table.width || 120) * 0.85}px`,
-                height: `${(table.height || 100) * 0.85}px`,
-                padding: "8px",
+                width: `${(table.width || 120) * 0.8}px`,
+                height: `${(table.height || 100) * 0.8}px`,
+                padding: "6px",
                 transition: dragStateRef.current.tableId === table.id ? 'none' : undefined,
                 // Optimize for performance
                 willChange: editMode ? "transform, left, top" : "auto",
@@ -898,9 +900,9 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1">
                   <StatusIcon className="h-3 w-3 text-current" />
-                  <span className="font-bold text-sm text-foreground">T{table.table_number}</span>
+                  <span className="font-bold text-xs text-foreground whitespace-nowrap">T{table.table_number}</span>
                 </div>
-                <Badge variant="outline" className="text-xs px-1 py-0 bg-background/70 font-medium rounded-md">
+                <Badge variant="outline" className="text-[10px] px-1 py-0 bg-background/70 font-medium rounded-md whitespace-nowrap">
                   {table.min_capacity}-{table.max_capacity}
                 </Badge>
               </div>
@@ -910,20 +912,20 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 <div className="space-y-1">
                   {/* Guest info - Simplified with icons */}
                   <div>
-                    <p className="font-bold text-sm truncate text-foreground mb-0.5">
+                    <p className="font-bold text-[11px] truncate text-foreground mb-0.5">
                       {current.guest_name || current.user?.full_name || 'Guest'}
                     </p>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         {/* Party size with visual indicators */}
                         <div className={cn(
-                          "flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 shadow-sm",
+                          "flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-all duration-200 shadow-sm",
                           current.party_size > table.max_capacity 
                             ? "bg-red-100 text-red-800 border-2 border-red-300 animate-pulse" 
-                            : "bg-primary/20 text-primary border-2 border-primary/30 hover:bg-primary/30"
+                            : "bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30"
                         )}>
                           <Users className="h-3 w-3" />
-                          <span className="font-bold text-xs">{current.party_size}</span>
+                          <span className="font-bold text-[11px]">{current.party_size}</span>
                           {current.party_size > table.max_capacity && (
                             <AlertTriangle className="h-3 w-3 animate-bounce text-destructive" />
                           )}
@@ -931,7 +933,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                         
                         {/* Time indicator with urgency colors */}
                         <div className={cn(
-                          "flex items-center gap-1 px-2 py-1 rounded-lg font-bold text-xs border-2 transition-all duration-200 shadow-sm",
+                          "flex items-center gap-1 px-1.5 py-0.5 rounded-md font-bold text-[11px] border transition-all duration-200 shadow-sm",
                           minutesSinceArrival > (current.turn_time_minutes || 120) 
                             ? "bg-red-100 text-red-800 border-red-300 animate-pulse shadow-red-200" :
                           minutesSinceArrival > (current.turn_time_minutes || 120) * 0.8 
@@ -949,9 +951,9 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                       {/* Enhanced quick call button */}
                       {(current.user?.phone_number || current.guest_phone) && (
                         <Button
-                          size="sm"
+                          size="icon"
                           aria-label={`Call ${current.guest_name || current.user?.full_name || 'Guest'} at ${current.user?.phone_number || current.guest_phone}`}
-                          className="h-7 w-7 p-0 bg-gradient-to-br from-accent to-accent/80 hover:from-accent/80 hover:to-accent text-accent-foreground rounded-full shadow-lg border-2 border-accent/30 hover:scale-110 transition-all duration-200 animate-pulse focus:outline-none focus:ring-2 focus:ring-accent/40 focus:ring-offset-2"
+                          className="h-7 w-7 p-0 bg-gradient-to-br from-accent to-accent/80 hover:from-accent/80 hover:to-accent text-accent-foreground rounded-full shadow-md border border-accent/30 hover:scale-110 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/40 focus:ring-offset-2"
                           onClick={(e) => {
                             e.stopPropagation()
                             const phone = current.user?.phone_number || current.guest_phone
@@ -967,7 +969,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                   {/* Status indicator with enhanced visual feedback */}
                   <div className="flex items-center justify-center">
                     <div className={cn(
-                      "px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-md border transition-all duration-300 transform hover:scale-105",
+                      "px-1.5 py-0.5 rounded-md text-[11px] font-bold flex items-center gap-1 shadow-md border transition-all duration-300",
                       current.status === 'arrived' ? "bg-gradient-to-r from-primary/20 to-primary/30 text-primary border-primary/40 animate-pulse shadow-primary/20" :
                       current.status === 'seated' ? "bg-gradient-to-r from-purple-100 to-purple-200 text-purple-800 border-purple-400 shadow-purple-300/50" :
                       current.status === 'ordered' ? "bg-gradient-to-r from-orange-100 to-orange-200 text-orange-800 border-orange-400 shadow-orange-300/50" :
@@ -1189,7 +1191,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
 
 
   return (
-    <div className="h-full w-full flex flex-col bg-gradient-to-br from-background to-card">
+    <div className="h-full w-full flex flex-col bg-gradient-to-br from-background to-card ">
       {/* Section Navigation Bar */}
       <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="p-3">
@@ -1347,7 +1349,8 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
       {onTableUpdate && (
         <div className="absolute top-20 left-4 z-50">
           <Button
-            size="sm"
+            size="icon"
+            aria-label={editMode ? "Exit Edit Layout" : "Edit Layout"}
             variant={editMode ? "destructive" : "secondary"}
             onClick={() => {
               setEditMode(!editMode)
@@ -1368,19 +1371,19 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               }
             }}
             className={cn(
-              "shadow-lg transition-all duration-200 font-medium",
+              "shadow-md transition-all duration-200",
               editMode 
-                ? "bg-red-600 hover:bg-red-700 text-white animate-pulse" 
+                ? "bg-red-600 hover:bg-red-700 text-white" 
                 : "bg-background/90 hover:bg-background text-foreground border border-border"
             )}
           >
-            {editMode ? "Exit Edit" : "Edit Layout"}
+            {editMode ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
           </Button>
         </div>
       )}
 
       {/* Floor Plan Area */}
-      <div className="flex-1 relative bg-gradient-to-br from-card to-muted overflow-auto" ref={floorPlanRef}>
+      <div className="flex-1 relative bg-gradient-to-br from-card to-muted overflow-auto px-3 md:px-6" ref={floorPlanRef}>
         <div 
           className="relative w-full h-full"
           style={{ minHeight: "600px", minWidth: "700px" }}
