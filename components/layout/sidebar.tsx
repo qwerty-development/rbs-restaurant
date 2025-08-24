@@ -81,10 +81,10 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
 
   return (
     <>
-      {/* Enhanced backdrop with glassmorphism */}
+      {/* Backdrop blur when expanded - covers everything */}
       {!isCollapsed && (
         <div
-          className="fixed inset-0 bg-black/20 backdrop-blur-md z-[50] transition-all duration-300 ease-out animate-fade-in"
+          className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[50] transition-all duration-200 ease-out"
           onClick={() => setIsCollapsed(true)}
           onTouchEnd={() => setIsCollapsed(true)} // Better touch support
           role="button"
@@ -95,25 +95,25 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
       
       <aside
         className={cn(
-          "flex flex-col h-screen bg-glass-bg/90 backdrop-blur-xl border-r border-glass-border transition-all duration-300 ease-out group fixed inset-y-0 left-0 overflow-hidden hover:shadow-lg hover:translate-y-[-2px]",
-          // Enhanced glassmorphism effects
-          // Collapsed: narrow width with subtle shadow
-          // Expanded: wider width with enhanced glassmorphism
+          "flex flex-col h-screen bg-sidebar/98 backdrop-blur-xl border-r border-sidebar-border transition-all duration-200 ease-out group fixed inset-y-0 left-0 overflow-hidden",
+          // Always fixed position to prevent layout jumps
+          // Collapsed: narrow width, normal z-index
+          // Expanded: wider width, higher z-index
           isCollapsed
-            ? "w-16 z-30 shadow-glass"
-            : "w-72 z-[60] shadow-glass border-r border-glass-border/50"
+            ? "w-16 z-30 shadow-sm" 
+            : "w-72 z-[60] shadow-2xl"
         )}
         role="complementary"
         aria-label="Navigation sidebar"
       >
-      {/* Enhanced Header with glassmorphism */}
-      <div className="flex items-center justify-between p-4 border-b border-glass-border/30 bg-white/5 backdrop-blur-sm">
+      {/* Header - Optimized for tablets */}
+      <div className="flex items-center justify-between p-3 md:p-4 border-b border-sidebar-border">
         <div className={cn(
-          "transition-all duration-300 ease-out overflow-hidden",
+          "transition-all duration-200 ease-out overflow-hidden",
           isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
         )}>
-          <h2 className="text-lg font-bold truncate whitespace-nowrap bg-gradient-to-r from-primary to-primary/90 bg-clip-text text-transparent">{restaurant.name}</h2>
-          <p className="text-sm text-sidebar-foreground/70 capitalize whitespace-nowrap font-medium">{role}</p>
+          <h2 className="text-base md:text-lg font-semibold truncate whitespace-nowrap">{restaurant.name}</h2>
+          <p className="text-xs md:text-sm text-sidebar-foreground/60 capitalize whitespace-nowrap">{role}</p>
         </div>
 
         <Button
@@ -121,11 +121,11 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
           size="icon"
           onClick={toggleSidebar}
                       className={cn(
-            "h-9 w-9 shrink-0 transition-all duration-200 ease-out hover:bg-accent/20 hover:scale-105 active:scale-95 rounded-xl focus:outline-none focus:ring-2 focus:ring-ring/50 focus:ring-offset-2",
+            "h-8 w-8 md:h-9 md:w-9 shrink-0 transition-all duration-150 ease-out hover:bg-sidebar-accent/30",
             isCollapsed ? "" : "ml-auto"
           )}
         >
-          {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          {isCollapsed ? <ChevronRight className="h-3 w-3 md:h-4 md:w-4" /> : <ChevronLeft className="h-3 w-3 md:h-4 md:w-4" />}
         </Button>
       </div>
 
@@ -145,10 +145,10 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
                   }
                 }}
                 className={cn(
-                  "flex items-center px-3 py-3 rounded-xl text-sm font-medium transition-all duration-200 ease-out touch-manipulation group relative overflow-hidden",
+                  "flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ease-out touch-manipulation",
                   isActive
-                    ? "bg-primary/10 text-primary shadow-sm border border-primary/20"
-                    : "text-sidebar-foreground hover:bg-accent/20 hover:text-accent-foreground hover:shadow-sm hover:shadow-lg hover:translate-y-[-2px]",
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
                   isCollapsed && "justify-center"
                 )}
                 title={isCollapsed ? item.title : undefined}
@@ -167,8 +167,8 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
         </nav>
       </ScrollArea>
 
-      {/* Enhanced Bottom Section with glassmorphism */}
-      <div className="border-t border-glass-border/30 p-2 space-y-1 bg-white/5 backdrop-blur-sm">
+      {/* Bottom Section - Optimized for tablets */}
+      <div className="border-t border-sidebar-border p-1.5 md:p-2 space-y-0.5 md:space-y-1">
         {filteredBottomItems.map((item) => {
           const isActive = pathname === item.href
           return (
@@ -182,10 +182,10 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
                 }
               }}
               className={cn(
-                "flex items-center px-3 py-3 rounded-xl text-sm font-medium transition-all duration-200 ease-out touch-manipulation relative group overflow-hidden",
+                "flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ease-out touch-manipulation relative",
                 isActive
-                  ? "bg-accent/30 text-accent-foreground shadow-sm border border-accent/30"
-                  : "text-sidebar-foreground hover:bg-accent/20 hover:text-accent-foreground hover:shadow-sm hover:shadow-lg hover:translate-y-[-2px]",
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
                 isCollapsed && "justify-center"
               )}
               title={isCollapsed ? item.title : undefined}
@@ -212,7 +212,7 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
           variant="ghost"
           onClick={handleSignOut}
           className={cn(
-            "w-full justify-start text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive py-3 h-auto touch-manipulation transition-all duration-200 ease-out px-3 rounded-xl hover:shadow-lg hover:translate-y-[-2px] active:scale-95 focus:outline-none focus:ring-2 focus:ring-destructive/50 focus:ring-offset-2",
+            "w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground py-2.5 h-auto touch-manipulation transition-all duration-150 ease-out px-3",
             isCollapsed && "justify-center"
           )}
           title={isCollapsed ? "Sign Out" : undefined}

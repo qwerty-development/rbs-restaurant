@@ -8,68 +8,27 @@
 
 @layer base {
   :root {
-    /* Enhanced Brand Color Palette with Modern Design Tokens */
+    /* New Brand Color Palette */
     --background: 45 29% 97%; /* off white */
     --foreground: 345 55% 31%; /* Mulberry Velvet */
-
-    /* Enhanced card system with gradients and depth */
     --card: 25 50% 96%; /* Light Blushed Linen */
     --card-foreground: 345 55% 31%; /* Mulberry Velvet */
-    --card-border: 25 30% 88%; /* Subtle Blushed Linen */
-    --card-shadow: 0 4px 6px -1px rgba(166, 43, 93, 0.1), 0 2px 4px -1px rgba(166, 43, 93, 0.06);
-    --card-hover-shadow: 0 10px 15px -3px rgba(166, 43, 93, 0.15), 0 4px 6px -2px rgba(166, 43, 93, 0.05);
-
     --popover: 0 0% 100%;
     --popover-foreground: 345 55% 31%; /* Mulberry Velvet */
-
-    /* Enhanced primary with gradient support */
     --primary: 345 55% 31%; /* Mulberry Velvet */
     --primary-foreground: 0 0% 100%;
-    --primary-gradient: linear-gradient(135deg, hsl(345 55% 31%) 0%, hsl(345 65% 45%) 100%);
-    --primary-hover: 345 65% 35%;
-
     --secondary: 25 100% 94%; /* Blushed Linen */
     --secondary-foreground: 345 55% 31%; /* Mulberry Velvet */
-    --secondary-gradient: linear-gradient(135deg, hsl(25 100% 94%) 0%, hsl(25 80% 96%) 100%);
-
     --muted: 25 50% 96%; /* Lighter Blushed Linen */
     --muted-foreground: 0 0% 47%; /* Charcoal Mood */
-
-    /* Enhanced accent with glass effect */
     --accent: 295 30% 81%; /* Lavender Fog */
     --accent-foreground: 345 55% 31%; /* Mulberry Velvet */
-    --accent-glass: rgba(229, 202, 236, 0.1);
-
     --destructive: 0 80% 57.70%;
     --destructive-foreground: 0 0% 100%;
-
     --border: 25 30% 88%; /* Subtle Blushed Linen */
-    --border-light: 25 20% 92%;
-    --border-focus: 345 55% 31%;
-
     --input: 25 30% 88%; /* Subtle Blushed Linen */
     --ring: 345 55% 31%; /* Mulberry Velvet */
-    --radius: 0.75rem;
-    --radius-sm: 0.5rem;
-    --radius-lg: 1rem;
-
-    /* Modern shadow system */
-    --shadow-sm: 0 1px 2px 0 rgba(166, 43, 93, 0.05);
-    --shadow: 0 1px 3px 0 rgba(166, 43, 93, 0.1), 0 1px 2px 0 rgba(166, 43, 93, 0.06);
-    --shadow-md: 0 4px 6px -1px rgba(166, 43, 93, 0.1), 0 2px 4px -1px rgba(166, 43, 93, 0.06);
-    --shadow-lg: 0 10px 15px -3px rgba(166, 43, 93, 0.1), 0 4px 6px -2px rgba(166, 43, 93, 0.05);
-    --shadow-xl: 0 20px 25px -5px rgba(166, 43, 93, 0.1), 0 10px 10px -5px rgba(166, 43, 93, 0.04);
-    --shadow-2xl: 0 25px 50px -12px rgba(166, 43, 93, 0.25);
-
-    /* Glassmorphism effects */
-    --glass-bg: rgba(255, 255, 255, 0.8);
-    --glass-border: rgba(255, 255, 255, 0.2);
-    --glass-shadow: 0 8px 32px 0 rgba(166, 43, 93, 0.1);
-
-    /* Animation durations */
-    --duration-fast: 150ms;
-    --duration-normal: 200ms;
-    --duration-slow: 300ms;
+    --radius: 0.5rem;
   }
 }
 
@@ -77,145 +36,62 @@
   * {
     @apply border-border;
   }
-
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+  }
   }
 
-  /* Enhanced focus styles */
-  *:focus-visible {
-    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
-  }
-
-  /* Smooth scrolling */
-  html {
-    scroll-behavior: smooth;
-  }
-
-  /* Modern scrollbar */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: hsl(var(--muted));
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.3);
-    border-radius: calc(var(--radius) * 2);
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.5);
-  }
-}
-
-/* Enhanced Component Styles */
+/* Kitchen Operations Specific Styles */
 @layer components {
-  /* Modern Card System */
-  .card-modern {
-    @apply bg-card border border-border rounded-xl shadow-card hover:shadow-lg transition-all duration-200;
-    background: linear-gradient(135deg, hsl(var(--card)) 0%, hsl(var(--muted)) 100%);
-  }
-
-  .card-glass {
-    @apply bg-white/80 backdrop-blur-xl border border-white/20 rounded-xl shadow-lg;
-  }
-
-  .card-gradient {
-    @apply bg-gradient-to-br from-primary/5 to-accent/5 border border-primary/10 rounded-xl shadow-primary/5;
-  }
-
-  /* Enhanced Button Styles */
-  .btn-modern {
-    @apply relative overflow-hidden transition-all duration-200 rounded-lg font-medium;
-  }
-
-  .btn-modern::before {
-    content: '';
-    @apply absolute inset-0 bg-gradient-to-r from-primary to-primary/90 opacity-0 transition-opacity duration-200;
-  }
-
-  .btn-modern:hover::before {
-    @apply opacity-100;
-  }
-
-  .btn-modern-primary {
-    @apply bg-primary text-primary-foreground shadow-md hover:shadow-lg transform hover:scale-[1.02] active:scale-[0.98];
-  }
-
-  .btn-modern-secondary {
-    @apply bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-sm hover:shadow-md;
-  }
-
-  .btn-modern-ghost {
-    @apply bg-transparent text-foreground hover:bg-accent/10 hover:text-accent-foreground;
-  }
-
-  /* Kitchen Operations Specific Styles */
+  /* Kitchen Display System */
   .kitchen-display {
     @apply h-screen flex flex-col bg-background overflow-hidden;
   }
 
   .kitchen-header {
-    @apply bg-card border-b border-border px-4 py-3 flex items-center justify-between shadow-sm;
+    @apply bg-card border-b border-border px-4 py-3 flex items-center justify-between;
   }
 
   .kitchen-station-tabs {
-    @apply bg-card border-b border-border px-4 py-2 shadow-sm;
+    @apply bg-card border-b border-border px-4 py-2;
   }
 
-  /* Enhanced Order Cards */
+  /* Order Cards */
   .order-card {
-    @apply transition-all duration-200 hover:shadow-lg bg-card border border-border rounded-lg shadow-card;
+    @apply transition-all duration-200 hover:shadow-lg bg-card border-border;
   }
 
-  .order-card:hover {
-    @apply shadow-lg transform translate-y-[-2px];
-  }
-
-  /* Enhanced Priority System */
   .order-card-priority-1 {
-    @apply border-border shadow-sm;
+    @apply border-border;
   }
 
   .order-card-priority-2 {
-    @apply border-blue-400/60 bg-blue-50/30 shadow-blue-100/50;
-    box-shadow: 0 0 0 1px hsl(217 91% 60% / 0.3), var(--shadow-sm);
+    @apply border-blue-400;
   }
 
   .order-card-priority-3 {
-    @apply border-yellow-400/60 bg-yellow-50/30 shadow-yellow-100/50;
-    box-shadow: 0 0 0 1px hsl(48 96% 53% / 0.3), var(--shadow-sm);
+    @apply border-yellow-400;
   }
 
   .order-card-priority-4 {
-    @apply border-orange-400/60 bg-orange-50/30 shadow-orange-100/50;
-    box-shadow: 0 0 0 1px hsl(25 95% 53% / 0.3), var(--shadow-sm);
+    @apply border-orange-400;
   }
 
   .order-card-priority-5 {
-    @apply border-destructive/60 bg-destructive/5 shadow-destructive/20;
-    box-shadow: 0 0 0 1px hsl(0 80% 58% / 0.3), var(--shadow-sm);
-    animation: pulse-destructive 2s infinite;
+    @apply border-destructive;
   }
 
   .order-card-overdue {
-    @apply border-destructive/80 bg-destructive/10 shadow-destructive/30;
-    animation: pulse-destructive 1.5s infinite;
+    @apply border-destructive bg-destructive/5;
   }
 
   .order-card-ready {
-    @apply ring-2 ring-green-500/60 border-green-500/60 bg-green-50/20 shadow-green-100/50;
-    animation: pulse-success 3s infinite;
+    @apply ring-2 ring-green-500/50 border-green-500/50;
   }
 
-  /* Enhanced Order Items */
+  /* Order Items */
   .order-item {
-    @apply flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border/50 hover:bg-muted/70 transition-colors duration-200;
+    @apply flex items-center justify-between p-2 bg-muted/50 rounded border border-border;
   }
 
   .order-item-name {
@@ -301,85 +177,26 @@
     @apply text-destructive;
   }
 
-  /* Enhanced Connection Status */
+  /* Connection Status */
   .connection-connected {
     @apply text-green-500;
-    position: relative;
-  }
-
-  .connection-connected::after {
-    content: '';
-    @apply absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full;
-    animation: pulse-success 2s infinite;
   }
 
   .connection-disconnected {
     @apply text-destructive;
-    position: relative;
   }
 
-  .connection-disconnected::after {
-    content: '';
-    @apply absolute -top-1 -right-1 w-2 h-2 bg-destructive rounded-full;
-    animation: pulse-destructive 2s infinite;
-  }
-
-  /* Modern Order Entry Modal */
+  /* Order Entry Modal */
   .order-entry-modal {
-    @apply max-w-6xl h-[90vh] flex flex-col rounded-xl shadow-xl bg-card border border-border;
+    @apply max-w-6xl h-[90vh] flex flex-col;
   }
 
   .menu-item-card {
-    @apply cursor-pointer hover:shadow-lg transition-all duration-200 bg-card border border-border hover:border-primary/50 rounded-lg transform hover:scale-[1.02] hover:translate-y-[-1px];
+    @apply cursor-pointer hover:shadow-md transition-shadow bg-card border-border hover:border-primary/50;
   }
 
   .menu-item-name {
     @apply font-medium text-sm text-card-foreground;
-  }
-
-  /* Modern Micro-interactions */
-  .hover-lift {
-    @apply transition-all duration-200 hover:shadow-lg hover:translate-y-[-2px];
-  }
-
-  .hover-scale {
-    @apply transition-transform duration-200 hover:scale-105;
-  }
-
-  .click-feedback {
-    @apply active:scale-95 transition-transform duration-150;
-  }
-
-  .focus-ring {
-    @apply focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2;
-  }
-
-  /* Loading States */
-  .loading-shimmer {
-    background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--muted) / 0.8) 50%, hsl(var(--muted)) 75%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s infinite;
-  }
-
-  .loading-pulse {
-    @apply animate-pulse;
-  }
-
-  /* Notification Badges */
-  .badge-modern {
-    @apply inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full;
-  }
-
-  .badge-primary {
-    @apply bg-primary/10 text-primary border border-primary/20;
-  }
-
-  .badge-secondary {
-    @apply bg-secondary text-secondary-foreground border border-border;
-  }
-
-  .badge-destructive {
-    @apply bg-destructive/10 text-destructive border border-destructive/20;
   }
 
   .menu-item-price {
@@ -576,75 +393,6 @@
 
 .animate-scale-in {
   animation: scale-in 0.2s ease-out;
-}
-
-/* Enhanced Animations */
-@keyframes pulse-destructive {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.05);
-  }
-}
-
-@keyframes pulse-success {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.9;
-    transform: scale(1.02);
-  }
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-@keyframes bounce-in {
-  0% {
-    opacity: 0;
-    transform: scale(0.3);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.05);
-  }
-  70% {
-    transform: scale(0.9);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-bounce-in {
-  animation: bounce-in 0.5s ease-out;
-}
-
-.animate-slide-up {
-  animation: slide-up 0.3s ease-out;
 }
 
 @theme inline {

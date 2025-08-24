@@ -119,30 +119,28 @@ const STATUS_ICONS: any = {
   'cancelled': AlertCircle
 }
 
-// Enhanced status colors with modern gradients and animations
 const STATUS_COLORS: any = {
-  'pending': 'bg-gradient-to-br from-secondary/60 to-secondary/80 border-secondary/60 text-secondary-foreground shadow-secondary/20',
-  'confirmed': 'bg-gradient-to-br from-primary/20 to-primary/30 border-primary/40 text-primary shadow-primary/10',
-  'arrived': 'bg-gradient-to-br from-accent/40 to-accent/60 border-accent/50 text-accent-foreground shadow-accent/20',
-  'seated': 'bg-gradient-to-br from-primary/30 to-primary/50 border-primary/60 text-primary shadow-primary/20',
-  'ordered': 'bg-gradient-to-br from-secondary/70 to-secondary/90 border-secondary/80 text-secondary-foreground shadow-secondary/30',
-  'appetizers': 'bg-gradient-to-br from-accent/50 to-accent/70 border-accent/60 text-accent-foreground shadow-accent/30',
-  'main_course': 'bg-gradient-to-br from-secondary/80 to-secondary border-secondary/90 text-secondary-foreground shadow-secondary/40',
-  'dessert': 'bg-gradient-to-br from-accent/70 to-accent/90 border-accent/80 text-accent-foreground shadow-accent/40',
-  'payment': 'bg-gradient-to-br from-primary/50 to-primary/70 border-primary/80 text-primary shadow-primary/30',
-  'completed': 'bg-gradient-to-br from-muted to-muted/80 border-border/50 text-muted-foreground shadow-sm',
-  'no_show': 'bg-gradient-to-br from-destructive/30 to-destructive/50 border-destructive/60 text-destructive shadow-destructive/20',
-  'cancelled': 'bg-gradient-to-br from-destructive/30 to-destructive/50 border-destructive/60 text-destructive shadow-destructive/20'
+  'pending': 'bg-secondary/50 border-secondary text-secondary-foreground',
+  'confirmed': 'bg-primary/20 border-primary/40 text-primary',
+  'arrived': 'bg-accent/30 border-accent text-accent-foreground',
+  'seated': 'bg-primary/30 border-primary text-primary',
+  'ordered': 'bg-secondary/70 border-secondary text-secondary-foreground',
+  'appetizers': 'bg-accent/50 border-accent text-accent-foreground',
+  'main_course': 'bg-secondary border-secondary text-secondary-foreground',
+  'dessert': 'bg-accent/70 border-accent text-accent-foreground',
+  'payment': 'bg-primary/40 border-primary text-primary',
+  'completed': 'bg-muted border-border text-muted-foreground',
+  'no_show': 'bg-destructive/20 border-destructive text-destructive',
+  'cancelled': 'bg-destructive/20 border-destructive text-destructive'
 }
 
-// Enhanced table type colors with modern design
 const TABLE_TYPE_COLORS: Record<string, string> = {
-  booth: "bg-gradient-to-br from-primary/15 to-primary/25 border-primary/40 shadow-primary/20 hover:shadow-primary/30",
-  window: "bg-gradient-to-br from-accent/15 to-accent/25 border-accent/40 shadow-accent/20 hover:shadow-accent/30",
-  patio: "bg-gradient-to-br from-secondary/25 to-secondary/35 border-secondary/50 shadow-secondary/20 hover:shadow-secondary/30",
-  standard: "bg-gradient-to-br from-card via-muted/50 to-card border-border/60 shadow-sm hover:shadow-md",
-  bar: "bg-gradient-to-br from-accent/25 to-accent/35 border-accent/50 shadow-accent/20 hover:shadow-accent/30",
-  private: "bg-gradient-to-br from-primary/15 to-primary/25 border-primary/40 shadow-primary/20 hover:shadow-primary/30",
+  booth: "bg-gradient-to-br from-primary/10 to-primary/20 border-primary/30 shadow-primary/10",
+  window: "bg-gradient-to-br from-accent/10 to-accent/20 border-accent/30 shadow-accent/10",
+  patio: "bg-gradient-to-br from-secondary/20 to-secondary/30 border-secondary/40 shadow-secondary/10",
+  standard: "bg-gradient-to-br from-card to-muted border-border shadow-sm",
+  bar: "bg-gradient-to-br from-accent/20 to-accent/30 border-accent/40 shadow-accent/10",
+  private: "bg-gradient-to-br from-primary/10 to-primary/20 border-primary/30 shadow-primary/10",
 }
 
 export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({ 
@@ -1349,7 +1347,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
 
       {/* Edit Mode Toggle */}
       {onTableUpdate && (
-        <div className="absolute top-20 left-4 z-50">
+        <div className="absolute top-20 left-20 z-20 ">
           <Button
             size="icon"
             aria-label={editMode ? "Exit Edit Layout" : "Edit Layout"}
