@@ -871,7 +871,7 @@ export function CheckInQueue({
             : (walkInData.guestName.trim() || `Walk-in ${format(currentTime, 'HH:mm')}`),
           guest_phone: selectedCustomer
             ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
-            : walkInData.guestPhone,
+            : (walkInData.guestPhone?.trim() || null),
           guest_email: selectedCustomer?.guest_email || null,
           party_size: walkInData.partySize,
           table_ids: selectedTableIds,
@@ -896,7 +896,7 @@ export function CheckInQueue({
             : (walkInData.guestName.trim() || `Walk-in ${format(currentTime, 'HH:mm')}`),
           guest_phone: selectedCustomer
             ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
-            : walkInData.guestPhone,
+            : (walkInData.guestPhone?.trim() || null),
           guest_email: selectedCustomer?.guest_email || null,
           party_size: walkInData.partySize,
           table_ids: selectedTableIds,
@@ -1022,8 +1022,10 @@ export function CheckInQueue({
         : (walkInData.guestName.trim() || `Walk-in ${format(currentTime, 'HH:mm')}`),
       guest_phone: selectedCustomer
         ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
-        : walkInData.guestPhone,
-      guest_email: selectedCustomer?.guest_email || null,
+        : (walkInData.guestPhone?.trim() || null),
+      guest_email: selectedCustomer 
+        ? (selectedCustomer.guest_email || null)
+        : null, // Walk-ins don't have email in this form
       party_size: walkInData.partySize,
       table_ids: selectedTableIds,
       booking_time: currentTime.toISOString(),
@@ -1031,20 +1033,33 @@ export function CheckInQueue({
       status: 'arrived',
       table_preferences: walkInData.preferences
     }
-    // If no selected customer but guest info is provided, prompt to add/use existing
-    const hasGuestInfo = !!(walkInBooking.guest_name?.trim() || walkInBooking.guest_email?.trim() || walkInBooking.guest_phone?.trim())
+    
+    // FIXED: Clean the booking data to ensure empty strings are converted to null
+    const cleanGuestName = walkInBooking.guest_name?.trim()
+    const cleanGuestEmail = walkInBooking.guest_email?.trim()
+    const cleanGuestPhone = walkInBooking.guest_phone?.trim()
+    
+    const cleanedWalkInBooking = {
+      ...walkInBooking,
+      guest_name: cleanGuestName || `Walk-in ${format(currentTime, 'HH:mm')}`,
+      guest_email: cleanGuestEmail || null,
+      guest_phone: cleanGuestPhone || null,
+    }
+    
+    // If no selected customer but meaningful guest info is provided, prompt to add/use existing
+    const hasGuestInfo = !!(cleanGuestName || cleanGuestEmail || cleanGuestPhone)
     if (!walkInBooking.customer_id && hasGuestInfo) {
-      setPendingWalkInBooking(walkInBooking)
+      setPendingWalkInBooking(cleanedWalkInBooking)
       setPendingGuestDetails({
-        name: walkInBooking.guest_name || null,
-        email: walkInBooking.guest_email || null,
-        phone: walkInBooking.guest_phone || null,
+        name: cleanGuestName || null,
+        email: cleanGuestEmail || null,
+        phone: cleanGuestPhone || null,
       })
       setShowAddCustomerPrompt(true)
       return
     }
 
-    await executeWalkInFlow(walkInBooking)
+    await executeWalkInFlow(cleanedWalkInBooking)
   }
 
   // Similar customers lookup when prompt open
@@ -1130,12 +1145,28 @@ export function CheckInQueue({
 
   const handleAddNewCustomer = async () => {
     if (!pendingWalkInBooking || !restaurantId) return
-    const name = pendingGuestDetails?.name || pendingWalkInBooking.guest_name || null
-    const email = pendingGuestDetails?.email || pendingWalkInBooking.guest_email || null
-    const phone = pendingGuestDetails?.phone || pendingWalkInBooking.guest_phone || null
+    const name = pendingGuestDetails?.name?.trim() || pendingWalkInBooking.guest_name?.trim() || null
+    const email = pendingGuestDetails?.email?.trim() || pendingWalkInBooking.guest_email?.trim() || null
+    const phone = pendingGuestDetails?.phone?.trim() || pendingWalkInBooking.guest_phone?.trim() || null
 
-    if (!name && !email && !phone) {
+    // FIXED: Ensure we have at least one meaningful identifier
+    // Empty strings should be converted to null to avoid unique constraint violations
+    const cleanName = name && name.length > 0 ? name : null
+    const cleanEmail = email && email.length > 0 ? email : null
+    const cleanPhone = phone && phone.length > 0 ? phone : null
+
+    if (!cleanName && !cleanEmail && !cleanPhone) {
       toast.error("Provide at least a name, email, or phone to add a customer")
+      return
+    }
+
+    // FIXED: Don't create customers if we only have empty values or null values
+    // This prevents the unique constraint violation on (restaurant_id, '', '')
+    if (!cleanEmail && !cleanPhone) {
+      // If we only have a name but no contact info, skip creating a customer
+      // since the unique constraint is on email+phone combination
+      toast("Skipping customer creation - contact information is required")
+      await handleSkipAddingCustomer()
       return
     }
 
@@ -1156,12 +1187,12 @@ export function CheckInQueue({
         .eq("restaurant_id", restaurantId)
         .limit(1)
 
-      if (email && phone) {
-        existingQuery = existingQuery.eq("guest_email", email).eq("guest_phone", phone)
-      } else if (email) {
-        existingQuery = existingQuery.eq("guest_email", email)
-      } else if (phone) {
-        existingQuery = existingQuery.eq("guest_phone", phone)
+      if (cleanEmail && cleanPhone) {
+        existingQuery = existingQuery.eq("guest_email", cleanEmail).eq("guest_phone", cleanPhone)
+      } else if (cleanEmail) {
+        existingQuery = existingQuery.eq("guest_email", cleanEmail).is("guest_phone", null)
+      } else if (cleanPhone) {
+        existingQuery = existingQuery.eq("guest_phone", cleanPhone).is("guest_email", null)
       }
 
       const { data: existing } = await existingQuery.single()
@@ -1176,9 +1207,9 @@ export function CheckInQueue({
         .from("restaurant_customers")
         .insert({
           restaurant_id: restaurantId,
-          guest_name: name,
-          guest_email: email,
-          guest_phone: phone,
+          guest_name: cleanName,
+          guest_email: cleanEmail,
+          guest_phone: cleanPhone,
           first_visit: new Date().toISOString(),
           last_visit: new Date().toISOString(),
         })
@@ -1197,7 +1228,7 @@ export function CheckInQueue({
         // If duplicate, fetch existing and use it
         // @ts-ignore Supabase error shape
         if (error?.code === '23505') {
-          const { data: dupExisting } = await supabase
+          let dupQuery = supabase
             .from("restaurant_customers")
             .select(`
               *,
@@ -1209,9 +1240,16 @@ export function CheckInQueue({
               )
             `)
             .eq("restaurant_id", restaurantId)
-            .eq("guest_email", email)
-            .eq("guest_phone", phone)
-            .single()
+
+          if (cleanEmail && cleanPhone) {
+            dupQuery = dupQuery.eq("guest_email", cleanEmail).eq("guest_phone", cleanPhone)
+          } else if (cleanEmail) {
+            dupQuery = dupQuery.eq("guest_email", cleanEmail).is("guest_phone", null)
+          } else if (cleanPhone) {
+            dupQuery = dupQuery.eq("guest_phone", cleanPhone).is("guest_email", null)
+          }
+
+          const { data: dupExisting } = await dupQuery.single()
 
           if (dupExisting) {
             toast.success("Customer already exists. Using existing record.")
