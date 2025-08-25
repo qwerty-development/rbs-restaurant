@@ -160,6 +160,28 @@ export default function TablesPage() {
     },
   })
 
+  const updateTableSize = useMutation({
+    mutationFn: async ({ tableId, dimensions }: { tableId: string; dimensions: { width: number; height: number } }) => {
+      const { error } = await supabase
+        .from("restaurant_tables")
+        .update({
+          width: dimensions.width,
+          height: dimensions.height,
+        })
+        .eq("id", tableId)
+      
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tables-with-sections"] })
+      toast.success("Table size updated successfully")
+    },
+    onError: (error: any) => {
+      console.error("Size update error:", error)
+      toast.error("Failed to update table size")
+    },
+  })
+
   const updateTableSection = useMutation({
     mutationFn: async ({ tableId, sectionId }: { tableId: string; sectionId: string }) => {
       const { error } = await supabase
@@ -216,6 +238,10 @@ export default function TablesPage() {
 
   const handleTableUpdate = (tableId: string, position: { x: number; y: number }) => {
     updateTablePosition.mutate({ tableId, position })
+  }
+
+  const handleTableResize = (tableId: string, dimensions: { width: number; height: number }) => {
+    updateTableSize.mutate({ tableId, dimensions })
   }
 
   const handleTableSectionChange = (tableId: string, sectionId: string) => {
@@ -392,6 +418,7 @@ export default function TablesPage() {
             restaurantId={restaurantId}
             tables={tables || []}
             onTableUpdate={handleTableUpdate}
+            onTableResize={handleTableResize}
             onTableDelete={handleDelete}
             onTableSectionChange={handleTableSectionChange}
           />

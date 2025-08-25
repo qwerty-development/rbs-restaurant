@@ -331,10 +331,20 @@ export function FloorPlanEditor({
 
   // Unified resize start handler for mouse and touch
   const handleResizeStart = useCallback((e: React.MouseEvent | React.TouchEvent, tableId: string) => {
-    if (viewMode === "preview" || isDragging) return
+    console.log('🔧 Resize start triggered for table:', tableId, 'editMode:', editMode)
+    
+    if (viewMode === "preview" || isDragging) {
+      console.log('❌ Resize blocked - viewMode:', viewMode, 'isDragging:', isDragging)
+      return
+    }
     
     // Only allow resizing in resize mode
-    if (editMode !== "resize") return
+    if (editMode !== "resize") {
+      console.log('❌ Resize blocked - not in resize mode, current mode:', editMode)
+      return
+    }
+    
+    console.log('✅ Resize proceeding...')
     
     // Always prevent default and stop propagation for resize handles
     e.preventDefault()
@@ -343,11 +353,17 @@ export function FloorPlanEditor({
     // Find the table element (parent of resize handle)
     const resizeHandle = e.currentTarget as HTMLElement
     const tableElement = resizeHandle.closest('[data-table-id]') as HTMLElement
-    if (!tableElement) return
+    if (!tableElement) {
+      console.log('❌ No table element found')
+      return
+    }
 
-    // Get current dimensions more accurately
-    const currentWidth = tableElement.offsetWidth / (zoom / 100)
-    const currentHeight = tableElement.offsetHeight / (zoom / 100)
+    // Get current dimensions - use the stored values for accuracy
+    const storedSize = finalSizesRef.current[tableId] || originalSizesRef.current[tableId]
+    const currentWidth = storedSize?.width || tableElement.offsetWidth / (zoom / 100)
+    const currentHeight = storedSize?.height || tableElement.offsetHeight / (zoom / 100)
+    
+    console.log('📏 Current size:', { width: currentWidth, height: currentHeight })
 
     // Get coordinates based on event type
     let clientX: number, clientY: number
@@ -359,10 +375,13 @@ export function FloorPlanEditor({
       clientY = e.touches[0].clientY
       touchId = e.touches[0].identifier
       isTouch = true
+      console.log('📱 Touch resize start')
     } else if ('clientX' in e) {
       clientX = e.clientX
       clientY = e.clientY
+      console.log('🖱️ Mouse resize start')
     } else {
+      console.log('❌ No valid coordinates')
       return
     }
 
@@ -375,7 +394,7 @@ export function FloorPlanEditor({
       initialHeight: currentHeight,
       animationId: null,
       touchId,
-      isResizeConfirmed: !isTouch, // For mouse, immediately confirm. For touch, wait for movement.
+      isResizeConfirmed: !isTouch, // For mouse, immediately confirm. For touch, confirm immediately for resize handles
       startTime: Date.now()
     }
 
@@ -384,13 +403,13 @@ export function FloorPlanEditor({
     tableElement.classList.add('resize-active')
     tableElement.style.zIndex = '1001'
     
-    if (!isTouch) {
-      document.body.style.cursor = 'se-resize'
-      document.body.style.userSelect = 'none'
-    }
+    // Set body cursor for both mouse and touch
+    document.body.style.cursor = 'se-resize'
+    document.body.style.userSelect = 'none'
     
     setIsResizing(true)
-  }, [viewMode, isDragging, editMode])
+    console.log('🎯 Resize state set to true')
+  }, [viewMode, isDragging, editMode, zoom])
 
   // Unified move handler for mouse and touch
   const handleMove = useCallback((e: MouseEvent | TouchEvent) => {
@@ -492,19 +511,14 @@ export function FloorPlanEditor({
       // Calculate movement distance
       const deltaX = coords.clientX - resizeState.startX
       const deltaY = coords.clientY - resizeState.startY
-      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
       
-      // For touch events, confirm resize after minimal movement (resize handles are intentional)
+      // For touch events, confirm resize immediately if we have a touch ID (resize handles are intentional)
       if (!resizeState.isResizeConfirmed && resizeState.touchId !== null) {
-        if (distance > 3) { // Much smaller threshold for resize handles
-          e.preventDefault()
-          resizeState.isResizeConfirmed = true
-          document.body.style.cursor = 'se-resize'
-          document.body.style.userSelect = 'none'
-          resizeState.element.style.touchAction = 'none'
-        } else {
-          return
-        }
+        e.preventDefault()
+        resizeState.isResizeConfirmed = true
+        document.body.style.cursor = 'se-resize'
+        document.body.style.userSelect = 'none'
+        resizeState.element.style.touchAction = 'none'
       }
       
       // Only proceed with resize if confirmed
@@ -534,7 +548,11 @@ export function FloorPlanEditor({
         resizeState.element!.style.width = `${newWidth}px`
         resizeState.element!.style.height = `${newHeight}px`
         
+        // Update the stored size reference
         finalSizesRef.current[resizeState.tableId!] = { width: newWidth, height: newHeight }
+        
+        // Also update the original size reference to maintain consistency
+        originalSizesRef.current[resizeState.tableId!] = { width: newWidth, height: newHeight }
       })
     }
   }, [isDragging, isResizing, zoom])
@@ -582,6 +600,8 @@ export function FloorPlanEditor({
     
     // Handle resize completion
     if (resizeState.tableId && resizeState.element) {
+      console.log('🏁 Resize completion for table:', resizeState.tableId)
+      
       // Re-enable CSS transitions
       resizeState.element.style.transition = ''
       resizeState.element.style.touchAction = ''
@@ -593,9 +613,14 @@ export function FloorPlanEditor({
       // Save final size to database only if resize was confirmed
       if (resizeState.isResizeConfirmed) {
         const finalSize = finalSizesRef.current[resizeState.tableId]
+        console.log('💾 Saving resize to database:', finalSize)
         if (finalSize && onTableResize) {
           onTableResize(resizeState.tableId, finalSize)
+        } else {
+          console.log('❌ No final size or onTableResize callback:', { finalSize, onTableResize: !!onTableResize })
         }
+      } else {
+        console.log('❌ Resize not confirmed, not saving')
       }
       
       // Cancel any pending animation
@@ -666,6 +691,10 @@ export function FloorPlanEditor({
       }
       
       if (isRelevantTouch) {
+        // Always prevent default for resize operations to avoid scroll conflicts
+        if (resizeState.touchId !== null) {
+          e.preventDefault()
+        }
         handleMove(e)
       }
       // If not relevant, let the browser handle it normally for scrolling
@@ -799,13 +828,14 @@ export function FloorPlanEditor({
     }, 50)
   }, [showGrid, tables])
 
-  // Keyboard shortcuts with optimized movement
+  // Keyboard shortcuts with optimized movement and resizing
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!selectedTable || isDragging || isResizing || viewMode === "preview") return
 
       const step = e.shiftKey ? 5 : 1
       let deltaX = 0, deltaY = 0
+      let deltaWidth = 0, deltaHeight = 0
 
       switch (e.key) {
         case "Delete":
@@ -820,23 +850,40 @@ export function FloorPlanEditor({
           break
         case "ArrowUp":
           e.preventDefault()
-          deltaY = -step
+          if (editMode === "move") {
+            deltaY = -step
+          } else if (editMode === "resize") {
+            deltaHeight = -step
+          }
           break
         case "ArrowDown":
           e.preventDefault()
-          deltaY = step
+          if (editMode === "move") {
+            deltaY = step
+          } else if (editMode === "resize") {
+            deltaHeight = step
+          }
           break
         case "ArrowLeft":
           e.preventDefault()
-          deltaX = -step
+          if (editMode === "move") {
+            deltaX = -step
+          } else if (editMode === "resize") {
+            deltaWidth = -step
+          }
           break
         case "ArrowRight":
           e.preventDefault()
-          deltaX = step
+          if (editMode === "move") {
+            deltaX = step
+          } else if (editMode === "resize") {
+            deltaWidth = step
+          }
           break
       }
 
-      if (deltaX !== 0 || deltaY !== 0) {
+      // Handle movement
+      if ((deltaX !== 0 || deltaY !== 0) && editMode === "move") {
         const currentPos = finalPositionsRef.current[selectedTable] || 
                           { x: filteredTables.find(t => t.id === selectedTable)?.x_position || 0,
                             y: filteredTables.find(t => t.id === selectedTable)?.y_position || 0 }
@@ -859,11 +906,36 @@ export function FloorPlanEditor({
         // Save to database
         onTableUpdate(selectedTable, newPos)
       }
+
+      // Handle resizing
+      if ((deltaWidth !== 0 || deltaHeight !== 0) && editMode === "resize" && onTableResize) {
+        const currentSize = finalSizesRef.current[selectedTable] || 
+                           originalSizesRef.current[selectedTable] ||
+                           { width: 60, height: 40 }
+        
+        const newSize = {
+          width: Math.max(40, currentSize.width + deltaWidth),
+          height: Math.max(30, currentSize.height + deltaHeight)
+        }
+        
+        finalSizesRef.current[selectedTable] = newSize
+        originalSizesRef.current[selectedTable] = newSize
+        
+        // Update DOM immediately for visual feedback
+        const element = document.querySelector(`[data-table-id="${selectedTable}"]`) as HTMLElement
+        if (element) {
+          element.style.width = `${newSize.width}px`
+          element.style.height = `${newSize.height}px`
+        }
+        
+        // Save to database
+        onTableResize(selectedTable, newSize)
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [selectedTable, isDragging, isResizing, viewMode, filteredTables, onTableDelete, onTableUpdate])
+  }, [selectedTable, isDragging, isResizing, viewMode, editMode, filteredTables, onTableDelete, onTableUpdate, onTableResize])
 
   // Minimap render function
   const renderMinimap = () => {
@@ -1059,6 +1131,37 @@ export function FloorPlanEditor({
 
       {/* Print Styles */}
       <style jsx global>{`
+        /* Resize active animation */
+        .resize-active {
+          animation: resize-pulse 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes resize-pulse {
+          0%, 100% { 
+            border-color: rgba(34, 197, 94, 0.8);
+            box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.3);
+          }
+          50% { 
+            border-color: rgba(34, 197, 94, 1);
+            box-shadow: 0 0 0 8px rgba(34, 197, 94, 0.2);
+          }
+        }
+        
+        /* Improve resize handle visibility */
+        [data-resize-handle="true"] {
+          backdrop-filter: blur(2px);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), 0 0 0 2px white;
+        }
+        
+        [data-resize-handle="true"]:hover {
+          transform: scale(1.1);
+          box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3), 0 0 0 3px white;
+        }
+        
+        [data-resize-handle="true"]:active {
+          transform: scale(0.95);
+        }
+        
         @media print {
           /* Set landscape orientation with no margins to maximize space */
           @page {
@@ -1274,7 +1377,10 @@ export function FloorPlanEditor({
                     <Button
                       variant={editMode === "resize" ? "default" : "ghost"}
                       size="sm"
-                      className="h-8 px-3 text-xs"
+                      className={cn(
+                        "h-8 px-3 text-xs",
+                        editMode === "resize" && "bg-green-600 hover:bg-green-700 text-white"
+                      )}
                       onClick={() => setEditMode("resize")}
                     >
                       <Settings className="h-3 w-3 mr-1" />
@@ -1432,7 +1538,7 @@ export function FloorPlanEditor({
                     viewMode === "edit" && editMode === "resize" ? "cursor-crosshair" : "",
                     viewMode === "preview" ? "cursor-pointer" : "",
                     isBeingDragged && "shadow-2xl scale-105 cursor-grabbing",
-                    isBeingResized && "shadow-2xl ring-4 ring-green-400 ring-opacity-75 scale-[1.02]",
+                    isBeingResized && "shadow-2xl ring-4 ring-green-400 ring-opacity-75 scale-[1.02] resize-active",
                     isSelected && !isBeingDragged && !isBeingResized && "ring-2 ring-blue-400 shadow-lg z-40"
                   )}
                   style={{
@@ -1486,20 +1592,22 @@ export function FloorPlanEditor({
                           data-resize-handle="true"
                           className="absolute bg-green-500 rounded-full border-2 border-white shadow-lg cursor-se-resize hover:bg-green-600 active:bg-green-700 transition-all duration-150 z-50 flex items-center justify-center"
                           style={{
-                            // Position handle at bottom-right corner with better spacing
-                            bottom: '-10px',
-                            right: '-10px',
-                            // Make handle larger and more accessible for touch
-                            width: '48px',
-                            height: '48px',
-                            minWidth: '48px',
-                            minHeight: '48px',
+                            // Position handle at bottom-right corner - compensate for zoom
+                            bottom: `${-12 / (zoom / 100)}px`,
+                            right: `${-12 / (zoom / 100)}px`,
+                            // Make handle size consistent regardless of zoom level
+                            width: `${48 / (zoom / 100)}px`,
+                            height: `${48 / (zoom / 100)}px`,
+                            minWidth: `${48 / (zoom / 100)}px`,
+                            minHeight: `${48 / (zoom / 100)}px`,
                             // Ensure handle is touchable and responsive
                             touchAction: 'none',
                             // Better transform origin for scaling
                             transformOrigin: 'center',
                             // Ensure it's always on top and accessible
-                            zIndex: 1000
+                            zIndex: 1001,
+                            // Reset any inherited transforms
+                            transform: 'none'
                           }}
                           onMouseDown={(e) => handleResizeStart(e, table.id)}
                           onTouchStart={(e) => handleResizeStart(e, table.id)}
@@ -1507,8 +1615,8 @@ export function FloorPlanEditor({
                           {/* Visual resize icon - clearer and larger for touch */}
                           <svg 
                             className="text-white opacity-95 pointer-events-none" 
-                            width="24"
-                            height="24"
+                            width={`${24 / (zoom / 100)}`}
+                            height={`${24 / (zoom / 100)}`}
                             fill="currentColor" 
                             viewBox="0 0 24 24"
                           >
@@ -1577,7 +1685,7 @@ export function FloorPlanEditor({
                         {viewMode === "edit" 
                           ? editMode === "move" 
                             ? "Touch and drag tables to move • Tap to select • Arrow keys for precise movement" 
-                            : "Tap table to select • Touch and drag the large green handle to resize tables"
+                            : "Select a table to see the green resize handle • Touch and drag the handle to resize • Arrow keys for precise resizing"
                           : "Read-only view of your floor plan"
                         }
                       </div>
