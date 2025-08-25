@@ -17,8 +17,6 @@ import {
 } from "@/components/ui/select"
 import {
   Table2,
-  Users,
-  Clock,
   ChefHat,
   AlertCircle,
   CheckCircle,
@@ -29,9 +27,6 @@ import {
   Cake,
   UserCheck,
   Hand,
-  Phone,
-  AlertTriangle,
-  Calendar,
   Eye,
   Move,
   Layers,
@@ -896,15 +891,15 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 </div>
               )}
 
-              {/* Table header - Compact for tablets */}
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-1">
-                  <StatusIcon className="h-3 w-3 text-current" />
-                  <span className="font-bold text-xs text-foreground whitespace-nowrap">T{table.table_number}</span>
+              {/* Table header - Ultra compact */}
+              <div className="flex items-center justify-between mb-0.5">
+                <div className="flex items-center gap-0.5">
+                  <StatusIcon className="h-2.5 w-2.5 text-current" />
+                  <span className="font-bold text-[10px] text-foreground">T{table.table_number}</span>
                 </div>
-                <Badge variant="outline" className="text-[10px] px-1 py-0 bg-background/70 font-medium rounded-md whitespace-nowrap">
-                  {table.min_capacity}-{table.max_capacity}
-                </Badge>
+                <span className="text-[8px] text-muted-foreground font-medium">
+                  👥{table.max_capacity}
+                </span>
               </div>
 
               {/* Current booking info */}
@@ -912,222 +907,97 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 <div className="space-y-1">
                   {/* Guest info - Simplified with icons */}
                   <div>
-                    <p className="font-bold text-[11px] truncate text-foreground mb-0.5">
-                      {current.guest_name || current.user?.full_name || 'Guest'}
+                    <p className="font-bold text-[9px] truncate text-foreground mb-0.5 leading-tight">
+                      {(current.guest_name || current.user?.full_name || 'Guest').split(' ')[0]}
                     </p>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         {/* Party size with visual indicators */}
                         <div className={cn(
-                          "flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-all duration-200 shadow-sm",
+                          "flex items-center px-1 py-0.5 rounded text-[8px] font-bold",
                           current.party_size > table.max_capacity 
-                            ? "bg-red-100 text-red-800 border-2 border-red-300 animate-pulse" 
-                            : "bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30"
+                            ? "bg-red-500 text-white" 
+                            : "bg-blue-500 text-white"
                         )}>
-                          <Users className="h-3 w-3" />
-                          <span className="font-bold text-[11px]">{current.party_size}</span>
-                          {current.party_size > table.max_capacity && (
-                            <AlertTriangle className="h-3 w-3 animate-bounce text-destructive" />
-                          )}
+                          👥{current.party_size}{current.party_size > table.max_capacity && '⚠️'}
                         </div>
                         
                         {/* Time indicator with urgency colors */}
                         <div className={cn(
-                          "flex items-center gap-1 px-1.5 py-0.5 rounded-md font-bold text-[11px] border transition-all duration-200 shadow-sm",
+                          "flex items-center px-1 py-0.5 rounded text-[8px] font-bold",
                           minutesSinceArrival > (current.turn_time_minutes || 120) 
-                            ? "bg-red-100 text-red-800 border-red-300 animate-pulse shadow-red-200" :
+                            ? "bg-red-500 text-white" :
                           minutesSinceArrival > (current.turn_time_minutes || 120) * 0.8 
-                            ? "bg-orange-100 text-orange-800 border-orange-300 shadow-orange-200" :
-                          "bg-green-100 text-green-800 border-green-300 shadow-green-200"
+                            ? "bg-orange-500 text-white" :
+                          "bg-green-500 text-white"
                         )}>
-                          <Clock className="h-3 w-3" />
-                          <span>{minutesSinceArrival}m</span>
-                          {minutesSinceArrival > (current.turn_time_minutes || 120) && (
-                            <AlertTriangle className="h-3 w-3 animate-bounce" />
-                          )}
+                          ⏱️{minutesSinceArrival}m{minutesSinceArrival > (current.turn_time_minutes || 120) && '⚠️'}
                         </div>
                       </div>
                       
-                      {/* Enhanced quick call button */}
+                      {/* Compact call button */}
                       {(current.user?.phone_number || current.guest_phone) && (
-                        <Button
-                          size="icon"
-                          aria-label={`Call ${current.guest_name || current.user?.full_name || 'Guest'} at ${current.user?.phone_number || current.guest_phone}`}
-                          className="h-7 w-7 p-0 bg-gradient-to-br from-accent to-accent/80 hover:from-accent/80 hover:to-accent text-accent-foreground rounded-full shadow-md border border-accent/30 hover:scale-110 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/40 focus:ring-offset-2"
+                        <button
+                          aria-label={`Call guest`}
+                          className="text-xs hover:scale-125 transition-transform"
                           onClick={(e) => {
                             e.stopPropagation()
                             const phone = current.user?.phone_number || current.guest_phone
                             window.open(`tel:${phone}`, '_self')
                           }}
                         >
-                          <Phone className="h-3 w-3" />
-                        </Button>
+                          📞
+                        </button>
                       )}
                     </div>
                   </div>
 
-                  {/* Status indicator with enhanced visual feedback */}
-                  <div className="flex items-center justify-center">
-                    <div className={cn(
-                      "px-1.5 py-0.5 rounded-md text-[11px] font-bold flex items-center gap-1 shadow-md border transition-all duration-300",
-                      current.status === 'arrived' ? "bg-gradient-to-r from-primary/20 to-primary/30 text-primary border-primary/40 animate-pulse shadow-primary/20" :
-                      current.status === 'seated' ? "bg-gradient-to-r from-purple-100 to-purple-200 text-purple-800 border-purple-400 shadow-purple-300/50" :
-                      current.status === 'ordered' ? "bg-gradient-to-r from-orange-100 to-orange-200 text-orange-800 border-orange-400 shadow-orange-300/50" :
-                      current.status === 'payment' ? "bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800 border-yellow-400 shadow-yellow-300/50 animate-pulse" :
-                      "bg-gradient-to-r from-green-100 to-green-200 text-green-800 border-green-400 shadow-green-300/50"
-                    )}>
-                      <StatusIcon className="h-2.5 w-2.5" />
-                      <span className="capitalize">{current.status.replace(/_/g, ' ')}</span>
-                      {/* Status emoji indicators */}
-                      {current.status === 'arrived' && <span>👋</span>}
-                      {current.status === 'seated' && <span>🪑</span>}
-                      {current.status === 'ordered' && <span>📝</span>}
-                      {current.status === 'payment' && <span>💳</span>}
+                  {/* Minimal status indicator */}
+                  <div className="flex items-center justify-center mt-0.5">
+                    <div className="text-sm">
+                      {current.status === 'arrived' && '👋'}
+                      {current.status === 'seated' && '🪑'}
+                      {current.status === 'ordered' && '📝'}
+                      {current.status === 'appetizers' && '🥗'}
+                      {current.status === 'main_course' && '🍽️'}
+                      {current.status === 'dessert' && '🍰'}
+                      {current.status === 'payment' && '💳'}
+                      {current.status === 'completed' && '✅'}
                     </div>
                   </div>
 
-                  {/* Quick actions - Compact for tablets */}
-                  {selectedTable === table.id && activeMenuTable === table.id && (
-                    <div className="absolute -bottom-12 left-1/2 transform -translate-x-1/2 flex gap-1 z-50 animate-in fade-in-0 slide-in-from-top-4 duration-300">
-                      {/* Enhanced quick status buttons */}
-                      {current.status === 'arrived' && (
-                        <Button 
-                          size="sm"
-                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground rounded-lg font-semibold border border-primary/40 hover:scale-105 transition-all duration-200"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleStatusTransition(current.id, 'seated')
-                          }}
-                          disabled={loadingTransition === current.id}
-                        >
-                          <ChefHat className="h-2.5 w-2.5 mr-1" />
-                          Seat
-                        </Button>
-                      )}
-                      
-                      {current.status === 'seated' && (
-                        <Button 
-                          size="sm"
-                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-secondary to-secondary/90 hover:from-secondary/90 hover:to-secondary text-secondary-foreground rounded-lg font-semibold border border-secondary/40 hover:scale-105 transition-all duration-200"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleStatusTransition(current.id, 'ordered')
-                          }}
-                          disabled={loadingTransition === current.id}
-                        >
-                          <Coffee className="h-2.5 w-2.5 mr-1" />
-                          Order
-                        </Button>
-                      )}
-                      
-                      {['ordered', 'appetizers', 'main_course', 'dessert'].includes(current.status) && (
-                        <Button 
-                          size="sm"
-                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-accent to-accent/90 hover:from-accent/90 hover:to-accent text-accent-foreground rounded-lg font-semibold border border-accent/40 hover:scale-105 transition-all duration-200"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleStatusTransition(current.id, 'payment')
-                          }}
-                          disabled={loadingTransition === current.id}
-                        >
-                          <CreditCard className="h-2.5 w-2.5 mr-1" />
-                          Bill
-                        </Button>
-                      )}
-                      
-                      {current.status === 'payment' && (
-                        <Button 
-                          size="sm"
-                          className="h-7 text-xs px-2 shadow-lg bg-gradient-to-r from-accent to-accent/90 hover:from-accent/90 hover:to-accent text-accent-foreground rounded-lg font-semibold border border-accent/40 hover:scale-105 transition-all duration-200"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleStatusTransition(current.id, 'completed')
-                          }}
-                          disabled={loadingTransition === current.id}
-                        >
-                          <CheckCircle className="h-2.5 w-2.5 mr-1" />
-                          Done
-                        </Button>
-                      )}
-
-                      {/* View Details button */}
-                      <Button 
-                        size="sm"
-                        className="h-7 px-2 shadow-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground rounded-lg font-semibold border border-primary/40 hover:scale-105 transition-all duration-200"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (onTableClick) onTableClick(table, { current, upcoming, allUpcoming, recentHistory })
-                        }}
-                      >
-                        <Eye className="h-2.5 w-2.5 mr-1" />
-                        Info
-                      </Button>
-                    </div>
-                  )}
                 </div>
               ) : (
-                <div className="text-center py-2">
-                  <div className="mb-2">
-                    <Badge 
-                      variant="secondary" 
-                      className="text-xs px-2 py-1 bg-accent/30 text-accent-foreground border-accent/50 font-medium shadow-sm"
-                    >
-                      ✅ Available
-                    </Badge>
+                <div className="text-center py-1">
+                  <div className="mb-1">
+                    <div className="w-4 h-4 mx-auto bg-green-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-[8px] font-bold">✓</span>
+                    </div>
                   </div>
                   
-                  {/* Show next upcoming booking with better visibility */}
+                  {/* Compact upcoming booking */}
                   {upcoming && (
-                    <div className="text-xs p-2 bg-gradient-to-br from-accent/30 to-accent/40 border border-accent/50 rounded-lg shadow-sm">
-                      <div className="flex items-start gap-2">
-                        <div className="w-4 h-4 bg-accent rounded-full flex items-center justify-center flex-shrink-0">
-                          <Clock className="h-2 w-2 text-accent-foreground" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-bold text-accent-foreground">
-                            📅 {format(new Date(upcoming.booking_time), 'h:mm a')}
-                          </p>
-                          <p className="truncate text-accent-foreground flex items-center gap-1">
-                            <Users className="h-2.5 w-2.5" />
-                            {upcoming.guest_name || upcoming.user?.full_name} ({upcoming.party_size})
-                          </p>
-                          <p className="text-accent-foreground mt-1 flex items-center gap-1">
-                            <Timer className="h-2.5 w-2.5" />
-                            {differenceInMinutes(new Date(upcoming.booking_time), currentTime)}m away
-                          </p>
-                        </div>
+                    <div className="text-center p-1 bg-blue-50 border border-blue-200 rounded text-[8px]">
+                      <div className="font-bold text-blue-800">
+                        🕒{format(new Date(upcoming.booking_time), 'H:mm')}
+                      </div>
+                      <div className="text-blue-700 truncate">
+                        {(upcoming.guest_name || upcoming.user?.full_name || '').split(' ')[0]} ({upcoming.party_size})
                       </div>
                     </div>
                   )}
                   
-                  {/* Enhanced activity indicators for empty tables */}
-                  {!upcoming && (
-                    <div className="space-y-3">
-                      {/* Main availability indicator */}
-                      <div className="text-center">
-                        <div className="w-8 h-8 mx-auto bg-gradient-to-br from-accent to-accent/80 rounded-full flex items-center justify-center shadow-lg">
-                          <span className="text-accent-foreground text-lg font-bold">✓</span>
+                  {/* Minimal activity indicators */}
+                  {!upcoming && (allUpcoming.length > 0 || recentHistory.length > 0) && (
+                    <div className="flex justify-center gap-1 mt-1">
+                      {allUpcoming.length > 0 && (
+                        <div className="text-[7px] text-blue-600 bg-blue-100 px-1 py-0.5 rounded">
+                          📅{allUpcoming.length}
                         </div>
-                      </div>
-                      
-                      {/* Activity summary */}
-                      {(allUpcoming.length > 0 || recentHistory.length > 0) && (
-                        <div className="text-center space-y-2">
-                          <p className="text-xs font-medium text-muted-foreground">Table Activity</p>
-                          <div className="flex justify-center gap-3">
-                            {allUpcoming.length > 0 && (
-                              <div className="flex items-center gap-1.5 px-2 py-1 bg-primary/20 text-primary rounded-lg border border-primary/30">
-                                <Calendar className="h-2.5 w-2.5" />
-                                <span className="text-xs font-medium">{allUpcoming.length} upcoming</span>
-                              </div>
-                            )}
-                            {recentHistory.length > 0 && (
-                              <div className="flex items-center gap-1.5 px-2 py-1 bg-muted text-muted-foreground rounded-lg border border-border">
-                                <CheckCircle className="h-2.5 w-2.5" />
-                                <span className="text-xs font-medium">{recentHistory.length} today</span>
-                              </div>
-                            )}
-                          </div>
+                      )}
+                      {recentHistory.length > 0 && (
+                        <div className="text-[7px] text-gray-600 bg-gray-100 px-1 py-0.5 rounded">
+                          ✅{recentHistory.length}
                         </div>
                       )}
                     </div>
@@ -1397,6 +1267,108 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
         >
           {/* Render filtered tables */}
           {filteredTables.filter(t => t.is_active).map(renderTable)}
+          
+          {/* Floating Quick Actions Menu - positioned outside tables */}
+          {selectedTable && activeMenuTable && (() => {
+            const selectedTableData = filteredTables.find(t => t.id === selectedTable)
+            if (!selectedTableData) return null
+            
+            const { current } = getTableBookingInfo(selectedTableData)
+            if (!current) return null
+            
+            return (
+              <div 
+                className="fixed z-[9999] bg-background/95 backdrop-blur-sm border border-border rounded-lg shadow-2xl p-2 pointer-events-auto animate-in fade-in-0 slide-in-from-bottom-4 duration-300"
+                style={{
+                  left: '50%',
+                  bottom: '20px',
+                  transform: 'translateX(-50%)',
+                }}
+              >
+                <div className="flex gap-2 items-center">
+                  <span className="text-xs font-medium text-muted-foreground mr-2">
+                    T{selectedTableData.table_number}:
+                  </span>
+                  
+                  {/* Enhanced quick status buttons */}
+                  {current.status === 'arrived' && (
+                    <Button 
+                      size="sm"
+                      className="h-8 text-xs px-3 shadow-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground rounded-lg font-semibold border border-primary/40 hover:scale-105 transition-all duration-200"
+                      onClick={() => handleStatusTransition(current.id, 'seated')}
+                      disabled={loadingTransition === current.id}
+                    >
+                      <ChefHat className="h-3 w-3 mr-1" />
+                      Seat
+                    </Button>
+                  )}
+                  
+                  {current.status === 'seated' && (
+                    <Button 
+                      size="sm"
+                      className="h-8 text-xs px-3 shadow-lg bg-gradient-to-r from-secondary to-secondary/90 hover:from-secondary/90 hover:to-secondary text-secondary-foreground rounded-lg font-semibold border border-secondary/40 hover:scale-105 transition-all duration-200"
+                      onClick={() => handleStatusTransition(current.id, 'ordered')}
+                      disabled={loadingTransition === current.id}
+                    >
+                      <Coffee className="h-3 w-3 mr-1" />
+                      Order
+                    </Button>
+                  )}
+                  
+                  {['ordered', 'appetizers', 'main_course', 'dessert'].includes(current.status) && (
+                    <Button 
+                      size="sm"
+                      className="h-8 text-xs px-3 shadow-lg bg-gradient-to-r from-accent to-accent/90 hover:from-accent/90 hover:to-accent text-accent-foreground rounded-lg font-semibold border border-accent/40 hover:scale-105 transition-all duration-200"
+                      onClick={() => handleStatusTransition(current.id, 'payment')}
+                      disabled={loadingTransition === current.id}
+                    >
+                      <CreditCard className="h-3 w-3 mr-1" />
+                      Bill
+                    </Button>
+                  )}
+                  
+                  {current.status === 'payment' && (
+                    <Button 
+                      size="sm"
+                      className="h-8 text-xs px-3 shadow-lg bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-600 text-white rounded-lg font-semibold border border-green-400 hover:scale-105 transition-all duration-200"
+                      onClick={() => handleStatusTransition(current.id, 'completed')}
+                      disabled={loadingTransition === current.id}
+                    >
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      Done
+                    </Button>
+                  )}
+
+                  {/* View Details button */}
+                  <Button 
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-3 text-xs font-medium border-border hover:bg-muted"
+                    onClick={() => {
+                      const { upcoming, allUpcoming, recentHistory } = getTableBookingInfo(selectedTableData)
+                      if (onTableClick) onTableClick(selectedTableData, { current, upcoming, allUpcoming, recentHistory })
+                    }}
+                  >
+                    <Eye className="h-3 w-3 mr-1" />
+                    Info
+                  </Button>
+                  
+                  {/* Close button */}
+                  <Button 
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 ml-2 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setSelectedTable(null)
+                      setActiveMenuTable(null)
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            )
+          })()}
           
           {/* Empty state for sections */}
           {filteredTables.length === 0 && selectedSection !== "all" && (
