@@ -119,6 +119,7 @@ export function WaitlistPanel({
   const [selectedTables, setSelectedTables] = useState<string[]>([])
   const [checkingAvailability, setCheckingAvailability] = useState(false)
   const [isConverting, setIsConverting] = useState(false)
+  const [isAddingEntry, setIsAddingEntry] = useState(false)
 
   // Form state for manual entry
   const [manualEntry, setManualEntry] = useState({
@@ -377,7 +378,10 @@ export function WaitlistPanel({
 
   // Add manual waitlist entry
   const addManualEntry = async () => {
+    if (isAddingEntry) return // Prevent multiple submissions
+    
     try {
+      setIsAddingEntry(true)
       const { data: { user } } = await supabase.auth.getUser()
       
       const startDateTime = new Date(manualEntry.desired_date)
@@ -453,6 +457,8 @@ export function WaitlistPanel({
     } catch (error) {
       console.error('Error adding entry:', error)
       toast.error('Failed to add waitlist entry')
+    } finally {
+      setIsAddingEntry(false)
     }
   }
 
@@ -460,6 +466,7 @@ export function WaitlistPanel({
   const resetForm = () => {
     setSelectedCustomer(null)
     setCustomerSearch("")
+    setIsAddingEntry(false)
     setManualEntry({
       guest_name: '',
       guest_phone: '',
@@ -1139,8 +1146,11 @@ export function WaitlistPanel({
             }}>
               Cancel
             </Button>
-            <Button onClick={addManualEntry}>
-              Add Entry
+            <Button 
+              onClick={addManualEntry}
+              disabled={isAddingEntry}
+            >
+              {isAddingEntry ? "Adding..." : "Add Entry"}
             </Button>
           </DialogFooter>
         </DialogContent>
