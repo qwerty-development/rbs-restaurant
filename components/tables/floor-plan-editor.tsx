@@ -394,7 +394,7 @@ export function FloorPlanEditor({
       initialHeight: currentHeight,
       animationId: null,
       touchId,
-      isResizeConfirmed: !isTouch, // For mouse, immediately confirm. For touch, confirm immediately for resize handles
+      isResizeConfirmed: true, // Always confirm immediately for resize handles (both mouse and touch)
       startTime: Date.now()
     }
 
@@ -406,6 +406,16 @@ export function FloorPlanEditor({
     // Set body cursor for both mouse and touch
     document.body.style.cursor = 'se-resize'
     document.body.style.userSelect = 'none'
+    
+    // For touch, also disable scrolling immediately
+    if (isTouch) {
+      document.body.style.overflow = 'hidden'
+      tableElement.style.touchAction = 'none'
+      // Add haptic feedback for touch devices
+      if ('vibrate' in navigator) {
+        navigator.vibrate(50)
+      }
+    }
     
     setIsResizing(true)
     console.log('🎯 Resize state set to true')
@@ -512,17 +522,19 @@ export function FloorPlanEditor({
       const deltaX = coords.clientX - resizeState.startX
       const deltaY = coords.clientY - resizeState.startY
       
-      // For touch events, confirm resize immediately if we have a touch ID (resize handles are intentional)
-      if (!resizeState.isResizeConfirmed && resizeState.touchId !== null) {
+      // Always proceed with resize if we have a resize state (no confirmation needed for resize handles)
+      if (!resizeState.isResizeConfirmed) {
         e.preventDefault()
         resizeState.isResizeConfirmed = true
         document.body.style.cursor = 'se-resize'
         document.body.style.userSelect = 'none'
         resizeState.element.style.touchAction = 'none'
+        
+        // For touch, also disable body scrolling
+        if ('touches' in e) {
+          document.body.style.overflow = 'hidden'
+        }
       }
-      
-      // Only proceed with resize if confirmed
-      if (!resizeState.isResizeConfirmed) return
 
       // Always prevent default for confirmed resizes
       if ('touches' in e) {
@@ -662,6 +674,7 @@ export function FloorPlanEditor({
     // Reset body styles
     document.body.style.userSelect = ''
     document.body.style.cursor = ''
+    document.body.style.overflow = '' // Reset overflow for touch devices
     
     setIsDragging(false)
     setIsResizing(false)
@@ -1147,7 +1160,7 @@ export function FloorPlanEditor({
           }
         }
         
-        /* Improve resize handle visibility */
+        /* Improve resize handle visibility and touch responsiveness */
         [data-resize-handle="true"] {
           backdrop-filter: blur(2px);
           box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), 0 0 0 2px white;
@@ -1160,6 +1173,56 @@ export function FloorPlanEditor({
         
         [data-resize-handle="true"]:active {
           transform: scale(0.95);
+        }
+        
+        /* Enhanced touch handle styling */
+        .touch-handle {
+          /* Ensure consistent appearance across browsers */
+          -webkit-appearance: none;
+          -moz-appearance: none;
+          appearance: none;
+          
+          /* Better touch interaction */
+          user-select: none;
+          -webkit-user-select: none;
+          -moz-user-select: none;
+          -ms-user-select: none;
+          
+          /* Disable text selection */
+          -webkit-touch-callout: none;
+          -webkit-tap-highlight-color: transparent;
+          
+          /* Better touch responsiveness */
+          touch-action: none;
+          
+          /* Smooth transitions for touch feedback */
+          transition: all 0.1s ease-out;
+        }
+        
+        /* Active state for touch */
+        .touch-handle:active,
+        .touch-handle.active {
+          transform: scale(1.1) !important;
+          background-color: #16a34a !important;
+          box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4), 0 0 0 4px white !important;
+        }
+        
+        /* Subtle pulse animation for resize handles on touch devices */
+        @media (hover: none) and (pointer: coarse) {
+          [data-resize-handle="true"] {
+            animation: gentle-pulse 2s ease-in-out infinite;
+          }
+          
+          @keyframes gentle-pulse {
+            0%, 100% { 
+              transform: scale(1);
+              box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), 0 0 0 2px white;
+            }
+            50% { 
+              transform: scale(1.05);
+              box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3), 0 0 0 3px white;
+            }
+          }
         }
         
         @media print {
@@ -1539,7 +1602,8 @@ export function FloorPlanEditor({
                     viewMode === "preview" ? "cursor-pointer" : "",
                     isBeingDragged && "shadow-2xl scale-105 cursor-grabbing",
                     isBeingResized && "shadow-2xl ring-4 ring-green-400 ring-opacity-75 scale-[1.02] resize-active",
-                    isSelected && !isBeingDragged && !isBeingResized && "ring-2 ring-blue-400 shadow-lg z-40"
+                    isSelected && !isBeingDragged && !isBeingResized && editMode === "resize" && "ring-2 ring-green-400 shadow-lg z-40 bg-green-50/20",
+                    isSelected && !isBeingDragged && !isBeingResized && editMode === "move" && "ring-2 ring-blue-400 shadow-lg z-40"
                   )}
                   style={{
                     left: `${position.x}%`,
@@ -1553,7 +1617,9 @@ export function FloorPlanEditor({
                     willChange: viewMode === "edit" ? "transform, left, top, width, height" : "auto",
                     // Prevent iOS bounce and ensure proper touch handling
                     // Allow natural scrolling unless this table is being dragged/resized  
-                    touchAction: isBeingDragged || isBeingResized ? "none" : "manipulation"
+                    touchAction: isBeingDragged || isBeingResized ? "none" : "manipulation",
+                    // Better touch responsiveness for resize mode
+                    WebkitTapHighlightColor: editMode === "resize" ? "rgba(34, 197, 94, 0.1)" : "transparent"
                   }}
                   onMouseDown={(e) => {
                     if (editMode === "move") {
@@ -1590,16 +1656,16 @@ export function FloorPlanEditor({
                       {onTableResize && editMode === "resize" && (
                         <div 
                           data-resize-handle="true"
-                          className="absolute bg-green-500 rounded-full border-2 border-white shadow-lg cursor-se-resize hover:bg-green-600 active:bg-green-700 transition-all duration-150 z-50 flex items-center justify-center"
+                          className="absolute bg-green-500 rounded-full border-2 border-white shadow-lg cursor-se-resize hover:bg-green-600 active:bg-green-700 transition-all duration-150 z-50 flex items-center justify-center touch-handle"
                           style={{
                             // Position handle at bottom-right corner - compensate for zoom
                             bottom: `${-12 / (zoom / 100)}px`,
                             right: `${-12 / (zoom / 100)}px`,
-                            // Make handle size consistent regardless of zoom level
-                            width: `${48 / (zoom / 100)}px`,
-                            height: `${48 / (zoom / 100)}px`,
-                            minWidth: `${48 / (zoom / 100)}px`,
-                            minHeight: `${48 / (zoom / 100)}px`,
+                            // Make handle size consistent regardless of zoom level, but larger for touch
+                            width: `${56 / (zoom / 100)}px`,
+                            height: `${56 / (zoom / 100)}px`,
+                            minWidth: `${56 / (zoom / 100)}px`,
+                            minHeight: `${56 / (zoom / 100)}px`,
                             // Ensure handle is touchable and responsive
                             touchAction: 'none',
                             // Better transform origin for scaling
@@ -1607,16 +1673,30 @@ export function FloorPlanEditor({
                             // Ensure it's always on top and accessible
                             zIndex: 1001,
                             // Reset any inherited transforms
-                            transform: 'none'
+                            transform: 'none',
+                            // Better touch target
+                            WebkitTapHighlightColor: 'transparent',
+                            // Ensure it captures all touch events
+                            pointerEvents: 'auto'
                           }}
                           onMouseDown={(e) => handleResizeStart(e, table.id)}
-                          onTouchStart={(e) => handleResizeStart(e, table.id)}
+                          onTouchStart={(e) => {
+                            // Add immediate visual feedback for touch
+                            e.currentTarget.style.transform = 'scale(1.1)'
+                            e.currentTarget.style.backgroundColor = '#16a34a'
+                            handleResizeStart(e, table.id)
+                          }}
+                          onTouchEnd={(e) => {
+                            // Reset visual feedback on touch end
+                            e.currentTarget.style.transform = 'none'
+                            e.currentTarget.style.backgroundColor = ''
+                          }}
                         >
                           {/* Visual resize icon - clearer and larger for touch */}
                           <svg 
                             className="text-white opacity-95 pointer-events-none" 
-                            width={`${24 / (zoom / 100)}`}
-                            height={`${24 / (zoom / 100)}`}
+                            width={`${28 / (zoom / 100)}`}
+                            height={`${28 / (zoom / 100)}`}
                             fill="currentColor" 
                             viewBox="0 0 24 24"
                           >
@@ -1685,7 +1765,7 @@ export function FloorPlanEditor({
                         {viewMode === "edit" 
                           ? editMode === "move" 
                             ? "Touch and drag tables to move • Tap to select • Arrow keys for precise movement" 
-                            : "Select a table to see the green resize handle • Touch and drag the handle to resize • Arrow keys for precise resizing"
+                            : "Select a table to reveal the green resize handle • Touch and hold the green circle to resize smoothly"
                           : "Read-only view of your floor plan"
                         }
                       </div>
