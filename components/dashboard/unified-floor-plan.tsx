@@ -1217,7 +1217,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
 
       {/* Edit Mode Toggle */}
       {onTableUpdate && (
-        <div className="absolute top-20 left-20 z-20 ">
+        <div className="absolute top-28 left-20 z-20 ">
           <Button
             size="icon"
             aria-label={editMode ? "Exit Edit Layout" : "Edit Layout"}
