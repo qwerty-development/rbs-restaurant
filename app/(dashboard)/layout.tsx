@@ -60,7 +60,7 @@ export default async function DashboardLayout({
         </div>
 
         {/* Main Content - Full height optimization without header */}
-        <div className="transition-all duration-200 ease-out sm:ml-16 flex flex-col min-h-screen px-2 sm:px-3">
+        <div className="transition-all duration-200 ease-out sm:ml-16 flex flex-col min-h-screen px-1 ">
           <StaffChatProvider restaurantId={staffData.restaurant.id}>
             <main className="flex-1">
               {children}
