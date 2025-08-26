@@ -642,6 +642,7 @@ export function WaitlistPanel({
           status: 'confirmed',
           special_requests: convertingEntry.special_requests,
           confirmation_code: confirmationCode,
+          source:'manual'
         })
         .select()
         .single()

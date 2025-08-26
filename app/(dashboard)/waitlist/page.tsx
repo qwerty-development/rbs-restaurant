@@ -518,7 +518,7 @@ export default function WaitlistPage() {
         .insert({
           restaurant_id: restaurantId,
           user_id: convertingEntry.user_id || user.id, // Use staff user ID if no customer user ID
-      
+          source:'manual',
           guest_name: convertingEntry.user?.full_name || convertingEntry.guest_name,
           // If we linked a customer, avoid passing guest contact to prevent duplicate customer upsert by DB triggers
           guest_email: linkedCustomerId ? null : convertingEntry.guest_email,

@@ -181,7 +181,8 @@ export function QuickBookingDialog({
           booking_type: 'regular',
           notes: notes || `Created from waitlist entry on ${format(new Date(), 'MMM dd, yyyy')}`,
           created_from_waitlist: true,
-          waitlist_entry_id: waitlistEntry.id
+          waitlist_entry_id: waitlistEntry.id,
+          source:'manual'
         })
         .select()
         .single()

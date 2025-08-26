@@ -199,6 +199,7 @@ export async function POST(request: NextRequest) {
       occasion: occasion || null,
       dietary_notes: dietary_notes || null,
       confirmation_code: confirmationCode,
+      source:'manual',
       turn_time_minutes: 120, // Default 2 hours
       request_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours from now
     }
