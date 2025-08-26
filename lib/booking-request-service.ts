@@ -134,7 +134,8 @@ export class BookingRequestService {
           request_expires_at: requestExpiresAt?.toISOString(),
           turn_time_minutes: data.turnTimeMinutes || restaurant.table_turnover_minutes || 120,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          source:'manual'
         })
         .select()
         .single()

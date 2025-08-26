@@ -415,6 +415,7 @@ export default function BookingsPage() {
           special_requests: bookingData.special_requests,
           occasion: bookingData.occasion,
           confirmation_code: confirmationCode,
+          source:'manual'
         })
         .select()
         .single()
