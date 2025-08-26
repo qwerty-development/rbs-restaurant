@@ -1,7 +1,8 @@
 // components/bookings/manual-booking-form.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import { useForm, SubmitHandler } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -104,6 +105,9 @@ export function ManualBookingForm({
   const [customerSearch, setCustomerSearch] = useState("")
   const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState("")
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 })
+  const [mounted, setMounted] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
   const tableService = new TableAvailabilityService()
   const availabilityService = new RestaurantAvailability()
@@ -122,6 +126,56 @@ export function ManualBookingForm({
 
     return () => clearTimeout(timer)
   }, [customerSearch])
+
+  // Calculate dropdown position when showing
+  useEffect(() => {
+    setMounted(true)
+    if (showCustomerDropdown && inputRef.current) {
+      const updatePosition = () => {
+        if (inputRef.current) {
+          const rect = inputRef.current.getBoundingClientRect()
+          const newPosition = {
+            top: rect.bottom + window.scrollY + 8,
+            left: rect.left + window.scrollX,
+            width: rect.width
+          }
+          console.log('Dropdown position:', newPosition, 'Input rect:', rect)
+          setDropdownPosition(newPosition)
+        }
+      }
+      updatePosition()
+      // Update position on next frame to ensure DOM is ready
+      requestAnimationFrame(updatePosition)
+    }
+  }, [showCustomerDropdown])
+
+  // Update position on scroll/resize
+  useEffect(() => {
+    if (!showCustomerDropdown || !inputRef.current) return
+
+    const updatePosition = () => {
+      if (inputRef.current) {
+        const rect = inputRef.current.getBoundingClientRect()
+        setDropdownPosition({
+          top: rect.bottom + window.scrollY + 8,
+          left: rect.left + window.scrollX,
+          width: rect.width
+        })
+      }
+    }
+
+    const throttledUpdate = () => {
+      requestAnimationFrame(updatePosition)
+    }
+
+    window.addEventListener('scroll', throttledUpdate, true)
+    window.addEventListener('resize', throttledUpdate)
+    
+    return () => {
+      window.removeEventListener('scroll', throttledUpdate, true)
+      window.removeEventListener('resize', throttledUpdate)
+    }
+  }, [showCustomerDropdown])
 
   const {
     register,
@@ -395,6 +449,11 @@ export function ManualBookingForm({
     }
     
     setValue("customer_id", customer.id)
+    
+    // Refocus the input to keep it active
+    if (inputRef.current) {
+      inputRef.current.focus()
+    }
   }
 
   const handleClearCustomer = () => {
@@ -801,7 +860,7 @@ export function ManualBookingForm({
     <div className="manual-booking-form relative max-w-full overflow-x-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-800/50 min-h-full">
       <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6 max-w-full overflow-x-hidden pb-24">
         {/* Customer Search */}
-        <div className="space-y-4 rounded-xl border border-slate-200/60 dark:border-slate-700/60 p-6 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm dark:shadow-slate-900/20">
+        <div className="space-y-4 rounded-xl border border-slate-200/60 dark:border-slate-700/60 p-6 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm dark:shadow-slate-900/20 relative z-[100] overflow-visible">
           <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <Search className="h-5 w-5 text-slate-600 dark:text-slate-400" />
             Customer Selection (Optional)
@@ -810,10 +869,11 @@ export function ManualBookingForm({
             Search for an existing customer or leave blank to create a new booking
           </p>
           
-          <div className="relative">
+          <div className="relative z-[1000]">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                ref={inputRef}
                 placeholder="Search customers by name, email, or phone (min 2 characters)..."
                 value={customerSearch}
                 onChange={(e) => {
@@ -821,7 +881,10 @@ export function ManualBookingForm({
                   setShowCustomerDropdown(e.target.value.length >= 2)
                 }}
                 onFocus={() => setShowCustomerDropdown(customerSearch.length >= 2)}
-                onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 150)}
+                onBlur={() => {
+                  // Delay hiding to allow click events to process
+                  setTimeout(() => setShowCustomerDropdown(false), 200)
+                }}
                 className="pl-10"
                 disabled={isLoading}
               />
@@ -837,79 +900,6 @@ export function ManualBookingForm({
                 </Button>
               )}
             </div>
-            
-            {/* Customer dropdown */}
-            {showCustomerDropdown && customerSearch.length >= 2 && (
-              <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl dark:shadow-slate-900/40 max-h-60 overflow-y-auto backdrop-blur-sm">
-                {customersLoading && (
-                  <div className="p-4">
-                    <p className="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      Searching customers...
-                    </p>
-                  </div>
-                )}
-                
-                {customersError && (
-                  <div className="p-4">
-                    <p className="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
-                      Error searching customers: {customersError.message}
-                    </p>
-                  </div>
-                )}
-                
-                {!customersLoading && !customersError && customers && customers.length > 0 && (
-                  <>
-                    {customers.map((customer) => (
-                      <div
-                        key={customer.id}
-                        className="flex items-center gap-3 p-4 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer border-b border-slate-100 dark:border-slate-700 last:border-b-0 transition-colors duration-150"
-                        onClick={() => handleCustomerSelect(customer)}
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">
-                              {customer.profile?.full_name || customer.guest_name || 'Guest'}
-                            </p>
-                            {customer.vip_status && (
-                              <Badge variant="secondary" className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700">
-                                <Star className="h-3 w-3 mr-1 fill-current" />
-                                VIP
-                              </Badge>
-                            )}
-                            {customer.user_id && (
-                              <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700">
-                                <UserCheck className="h-3 w-3 mr-1" />
-                                Registered
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="text-sm text-slate-600 dark:text-slate-300 truncate">
-                            {customer.guest_email && <span>{customer.guest_email}</span>}
-                            {customer.guest_email && (customer.profile?.phone_number || customer.guest_phone) && <span> • </span>}
-                            {(customer.profile?.phone_number || customer.guest_phone) && (
-                              <span>{customer.profile?.phone_number || customer.guest_phone}</span>
-                            )}
-                          </div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                            {customer.total_bookings} bookings
-                            {customer.last_visit && (
-                              <span> • Last visit: {format(new Date(customer.last_visit), 'MMM d, yyyy')}</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </>
-                )}
-                
-                {!customersLoading && !customersError && customers && customers.length === 0 && (
-                  <div className="p-4">
-                    <p className="text-sm text-slate-600 dark:text-slate-300">No customers found matching "{customerSearch}"</p>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
           
           {/* Selected customer display */}
@@ -1528,6 +1518,102 @@ export function ManualBookingForm({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* BRUTE FORCE DROPDOWN - PORTAL TO BODY */}
+      {mounted && showCustomerDropdown && customerSearch.length >= 2 && createPortal(
+        <div 
+          className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl dark:shadow-slate-900/50 max-h-60 overflow-y-auto backdrop-blur-sm"
+          style={{
+            position: 'fixed',
+            top: dropdownPosition.top,
+            left: dropdownPosition.left,
+            width: Math.max(dropdownPosition.width, 400),
+            zIndex: 2147483647,
+            transform: 'translateZ(0)',
+            willChange: 'transform',
+            pointerEvents: 'auto'
+          }}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {customersLoading && (
+            <div className="p-4">
+              <p className="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Searching customers...
+              </p>
+            </div>
+          )}
+          
+          {customersError && (
+            <div className="p-4">
+              <p className="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
+                Error searching customers: {customersError.message}
+              </p>
+            </div>
+          )}
+          
+          {!customersLoading && !customersError && customers && customers.length > 0 && (
+            <>
+              {customers.map((customer) => (
+                <div
+                  key={customer.id}
+                  className="flex items-center gap-3 p-4 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer border-b border-slate-100 dark:border-slate-700 last:border-b-0 transition-colors duration-150"
+                  onMouseDown={(e) => {
+                    e.preventDefault() // Prevent input blur
+                    e.stopPropagation()
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleCustomerSelect(customer)
+                  }}
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">
+                        {customer.profile?.full_name || customer.guest_name || 'Guest'}
+                      </p>
+                      {customer.vip_status && (
+                        <Badge variant="secondary" className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700">
+                          <Star className="h-3 w-3 mr-1 fill-current" />
+                          VIP
+                        </Badge>
+                      )}
+                      {customer.user_id && (
+                        <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-300 dark:border-green-700">
+                          <UserCheck className="h-3 w-3 mr-1" />
+                          Registered
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="text-sm text-slate-600 dark:text-slate-300 truncate">
+                      {customer.guest_email && <span>{customer.guest_email}</span>}
+                      {customer.guest_email && (customer.profile?.phone_number || customer.guest_phone) && <span> • </span>}
+                      {(customer.profile?.phone_number || customer.guest_phone) && (
+                        <span>{customer.profile?.phone_number || customer.guest_phone}</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                      {customer.total_bookings} bookings
+                      {customer.last_visit && (
+                        <span> • Last visit: {format(new Date(customer.last_visit), 'MMM d, yyyy')}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+          
+          {!customersLoading && !customersError && customers && customers.length === 0 && (
+            <div className="p-4">
+              <p className="text-sm text-slate-600 dark:text-slate-300">No customers found matching "{customerSearch}"</p>
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
