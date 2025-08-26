@@ -472,7 +472,7 @@ export default function BookingsPage() {
     const confirmationCode = booking.confirmation_code?.toLowerCase() || ""
     const phone = booking.guest_phone?.toLowerCase() || booking.user?.phone_number?.toLowerCase() || ""
     const email = booking.guest_email?.toLowerCase() || booking.user?.email?.toLowerCase() || ""
-    const tableNumbers = booking.tables?.map(t => t.table_number.toLowerCase()).join(" ") || ""
+    const tableNumbers = booking.tables?.map(t => `${t.table_number.toLowerCase()} t${t.table_number.toLowerCase()}`).join(" ") || ""
     const status = booking.status?.toLowerCase() || ""
     
     return (

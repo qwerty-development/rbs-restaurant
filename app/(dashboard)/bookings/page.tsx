@@ -812,7 +812,7 @@ export default function BookingsPage() {
     const confirmationCode = booking.confirmation_code?.toLowerCase() || ""
     const phone = booking.guest_phone?.toLowerCase() || booking.user?.phone_number?.toLowerCase() || ""
     const email = booking.guest_email?.toLowerCase() || ""
-    const tableNumbers = booking.tables?.map(t => t.table_number.toLowerCase()).join(" ") || ""
+    const tableNumbers = booking.tables?.map(t => `${t.table_number.toLowerCase()} t${t.table_number.toLowerCase()}`).join(" ") || ""
     
     const matchesSearch = (
       userName.includes(searchLower) ||
@@ -1826,7 +1826,7 @@ export default function BookingsPage() {
                                   className="hover:underline font-medium min-h-touch inline-block py-2 px-4"
                                   onClick={() => {
                                     setViewMode("list")
-                                    setSearchQuery(`table ${table.table_number}`)
+                                    setSearchQuery(`t${table.table_number}`)
                                   }}
                                 >
                                   View all bookings →
