@@ -1698,7 +1698,7 @@ export function CheckInQueue({
           <ScrollArea className="h-full">
             <div className="space-y-2 pr-2">
               {/* Enhanced tables summary */}
-              <div className="p-2 bg-card rounded-lg border border-border">
+              <div className="p-2 bg-card hidden rounded-lg border border-border">
                 <div className="flex items-center justify-between text-xs mb-2">
                   <span className="text-foreground font-medium">Table Status</span>
                   <span className="text-muted-foreground">
@@ -1823,7 +1823,7 @@ export function CheckInQueue({
                   <Label className="text-xs text-foreground mb-1 block">
                     Select Table - {availableTables.length} available
                   </Label>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="grid grid-cols-2 gap-2">
                     {tableStatus
                       .filter(table => table.is_active)
                       .sort((a, b) => {
@@ -1877,7 +1877,7 @@ export function CheckInQueue({
                             variant="outline"
                             disabled={!canSelect}
                             className={cn(
-                              "h-10 p-1 transition-all relative",
+                              "h-full py-2 transition-all relative",
                               bgColor,
                               statusColor,
                               canSelect && "hover:bg-muted cursor-pointer",
