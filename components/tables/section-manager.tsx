@@ -40,7 +40,9 @@ import {
   Building,
   Palette,
   Move,
-  Check
+  Check,
+  Power,
+  PowerOff
 } from "lucide-react"
 import type { RestaurantSection } from "@/types"
 
@@ -91,6 +93,7 @@ export function SectionManager({
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingSection, setEditingSection] = useState<RestaurantSection | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
   
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -120,12 +123,11 @@ export function SectionManager({
   const { data: sections, isLoading } = useQuery({
     queryKey: ["restaurant-sections", restaurantId],
     queryFn: async () => {
-      // Fetch sections
+      // Fetch sections (including disabled ones for management)
       const { data: sectionsData, error: sectionsError } = await supabase
         .from("restaurant_sections")
         .select("*")
         .eq("restaurant_id", restaurantId)
-        .eq("is_active", true)
         .order("display_order", { ascending: true })
 
       if (sectionsError) throw sectionsError
@@ -241,6 +243,51 @@ export function SectionManager({
     },
   })
 
+  // Toggle section status mutation (disable/enable)
+  const toggleSectionMutation = useMutation({
+    mutationFn: async ({ sectionId, isActive }: { sectionId: string; isActive: boolean }) => {
+      // Start a transaction-like operation
+      if (!isActive) {
+        // Disabling section - also disable all tables in this section
+        const { error: tablesError } = await supabase
+          .from("restaurant_tables")
+          .update({ is_active: false })
+          .eq("section_id", sectionId)
+          .eq("is_active", true)
+
+        if (tablesError) throw tablesError
+      } else {
+        // Enabling section - also enable all tables in this section
+        const { error: tablesError } = await supabase
+          .from("restaurant_tables")
+          .update({ is_active: true })
+          .eq("section_id", sectionId)
+          .eq("is_active", false)
+
+        if (tablesError) throw tablesError
+      }
+
+      // Update the section itself
+      const { error: sectionError } = await supabase
+        .from("restaurant_sections")
+        .update({ is_active: isActive })
+        .eq("id", sectionId)
+
+      if (sectionError) throw sectionError
+    },
+    onSuccess: (_, { isActive }) => {
+      queryClient.invalidateQueries({ queryKey: ["restaurant-sections"] })
+      queryClient.invalidateQueries({ queryKey: ["tables-with-sections"] })
+      toast.success(isActive ? "Section enabled successfully" : "Section disabled successfully")
+      setTogglingId(null)
+    },
+    onError: (error: any) => {
+      console.error("Toggle section error:", error)
+      toast.error("Failed to update section status")
+      setTogglingId(null)
+    },
+  })
+
   const handleEdit = (section: RestaurantSection) => {
     setEditingSection(section)
     setValue("name", section.name)
@@ -258,6 +305,17 @@ export function SectionManager({
     }
   }
 
+  const handleToggleStatus = (sectionId: string, currentStatus: boolean) => {
+    const message = currentStatus 
+      ? "Are you sure you want to disable this section? All tables in this section will also be disabled."
+      : "Are you sure you want to enable this section? All tables in this section will also be enabled."
+    
+    if (confirm(message)) {
+      setTogglingId(sectionId)
+      toggleSectionMutation.mutate({ sectionId, isActive: !currentStatus })
+    }
+  }
+
   const handleFormSubmit = (data: SectionFormData) => {
     sectionMutation.mutate(data)
   }
@@ -267,8 +325,6 @@ export function SectionManager({
     setEditingSection(null)
     reset()
   }
-
-  const IconComponent = SECTION_ICONS[selectedIcon as keyof typeof SECTION_ICONS] || Grid3X3
 
   return (
     <div className="space-y-4">
@@ -419,7 +475,8 @@ export function SectionManager({
                 className={cn(
                   "cursor-pointer hover:shadow-lg transition-all",
                   isSelected && "ring-2 ring-primary shadow-lg",
-                  deletingId === section.id && "opacity-50"
+                  (deletingId === section.id || togglingId === section.id) && "opacity-50",
+                  !section.is_active && "opacity-60 border-dashed"
                 )}
                 onClick={() => onSectionSelect?.(section.id)}
               >
@@ -441,9 +498,26 @@ export function SectionManager({
                         className="h-8 w-8 p-0"
                         onClick={(e) => {
                           e.stopPropagation()
+                          handleToggleStatus(section.id, section.is_active)
+                        }}
+                        disabled={deletingId === section.id || togglingId === section.id}
+                        title={section.is_active ? "Disable section" : "Enable section"}
+                      >
+                        {section.is_active ? (
+                          <PowerOff className="h-3 w-3" />
+                        ) : (
+                          <Power className="h-3 w-3 text-green-600" />
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 w-8 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation()
                           handleEdit(section)
                         }}
-                        disabled={deletingId === section.id}
+                        disabled={deletingId === section.id || togglingId === section.id}
                       >
                         <Edit className="h-3 w-3" />
                       </Button>
@@ -455,7 +529,7 @@ export function SectionManager({
                           e.stopPropagation()
                           handleDelete(section.id)
                         }}
-                        disabled={deletingId === section.id}
+                        disabled={deletingId === section.id || togglingId === section.id}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
@@ -470,10 +544,17 @@ export function SectionManager({
                     </p>
                   )}
                   <div className="flex items-center justify-between">
-                    <Badge variant="secondary">
-                      {section.table_count || 0} tables
-                    </Badge>
-                    {isSelected && (
+                    <div className="flex gap-2">
+                      <Badge variant="secondary">
+                        {section.table_count || 0} tables
+                      </Badge>
+                      {!section.is_active && (
+                        <Badge variant="destructive">
+                          Disabled
+                        </Badge>
+                      )}
+                    </div>
+                    {isSelected && section.is_active && (
                       <Badge variant="default">
                         <Check className="h-3 w-3 mr-1" />
                         Active

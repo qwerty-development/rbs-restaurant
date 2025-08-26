@@ -83,7 +83,7 @@ export default function TablesPage() {
     enabled: !!restaurantId,
   })
 
-  // Fetch sections
+  // Fetch sections (including disabled ones for management purposes)
   const { data: sections, isLoading: sectionsLoading } = useQuery({
     queryKey: ["restaurant-sections", restaurantId],
     queryFn: async () => {
