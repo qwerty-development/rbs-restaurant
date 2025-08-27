@@ -7,7 +7,7 @@ import { Toaster as SonnerToaster } from "sonner"
 import { Providers } from "@/components/provider"
 import { InstallPrompt } from "@/components/pwa/install-prompt"
 import { PWAProvider } from "@/components/pwa/pwa-provider"
-import { Analytics } from "@vercel/analytics/next"
+// import { Analytics } from "@vercel/analytics/next"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -66,7 +66,7 @@ export default function RootLayout({
             {/* Note: Import added below */}
             <Toaster position="top-center" />
             <SonnerToaster richColors position="top-center" />
-            <Analytics />
+            {/* <Analytics /> */}
           </PWAProvider>
         </Providers>
       </body>
