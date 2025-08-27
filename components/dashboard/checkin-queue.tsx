@@ -1757,7 +1757,7 @@ export function CheckInQueue({
                             onClick={() => handleCustomerSelect(customer)}
                           >
                             <div className="flex items-center justify-between">
-                              <span className="text-white">
+                              <span className="text-popover-foreground">
                                 {customer.profile?.full_name || customer.guest_name || 'Guest'}
                               </span>
                               {customer.vip_status && (
@@ -1774,11 +1774,30 @@ export function CheckInQueue({
                   
                   {/* Selected customer */}
                   {selectedCustomer && (
-                    <div className="mt-1 p-1.5 bg-primary/20 rounded text-xs">
-                      <span className="text-primary">Selected: </span>
-                      <span className="text-foreground font-medium">
-                        {selectedCustomer.profile?.full_name || selectedCustomer.guest_name}
-                      </span>
+                    <div className="mt-1 p-1.5 bg-primary/20 rounded text-xs flex items-center justify-between">
+                      <div>
+                        <span className="text-primary">Selected: </span>
+                        <span className="text-foreground font-medium">
+                          {selectedCustomer.profile?.full_name || selectedCustomer.guest_name}
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedCustomer(null)
+                          setCustomerSearch("")
+                          setWalkInData(prev => ({
+                            ...prev,
+                            guestName: "",
+                            guestPhone: "",
+                            preferences: []
+                          }))
+                        }}
+                        className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+                      >
+                        ×
+                      </Button>
                     </div>
                   )}
                 </div>
