@@ -281,7 +281,8 @@ export default function BookingsPage() {
     if (!autoRefresh) return
     
     const interval = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["all-bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["displayed-bookings"] })
       queryClient.invalidateQueries({ queryKey: ["table-stats"] })
       setLastRefresh(new Date())
     }, 15000) // 15 seconds for more responsive updates
@@ -311,9 +312,48 @@ export default function BookingsPage() {
     getRestaurantId()
   }, [supabase])
 
-  // Fetch bookings with proper joins and table information
-  const { data: bookings, isLoading } = useQuery({
-    queryKey: ["bookings", restaurantId, selectedDate, statusFilter, timeFilter, dateRange, viewMode],
+  // Fetch all bookings (for accurate statistics)
+  const { data: allBookings, isLoading: allBookingsLoading } = useQuery({
+    queryKey: ["all-bookings", restaurantId],
+    queryFn: async () => {
+      if (!restaurantId) return []
+      
+      const { data, error } = await supabase
+        .from("bookings")
+        .select(`
+          *,
+          profiles!bookings_user_id_fkey(
+            id,
+            full_name,
+            phone_number
+          ),
+          booking_tables(
+            table:restaurant_tables(*)
+          )
+        `)
+        .eq("restaurant_id", restaurantId)
+        .order("booking_time", { ascending: true })
+
+      if (error) {
+        console.error("Error fetching all bookings:", error)
+        throw error
+      }
+
+      // Transform data
+      const transformedData = data?.map((booking: any) => ({
+        ...booking,
+        user: booking.profiles || null,
+        tables: booking.booking_tables?.map((bt: { table: any }) => bt.table) || []
+      })) as Booking[]
+
+      return transformedData
+    },
+    enabled: !!restaurantId,
+  })
+
+  // Fetch displayed bookings (filtered for current view)
+  const { data: displayedBookings, isLoading } = useQuery({
+    queryKey: ["displayed-bookings", restaurantId, selectedDate, statusFilter, timeFilter, dateRange, viewMode],
     queryFn: async () => {
       if (!restaurantId) return []
       
@@ -384,7 +424,7 @@ export default function BookingsPage() {
       const { data, error } = await query
 
       if (error) {
-        console.error("Error fetching bookings:", error)
+        console.error("Error fetching displayed bookings:", error)
         throw error
       }
 
@@ -508,7 +548,8 @@ export default function BookingsPage() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["all-bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["displayed-bookings"] })
       toast.success("Booking updated")
     },
     onError: (error) => {
@@ -535,7 +576,8 @@ export default function BookingsPage() {
       }
     },
     onSuccess: (_, { bookingIds }) => {
-      queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["all-bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["displayed-bookings"] })
       toast.success(`Updated ${bookingIds.length} booking(s)`)
       setSelectedBookings([])
     },
@@ -558,7 +600,8 @@ export default function BookingsPage() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["all-bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["displayed-bookings"] })
       toast.success("Booking confirmed")
     },
     onError: () => {
@@ -568,7 +611,8 @@ export default function BookingsPage() {
 
   // Manual refresh function
   const handleRefresh = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["bookings"] })
+    queryClient.invalidateQueries({ queryKey: ["all-bookings"] })
+    queryClient.invalidateQueries({ queryKey: ["displayed-bookings"] })
     queryClient.invalidateQueries({ queryKey: ["table-stats"] })
     queryClient.invalidateQueries({ queryKey: ["tables"] })
     toast.success("Data refreshed")
@@ -579,7 +623,7 @@ export default function BookingsPage() {
     setAssignmentBookingId(bookingId)
     setIsCheckingAvailability(true)
     
-    const booking = bookings?.find(b => b.id === bookingId)
+    const booking = allBookings?.find(b => b.id === bookingId)
     if (!booking) return
     
     try {
@@ -622,7 +666,7 @@ export default function BookingsPage() {
     } finally {
       setIsCheckingAvailability(false)
     }
-  }, [bookings, restaurantId, supabase, tableService])
+  }, [allBookings, restaurantId, supabase, tableService])
 
   // Assign tables to booking
   const assignTablesMutation = useMutation({
@@ -648,7 +692,8 @@ export default function BookingsPage() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["all-bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["displayed-bookings"] })
       queryClient.invalidateQueries({ queryKey: ["table-stats"] })
       toast.success("Table assignment updated successfully")
       setShowTableAssignment(false)
@@ -668,7 +713,7 @@ export default function BookingsPage() {
       fromTableId: string; 
       toTableId: string 
     }) => {
-      const booking = bookings?.find(b => b.id === bookingId)
+      const booking = allBookings?.find(b => b.id === bookingId)
       if (!booking) throw new Error("Booking not found")
       
       // Check if target table is available
@@ -694,7 +739,8 @@ export default function BookingsPage() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["all-bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["displayed-bookings"] })
       queryClient.invalidateQueries({ queryKey: ["table-stats"] })
       toast.success("Table switched successfully")
     },
@@ -719,7 +765,8 @@ export default function BookingsPage() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["all-bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["displayed-bookings"] })
       queryClient.invalidateQueries({ queryKey: ["table-stats"] })
       toast.success("Table assignment removed")
     },
@@ -793,7 +840,8 @@ export default function BookingsPage() {
       return booking
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["all-bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["displayed-bookings"] })
       toast.success("Booking created successfully")
       setShowManualBooking(false)
     },
@@ -804,7 +852,7 @@ export default function BookingsPage() {
   })
 
   // Filter bookings based on search
-  const filteredBookings = bookings?.filter((booking) => {
+  const filteredBookings = displayedBookings?.filter((booking) => {
     if (!searchQuery) return true
     
     const searchLower = searchQuery.toLowerCase()
@@ -840,39 +888,39 @@ export default function BookingsPage() {
 
   // Performance optimization - Memoized booking statistics
   const bookingStats = useMemo(() => {
-    if (!bookings) return {
+    if (!allBookings) return {
       all: 0, pending: 0, confirmed: 0, completed: 0, cancelled: 0, no_show: 0,
       withoutTables: 0, upcoming: 0, avgPartySize: 0, totalGuests: 0, revenue: 0, needingAttention: 0
     }
     
     return {
-      all: bookings.length,
-      pending: bookings.filter((b: any) => b.status === "pending").length,
-      confirmed: bookings.filter((b: any) => b.status === "confirmed").length,
-      completed: bookings.filter((b: any) => b.status === "completed").length,
-      cancelled: bookings.filter((b: any) => 
+      all: allBookings.length,
+      pending: allBookings.filter((b: any) => b.status === "pending").length,
+      confirmed: allBookings.filter((b: any) => b.status === "confirmed").length,
+      completed: allBookings.filter((b: any) => b.status === "completed").length,
+      cancelled: allBookings.filter((b: any) => 
         b.status === "cancelled_by_user" || b.status === "declined_by_restaurant"
       ).length,
-      no_show: bookings.filter((b: any) => b.status === "no_show").length,
-      withoutTables: bookings.filter((b: any) => 
+      no_show: allBookings.filter((b: any) => b.status === "no_show").length,
+      withoutTables: allBookings.filter((b: any) => 
         b.status === "confirmed" && (!b.tables || b.tables.length === 0)
       ).length,
-      upcoming: bookings.filter((b: any) => 
+      upcoming: allBookings.filter((b: any) => 
         (b.status === "pending" || b.status === "confirmed") && 
         new Date(b.booking_time) > now
       ).length,
-      avgPartySize: bookings.length ? 
-        Math.round((bookings.reduce((acc: number, b: any) => acc + b.party_size, 0) / bookings.length) * 10) / 10 : 0,
-      totalGuests: bookings.filter((b: any) => b.status === "confirmed" || b.status === "completed")
+      avgPartySize: allBookings.length ? 
+        Math.round((allBookings.reduce((acc: number, b: any) => acc + b.party_size, 0) / allBookings.length) * 10) / 10 : 0,
+      totalGuests: allBookings.filter((b: any) => b.status === "confirmed" || b.status === "completed")
         .reduce((acc: number, b: any) => acc + b.party_size, 0),
-      revenue: (bookings.filter((b: any) => b.status === "completed").length) * 45,
-      needingAttention: bookings.filter((b: any) => {
+      revenue: (allBookings.filter((b: any) => b.status === "completed").length) * 45,
+      needingAttention: allBookings.filter((b: any) => {
         const isUrgentPending = b.status === "pending" && new Date(b.booking_time).getTime() - now.getTime() < 3600000
         const isConfirmedWithoutTable = b.status === "confirmed" && (!b.tables || b.tables.length === 0)
         return b.status === "pending" || isConfirmedWithoutTable || isUrgentPending
       }).length
     }
-  }, [bookings, now])
+  }, [allBookings, now])
 
   return (
     <div className="space-y-6 tablet:space-y-8 animate-in fade-in-0 duration-500">
@@ -972,7 +1020,7 @@ export default function BookingsPage() {
               {/* Bulk Table Assignment */}
               {(() => {
                 const bookingsWithoutTables = selectedBookings.filter(id => {
-                  const booking = bookings?.find(b => b.id === id)
+                  const booking = allBookings?.find(b => b.id === id)
                   return booking && (!booking.tables || booking.tables.length === 0) && 
                          ['confirmed', 'pending', 'arrived'].includes(booking.status)
                 })
@@ -1610,7 +1658,7 @@ export default function BookingsPage() {
               {tables && tables.length > 0 ? (
                 <div className="grid gap-4 grid-cols-2 tablet:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                   {tables.map((table) => {
-                    const tableBookings = bookings?.filter(booking =>
+                    const tableBookings = allBookings?.filter(booking =>
                       booking.tables?.some(t => t.id === table.id) &&
                       format(new Date(booking.booking_time), "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd")
                     ) || []
@@ -1660,7 +1708,7 @@ export default function BookingsPage() {
                           e.currentTarget.classList.remove('ring-2', 'ring-primary', 'ring-offset-2')
                           
                           if (draggedBooking && !isCurrentlyOccupied) {
-                            const draggedBookingData = bookings?.find(b => b.id === draggedBooking)
+                            const draggedBookingData = allBookings?.find(b => b.id === draggedBooking)
                             if (draggedBookingData?.tables?.[0]?.id) {
                               switchTableMutation.mutate({
                                 bookingId: draggedBooking,
@@ -1989,7 +2037,7 @@ export default function BookingsPage() {
               </DialogTitle>
               <DialogDescription className="text-sm tablet:text-base">
                 {assignmentBookingId && (() => {
-                  const booking = bookings?.find(b => b.id === assignmentBookingId)
+                  const booking = allBookings?.find(b => b.id === assignmentBookingId)
                   return booking ? (
                     <span>
                       Assigning tables for <strong>{booking.guest_name || booking.user?.full_name}</strong> 
@@ -2059,7 +2107,7 @@ export default function BookingsPage() {
                     {availableTablesForAssignment.map((table) => {
                       const isSelected = selectedTablesForAssignment.includes(table.id)
                       const isCurrentlyAssigned = assignmentBookingId && 
-                        bookings?.find(b => b.id === assignmentBookingId)?.tables?.some(t => t.id === table.id)
+                        allBookings?.find(b => b.id === assignmentBookingId)?.tables?.some(t => t.id === table.id)
                       
                       return (
                         <Card 
@@ -2168,7 +2216,7 @@ export default function BookingsPage() {
               <div className="flex gap-3">
                 {/* Remove All Tables */}
                 {assignmentBookingId && (() => {
-                  const booking = bookings?.find(b => b.id === assignmentBookingId)
+                  const booking = allBookings?.find(b => b.id === assignmentBookingId)
                   return booking?.tables && booking.tables.length > 0
                 })() && (
                   <Button

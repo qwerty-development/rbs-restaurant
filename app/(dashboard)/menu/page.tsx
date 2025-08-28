@@ -79,9 +79,33 @@ export default function MenuPage() {
     enabled: !!restaurantId,
   })
 
-  // Fetch menu items
-  const { data: menuItems, isLoading: itemsLoading } = useQuery({
-    queryKey: ["menu-items", restaurantId, selectedCategory],
+  // Fetch all menu items (for category counts)
+  const { data: allMenuItems, isLoading: allItemsLoading } = useQuery({
+    queryKey: ["all-menu-items", restaurantId],
+    queryFn: async () => {
+      if (!restaurantId) return []
+      
+      const { data, error } = await supabase
+        .from("menu_items")
+        .select(`
+          *,
+          category:menu_categories!menu_items_category_id_fkey(*)
+        `)
+        .eq("restaurant_id", restaurantId)
+        .order("display_order", { ascending: true })
+
+      if (error) {
+        console.error("Error fetching all menu items:", error)
+        throw error
+      }
+      return data as MenuItem[]
+    },
+    enabled: !!restaurantId,
+  })
+
+  // Fetch displayed menu items (filtered by category)
+  const { data: displayedMenuItems, isLoading: itemsLoading } = useQuery({
+    queryKey: ["displayed-menu-items", restaurantId, selectedCategory],
     queryFn: async () => {
       if (!restaurantId) return []
       
@@ -101,7 +125,7 @@ export default function MenuPage() {
       const { data, error } = await query
 
       if (error) {
-        console.error("Error fetching menu items:", error)
+        console.error("Error fetching displayed menu items:", error)
         throw error
       }
       return data as MenuItem[]
@@ -130,14 +154,15 @@ export default function MenuPage() {
           .insert({
             ...itemData,
             restaurant_id: restaurantId,
-            display_order: menuItems?.length || 0,
+            display_order: allMenuItems?.length || 0,
           })
 
         if (error) throw error
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["menu-items"] })
+      queryClient.invalidateQueries({ queryKey: ["all-menu-items"] })
+      queryClient.invalidateQueries({ queryKey: ["displayed-menu-items"] })
       toast.success(selectedItem ? "Item updated" : "Item created")
       setSelectedItem(null)
       setIsAddingItem(false)
@@ -188,7 +213,8 @@ export default function MenuPage() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["menu-items"] })
+      queryClient.invalidateQueries({ queryKey: ["all-menu-items"] })
+      queryClient.invalidateQueries({ queryKey: ["displayed-menu-items"] })
       toast.success("Availability updated")
     },
     onError: () => {
@@ -197,7 +223,7 @@ export default function MenuPage() {
   })
 
   // Filter items based on search and dietary preferences
-  const filteredItems = menuItems?.filter((item) => {
+  const filteredItems = displayedMenuItems?.filter((item) => {
     const matchesSearch = !searchQuery || 
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.description?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -210,14 +236,14 @@ export default function MenuPage() {
 
   // Get menu statistics
   const getMenuStats = () => {
-    if (!menuItems) return { total: 0, available: 0, featured: 0, avgPrice: 0 }
+    if (!allMenuItems) return { total: 0, available: 0, featured: 0, avgPrice: 0 }
     
-    const available = menuItems.filter(item => item.is_available)
-    const featured = menuItems.filter(item => item.is_featured)
-    const avgPrice = menuItems.reduce((sum, item) => sum + Number(item.price), 0) / menuItems.length
+    const available = allMenuItems.filter(item => item.is_available)
+    const featured = allMenuItems.filter(item => item.is_featured)
+    const avgPrice = allMenuItems.reduce((sum, item) => sum + Number(item.price), 0) / allMenuItems.length
     
     return {
-      total: menuItems.length,
+      total: allMenuItems.length,
       available: available.length,
       featured: featured.length,
       avgPrice: avgPrice || 0,
@@ -342,7 +368,7 @@ export default function MenuPage() {
             onSelectCategory={setSelectedCategory}
             isLoading={categoriesLoading}
             itemCounts={
-              menuItems?.reduce((acc, item) => {
+              allMenuItems?.reduce((acc, item) => {
                 acc[item.category_id] = (acc[item.category_id] || 0) + 1
                 return acc
               }, {} as Record<string, number>) || {}
@@ -394,7 +420,7 @@ export default function MenuPage() {
             <Card>
               <CardContent className="text-center py-8">
                 <p className="text-muted-foreground">
-                  {menuItems?.length === 0 
+                  {allMenuItems?.length === 0 
                     ? "No menu items added yet. Click 'Add Item' to get started."
                     : "No menu items found matching your filters."}
                 </p>
