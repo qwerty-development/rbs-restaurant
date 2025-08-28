@@ -48,6 +48,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { CustomerDetailsDialog } from '@/components/customers/customer-details-dialog'
 import { TagManagementDialog } from '@/components/customers/tag-management-dialog'
 import { AddCustomerDialog } from '@/components/customers/add-customer-dialog'
+import CustomerMergeSelectionDialog from '@/components/customers/customer-merge-selection-dialog'
 import { CustomerBulkActions } from '@/components/customers/customer-bulk-actions'
 import { CustomerInsights } from '@/components/customers/customer-insights'
 import { restaurantAuth } from '@/lib/restaurant-auth'
@@ -82,6 +83,8 @@ export default function CustomersPage() {
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [showAddCustomerDialog, setShowAddCustomerDialog] = useState(false)
+  const [showMergeDialog, setShowMergeDialog] = useState(false)
+  const [customerToMerge, setCustomerToMerge] = useState<RestaurantCustomer | null>(null)
 
   const loadInitialData = useCallback(async () => {
     try {
@@ -834,6 +837,20 @@ export default function CustomersPage() {
                             }}>
                               {customer.blacklisted ? 'Remove from Blacklist' : 'Add to Blacklist'}
                             </DropdownMenuItem>
+                            {/* Show merge option only for guest customers or when restaurant can manage customers */}
+                            {(!customer.user_id || filteredCustomers.some(c => !c.user_id)) && 
+                             restaurantAuth.hasPermission(currentStaff?.permissions || [], 'customers.manage', currentStaff?.role) && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={(e) => {
+                                  e.stopPropagation()
+                                  setCustomerToMerge(customer)
+                                  setShowMergeDialog(true)
+                                }}>
+                                  Merge Customer
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       )}
@@ -880,6 +897,14 @@ export default function CustomersPage() {
       <AddCustomerDialog
         open={showAddCustomerDialog}
         onOpenChange={setShowAddCustomerDialog}
+        restaurantId={restaurantId}
+        onSuccess={() => loadCustomers(restaurantId)}
+      />
+
+      <CustomerMergeSelectionDialog
+        open={showMergeDialog}
+        onOpenChange={setShowMergeDialog}
+        primaryCustomer={customerToMerge}
         restaurantId={restaurantId}
         onSuccess={() => loadCustomers(restaurantId)}
       />
