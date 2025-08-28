@@ -1,5 +1,5 @@
 // components/tables/floor-plan-editor.tsx
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -149,7 +149,7 @@ export function FloorPlanEditor({
   })
   
   const [selectedTable, setSelectedTable] = useState<string | null>(null)
-  const [selectedSection, setSelectedSection] = useState<string>("all")
+  const [selectedSection, setSelectedSection] = useState<string>("")
   const [zoom, setZoom] = useState(100)
   const [showGrid, setShowGrid] = useState(true)
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit")
@@ -179,9 +179,11 @@ export function FloorPlanEditor({
   })
 
   // Filter tables by selected section
-  const filteredTables = selectedSection === "all" 
-    ? tables 
-    : tables.filter(table => table.section_id === selectedSection)
+  const filteredTables = useMemo(() => {
+    return selectedSection 
+      ? tables.filter(table => table.section_id === selectedSection)
+      : []
+  }, [selectedSection, tables])
 
   // Calculate section stats
   const sectionStats = sections?.map(section => {
@@ -213,6 +215,13 @@ export function FloorPlanEditor({
       setSelectedSection(sections[currentSectionIndex - 1].id)
     }
   }
+
+  // Initialize selected section to first section when sections are loaded
+  useEffect(() => {
+    if (sections && sections.length > 0 && !selectedSection) {
+      setSelectedSection(sections[0].id)
+    }
+  }, [sections, selectedSection])
 
   // Initialize positions and sizes
   useEffect(() => {
@@ -1025,7 +1034,7 @@ export function FloorPlanEditor({
                 size="sm"
                 variant="ghost"
                 onClick={() => navigateSection('prev')}
-                disabled={!hasPrevSection && selectedSection !== "all"}
+                disabled={!hasPrevSection}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -1033,14 +1042,6 @@ export function FloorPlanEditor({
               <ScrollArea className="flex-1">
                 <Tabs value={selectedSection} onValueChange={setSelectedSection}>
                   <TabsList className="w-full justify-start">
-                    <TabsTrigger value="all" className="gap-2">
-                      <Grid3X3 className="h-4 w-4" />
-                      All Sections
-                      <Badge variant="secondary" className="ml-1">
-                        {tables.length}
-                      </Badge>
-                    </TabsTrigger>
-                    
                     {sections?.map(section => {
                       const Icon = SECTION_ICONS[section.icon as keyof typeof SECTION_ICONS] || Grid3X3
                       const tableCount = tables.filter(t => t.section_id === section.id).length
@@ -1075,13 +1076,6 @@ export function FloorPlanEditor({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">
-                  <div className="flex items-center gap-2">
-                    <Grid3X3 className="h-4 w-4" />
-                    All Sections ({tables.length} tables)
-                  </div>
-                </SelectItem>
-                <Separator />
                 {sections?.map(section => {
                   const Icon = SECTION_ICONS[section.icon as keyof typeof SECTION_ICONS] || Grid3X3
                   const tableCount = tables.filter(t => t.section_id === section.id).length
@@ -1100,7 +1094,7 @@ export function FloorPlanEditor({
           )}
 
           {/* Section Info */}
-          {selectedSection !== "all" && sections && (
+          {selectedSection && sections && (
             <div className="mt-3 p-3 bg-muted rounded-lg">
               {(() => {
                 const section = sections.find(s => s.id === selectedSection)
@@ -1565,9 +1559,7 @@ export function FloorPlanEditor({
                   <Info className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                   <h3 className="text-lg font-medium mb-2">No Tables in This Section</h3>
                   <p className="text-sm text-muted-foreground">
-                    {selectedSection === "all" 
-                      ? "Add tables to get started"
-                      : "Add or move tables to this section"}
+                    Add or move tables to this section
                   </p>
                 </div>
               </div>
