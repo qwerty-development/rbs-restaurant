@@ -2,13 +2,18 @@
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { MoreHorizontal, Edit, Trash2, EyeOff } from "lucide-react"
 import type { MenuCategory } from "@/types"
 
 interface MenuCategoriesProps {
   categories: MenuCategory[]
   selectedCategory: string
   onSelectCategory: (categoryId: string) => void
+  onEditCategory: (category: MenuCategory) => void
+  onDeleteCategory: (categoryId: string) => void
+  onToggleCategoryStatus: (categoryId: string, isActive: boolean) => void
   isLoading: boolean
   itemCounts: Record<string, number>
 }
@@ -17,6 +22,9 @@ export function MenuCategories({
   categories,
   selectedCategory,
   onSelectCategory,
+  onEditCategory,
+  onDeleteCategory,
+  onToggleCategoryStatus,
   isLoading,
   itemCounts,
 }: MenuCategoriesProps) {
@@ -39,17 +47,47 @@ export function MenuCategories({
         </Button>
         
         {categories.map((category) => (
-          <Button
-            key={category.id}
-            variant={selectedCategory === category.id ? "secondary" : "ghost"}
-            className="w-full justify-between"
-            onClick={() => onSelectCategory(category.id)}
-          >
-            <span className="truncate">{category.name}</span>
-            <Badge variant="secondary">
-              {itemCounts[category.id] || 0}
-            </Badge>
-          </Button>
+          <div key={category.id} className="flex items-center gap-1">
+            <Button
+              variant={selectedCategory === category.id ? "secondary" : "ghost"}
+              className="flex-1 justify-between"
+              onClick={() => onSelectCategory(category.id)}
+            >
+              <span className={cn("truncate", !category.is_active && "opacity-50")}>
+                {category.name}
+                {!category.is_active && " (Inactive)"}
+              </span>
+              <Badge variant="secondary">
+                {itemCounts[category.id] || 0}
+              </Badge>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onEditCategory(category)}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => onToggleCategoryStatus(category.id, !category.is_active)}
+                >
+                  <EyeOff className="mr-2 h-4 w-4" />
+                  {category.is_active ? 'Deactivate' : 'Activate'}
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => onDeleteCategory(category.id)}
+                  className="text-destructive"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         ))}
       </div>
     </ScrollArea>

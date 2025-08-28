@@ -21,16 +21,22 @@ import { MenuCategories } from "@/components/menu/menu-categories"
 import { MenuItemCard } from "@/components/menu/menu-item-card"
 import { MenuItemForm } from "@/components/menu/menu-item-form"
 import { CategoryForm } from "@/components/menu/category-form"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { toast } from "react-hot-toast"
 import { Plus, Search, Filter, Upload, Download } from "lucide-react"
 import type { MenuItem, MenuCategory } from "@/types"
 
 export default function MenuPage() {
-  const [selectedCategory, setSelectedCategory] = useState<string>("all")
-  const [searchQuery, setSearchQuery] = useState("")
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null)
+  const [selectedCategory, setSelectedCategory] = useState<string>("all")
+  const [selectedCategoryForEdit, setSelectedCategoryForEdit] = useState<MenuCategory | null>(null)
   const [isAddingItem, setIsAddingItem] = useState(false)
+  const [isEditingItem, setIsEditingItem] = useState(false)
   const [isAddingCategory, setIsAddingCategory] = useState(false)
+  const [isEditingCategory, setIsEditingCategory] = useState(false)
+  const [itemToDelete, setItemToDelete] = useState<MenuItem | null>(null)
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
   const [dietaryFilter, setDietaryFilter] = useState<string[]>([])
   
   const supabase = createClient()
@@ -166,6 +172,7 @@ export default function MenuPage() {
       toast.success(selectedItem ? "Item updated" : "Item created")
       setSelectedItem(null)
       setIsAddingItem(false)
+      setIsEditingItem(false)
     },
     onError: (error) => {
       console.error("Item mutation error:", error)
@@ -173,29 +180,124 @@ export default function MenuPage() {
     },
   })
 
+  // Delete menu item
+  const deleteItemMutation = useMutation({
+    mutationFn: async (itemId: string) => {
+      const { error } = await supabase
+        .from("menu_items")
+        .delete()
+        .eq("id", itemId)
+
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["all-menu-items"] })
+      queryClient.invalidateQueries({ queryKey: ["displayed-menu-items"] })
+      toast.success("Item deleted successfully")
+      setItemToDelete(null)
+    },
+    onError: (error) => {
+      console.error("Delete item error:", error)
+      toast.error("Failed to delete menu item")
+    },
+  })
+
   // Create category
   const categoryMutation = useMutation({
     mutationFn: async (categoryData: Partial<MenuCategory>) => {
-      const displayOrder = categories?.length || 0
-      
+      if (categoryData.id) {
+        // Update existing category
+        const { error } = await supabase
+          .from("menu_categories")
+          .update({
+            ...categoryData,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", categoryData.id)
+
+        if (error) throw error
+      } else {
+        // Create new category
+        const displayOrder = categories?.length || 0
+        
+        const { error } = await supabase
+          .from("menu_categories")
+          .insert({
+            ...categoryData,
+            restaurant_id: restaurantId,
+            display_order: displayOrder,
+          })
+
+        if (error) throw error
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["menu-categories"] })
+      toast.success(selectedCategoryForEdit ? "Category updated" : "Category created")
+      setIsAddingCategory(false)
+      setIsEditingCategory(false)
+      setSelectedCategoryForEdit(null)
+    },
+    onError: (error) => {
+      console.error("Category mutation error:", error)
+      toast.error("Failed to save category")
+    },
+  })
+
+  // Delete category
+  const deleteCategoryMutation = useMutation({
+    mutationFn: async (categoryId: string) => {
+      // First check if category has menu items
+      const { data: itemsInCategory } = await supabase
+        .from("menu_items")
+        .select("id")
+        .eq("category_id", categoryId)
+        .limit(1)
+
+      if (itemsInCategory && itemsInCategory.length > 0) {
+        throw new Error("Cannot delete category that contains menu items")
+      }
+
       const { error } = await supabase
         .from("menu_categories")
-        .insert({
-          ...categoryData,
-          restaurant_id: restaurantId,
-          display_order: displayOrder,
-        })
+        .delete()
+        .eq("id", categoryId)
 
       if (error) throw error
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["menu-categories"] })
-      toast.success("Category created")
-      setIsAddingCategory(false)
+      toast.success("Category deleted successfully")
+      setCategoryToDelete(null)
+      if (selectedCategory === categoryToDelete) {
+        setSelectedCategory("all")
+      }
     },
     onError: (error) => {
-      console.error("Category mutation error:", error)
-      toast.error("Failed to create category")
+      console.error("Delete category error:", error)
+      toast.error(error.message || "Failed to delete category")
+    },
+  })
+
+  // Toggle category status
+  const toggleCategoryStatusMutation = useMutation({
+    mutationFn: async ({ categoryId, isActive }: { categoryId: string; isActive: boolean }) => {
+      const { error } = await supabase
+        .from("menu_categories")
+        .update({ 
+          is_active: isActive,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", categoryId)
+
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["menu-categories"] })
+      toast.success("Category status updated")
+    },
+    onError: () => {
+      toast.error("Failed to update category status")
     },
   })
 
@@ -278,19 +380,21 @@ export default function MenuPage() {
                 Add Item
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Add Menu Item</DialogTitle>
                 <DialogDescription>
                   Create a new item for your menu
                 </DialogDescription>
               </DialogHeader>
-              <MenuItemForm
-                categories={categories || []}
-                onSubmit={(data) => itemMutation.mutate(data)}
-                onCancel={() => setIsAddingItem(false)}
-                isLoading={itemMutation.isPending}
-              />
+              <div className="overflow-y-auto">
+                <MenuItemForm
+                  categories={categories || []}
+                  onSubmit={(data) => itemMutation.mutate(data)}
+                  onCancel={() => setIsAddingItem(false)}
+                  isLoading={itemMutation.isPending}
+                />
+              </div>
             </DialogContent>
           </Dialog>
         </div>
@@ -366,6 +470,14 @@ export default function MenuPage() {
             categories={categories || []}
             selectedCategory={selectedCategory}
             onSelectCategory={setSelectedCategory}
+            onEditCategory={(category) => {
+              setSelectedCategoryForEdit(category)
+              setIsEditingCategory(true)
+            }}
+            onDeleteCategory={(categoryId) => setCategoryToDelete(categoryId)}
+            onToggleCategoryStatus={(categoryId, isActive) =>
+              toggleCategoryStatusMutation.mutate({ categoryId, isActive })
+            }
             isLoading={categoriesLoading}
             itemCounts={
               allMenuItems?.reduce((acc, item) => {
@@ -434,8 +546,9 @@ export default function MenuPage() {
                   item={item}
                   onEdit={() => {
                     setSelectedItem(item)
-                    setIsAddingItem(true)
+                    setIsEditingItem(true)
                   }}
+                  onDelete={() => setItemToDelete(item)}
                   onToggleAvailability={(isAvailable) =>
                     toggleAvailabilityMutation.mutate({ itemId: item.id, isAvailable })
                   }
@@ -447,28 +560,81 @@ export default function MenuPage() {
       </div>
 
       {/* Edit Item Dialog */}
-      {selectedItem && isAddingItem && (
-        <Dialog open={!!selectedItem} onOpenChange={() => {
+      <Dialog open={isEditingItem} onOpenChange={(open) => {
+        if (!open) {
           setSelectedItem(null)
-          setIsAddingItem(false)
-        }}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Edit Menu Item</DialogTitle>
-            </DialogHeader>
+          setIsEditingItem(false)
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Menu Item</DialogTitle>
+            <DialogDescription>
+              Update the details of this menu item
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-y-auto">
             <MenuItemForm
-              item={selectedItem}
+              item={selectedItem || undefined}
               categories={categories || []}
-              onSubmit={(data) => itemMutation.mutate({ ...data, id: selectedItem.id })}
+              onSubmit={(data) => itemMutation.mutate({ ...data, id: selectedItem?.id })}
               onCancel={() => {
                 setSelectedItem(null)
-                setIsAddingItem(false)
+                setIsEditingItem(false)
               }}
               isLoading={itemMutation.isPending}
             />
-          </DialogContent>
-        </Dialog>
-      )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Category Dialog */}
+      <Dialog open={isEditingCategory} onOpenChange={(open) => {
+        if (!open) {
+          setSelectedCategoryForEdit(null)
+          setIsEditingCategory(false)
+        }
+      }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Category</DialogTitle>
+            <DialogDescription>
+              Update the details of this category
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-y-auto">
+            <CategoryForm
+              category={selectedCategoryForEdit || undefined}
+              onSubmit={(data) => categoryMutation.mutate({ ...data, id: selectedCategoryForEdit?.id })}
+              onCancel={() => {
+                setSelectedCategoryForEdit(null)
+                setIsEditingCategory(false)
+              }}
+              isLoading={categoryMutation.isPending}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Item Confirmation */}
+      <ConfirmDialog
+        open={!!itemToDelete}
+        onOpenChange={(open) => !open && setItemToDelete(null)}
+        title="Delete Menu Item"
+        description={`Are you sure you want to delete "${itemToDelete?.name}"? This action cannot be undone.`}
+        onConfirm={() => itemToDelete && deleteItemMutation.mutate(itemToDelete.id)}
+        isLoading={deleteItemMutation.isPending}
+      />
+
+      {/* Delete Category Confirmation */}
+      <ConfirmDialog
+        open={!!categoryToDelete}
+        onOpenChange={(open) => !open && setCategoryToDelete(null)}
+        title="Delete Category"
+        description="Are you sure you want to delete this category? This action cannot be undone and will only work if the category has no menu items."
+        onConfirm={() => categoryToDelete && deleteCategoryMutation.mutate(categoryToDelete)}
+        isLoading={deleteCategoryMutation.isPending}
+      />
     </div>
   )
 }

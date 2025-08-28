@@ -11,6 +11,7 @@ import Image from "next/image"
 interface MenuItemCardProps {
   item: MenuItem
   onEdit: () => void
+  onDelete: () => void
   onToggleAvailability: (isAvailable: boolean) => void
 }
 
@@ -21,7 +22,7 @@ const DIETARY_ICONS = {
   spicy: { icon: Flame, color: "text-red-600" },
 }
 
-export function MenuItemCard({ item, onEdit, onToggleAvailability }: MenuItemCardProps) {
+export function MenuItemCard({ item, onEdit, onDelete, onToggleAvailability }: MenuItemCardProps) {
   return (
     <Card className={cn("transition-opacity", !item.is_available && "opacity-60")}>
       <CardContent className="p-4">
@@ -93,6 +94,7 @@ export function MenuItemCard({ item, onEdit, onToggleAvailability }: MenuItemCar
               <Button variant="ghost" size="icon" onClick={onEdit}>
                 <Edit className="h-4 w-4" />
               </Button>
+      
             </div>
           </div>
         </div>
