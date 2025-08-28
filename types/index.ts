@@ -16,11 +16,14 @@ export interface Restaurant {
   }[]
   created_at: string
   updated_at: string
-  // Legacy fields for backward compatibility
-  location?: {
-    type: "Point";
-    coordinates: [number, number];
+  // Location data - PostGIS geometry stored as WKB hex string
+  location?: string; // PostGIS WKB hex format
+  // Parsed location coordinates for frontend use
+  coordinates?: {
+    lat: number;
+    lng: number;
   };
+  // Legacy fields for backward compatibility
   image_urls?: string[];
   tags?: string[];
   opening_time?: string;
