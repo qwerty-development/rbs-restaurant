@@ -103,12 +103,18 @@ export function CheckInQueue({
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
   const [customerSearch, setCustomerSearch] = useState("")
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
-  const [walkInData, setWalkInData] = useState({
+  const [walkInData, setWalkInData] = useState<{
+    guestName: string
+    guestPhone: string
+    partySize: number | string
+    estimatedDuration: number
+    preferences: string[]
+  }>({
     guestName: "",
     guestPhone: "",
     partySize: 2,
     estimatedDuration: 120,
-    preferences: [] as string[]
+    preferences: []
   })
 
   // Confirmation dialogs state
@@ -152,6 +158,25 @@ export function CheckInQueue({
   const queryClient = useQueryClient()
   const tableStatusService = useMemo(() => new TableStatusService(), [])
   const conflictService = useMemo(() => new BookingConflictService(), [])
+
+  // Fetch restaurant sections for table organization
+  const { data: restaurantSections = [] } = useQuery({
+    queryKey: ["restaurant-sections", restaurantId],
+    queryFn: async () => {
+      if (!restaurantId) return []
+      
+      const { data, error } = await supabase
+        .from("restaurant_sections")
+        .select("*")
+        .eq("restaurant_id", restaurantId)
+        .eq("is_active", true)
+        .order("display_order", { ascending: true })
+
+      if (error) throw error
+      return data
+    },
+    enabled: !!restaurantId,
+  })
 
   // Add/Use customer prompt state for walk-ins
   const [showAddCustomerPrompt, setShowAddCustomerPrompt] = useState(false)
@@ -221,7 +246,7 @@ export function CheckInQueue({
     
     // Helper function to check if booking is physically present
     const isPhysicallyPresent = (b: any) => {
-      const presentStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+      const presentStatuses = ['arrived', 'seated', 'ordered', 'payment']
       return presentStatuses.includes(b.status)
     }
     
@@ -292,7 +317,7 @@ export function CheckInQueue({
       }
       
       // Also offer option to bump the target booking if they're not seated yet
-      if (!['seated', 'ordered', 'appetizers', 'main_course', 'dessert'].includes(targetBooking.status)) {
+      if (!['seated', 'ordered', 'payment'].includes(targetBooking.status)) {
         options.push({
           type: 'empty',
           tables: targetTables,
@@ -308,7 +333,7 @@ export function CheckInQueue({
     else if (physicallyPresentBookings.length > 1) {
       // This is complex - offer to bump all if none are actively dining
       const activeDiners = physicallyPresentBookings.filter(b => 
-        ['ordered', 'appetizers', 'main_course', 'dessert'].includes(b.status)
+        ['ordered', 'payment'].includes(b.status)
       )
       
       if (activeDiners.length === 0) {
@@ -372,7 +397,7 @@ export function CheckInQueue({
       const availableTables = tables.filter(table => {
         if (!table.is_active) return false
         const isOccupied = bookings.some(b => {
-          const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+          const occupiedStatuses = ['arrived', 'seated', 'ordered', 'payment']
           return occupiedStatuses.includes(b.status) && 
                  b.tables?.some((t: any) => t.id === table.id)
         })
@@ -472,10 +497,10 @@ export function CheckInQueue({
 
     // Active dining guests
     const activeDining = bookings.filter(b =>
-      ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(b.status)
+      ['seated', 'ordered', 'payment'].includes(b.status)
     ).sort((a, b) => {
       // Sort by status progression, then by booking time
-      const statusOrder = { seated: 1, ordered: 2, appetizers: 3, main_course: 4, dessert: 5, payment: 6 }
+      const statusOrder = { seated: 1, ordered: 2, payment: 3 }
       const aOrder = statusOrder[b.status as keyof typeof statusOrder] || 0
       const bOrder = statusOrder[b.status as keyof typeof statusOrder] || 0
       if (aOrder !== bOrder) return aOrder - bOrder
@@ -853,8 +878,9 @@ export function CheckInQueue({
       const table = tableStatus.find(t => t.id === id)
       return sum + (table?.max_capacity || 0)
     }, 0)
-    const hasCapacityIssue = totalCapacity < walkInData.partySize
-    const isLargeParty = walkInData.partySize > 6 || selectedTableIds.length > 1 || hasCapacityIssue
+    const partySize = typeof walkInData.partySize === 'number' ? walkInData.partySize : (parseInt(walkInData.partySize as string) || 1)
+    const hasCapacityIssue = totalCapacity < partySize
+    const isLargeParty = partySize > 6 || selectedTableIds.length > 1 || hasCapacityIssue
 
     // Show confirmation dialog if there are conflicts or large party
     if (conflictingReservations.length > 0) {
@@ -873,7 +899,7 @@ export function CheckInQueue({
             ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
             : (walkInData.guestPhone?.trim() || null),
           guest_email: selectedCustomer?.guest_email || null,
-          party_size: walkInData.partySize,
+          party_size: partySize,
           table_ids: selectedTableIds,
           booking_time: currentTime.toISOString(),
           turn_time_minutes: walkInData.estimatedDuration,
@@ -898,7 +924,7 @@ export function CheckInQueue({
             ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
             : (walkInData.guestPhone?.trim() || null),
           guest_email: selectedCustomer?.guest_email || null,
-          party_size: walkInData.partySize,
+          party_size: partySize,
           table_ids: selectedTableIds,
           booking_time: currentTime.toISOString(),
           turn_time_minutes: walkInData.estimatedDuration,
@@ -1014,6 +1040,7 @@ export function CheckInQueue({
   }
 
   const proceedWithWalkIn = async () => {
+    const partySize = typeof walkInData.partySize === 'number' ? walkInData.partySize : (parseInt(walkInData.partySize as string) || 1)
     const walkInBooking = walkInConfirmation.walkInData || {
       customer_id: selectedCustomer?.id || null,
       user_id: selectedCustomer?.user_id || null,
@@ -1026,7 +1053,7 @@ export function CheckInQueue({
       guest_email: selectedCustomer 
         ? (selectedCustomer.guest_email || null)
         : null, // Walk-ins don't have email in this form
-      party_size: walkInData.partySize,
+      party_size: partySize,
       table_ids: selectedTableIds,
       booking_time: currentTime.toISOString(),
       turn_time_minutes: walkInData.estimatedDuration,
@@ -1047,7 +1074,7 @@ export function CheckInQueue({
     }
     
     // If no selected customer but meaningful guest info is provided, prompt to add/use existing
-    const hasGuestInfo = !!(cleanGuestName || cleanGuestEmail || cleanGuestPhone)
+    const hasGuestInfo = !!(cleanGuestName && cleanGuestName !== `Walk-in ${format(currentTime, 'HH:mm')}`) || !!(cleanGuestEmail) || !!(cleanGuestPhone)
     if (!walkInBooking.customer_id && hasGuestInfo) {
       setPendingWalkInBooking(cleanedWalkInBooking)
       setPendingGuestDetails({
@@ -1417,20 +1444,16 @@ export function CheckInQueue({
   const STATUS_ICONS = {
     seated: Users,
     ordered: ChefHat,
-    appetizers: Utensils,
-    main_course: Utensils,
-    dessert: Coffee,
-    payment: CreditCard
+    payment: CreditCard,
+    completed: CheckCircle
   }
 
   // Status colors mapping using brand colors
   const STATUS_COLORS = {
     seated: "text-primary bg-primary/10 border-primary/30",
     ordered: "text-accent-foreground bg-accent/20 border-accent/40",
-    appetizers: "text-secondary-foreground bg-secondary/30 border-secondary/50",
-    main_course: "text-muted-foreground bg-muted/50 border-border",
-    dessert: "text-accent-foreground bg-accent/30 border-accent/50",
-    payment: "text-primary bg-primary/20 border-primary/40"
+    payment: "text-primary bg-primary/20 border-primary/40",
+    completed: "text-muted-foreground bg-muted/50 border-border"
   }
 
   const renderDiningCard = (booking: any) => {
@@ -1498,19 +1521,42 @@ export function CheckInQueue({
             </div>
           </div>
 
-          {/* Compact button with icon + text */}
-          <div className="flex-shrink-0">
-            {nextTransition && (
+          {/* Action buttons */}
+          <div className="flex-shrink-0 flex gap-1">
+            {/* Complete booking button - always available for any status except completed */}
+            {booking.status !== 'completed' && (
               <Button
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation()
-                  handleStatusUpdate(booking.id, nextTransition.to)
+                  handleStatusUpdate(booking.id, 'completed')
                 }}
-                className="bg-accent hover:bg-accent/80 text-accent-foreground px-1.5 py-0.5 h-5 text-xs flex items-center gap-0.5"
+                className="bg-green-600 hover:bg-green-700 text-white px-1.5 py-0.5 h-5 text-xs flex items-center justify-center"
+              >
+                <CheckCircle className="h-2.5 w-2.5" />
+              </Button>
+            )}
+            
+            {/* Next step button - simplified flow */}
+            {nextTransition && booking.status !== 'completed' && (
+              <Button
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  // Simplified status flow: seated -> ordered -> payment -> completed
+                  let nextStatus = nextTransition.to
+                  if (booking.status === 'seated') {
+                    nextStatus = 'ordered'
+                  } else if (booking.status === 'ordered') {
+                    nextStatus = 'payment'
+                  } else if (booking.status === 'payment') {
+                    nextStatus = 'completed'
+                  }
+                  handleStatusUpdate(booking.id, nextStatus)
+                }}
+                className="bg-accent hover:bg-accent/80 text-accent-foreground px-1.5 py-0.5 h-5 text-xs flex items-center justify-center"
               >
                 <Play className="h-2.5 w-2.5" />
-                Next
               </Button>
             )}
           </div>
@@ -1828,10 +1874,26 @@ export function CheckInQueue({
                     <Label className="text-xs text-foreground mb-0.5 block">Party</Label>
                     <Input
                       type="number"
-                      min="1"
                       max="20"
-                      value={walkInData.partySize}
-                      onChange={(e) => setWalkInData(prev => ({ ...prev, partySize: parseInt(e.target.value) || 1 }))}
+                      value={walkInData.partySize || ""}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        if (value === "") {
+                          setWalkInData(prev => ({ ...prev, partySize: "" as any }))
+                        } else {
+                          const numValue = parseInt(value)
+                          if (!isNaN(numValue) && numValue > 0) {
+                            setWalkInData(prev => ({ ...prev, partySize: numValue }))
+                          }
+                        }
+                      }}
+                      onBlur={(e) => {
+                        // Ensure we have a valid value when user finishes editing
+                        if (e.target.value === "" || parseInt(e.target.value) < 1) {
+                          setWalkInData(prev => ({ ...prev, partySize: 1 }))
+                        }
+                      }}
+                      placeholder="Party size"
                       className="bg-background border-border text-foreground text-xs h-7"
                     />
                   </div>
@@ -1842,106 +1904,201 @@ export function CheckInQueue({
                   <Label className="text-xs text-foreground mb-1 block">
                     Select Table - {availableTables.length} available
                   </Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {tableStatus
-                      .filter(table => table.is_active)
-                      .sort((a, b) => {
-                        if (a.isOccupied !== b.isOccupied) {
-                          return a.isOccupied ? 1 : -1
-                        }
-                        return a.table_number - b.table_number
-                      })
-                      .map(table => {
-                        const isSelected = selectedTableIds.includes(table.id)
-                        const isAvailable = !table.isOccupied
-                        // For large parties, allow selecting any available table to combine capacity
-                        const canSelect = isAvailable
-                        
+                  
+                  {(() => {
+                    // Group tables by sections
+                    const activeTables = tableStatus.filter(table => table.is_active)
+                    
+                    // Group available tables by section
+                    const availableTablesBySection = activeTables
+                      .filter(table => !table.isOccupied)
+                      .reduce((groups: Record<string, any[]>, table) => {
+                        const sectionId = table.section_id || 'no-section'
+                        if (!groups[sectionId]) groups[sectionId] = []
+                        groups[sectionId].push(table)
+                        return groups
+                      }, {})
+                    
+                    const occupiedTables = activeTables.filter(table => table.isOccupied)
+                    
+                    const tablesWithUpcomingBookings = activeTables
+                      .filter(table => {
+                        if (table.isOccupied) return false
                         const nextBooking = table.upcomingBookings?.[0]
-                        const minutesUntilNext = nextBooking ? differenceInMinutes(new Date(nextBooking.booking_time), currentTime) : null
-                        const hasUrgentBooking = nextBooking && minutesUntilNext! <= 60
-                        const hasBookingSoon = nextBooking && minutesUntilNext! <= 120
+                        return nextBooking && differenceInMinutes(new Date(nextBooking.booking_time), currentTime) <= 120
+                      })
+                    
+                    const renderTableButton = (table: any) => {
+                      const isSelected = selectedTableIds.includes(table.id)
+                      const isAvailable = !table.isOccupied
+                      const canSelect = isAvailable
+                      
+                      const nextBooking = table.upcomingBookings?.[0]
+                      const minutesUntilNext = nextBooking ? differenceInMinutes(new Date(nextBooking.booking_time), currentTime) : null
+                      const hasUrgentBooking = nextBooking && minutesUntilNext! <= 60
+                      const hasBookingSoon = nextBooking && minutesUntilNext! <= 120
 
-                        let statusColor = "border-border"
-                        let bgColor = "bg-card"
-                        let statusText = "Available"
+                      let statusColor = "border-border"
+                      let bgColor = "bg-card"
+                      let statusText = "Available"
 
-                        if (table.isOccupied) {
-                          statusColor = "border-destructive"
-                          bgColor = "bg-destructive/20"
-                          statusText = "Occupied"
-                        } else if (hasUrgentBooking) {
-                          statusColor = "border-destructive border-2"
-                          bgColor = "bg-destructive/30"
-                          statusText = `Booked ${minutesUntilNext}m`
-                        } else if (hasBookingSoon) {
-                          statusColor = "border-orange-500 border-2"
-                          bgColor = "bg-orange-500/20"
-                          statusText = `Booked ${minutesUntilNext}m`
-                        } else {
-                          statusColor = "border-accent"
-                          bgColor = "bg-accent/20"
-                          statusText = "Free"
-                        }
-                        
-                        if (isSelected) {
-                          statusColor = "border-primary border-2"
-                          bgColor = "bg-primary/30"
-                        }
-                        
-                        return (
-                          <Button
-                            key={table.id}
-                            size="sm"
-                            variant="outline"
-                            disabled={!canSelect}
-                            className={cn(
-                              "h-full py-2 transition-all relative",
-                              bgColor,
-                              statusColor,
-                              canSelect && "hover:bg-muted cursor-pointer",
-                              !canSelect && "opacity-60 cursor-not-allowed",
-                              isSelected && "ring-1 ring-primary"
+                      if (table.isOccupied) {
+                        statusColor = "border-destructive"
+                        bgColor = "bg-destructive/20"
+                        statusText = "Occupied"
+                      } else if (hasUrgentBooking) {
+                        statusColor = "border-destructive border-2"
+                        bgColor = "bg-destructive/30"
+                        statusText = `Booked ${minutesUntilNext}m`
+                      } else if (hasBookingSoon) {
+                        statusColor = "border-orange-500 border-2"
+                        bgColor = "bg-orange-500/20"
+                        statusText = `Booked ${minutesUntilNext}m`
+                      } else {
+                        statusColor = "border-accent"
+                        bgColor = "bg-accent/20"
+                        statusText = "Free"
+                      }
+                      
+                      if (isSelected) {
+                        statusColor = "border-primary border-2"
+                        bgColor = "bg-primary/30"
+                      }
+                      
+                      return (
+                        <Button
+                          key={table.id}
+                          size="sm"
+                          variant="outline"
+                          disabled={!canSelect}
+                          className={cn(
+                            "h-full py-2 transition-all relative",
+                            bgColor,
+                            statusColor,
+                            canSelect && "hover:bg-muted cursor-pointer",
+                            !canSelect && "opacity-60 cursor-not-allowed",
+                            isSelected && "ring-1 ring-primary"
+                          )}
+                          onClick={() => {
+                            if (canSelect) {
+                              setSelectedTableIds(prev => 
+                                prev.includes(table.id)
+                                  ? prev.filter(id => id !== table.id)
+                                  : [...prev, table.id]
+                              )
+                            }
+                          }}
+                        >
+                          <div className="w-full h-full flex flex-col items-center justify-center relative">
+                            {/* Warning indicator for urgent bookings */}
+                            {hasUrgentBooking && (
+                              <div className="absolute -top-1 -right-1">
+                                <AlertTriangle className="h-3 w-3 text-destructive fill-current" />
+                              </div>
                             )}
-                            onClick={() => {
-                              if (canSelect) {
-                                setSelectedTableIds(prev => 
-                                  prev.includes(table.id)
-                                    ? prev.filter(id => id !== table.id)
-                                    : [...prev, table.id]
-                                )
-                              }
-                            }}
-                          >
-                            <div className="w-full h-full flex flex-col items-center justify-center relative">
-                              {/* Warning indicator for urgent bookings */}
-                              {hasUrgentBooking && (
-                                <div className="absolute -top-1 -right-1">
-                                  <AlertTriangle className="h-3 w-3 text-destructive fill-current" />
-                                </div>
-                              )}
-                              
-                              <div className="font-bold text-xs">
-                                T{table.table_number}
-                              </div>
-                              <div className="text-xs">
-                                {table.max_capacity}p
-                              </div>
-                              <div className="text-xs font-medium mt-0.5">
-                                {statusText}
-                              </div>
-                              
-                              {/* Show next booking time if exists */}
-                              {nextBooking && (
-                                <div className="text-xs mt-0.5 opacity-75">
-                                  {format(new Date(nextBooking.booking_time), 'h:mm')}
-                                </div>
-                              )}
+                            
+                            <div className="font-bold text-xs">
+                              T{table.table_number}
                             </div>
-                          </Button>
-                        )
-                      })}
-                  </div>
+                            <div className="text-xs">
+                              {table.max_capacity}p
+                            </div>
+                            <div className="text-xs font-medium mt-0.5">
+                              {statusText}
+                            </div>
+                            
+                            {/* Show next booking time if exists */}
+                            {nextBooking && (
+                              <div className="text-xs mt-0.5 opacity-75">
+                                {format(new Date(nextBooking.booking_time), 'h:mm')}
+                              </div>
+                            )}
+                          </div>
+                        </Button>
+                      )
+                    }
+
+                    const getSectionLabel = (sectionId: string) => {
+                      if (sectionId === 'no-section') return 'Unassigned Tables'
+                      const section = restaurantSections.find(s => s.id === sectionId)
+                      return section?.name || 'Unknown Section'
+                    }
+
+                    const getSectionIcon = (sectionId: string) => {
+                      if (sectionId === 'no-section') return null
+                      const section = restaurantSections.find(s => s.id === sectionId)
+                      // You could add section-specific icons based on section.name or section.type
+                      return null
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        {/* Available tables by section */}
+                        {Object.entries(availableTablesBySection)
+                          .sort(([sectionA], [sectionB]) => {
+                            // Sort sections by display order, with unassigned last
+                            if (sectionA === 'no-section') return 1
+                            if (sectionB === 'no-section') return -1
+                            
+                            const sectionAData = restaurantSections.find(s => s.id === sectionA)
+                            const sectionBData = restaurantSections.find(s => s.id === sectionB)
+                            
+                            return (sectionAData?.display_order || 999) - (sectionBData?.display_order || 999)
+                          })
+                          .map(([sectionId, sectionTables]) => (
+                            <div key={sectionId} className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-xs font-medium text-muted-foreground">
+                                  {getSectionLabel(sectionId)} ({sectionTables.length})
+                                </h4>
+                                <div className="flex-1 h-px bg-border" />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                {sectionTables
+                                  .sort((a: any, b: any) => a.table_number - b.table_number)
+                                  .map(renderTableButton)}
+                              </div>
+                            </div>
+                          ))}
+
+                        {/* Tables with upcoming bookings */}
+                        {tablesWithUpcomingBookings.length > 0 && (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-xs font-medium text-orange-600">
+                                <Clock className="h-3 w-3 inline mr-1" />
+                                Available - Booked Soon ({tablesWithUpcomingBookings.length})
+                              </h4>
+                              <div className="flex-1 h-px bg-border" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              {tablesWithUpcomingBookings
+                                .sort((a: any, b: any) => a.table_number - b.table_number)
+                                .map(renderTableButton)}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Occupied tables */}
+                        {occupiedTables.length > 0 && (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-xs font-medium text-muted-foreground opacity-60">
+                                <UserCheck className="h-3 w-3 inline mr-1" />
+                                Occupied ({occupiedTables.length})
+                              </h4>
+                              <div className="flex-1 h-px bg-border opacity-30" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 opacity-60">
+                              {occupiedTables
+                                .sort((a: any, b: any) => a.table_number - b.table_number)
+                                .map(renderTableButton)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 {/* Capacity warning */}
@@ -1950,7 +2107,8 @@ export function CheckInQueue({
                     const table = tableStatus.find(t => t.id === id)
                     return sum + (table?.max_capacity || 0)
                   }, 0)
-                  const isInsufficient = totalCapacity < walkInData.partySize
+                  const currentPartySize = typeof walkInData.partySize === 'number' ? walkInData.partySize : (parseInt(walkInData.partySize as string) || 1)
+                  const isInsufficient = totalCapacity < currentPartySize
 
                   if (isInsufficient) {
                     return (
@@ -1958,7 +2116,7 @@ export function CheckInQueue({
                         <AlertTriangle className="h-4 w-4" />
                         <AlertDescription className="text-xs">
                           <strong>Capacity Warning:</strong> Selected tables can seat {totalCapacity} people,
-                          but party size is {walkInData.partySize}. You can still proceed if needed.
+                          but party size is {currentPartySize}. You can still proceed if needed.
                         </AlertDescription>
                       </Alert>
                     )
@@ -1970,7 +2128,7 @@ export function CheckInQueue({
                 <Button
                   className="w-full h-8 text-xs font-medium bg-secondary hover:bg-secondary/90 text-secondary-foreground disabled:bg-muted disabled:text-muted-foreground"
                   onClick={handleWalkIn}
-                  disabled={selectedTableIds.length === 0}
+                  disabled={selectedTableIds.length === 0 || !walkInData.partySize || walkInData.partySize === '' || (typeof walkInData.partySize === 'number' && walkInData.partySize < 1)}
                 >
                   {selectedTableIds.length > 0
                     ? `Seat at Table ${selectedTableIds.map(id =>

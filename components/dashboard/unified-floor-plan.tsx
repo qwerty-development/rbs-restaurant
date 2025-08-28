@@ -105,9 +105,6 @@ const STATUS_ICONS: any = {
   'arrived': UserCheck,
   'seated': ChefHat,
   'ordered': Coffee,
-  'appetizers': Utensils,
-  'main_course': Utensils,
-  'dessert': Cake,
   'payment': CreditCard,
   'completed': CheckCircle,
   'no_show': AlertCircle,
@@ -120,9 +117,6 @@ const STATUS_COLORS: any = {
   'arrived': 'bg-accent/30 border-accent text-accent-foreground',
   'seated': 'bg-primary/30 border-primary text-primary',
   'ordered': 'bg-secondary/70 border-secondary text-secondary-foreground',
-  'appetizers': 'bg-accent/50 border-accent text-accent-foreground',
-  'main_course': 'bg-secondary border-secondary text-secondary-foreground',
-  'dessert': 'bg-accent/70 border-accent text-accent-foreground',
   'payment': 'bg-primary/40 border-primary text-primary',
   'completed': 'bg-muted border-border text-muted-foreground',
   'no_show': 'bg-destructive/20 border-destructive text-destructive',
@@ -235,7 +229,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
       const occupiedTables = sectionTables.filter(table => {
         const hasActiveBooking = bookings.some(booking => 
           booking.tables?.some((t: any) => t.id === table.id) &&
-          ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status)
+          ['arrived', 'seated', 'ordered', 'payment'].includes(booking.status)
         )
         return hasActiveBooking
       })
@@ -652,11 +646,11 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
 
     // Current active bookings
     const activeBookings = allTableBookings.filter(booking =>
-      ['confirmed', 'arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status)
+      ['confirmed', 'arrived', 'seated', 'ordered', 'payment'].includes(booking.status)
     )
 
     const currentBooking = activeBookings.find(booking => {
-      const physicallyPresent = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status)
+      const physicallyPresent = ['arrived', 'seated', 'ordered', 'payment'].includes(booking.status)
       if (physicallyPresent) return true
       
       const bookingStart = new Date(booking.booking_time)
@@ -951,9 +945,6 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                       {current.status === 'arrived' && '👋'}
                       {current.status === 'seated' && '🪑'}
                       {current.status === 'ordered' && '📝'}
-                      {current.status === 'appetizers' && '🥗'}
-                      {current.status === 'main_course' && '🍽️'}
-                      {current.status === 'dessert' && '🍰'}
                       {current.status === 'payment' && '💳'}
                       {current.status === 'completed' && '✅'}
                     </div>
@@ -1277,8 +1268,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                       onClick={() => handleStatusTransition(current.id, 'seated')}
                       disabled={loadingTransition === current.id}
                     >
-                      <ChefHat className="h-3 w-3 mr-1" />
-                      Seat
+                      <ChefHat className="h-3 w-3" />
                     </Button>
                   )}
                   
@@ -1289,20 +1279,18 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                       onClick={() => handleStatusTransition(current.id, 'ordered')}
                       disabled={loadingTransition === current.id}
                     >
-                      <Coffee className="h-3 w-3 mr-1" />
-                      Order
+                      <Coffee className="h-3 w-3" />
                     </Button>
                   )}
                   
-                  {['ordered', 'appetizers', 'main_course', 'dessert'].includes(current.status) && (
+                  {current.status === 'ordered' && (
                     <Button 
                       size="sm"
                       className="h-8 text-xs px-3 shadow-lg bg-gradient-to-r from-accent to-accent/90 hover:from-accent/90 hover:to-accent text-accent-foreground rounded-lg font-semibold border border-accent/40 hover:scale-105 transition-all duration-200"
                       onClick={() => handleStatusTransition(current.id, 'payment')}
                       disabled={loadingTransition === current.id}
                     >
-                      <CreditCard className="h-3 w-3 mr-1" />
-                      Bill
+                      <CreditCard className="h-3 w-3" />
                     </Button>
                   )}
                   
@@ -1313,8 +1301,19 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                       onClick={() => handleStatusTransition(current.id, 'completed')}
                       disabled={loadingTransition === current.id}
                     >
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      Done
+                      <CheckCircle className="h-3 w-3" />
+                    </Button>
+                  )}
+
+                  {/* Quick complete button for any status except completed */}
+                  {current.status !== 'completed' && current.status !== 'payment' && (
+                    <Button 
+                      size="sm"
+                      className="h-8 text-xs px-3 shadow-lg bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-lg font-semibold border border-emerald-400 hover:scale-105 transition-all duration-200"
+                      onClick={() => handleStatusTransition(current.id, 'completed')}
+                      disabled={loadingTransition === current.id}
+                    >
+                      <CheckCircle className="h-3 w-3" />
                     </Button>
                   )}
 

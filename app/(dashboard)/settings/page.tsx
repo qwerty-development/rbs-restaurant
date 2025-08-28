@@ -53,6 +53,7 @@ import {
 import Link from "next/link"
 import { PushNotificationManager } from "@/components/pwa/push-notification-manager"
 import { InstallPrompt } from "@/components/pwa/install-prompt"
+import { LocationManager } from "@/components/location/location-manager"
 
 // Type definitions
 type Restaurant = {
@@ -330,8 +331,9 @@ export default function SettingsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="location">Location</TabsTrigger>
           <TabsTrigger value="operational">Operational</TabsTrigger>
           <TabsTrigger value="features">Features & Pricing</TabsTrigger>
           <TabsTrigger value="pwa">PWA & Mobile</TabsTrigger>
@@ -483,6 +485,23 @@ export default function SettingsPage() {
                   </div>
                 </form>
               </Form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="location" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Restaurant Location
+              </CardTitle>
+              <CardDescription>
+                Set your restaurant's precise location for accurate directions and delivery
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <LocationManager restaurantId={restaurantId} currentAddress={restaurant?.address} />
             </CardContent>
           </Card>
         </TabsContent>
