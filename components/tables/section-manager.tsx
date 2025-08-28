@@ -328,20 +328,22 @@ export function SectionManager({
 
   return (
     <div className="space-y-4">
-      {/* Section Cards Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {/* Add New Section Card */}
+      {/* Header with Add Button */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">Restaurant Sections</h3>
+          <p className="text-sm text-muted-foreground">
+            Organize your tables into logical sections
+          </p>
+        </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Card className="cursor-pointer hover:shadow-lg transition-shadow border-dashed">
-              <CardContent className="flex flex-col items-center justify-center h-32">
-                <Plus className="h-8 w-8 mb-2 text-muted-foreground" />
-                <p className="text-sm font-medium text-muted-foreground">Add Section</p>
-              </CardContent>
-            </Card>
+            <Button size="sm">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Section
+            </Button>
           </DialogTrigger>
-
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editingSection ? "Edit Section" : "Create New Section"}
@@ -372,6 +374,7 @@ export function SectionManager({
                   {...register("description")}
                   placeholder="Optional description of this section"
                   disabled={sectionMutation.isPending}
+                  rows={2}
                 />
               </div>
 
@@ -384,7 +387,7 @@ export function SectionManager({
                       type="button"
                       variant={selectedIcon === key ? "default" : "outline"}
                       size="sm"
-                      className="h-10 w-full"
+                      className="h-9 w-full"
                       onClick={() => setValue("icon", key)}
                       disabled={sectionMutation.isPending}
                     >
@@ -401,23 +404,16 @@ export function SectionManager({
                     <Button
                       key={color.value}
                       type="button"
-                      variant="outline"
+                      variant={selectedColor === color.value ? "default" : "outline"}
                       size="sm"
-                      className={cn(
-                        "h-10 w-full relative",
-                        selectedColor === color.value && "ring-2 ring-offset-2 ring-primary"
-                      )}
-                      style={{ backgroundColor: color.value + "20", borderColor: color.value }}
+                      className="h-9 w-full relative"
                       onClick={() => setValue("color", color.value)}
                       disabled={sectionMutation.isPending}
                     >
-                      <div 
+                      <div
                         className="w-4 h-4 rounded-full"
                         style={{ backgroundColor: color.value }}
                       />
-                      {selectedColor === color.value && (
-                        <Check className="h-3 w-3 absolute top-1 right-1" />
-                      )}
                     </Button>
                   ))}
                 </div>
@@ -432,18 +428,13 @@ export function SectionManager({
                   {...register("display_order", { valueAsNumber: true })}
                   disabled={sectionMutation.isPending}
                 />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Lower numbers appear first
-                </p>
+                {errors.display_order && (
+                  <p className="text-sm text-red-600 mt-1">{errors.display_order.message}</p>
+                )}
               </div>
 
               <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleDialogClose}
-                  disabled={sectionMutation.isPending}
-                >
+                <Button type="button" variant="outline" onClick={handleDialogClose}>
                   Cancel
                 </Button>
                 <Button type="submit" disabled={sectionMutation.isPending}>
@@ -458,14 +449,16 @@ export function SectionManager({
             </form>
           </DialogContent>
         </Dialog>
+      </div>
 
-        {/* Existing Sections */}
+      {/* Sections Grid */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {isLoading ? (
           <div className="col-span-full text-center py-8">
-            Loading sections...
+            <div className="text-sm text-muted-foreground">Loading sections...</div>
           </div>
         ) : (
-          sections?.map((section:any) => {
+          sections?.map((section: any) => {
             const Icon = SECTION_ICONS[section.icon as keyof typeof SECTION_ICONS] || Grid3X3
             const isSelected = section.id === selectedSectionId
 
@@ -473,29 +466,29 @@ export function SectionManager({
               <Card
                 key={section.id}
                 className={cn(
-                  "cursor-pointer hover:shadow-lg transition-all",
-                  isSelected && "ring-2 ring-primary shadow-lg",
+                  "cursor-pointer hover:shadow-md transition-all",
+                  isSelected && "ring-2 ring-primary shadow-md",
                   (deletingId === section.id || togglingId === section.id) && "opacity-50",
                   !section.is_active && "opacity-60 border-dashed"
                 )}
                 onClick={() => onSectionSelect?.(section.id)}
               >
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <div
-                      className="p-2 rounded-lg"
+                      className="p-2 rounded-lg flex-shrink-0"
                       style={{ backgroundColor: section.color + "20" }}
                     >
                       <Icon 
-                        className="h-5 w-5" 
+                        className="h-4 w-4" 
                         style={{ color: section.color }}
                       />
                     </div>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 flex-shrink-0">
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-8 w-8 p-0"
+                        className="h-7 w-7 p-0"
                         onClick={(e) => {
                           e.stopPropagation()
                           handleToggleStatus(section.id, section.is_active)
@@ -512,7 +505,7 @@ export function SectionManager({
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-8 w-8 p-0"
+                        className="h-7 w-7 p-0"
                         onClick={(e) => {
                           e.stopPropagation()
                           handleEdit(section)
@@ -524,7 +517,7 @@ export function SectionManager({
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                        className="h-7 w-7 p-0 text-destructive hover:text-destructive"
                         onClick={(e) => {
                           e.stopPropagation()
                           handleDelete(section.id)
@@ -535,27 +528,27 @@ export function SectionManager({
                       </Button>
                     </div>
                   </div>
-                  <CardTitle className="text-base">{section.name}</CardTitle>
+                  <CardTitle className="text-sm font-medium line-clamp-1">{section.name}</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="pt-0">
                   {section.description && (
-                    <p className="text-sm text-muted-foreground mb-2">
+                    <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
                       {section.description}
                     </p>
                   )}
                   <div className="flex items-center justify-between">
-                    <div className="flex gap-2">
-                      <Badge variant="secondary">
+                    <div className="flex gap-1 flex-wrap">
+                      <Badge variant="secondary" className="text-xs">
                         {section.table_count || 0} tables
                       </Badge>
                       {!section.is_active && (
-                        <Badge variant="destructive">
+                        <Badge variant="destructive" className="text-xs">
                           Disabled
                         </Badge>
                       )}
                     </div>
                     {isSelected && section.is_active && (
-                      <Badge variant="default">
+                      <Badge variant="default" className="text-xs">
                         <Check className="h-3 w-3 mr-1" />
                         Active
                       </Badge>
@@ -571,11 +564,11 @@ export function SectionManager({
       {/* Quick Stats */}
       {sections && sections.length > 0 && (
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Section Overview</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-4 text-sm">
+          <CardContent className="pt-0">
+            <div className="flex flex-wrap gap-4 text-xs">
               <div>
                 <span className="text-muted-foreground">Total Sections:</span>
                 <span className="ml-2 font-medium">{sections.length}</span>
@@ -583,14 +576,14 @@ export function SectionManager({
               <div>
                 <span className="text-muted-foreground">Total Tables:</span>
                 <span className="ml-2 font-medium">
-                  {sections.reduce((sum, s:any) => sum + (s.table_count || 0), 0)}
+                  {sections.reduce((sum, s: any) => sum + (s.table_count || 0), 0)}
                 </span>
               </div>
               <div>
                 <span className="text-muted-foreground">Average per Section:</span>
                 <span className="ml-2 font-medium">
                   {Math.round(
-                    sections.reduce((sum, s:any) => sum + (s.table_count || 0), 0) / sections.length
+                    sections.reduce((sum, s: any) => sum + (s.table_count || 0), 0) / sections.length
                   )}
                 </span>
               </div>

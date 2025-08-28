@@ -167,7 +167,7 @@ export default function OffersPage() {
       toast.success(selectedOffer ? "Offer updated" : "Offer created")
       setSelectedOffer(null)
       setIsAddingOffer(false)
-      form.reset()
+      resetFormToDefaults()
     },
     onError: () => {
       toast.error("Failed to save offer")
@@ -241,6 +241,20 @@ export default function OffersPage() {
 
   const stats = getOfferStats()
 
+  // Reset form to default values
+  const resetFormToDefaults = () => {
+    form.reset({
+      title: "",
+      description: "",
+      discountPercentage: 10,
+      validFrom: new Date(),
+      validUntil: addDays(new Date(), 30),
+      minimumPartySize: 1,
+      applicableDays: [0, 1, 2, 3, 4, 5, 6],
+      termsConditions: "",
+    })
+  }
+
   // Get offer status
   const getOfferStatus = (offer: SpecialOffer) => {
     const now = new Date()
@@ -270,11 +284,14 @@ export default function OffersPage() {
           if (!open) {
             setIsAddingOffer(false)
             setSelectedOffer(null)
-            form.reset()
+            resetFormToDefaults()
           }
         }}>
           <DialogTrigger asChild>
-            <Button onClick={() => setIsAddingOffer(true)}>
+            <Button onClick={() => {
+              setIsAddingOffer(true)
+              resetFormToDefaults()
+            }}>
               <Plus className="mr-2 h-4 w-4" />
               Create Offer
             </Button>
@@ -518,7 +535,7 @@ export default function OffersPage() {
                     onClick={() => {
                       setIsAddingOffer(false)
                       setSelectedOffer(null)
-                      form.reset()
+                      resetFormToDefaults()
                     }}
                     disabled={offerMutation.isPending}
                   >

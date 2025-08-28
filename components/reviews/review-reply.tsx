@@ -116,12 +116,12 @@ export function ReviewReply({ reviewId, restaurantId, existingReply }: ReviewRep
 
   if (existingReply && !isReplying) {
     return (
-      <Card className="mt-4 bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+      <Card className="mt-4 bg-secondary/50 dark:bg-accent/10 border-border">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-blue-600" />
-              <CardTitle className="text-sm text-blue-800 dark:text-blue-200">
+              <MessageSquare className="h-4 w-4 text-primary" />
+              <CardTitle className="text-sm text-primary">
                 Restaurant Response
               </CardTitle>
             </div>
@@ -130,7 +130,7 @@ export function ReviewReply({ reviewId, restaurantId, existingReply }: ReviewRep
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsReplying(true)}
-                className="text-blue-600 hover:text-blue-700"
+                className="text-primary hover:text-primary/80 hover:bg-secondary/50"
               >
                 Edit
               </Button>
@@ -139,7 +139,7 @@ export function ReviewReply({ reviewId, restaurantId, existingReply }: ReviewRep
                 size="sm"
                 onClick={() => deleteMutation.mutate()}
                 disabled={deleteMutation.isPending}
-                className="text-red-600 hover:text-red-700"
+                className="text-destructive hover:text-destructive/80"
               >
                 Delete
               </Button>
@@ -150,20 +150,20 @@ export function ReviewReply({ reviewId, restaurantId, existingReply }: ReviewRep
           <div className="flex items-start gap-3">
             <Avatar className="h-8 w-8">
               <AvatarImage src={existingReply.staff_member?.avatar_url} />
-              <AvatarFallback className="text-xs bg-blue-100 text-blue-600">
+              <AvatarFallback className="text-xs bg-secondary text-primary">
                 {existingReply.staff_member?.full_name?.split(" ").map(n => n[0]).join("") || "R"}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                <span className="text-sm font-medium text-primary">
                   {existingReply.staff_member?.full_name || "Restaurant"}
                 </span>
-                <span className="text-xs text-blue-600 dark:text-blue-400">
+                <span className="text-xs text-muted-foreground">
                   {format(new Date(existingReply.created_at), "PPP")}
                 </span>
               </div>
-              <p className="text-sm text-blue-700 dark:text-blue-300">
+              <p className="text-sm text-foreground">
                 {existingReply.reply_message}
               </p>
             </div>
@@ -180,16 +180,16 @@ export function ReviewReply({ reviewId, restaurantId, existingReply }: ReviewRep
           variant="outline"
           size="sm"
           onClick={() => setIsReplying(true)}
-          className="text-blue-600 border-blue-200 hover:bg-blue-50"
+          className="text-primary border-border hover:bg-secondary/50"
         >
           <MessageSquare className="h-4 w-4 mr-2" />
           Reply to review
         </Button>
       ) : (
-        <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+        <Card className="bg-secondary/50 dark:bg-accent/10 border-border">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm text-blue-800 dark:text-blue-200">
+              <CardTitle className="text-sm text-primary">
                 {existingReply ? "Edit Reply" : "Reply to Review"}
               </CardTitle>
               <Button
@@ -199,6 +199,7 @@ export function ReviewReply({ reviewId, restaurantId, existingReply }: ReviewRep
                   setIsReplying(false)
                   setReplyMessage(existingReply?.reply_message || "")
                 }}
+                className="hover:bg-secondary/50"
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -210,7 +211,7 @@ export function ReviewReply({ reviewId, restaurantId, existingReply }: ReviewRep
                 value={replyMessage}
                 onChange={(e) => setReplyMessage(e.target.value)}
                 placeholder="Write your response to this review..."
-                className="min-h-[100px] resize-none bg-white dark:bg-gray-900"
+                className="min-h-[100px] resize-none bg-background border-input focus:ring-primary focus:border-primary"
                 maxLength={1000}
               />
               <div className="flex items-center justify-between">
@@ -226,6 +227,7 @@ export function ReviewReply({ reviewId, restaurantId, existingReply }: ReviewRep
                       setIsReplying(false)
                       setReplyMessage(existingReply?.reply_message || "")
                     }}
+                    className="hover:bg-secondary/50"
                   >
                     Cancel
                   </Button>
@@ -233,7 +235,7 @@ export function ReviewReply({ reviewId, restaurantId, existingReply }: ReviewRep
                     type="submit"
                     size="sm"
                     disabled={!replyMessage.trim() || replyMutation.isPending}
-                    className="bg-blue-600 hover:bg-blue-700"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   >
                     <Send className="h-4 w-4 mr-2" />
                     {replyMutation.isPending 
