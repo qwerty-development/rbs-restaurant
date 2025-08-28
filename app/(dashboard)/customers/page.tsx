@@ -19,7 +19,8 @@ import {
   Mail,
   Calendar,
   TrendingUp,
-  X
+  X,
+  Edit
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
@@ -51,6 +52,7 @@ import { AddCustomerDialog } from '@/components/customers/add-customer-dialog'
 import CustomerMergeSelectionDialog from '@/components/customers/customer-merge-selection-dialog'
 import { CustomerBulkActions } from '@/components/customers/customer-bulk-actions'
 import { CustomerInsights } from '@/components/customers/customer-insights'
+import { EditCustomerDialog } from '@/components/customers/edit-customer-dialog'
 import { restaurantAuth } from '@/lib/restaurant-auth'
 import type { RestaurantCustomer, CustomerTag, CustomerFilters } from '@/types/customer'
 
@@ -84,7 +86,9 @@ export default function CustomersPage() {
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [showAddCustomerDialog, setShowAddCustomerDialog] = useState(false)
   const [showMergeDialog, setShowMergeDialog] = useState(false)
+  const [showEditDialog, setShowEditDialog] = useState(false)
   const [customerToMerge, setCustomerToMerge] = useState<RestaurantCustomer | null>(null)
+  const [customerToEdit, setCustomerToEdit] = useState<RestaurantCustomer | null>(null)
 
   const loadInitialData = useCallback(async () => {
     try {
@@ -813,15 +817,39 @@ export default function CustomersPage() {
                       </div>
                       
                       {!isSelectMode && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <Button variant="ghost" size="icon">
-                              <MoreVertical className="h-4 w-4" />
+                        <div className="flex items-center gap-1">
+                          {restaurantAuth.hasPermission(currentStaff?.permissions || [], 'customers.manage', currentStaff?.role) && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setCustomerToEdit(customer)
+                                setShowEditDialog(true)
+                              }}
+                              className="h-8 w-8"
+                            >
+                              <Edit className="h-4 w-4" />
                             </Button>
-                          </DropdownMenuTrigger>
+                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuSeparator />
+                            {restaurantAuth.hasPermission(currentStaff?.permissions || [], 'customers.manage', currentStaff?.role) && (
+                              <DropdownMenuItem onClick={(e) => {
+                                e.stopPropagation()
+                                setCustomerToEdit(customer)
+                                setShowEditDialog(true)
+                              }}>
+                                Edit Customer
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={(e) => {
                               e.stopPropagation()
                               handleToggleVIP(customer)
@@ -852,7 +880,8 @@ export default function CustomersPage() {
                               </>
                             )}
                           </DropdownMenuContent>
-                        </DropdownMenu>
+                          </DropdownMenu>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -908,6 +937,16 @@ export default function CustomersPage() {
         restaurantId={restaurantId}
         onSuccess={() => loadCustomers(restaurantId)}
       />
+
+      {customerToEdit && (
+        <EditCustomerDialog
+          customer={customerToEdit}
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          onSuccess={() => loadCustomers(restaurantId)}
+          restaurantId={restaurantId}
+        />
+      )}
     </div>
   )
 }
