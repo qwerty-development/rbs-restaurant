@@ -7,7 +7,6 @@ import { StaffChatProvider } from "@/lib/contexts/staff-chat-context"
 import StaffChatToggle from "@/components/chat/chat-toggle"
 import StaffChatPanel from "@/components/chat/staff-chat-panel"
 import { SidebarProvider } from "@/lib/contexts/sidebar-context"
-import { Footer } from "@/components/layout/footer"
 
 export default async function DashboardLayout({
   children,
@@ -60,12 +59,11 @@ export default async function DashboardLayout({
         </div>
 
         {/* Main Content - Full height optimization without header */}
-        <div className="transition-all duration-200 ease-out sm:ml-16 flex flex-col min-h-screen px-1 ">
+        <div className="transition-all duration-200 ease-out sm:ml-16">
           <StaffChatProvider restaurantId={staffData.restaurant.id}>
-            <main className="flex-1">
+            <main className="min-h-screen">
               {children}
             </main>
-            <Footer variant="dashboard" />
             <StaffChatToggle />
             <StaffChatPanel />
           </StaffChatProvider>
