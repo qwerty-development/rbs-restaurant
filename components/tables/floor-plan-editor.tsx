@@ -12,8 +12,6 @@ import {
   ZoomIn, 
   ZoomOut, 
   Grid3X3, 
-  Settings, 
-  Copy,
   Trash2,
   Printer,
   Layers,
@@ -29,7 +27,8 @@ import {
   Eye,
   EyeOff,
   Maximize2,
-  Info
+  Info,
+  Utensils
 } from "lucide-react"
 import type { RestaurantTable, RestaurantSection } from "@/types"
 import { useQuery } from "@tanstack/react-query"
@@ -81,7 +80,7 @@ const SECTION_ICONS = {
   mappin: MapPin,
   building: Building,
   layers: Layers,
-  utensils: Settings, // fallback for 'utensils' icon used in migration
+  utensils: Utensils, // fallback for 'utensils' icon used in migration
 }
 
 interface DragState {
@@ -1446,7 +1445,7 @@ export function FloorPlanEditor({
                       )}
                       onClick={() => setEditMode("resize")}
                     >
-                      <Settings className="h-3 w-3 mr-1" />
+                      <Move className="h-3 w-3 mr-1" />
                       Resize
                     </Button>
                   </div>
@@ -1707,28 +1706,6 @@ export function FloorPlanEditor({
                       
                       {/* Action buttons - Enhanced for touch */}
                       <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 flex gap-2 pointer-events-auto">
-                        <Button 
-                          size="sm" 
-                          variant="secondary" 
-                          className="h-10 w-10 p-0 shadow-md touch-manipulation"
-                          style={{ touchAction: 'manipulation' }}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                          }}
-                        >
-                          <Settings className="h-5 w-5" />
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="secondary" 
-                          className="h-10 w-10 p-0 shadow-md touch-manipulation"
-                          style={{ touchAction: 'manipulation' }}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                          }}
-                        >
-                          <Copy className="h-5 w-5" />
-                        </Button>
                         {onTableDelete && (
                           <Button 
                             size="sm" 
