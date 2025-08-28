@@ -244,6 +244,15 @@ export function FloorPlanEditor({
   const TOUCH_TAP_MAX_DURATION = 200 // milliseconds for tap vs drag
   const TOUCH_DELAY_THRESHOLD = 100 // milliseconds to wait before confirming touch action
 
+  // iPad Pro detection
+  const isIPadPro = useMemo(() => {
+    if (typeof navigator === 'undefined') return false
+    const userAgent = navigator.userAgent
+    const isIPad = /iPad/.test(userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    const isLargeScreen = window.screen?.width >= 1024 || window.screen?.height >= 1024
+    return isIPad && isLargeScreen
+  }, [])
+
   // Helper function to get coordinates from mouse or touch event
   const getEventCoordinates = (e: MouseEvent | TouchEvent): { clientX: number; clientY: number } => {
     if ('touches' in e && e.touches.length > 0) {
@@ -265,6 +274,21 @@ export function FloorPlanEditor({
     }
     return null
   }
+
+  // Force reflow for iPad Pro Safari (helps with live resize updates)
+  const forceReflow = useCallback((element: HTMLElement) => {
+    if (isIPadPro) {
+      // Force Safari to recalculate layout immediately
+      element.style.transform = element.style.transform || 'translateZ(0)'
+      const dummy = element.offsetHeight // Trigger reflow
+      element.style.willChange = 'width, height, transform'
+      
+      // Use a microtask to ensure the paint happens
+      Promise.resolve().then(() => {
+        element.style.transform = `scale(${zoom / 100}) translateZ(0)`
+      })
+    }
+  }, [isIPadPro, zoom])
 
   // Unified drag start handler for mouse and touch
   const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent, tableId: string) => {
@@ -419,6 +443,16 @@ export function FloorPlanEditor({
     if (isTouch) {
       document.body.style.overflow = 'hidden'
       tableElement.style.touchAction = 'none'
+      
+      // iPad Pro specific optimizations
+      if (isIPadPro) {
+        tableElement.style.willChange = 'width, height, transform'
+        tableElement.style.transform = `scale(${zoom / 100}) translateZ(0)`
+        // Force immediate visual feedback for iPad Pro
+        tableElement.style.outline = '2px solid #22c55e'
+        tableElement.style.outlineOffset = '2px'
+      }
+      
       // Add haptic feedback for touch devices
       if ('vibrate' in navigator) {
         navigator.vibrate(50)
@@ -427,7 +461,7 @@ export function FloorPlanEditor({
     
     setIsResizing(true)
     console.log('🎯 Resize state set to true')
-  }, [viewMode, isDragging, editMode, zoom])
+  }, [viewMode, isDragging, editMode, zoom, isIPadPro])
 
   // Unified move handler for mouse and touch
   const handleMove = useCallback((e: MouseEvent | TouchEvent) => {
@@ -568,14 +602,45 @@ export function FloorPlanEditor({
         resizeState.element!.style.width = `${newWidth}px`
         resizeState.element!.style.height = `${newHeight}px`
         
+        // iPad Pro specific: Force immediate visual update
+        if (isIPadPro) {
+          // Force immediate DOM update without waiting for next frame
+          const element = resizeState.element!
+          
+          // Update transform to ensure Safari sees the change
+          element.style.transform = `scale(${zoom / 100}) translateZ(0)`
+          
+          // Force reflow and repaint
+          forceReflow(element)
+          
+          // Update visual resize indicator immediately
+          element.style.boxShadow = `0 0 0 4px rgba(34, 197, 94, 0.3), 0 0 0 8px rgba(34, 197, 94, 0.1)`
+        }
+        
         // Update the stored size reference
         finalSizesRef.current[resizeState.tableId!] = { width: newWidth, height: newHeight }
         
         // Also update the original size reference to maintain consistency
         originalSizesRef.current[resizeState.tableId!] = { width: newWidth, height: newHeight }
       })
+      
+      // iPad Pro specific: Also apply immediate updates outside of requestAnimationFrame
+      if (isIPadPro) {
+        const scaledDeltaX = deltaX / (zoom / 100)
+        const scaledDeltaY = deltaY / (zoom / 100)
+        
+        const newWidth = Math.max(40, resizeState.initialWidth + scaledDeltaX)
+        const newHeight = Math.max(30, resizeState.initialHeight + scaledDeltaY)
+        
+        // Immediate style update for iPad Pro Safari
+        resizeState.element!.style.width = `${newWidth}px`
+        resizeState.element!.style.height = `${newHeight}px`
+        
+        // Force Safari to acknowledge the change immediately
+        const dummy = resizeState.element!.getBoundingClientRect()
+      }
     }
-  }, [isDragging, isResizing, zoom])
+  }, [isDragging, isResizing, zoom, isIPadPro, forceReflow])
 
   // Unified end handler for mouse and touch
   const handleEnd = useCallback((e?: MouseEvent | TouchEvent) => {
@@ -629,6 +694,18 @@ export function FloorPlanEditor({
       
       // Remove resize indicator class
       resizeState.element.classList.remove('resize-active')
+      
+      // iPad Pro specific cleanup
+      if (isIPadPro) {
+        resizeState.element.style.willChange = 'auto'
+        resizeState.element.style.outline = ''
+        resizeState.element.style.outlineOffset = ''
+        resizeState.element.style.boxShadow = ''
+        resizeState.element.style.transform = `scale(${zoom / 100})`
+        
+        // Final force reflow to ensure Safari applies the final state
+        forceReflow(resizeState.element)
+      }
       
       // Save final size to database only if resize was confirmed
       if (resizeState.isResizeConfirmed) {
@@ -686,7 +763,7 @@ export function FloorPlanEditor({
     
     setIsDragging(false)
     setIsResizing(false)
-  }, [onTableUpdate, onTableResize])
+  }, [onTableUpdate, onTableResize, isIPadPro, zoom, forceReflow])
 
   // Setup global event listeners for both mouse and touch
   useEffect(() => {
@@ -1198,6 +1275,31 @@ export function FloorPlanEditor({
           transform: scale(1.1) !important;
           background-color: #16a34a !important;
           box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4), 0 0 0 4px white !important;
+        }
+        
+        /* iPad Pro specific optimizations */
+        @supports (-webkit-touch-callout: none) {
+          /* iPad Safari specific */
+          [data-table-id] {
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+          }
+          
+          .resize-active {
+            will-change: width, height, transform !important;
+            -webkit-transform: translateZ(0) !important;
+            transform: translateZ(0) !important;
+          }
+          
+          /* Force GPU acceleration for iPad Pro resize */
+          [data-table-id].resize-active {
+            -webkit-perspective: 1000px;
+            perspective: 1000px;
+            -webkit-transform-style: preserve-3d;
+            transform-style: preserve-3d;
+          }
         }
         
         /* Subtle pulse animation for resize handles on touch devices */
