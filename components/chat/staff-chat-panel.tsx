@@ -68,6 +68,32 @@ export default function StaffChatPanel() {
     }
   }, [isOpen, messages])
 
+  const handleStaffChatError = (error: any, response?: Response) => {
+    if (response?.status === 403) {
+      console.error('Request blocked - check User-Agent header')
+      return 'Request was blocked. Please contact support.'
+    }
+    
+    if (response?.status === 429) {
+      const retryAfter = response.headers?.get('retry-after') || '60'
+      console.error(`Rate limited. Retry after ${retryAfter} seconds`)
+      return `Too many requests. Please wait ${retryAfter} seconds before trying again.`
+    }
+    
+    if (response?.status === 400) {
+      console.error('Bad request:', error)
+      return 'Invalid request. Please check your input.'
+    }
+    
+    if (response?.status === 503) {
+      console.error('Service unavailable')
+      return 'AI service is temporarily unavailable. Please try again later.'
+    }
+    
+    console.error('Unexpected error:', error)
+    return 'An unexpected error occurred. Please try again.'
+  }
+
   const canSend = useMemo(() => input.trim().length > 0 && !isSending, [input, isSending])
 
   const sessionInfo = getSessionInfo()
@@ -151,7 +177,8 @@ export default function StaffChatPanel() {
       }
       if (!res.ok) {
         console.error('[StaffChat] Request failed', { status: res.status, body: data })
-        throw new Error(data?.error || 'Request failed')
+        const errorMessage = handleStaffChatError(data?.error || 'Request failed', res)
+        throw new Error(errorMessage)
       }
       
       const assistantResponse = data?.response ?? 'No response'
@@ -173,16 +200,18 @@ export default function StaffChatPanel() {
       try {
         console.error('[StaffChat] Error details', { name: error?.name, message: error?.message, stack: error?.stack })
       } catch {}
+      
+      const errorMessage = error?.message || 'Error contacting Staff AI. Please try again.'
       const errMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'system',
-        content: 'Error contacting Staff AI. Please try again.',
+        content: errorMessage,
         ts: Date.now(),
       }
       setMessages(prev => [...prev, errMsg])
       
       // Add error to conversation memory
-      addMessage('system', 'Error contacting Staff AI. Please try again.')
+      addMessage('system', errorMessage)
     } finally {
       setIsSending(false)
     }
