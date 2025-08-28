@@ -288,13 +288,16 @@ export default function StaffPage() {
   // Search users when email changes
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (emailSearch && !selectedUser) {
+      if (emailSearch && emailSearch.length >= 3 && !selectedUser) {
+        console.log('Searching for users with email:', emailSearch)
         searchUsers(emailSearch)
+      } else if (emailSearch.length < 3) {
+        setSearchedUsers([])
       }
-    }, 500)
+    }, 300) // Reduced delay for better responsiveness
 
     return () => clearTimeout(timer)
-  }, [emailSearch, selectedUser])
+  }, [emailSearch, selectedUser, restaurantId])
 
   // Watch edit role changes to update permissions
   const editWatchedRole = editForm.watch("role")
@@ -394,16 +397,60 @@ export default function StaffPage() {
     try {
       setIsSearchingUsers(true)
 
-      // Query profiles by email directly via Supabase client
+      // Clean and normalize the search email
+      const cleanEmail = email.trim().toLowerCase()
+      console.log('Searching for users with cleaned email:', cleanEmail)
+
+      // First try to search in profiles table by email
       const { data: profileUsers, error: profileError } = await supabase
         .from('profiles')
         .select('id, full_name, phone_number, avatar_url, email')
-        .ilike('email', `%${email}%`)
+        .or(`email.ilike.%${cleanEmail}%,email.eq.${cleanEmail}`)
         .limit(20)
 
-      if (profileError) throw profileError
+      console.log('Profile search results:', profileUsers, 'Error:', profileError)
 
-      let users: SearchedUser[] = (profileUsers || []) as any
+      let users: SearchedUser[] = []
+
+      // If we found users in profiles, use them
+      if (profileUsers && profileUsers.length > 0) {
+        users = profileUsers.filter(u => u.email && u.full_name) as any
+      }
+
+      // If no users found by email, try searching by name (in case they typed a name instead of email)
+      if (users.length === 0) {
+        console.log('No email matches, trying name search...')
+        const { data: nameSearch, error: nameError } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone_number, avatar_url, email')
+          .ilike('full_name', `%${cleanEmail}%`)
+          .limit(10)
+
+        console.log('Name search results:', nameSearch, 'Error:', nameError)
+
+        if (nameSearch && nameSearch.length > 0) {
+          users = nameSearch.filter(u => u.email && u.full_name) as any
+        }
+      }
+
+      // If still no results, try a broader search
+      if (users.length === 0) {
+        console.log('No name matches, trying broader search...')
+        const emailParts = cleanEmail.includes('@') ? cleanEmail.split('@') : [cleanEmail]
+        const { data: broadSearch, error: broadError } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone_number, avatar_url, email')
+          .or(`full_name.ilike.%${emailParts[0]}%,email.ilike.%${emailParts[0]}%`)
+          .limit(15)
+
+        console.log('Broad search results:', broadSearch, 'Error:', broadError)
+
+        if (broadSearch && broadSearch.length > 0) {
+          users = broadSearch.filter(u => u.email && u.full_name) as any
+        }
+      }
+
+      console.log('Final user results before staff check:', users)
 
       // Mark users already staff for this restaurant
       if (users.length > 0 && restaurantId) {
@@ -414,13 +461,23 @@ export default function StaffPage() {
           .eq('restaurant_id', restaurantId)
           .in('user_id', userIds)
 
-        if (!staffCheckError) {
-          const staffUserIds = new Set((existingStaff || []).map(s => s.user_id))
+        console.log('Existing staff check:', existingStaff, 'Error:', staffCheckError)
+
+        if (!staffCheckError && existingStaff) {
+          const staffUserIds = new Set(existingStaff.map(s => s.user_id))
           users = users.map(u => ({ ...u, isAlreadyStaff: staffUserIds.has(u.id) }))
         }
       }
 
-      setSearchedUsers(users)
+      // Filter out users with null/empty emails and ensure they have the required fields
+      const validUsers = users.filter(u => 
+        u.email && 
+        u.full_name && 
+        u.id
+      )
+
+      console.log('Final valid users:', validUsers)
+      setSearchedUsers(validUsers)
 
     } catch (error: any) {
       console.error('Error searching users:', error)
@@ -667,25 +724,53 @@ export default function StaffPage() {
                         placeholder="Enter email to search for existing users..."
                         value={emailSearch}
                         onChange={(e) => setEmailSearch(e.target.value)}
-                        className="pr-10"
+                        className="pr-20"
                       />
-                      {isSearchingUsers && (
-                        <div className="absolute right-3 top-3">
+                      <div className="absolute right-2 top-2 flex items-center gap-1">
+                        {isSearchingUsers && (
                           <Loader2 className="h-4 w-4 animate-spin" />
-                        </div>
-                      )}
-                      {selectedUser && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-2 top-2 h-6 w-6 p-0"
-                          onClick={clearUserSelection}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      )}
+                        )}
+                        {emailSearch && emailSearch.length >= 3 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => searchUsers(emailSearch)}
+                            disabled={isSearchingUsers}
+                          >
+                            <Search className="h-3 w-3" />
+                          </Button>
+                        )}
+                        {selectedUser && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={clearUserSelection}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
+                    {emailSearch && emailSearch.length >= 3 && !isSearchingUsers && searchedUsers.length === 0 && !selectedUser && (
+                      <div className="text-sm text-muted-foreground mt-1 space-y-1">
+                        <p>No users found with this email. Try:</p>
+                        <ul className="text-xs list-disc list-inside ml-2 space-y-1">
+                          <li>Checking the email spelling</li>
+                          <li>Searching by name instead</li>
+                          <li>Using just the username part (before @)</li>
+                          <li>Making sure the user has registered</li>
+                        </ul>
+                      </div>
+                    )}
+                    {emailSearch && emailSearch.length < 3 && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Enter at least 3 characters to search
+                      </p>
+                    )}
                   </div>
 
                   {/* Selected User Display */}
