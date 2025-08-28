@@ -384,19 +384,19 @@ export function OrderEntryModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl h-[90vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Create New Order</DialogTitle>
           <DialogDescription>
             Select a booking and add menu items to create an order
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 grid grid-cols-3 gap-6 overflow-hidden">
+        <div className="flex-1 grid grid-cols-3 gap-6 min-h-0 overflow-hidden">
           {/* Left Column - Menu Selection */}
-          <div className="col-span-2 space-y-4 overflow-hidden">
+          <div className="col-span-2 space-y-4 flex flex-col min-h-0">
             {/* Booking Selection */}
-            <div className="space-y-2">
+            <div className="space-y-2 flex-shrink-0">
               <Label>Select Booking</Label>
               <Select value={selectedBooking} onValueChange={setSelectedBooking}>
                 <SelectTrigger>
@@ -467,7 +467,7 @@ export function OrderEntryModal({
             </div>
 
             {/* Menu Categories */}
-            <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
+            <Tabs value={selectedCategory} onValueChange={setSelectedCategory} className="flex-shrink-0">
               <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="all">All</TabsTrigger>
                 {categories.slice(0, 4).map((category: any) => (
@@ -479,7 +479,7 @@ export function OrderEntryModal({
             </Tabs>
 
             {/* Search */}
-            <div className="relative">
+            <div className="relative flex-shrink-0">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search menu items..."
@@ -490,103 +490,107 @@ export function OrderEntryModal({
             </div>
 
             {/* Menu Items */}
-            <ScrollArea className="flex-1">
-              <div className="grid grid-cols-2 gap-3">
-                {filteredItems.map((item: any) => (
-                  <Card
-                    key={item.id}
-                    className="cursor-pointer hover:shadow-md transition-shadow bg-card border-border hover:border-primary/50"
-                    onClick={() => addToOrder(item)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-start">
-                          <h4 className="font-medium text-sm text-card-foreground">{item.name}</h4>
-                          <span className="font-bold text-sm text-card-foreground">${item.price.toFixed(2)}</span>
-                        </div>
-
-                        {item.description && (
-                          <p className="text-xs text-muted-foreground line-clamp-2">
-                            {item.description}
-                          </p>
-                        )}
-                        
-                        <div className="flex flex-wrap gap-1">
-                          {item.dietary_tags?.map((tag: any) => (
-                            <Badge key={tag} variant="outline" className="text-xs">
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                        
-                        {item.preparation_time && (
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock className="h-3 w-3" />
-                            <span>{item.preparation_time}min</span>
+            <div className="flex-1 min-h-0">
+              <ScrollArea className="h-full">
+                <div className="grid grid-cols-2 gap-3 p-1">
+                  {filteredItems.map((item: any) => (
+                    <Card
+                      key={item.id}
+                      className="cursor-pointer hover:shadow-md transition-shadow bg-card border-border hover:border-primary/50"
+                      onClick={() => addToOrder(item)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-start">
+                            <h4 className="font-medium text-sm text-card-foreground">{item.name}</h4>
+                            <span className="font-bold text-sm text-card-foreground">${item.price.toFixed(2)}</span>
                           </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </ScrollArea>
+
+                          {item.description && (
+                            <p className="text-xs text-muted-foreground line-clamp-2">
+                              {item.description}
+                            </p>
+                          )}
+                          
+                          <div className="flex flex-wrap gap-1">
+                            {item.dietary_tags?.map((tag: any) => (
+                              <Badge key={tag} variant="outline" className="text-xs">
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                          
+                          {item.preparation_time && (
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Clock className="h-3 w-3" />
+                              <span>{item.preparation_time}min</span>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
           </div>
 
           {/* Right Column - Order Summary */}
-          <div className="space-y-4 overflow-hidden flex flex-col">
-            <div className="flex items-center gap-2">
+          <div className="space-y-4 flex flex-col min-h-0">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <ShoppingCart className="h-5 w-5" />
               <h3 className="font-semibold">Order Summary</h3>
               <Badge variant="secondary">{orderItems.length} items</Badge>
             </div>
 
-            <ScrollArea className="flex-1">
-              <div className="space-y-3">
-                {orderItems.map((item) => (
-                  <Card key={item.menu_item_id} className="bg-card border-border">
-                    <CardContent className="p-3">
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-start">
-                          <span className="font-medium text-sm text-card-foreground">{item.menu_item.name}</span>
-                          <span className="font-bold text-sm text-card-foreground">
-                            ${(item.menu_item.price * item.quantity).toFixed(2)}
-                          </span>
+            <div className="flex-1 min-h-0">
+              <ScrollArea className="h-full">
+                <div className="space-y-3 p-1">
+                  {orderItems.map((item) => (
+                    <Card key={item.menu_item_id} className="bg-card border-border">
+                      <CardContent className="p-3">
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-start">
+                            <span className="font-medium text-sm text-card-foreground">{item.menu_item.name}</span>
+                            <span className="font-bold text-sm text-card-foreground">
+                              ${(item.menu_item.price * item.quantity).toFixed(2)}
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateQuantity(item.menu_item_id, item.quantity - 1)}
+                            >
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                            <span className="w-8 text-center">{item.quantity}</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateQuantity(item.menu_item_id, item.quantity + 1)}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          
+                          <Input
+                            placeholder="Special instructions..."
+                            value={item.special_instructions || ""}
+                            onChange={(e) => updateItemInstructions(item.menu_item_id, e.target.value)}
+                            className="text-xs"
+                          />
                         </div>
-                        
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => updateQuantity(item.menu_item_id, item.quantity - 1)}
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <span className="w-8 text-center">{item.quantity}</span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => updateQuantity(item.menu_item_id, item.quantity + 1)}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                        </div>
-                        
-                        <Input
-                          placeholder="Special instructions..."
-                          value={item.special_instructions || ""}
-                          onChange={(e) => updateItemInstructions(item.menu_item_id, e.target.value)}
-                          className="text-xs"
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </ScrollArea>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
 
             {/* Special Instructions */}
-            <div className="space-y-2">
+            <div className="space-y-2 flex-shrink-0">
               <Label>Order Instructions</Label>
               <Textarea
                 placeholder="Special instructions for the entire order..."
@@ -597,7 +601,7 @@ export function OrderEntryModal({
             </div>
 
             {/* Order Total */}
-            <div className="space-y-2 border-t border-border pt-4">
+            <div className="space-y-2 border-t border-border pt-4 flex-shrink-0">
               <div className="flex justify-between text-sm text-foreground">
                 <span>Subtotal:</span>
                 <span>${subtotal.toFixed(2)}</span>
@@ -616,7 +620,7 @@ export function OrderEntryModal({
             <Button
               onClick={handleSubmit}
               disabled={isSubmitting || !selectedBooking || orderItems.length === 0}
-              className="w-full"
+              className="w-full flex-shrink-0"
             >
               {isSubmitting ? "Creating Order..." : "Create Order"}
             </Button>

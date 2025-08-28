@@ -260,7 +260,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl w-full h-[95vh] flex flex-col p-0">
+      <DialogContent className="max-w-4xl w-full max-h-[90vh] flex flex-col p-0 overflow-hidden">
         <div className="flex-shrink-0 px-6 py-4 border-b">
           <DialogHeader>
             <div className="flex items-center justify-between">

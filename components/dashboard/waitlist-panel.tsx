@@ -959,7 +959,10 @@ export function WaitlistPanel({
           <div className="space-y-4">
             {/* Customer Search */}
             <div className="space-y-2">
-              <Label>Customer Search (Optional)</Label>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-popover-foreground flex items-center gap-2">
+                <Search className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                Customer Search (Optional)
+              </h3>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -1030,7 +1033,10 @@ export function WaitlistPanel({
 
             {/* Guest Information */}
             <div className="space-y-3">
-              <Label>Guest Information</Label>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-popover-foreground flex items-center gap-2">
+                <UserCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                Guest Information (Optional)
+              </h3>
               <Input
                 placeholder="Guest name"
                 value={selectedCustomer 
@@ -1064,7 +1070,10 @@ export function WaitlistPanel({
 
             {/* Waitlist Details */}
             <div className="space-y-3">
-              <Label>Waitlist Details</Label>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-popover-foreground flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                Waitlist Details
+              </h3>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-full justify-start text-left">
@@ -1286,7 +1295,10 @@ export function WaitlistPanel({
             <div className="space-y-6">
               {/* Time Selection */}
               <div className="space-y-3">
-                <Label>Select Time</Label>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-popover-foreground flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  Select Time
+                </h3>
                 <div className="grid grid-cols-4 gap-2">
                   {getAvailableTimeSlots().map((timeSlot) => (
                     <Button
@@ -1304,7 +1316,10 @@ export function WaitlistPanel({
 
               {/* Table Selection */}
               <div className="space-y-3">
-                <Label>Select Tables (Capacity needed: {convertingEntry.party_size})</Label>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-popover-foreground flex items-center gap-2">
+                  <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  Select Tables (Capacity needed: {convertingEntry.party_size})
+                </h3>
                 <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
                   {allTables?.map((table) => {
                     const isSelected = selectedTables.includes(table.id)
