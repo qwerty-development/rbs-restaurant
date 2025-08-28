@@ -160,7 +160,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
   const [hoveredTable, setHoveredTable] = useState<string | null>(null)
   const [loadingTransition, setLoadingTransition] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
-  const [selectedSection, setSelectedSection] = useState<string>(defaultSectionId || "all")
+  const [selectedSection, setSelectedSection] = useState<string>(defaultSectionId || "")
   const [sectionViewMode, setSectionViewMode] = useState<"tabs" | "dropdown">("tabs")
   const [showSectionOverview, setShowSectionOverview] = useState(false)
   const floorPlanRef = useRef<HTMLDivElement>(null)
@@ -205,9 +205,22 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
     enabled: !!restaurantId,
   })
 
+  // Set first section as default when sections are loaded
+  useEffect(() => {
+    if (sections && sections.length > 0) {
+      if (defaultSectionId && sections.find(s => s.id === defaultSectionId)) {
+        // Use provided default section if it exists
+        setSelectedSection(defaultSectionId)
+      } else if (!selectedSection || selectedSection === "" || selectedSection === "all") {
+        // Set first section as default if no valid section is selected
+        setSelectedSection(sections[0].id)
+      }
+    }
+  }, [sections, defaultSectionId])
+
   // Filter tables by selected section
   const filteredTables = useMemo(() => {
-    if (selectedSection === "all") {
+    if (!selectedSection || selectedSection === "" || selectedSection === "all") {
       return tables
     }
     return tables.filter(table => table.section_id === selectedSection)
@@ -314,26 +327,6 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 </button>
               )
             })}
-            
-            <button
-              className={cn(
-                "w-full p-2 rounded-lg border text-left transition-all",
-                selectedSection === "all" 
-                  ? "bg-primary/10 border-primary shadow-sm" 
-                  : "hover:bg-muted border-border"
-              )}
-              onClick={() => setSelectedSection("all")}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Grid3X3 className="h-4 w-4" />
-                  <span className="font-medium text-sm">All Sections</span>
-                </div>
-                <Badge variant="outline" className="text-xs">
-                  {tables.length} tables
-                </Badge>
-              </div>
-            </button>
           </div>
         </div>
       </Card>
@@ -892,13 +885,13 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               )}
 
               {/* Table header - Ultra compact */}
-              <div className="flex items-center justify-between mb-0.5">
+              <div className="flex flex-col items-center mb-0.5">
                 <div className="flex items-center gap-0.5">
                   <StatusIcon className="h-2.5 w-2.5 text-current" />
                   <span className="font-bold text-[10px] text-foreground">T{table.table_number}</span>
                 </div>
                 <span className="text-[8px] text-muted-foreground font-medium">
-                  👥{table.max_capacity}
+                  <UserCheck className="h-2.5 w-2.5 inline-block mr-0.5" />{table.max_capacity}
                 </span>
               </div>
 
@@ -919,7 +912,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                             ? "bg-red-500 text-white" 
                             : "bg-blue-500 text-white"
                         )}>
-                          👥{current.party_size}{current.party_size > table.max_capacity && '⚠️'}
+                          <UserCheck className="h-2.5 w-2.5 inline-block mr-0.5" />{current.party_size}{current.party_size > table.max_capacity && '⚠️'}
                         </div>
                         
                         {/* Time indicator with urgency colors */}
@@ -1071,7 +1064,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 size="sm"
                 variant="ghost"
                 onClick={() => navigateSection('prev')}
-                disabled={!hasPrevSection && selectedSection !== "all"}
+                disabled={!hasPrevSection}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -1079,14 +1072,6 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               <ScrollArea className="flex-1">
                 <Tabs value={selectedSection} onValueChange={setSelectedSection}>
                   <TabsList className="w-full justify-start">
-                    <TabsTrigger value="all" className="gap-2">
-                      <Grid3X3 className="h-4 w-4" />
-                      All
-                      <Badge variant="secondary" className="ml-1 text-xs">
-                        {tables.length}
-                      </Badge>
-                    </TabsTrigger>
-                    
                     {sectionStats.map(stat => {
                       const Icon = SECTION_ICONS[stat.icon as keyof typeof SECTION_ICONS] || Grid3X3
                       
@@ -1150,12 +1135,6 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">
-                    <div className="flex items-center gap-2">
-                      <Grid3X3 className="h-4 w-4" />
-                      All Sections ({tables.length} tables)
-                    </div>
-                  </SelectItem>
                   {sectionStats.map(stat => {
                     const Icon = SECTION_ICONS[stat.icon as keyof typeof SECTION_ICONS] || Grid3X3
                     
@@ -1371,7 +1350,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
           })()}
           
           {/* Empty state for sections */}
-          {filteredTables.length === 0 && selectedSection !== "all" && (
+          {filteredTables.length === 0 && selectedSection && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">
                 <Layers className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
