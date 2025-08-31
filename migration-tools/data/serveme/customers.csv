@@ -1,0 +1,6 @@
+Customer Name,Email,Phone,VIP,Notes,Dietary Restrictions,Allergies,Tags,First Visit,Last Visit,Total Visits,Total Spent
+John Smith,john.smith@email.com,555-123-4567,Yes,Regular customer - prefers window seats,Vegetarian,Nuts,VIP;Regular;Window Seating,2023-01-15,2024-08-20,24,850.50
+Sarah Johnson,sarah.j@email.com,555-234-5678,No,Celebrates anniversaries here,None,Shellfish,Anniversary;Couple,2023-06-10,2024-07-15,8,320.75
+Mike Brown,mike.brown@gmail.com,555-345-6789,No,Always orders dessert,Gluten Free,None,Sweet Tooth,2024-02-01,2024-08-18,12,480.25
+Lisa Davis,lisa.davis@email.com,555-456-7890,Yes,Business lunches - needs quiet table,None,Dairy,Business;VIP;Quiet,2022-11-20,2024-08-25,35,1250.00
+Robert Wilson,robert.w@email.com,555-567-8901,No,Large family gatherings,None,None,Family;Large Parties,2023-03-05,2024-06-30,6,750.80
