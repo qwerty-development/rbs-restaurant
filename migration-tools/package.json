@@ -1,0 +1,38 @@
+{
+  "name": "serveme-migration-tools",
+  "version": "1.0.0",
+  "description": "Migration tools for importing data from Serveme to Plate Restaurant Management System",
+  "main": "migrate-serveme.ts",
+  "scripts": {
+    "migrate:serveme": "npx ts-node migrate-serveme.ts",
+    "migrate:serveme:dry-run": "npx ts-node migrate-serveme.ts --dry-run",
+    "migrate:serveme:verbose": "npx ts-node migrate-serveme.ts --verbose",
+    "build": "tsc",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "csv-parser": "^3.0.0",
+    "xlsx": "^0.18.5",
+    "commander": "^11.1.0",
+    "chalk": "^4.1.2",
+    "ora": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/csv-parser": "^1.1.0",
+    "typescript": "^5.3.0",
+    "ts-node": "^10.9.0",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.0"
+  },
+  "keywords": [
+    "migration",
+    "serveme",
+    "restaurant",
+    "data-import",
+    "supabase"
+  ],
+  "author": "Plate Restaurant Management System",
+  "license": "MIT"
+}

@@ -15,8 +15,28 @@
       "Bash(rm:*)",
       "mcp__ide__getDiagnostics",
       "Bash(grep:*)",
-      "Bash(npm run lint:*)"
+      "Bash(npm run lint:*)",
+      "Read(/Users/asifalam/Library/Application Support/Code/User/**)",
+      "Read(/Users/asifalam/**)",
+      "mcp__fetch__imageFetch",
+      "mcp__puppeteer__puppeteer_navigate",
+      "mcp__puppeteer__puppeteer_screenshot",
+      "Bash(claude mcp:*)",
+      "Bash(claude:*)",
+      "Bash(npx:*)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "mcp__filesystem__list_allowed_directories",
+      "mcp__filesystem__list_directory",
+      "mcp__filesystem__read_text_file",
+      "mcp__supabase__list_projects",
+      "mcp__supabase__list_tables",
+      "mcp__supabase__execute_sql"
     ],
     "deny": []
-  }
+  },
+  "enabledMcpjsonServers": [
+    "fetch",
+    "puppeteer",
+    "supabase"
+  ]
 }
