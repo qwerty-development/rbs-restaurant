@@ -222,16 +222,20 @@ export function LocationPicker({
 
   // Map click handler component  
   const MapEvents = () => {
-    if (typeof window !== 'undefined') {
-      const { useMapEvents } = require('react-leaflet');
-      useMapEvents({
-        click: (e: any) => {
-          if (!disabled) {
-            handleLocationChange({ lat: e.latlng.lat, lng: e.latlng.lng });
-          }
-        },
-      });
+    if (typeof window === 'undefined') {
+      return null;
     }
+    
+    const { useMapEvents } = require('react-leaflet');
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useMapEvents({
+      click: (e: any) => {
+        if (!disabled) {
+          handleLocationChange({ lat: e.latlng.lat, lng: e.latlng.lng });
+        }
+      },
+    });
+    
     return null;
   };
 

@@ -54,6 +54,7 @@ import Link from "next/link"
 import { PushNotificationManager } from "@/components/pwa/push-notification-manager"
 import { InstallPrompt } from "@/components/pwa/install-prompt"
 import { LocationManager } from "@/components/location/location-manager"
+import { MigrationWidget } from "@/components/migration/migration-widget"
 
 // Type definitions
 type Restaurant = {
@@ -487,6 +488,9 @@ export default function SettingsPage() {
               </Form>
             </CardContent>
           </Card>
+          
+          {/* Data Migration Widget */}
+          <MigrationWidget restaurantId={restaurant?.id || ""} />
         </TabsContent>
 
         <TabsContent value="location" className="space-y-4">

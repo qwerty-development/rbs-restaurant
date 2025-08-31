@@ -53,6 +53,7 @@ import CustomerMergeSelectionDialog from '@/components/customers/customer-merge-
 import { CustomerBulkActions } from '@/components/customers/customer-bulk-actions'
 import { CustomerInsights } from '@/components/customers/customer-insights'
 import { EditCustomerDialog } from '@/components/customers/edit-customer-dialog'
+import { MigrationButton } from '@/components/migration/migration-button'
 import { restaurantAuth } from '@/lib/restaurant-auth'
 import type { RestaurantCustomer, CustomerTag, CustomerFilters } from '@/types/customer'
 
@@ -502,10 +503,13 @@ export default function CustomersPage() {
             Export
           </Button>
           {restaurantAuth.hasPermission(currentStaff?.permissions || [], 'customers.manage', currentStaff?.role) && (
-            <Button onClick={() => setShowAddCustomerDialog(true)}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Add Customer
-            </Button>
+            <>
+              <MigrationButton restaurantId={restaurantId} variant="outline" />
+              <Button onClick={() => setShowAddCustomerDialog(true)}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Add Customer
+              </Button>
+            </>
           )}
         </div>
       </div>

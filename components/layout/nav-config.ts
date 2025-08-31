@@ -16,6 +16,7 @@ import {
   Bell,
   Crown,
   Clock,
+  Upload,
 } from 'lucide-react'
 
 export interface NavigationItem {
@@ -40,6 +41,7 @@ export const NAV_ITEMS: NavigationItem[] = [
   { title: 'Offers', href: '/offers', icon: DollarSign, permission: 'offers.view' },
   { title: 'Staff', href: '/staff', icon: Users, permission: 'staff.manage' },
   { title: 'Schedules', href: '/schedules', icon: Clock, permission: 'schedules.view' },
+  { title: 'Migration', href: '/migration', icon: Upload, permission: 'settings.manage' },
   { title: 'Profile', href: '/profile', icon: User, permission: null },
   { title: 'Settings', href: '/settings', icon: Settings, permission: 'settings.view' },
 ]
