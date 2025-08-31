@@ -1,14 +1,14 @@
 // components/dashboard/pending-requests-panel.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
-import { format, differenceInMinutes } from "date-fns"
+import { format, differenceInMinutes, addMinutes } from "date-fns"
 import { 
   Clock, 
   Users, 
@@ -20,7 +20,9 @@ import {
   MessageSquare,
   Table2,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  Star,
+  UserX
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { BookingRequestService } from "@/lib/booking-request-service"
@@ -59,27 +61,131 @@ export function PendingRequestsPanel({
       return new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime()
     })
 
-  // Fetch available tables for each pending request
-  const { data: availableTables } = useQuery({
-    queryKey: ["available-tables-requests", pendingRequests.map(r => r.id)],
+  // Fetch all tables for the restaurant
+  const { data: allTables = [] } = useQuery({
+    queryKey: ["restaurant-tables-pending", restaurantId],
     queryFn: async () => {
-      const availability: Record<string, any> = {}
+      if (!restaurantId) return []
       
-      for (const request of pendingRequests) {
-        const available = await tableService.getAvailableTablesForSlot(
-          restaurantId,
-          new Date(request.booking_time),
-          request.party_size,
-          request.turn_time_minutes || 120
-        )
-        availability[request.id] = available
-      }
-      
-      return availability
+      const { data, error } = await supabase
+        .from("restaurant_tables")
+        .select(`
+          *,
+          section:restaurant_sections(*)
+        `)
+        .eq("restaurant_id", restaurantId)
+        .eq("is_active", true)
+        .order("table_number", { ascending: true })
+
+      if (error) throw error
+      return data || []
     },
-    enabled: pendingRequests.length > 0,
-    refetchInterval: 30000
+    enabled: !!restaurantId,
   })
+
+  // Fetch customer data for VIP status
+  const { data: customersData = {} } = useQuery({
+    queryKey: ["pending-customers", restaurantId, pendingRequests.map(b => b.user?.id).filter(Boolean)],
+    queryFn: async () => {
+      if (!restaurantId || pendingRequests.length === 0) return {}
+      
+      const userIds = pendingRequests
+        .map(booking => booking.user?.id)
+        .filter(Boolean)
+        .filter((id, index, self) => self.indexOf(id) === index)
+      
+      if (userIds.length === 0) return {}
+
+      const { data, error } = await supabase
+        .from("restaurant_customers")
+        .select(`
+          user_id,
+          vip_status,
+          blacklisted,
+          blacklist_reason,
+          total_bookings,
+          no_show_count
+        `)
+        .eq("restaurant_id", restaurantId)
+        .in("user_id", userIds)
+
+      if (error) throw error
+
+      const customerMap: Record<string, any> = {}
+      data?.forEach(customer => {
+        customerMap[customer.user_id] = customer
+      })
+
+      return customerMap
+    },
+    enabled: !!restaurantId && pendingRequests.length > 0,
+  })
+
+  // Calculate table status for each pending request
+  const tableStatusForRequests = useMemo(() => {
+    const statusMap: Record<string, any[]> = {}
+    
+    pendingRequests.forEach(request => {
+      const requestTime = new Date(request.booking_time)
+      const requestEndTime = addMinutes(requestTime, request.turn_time_minutes || 120)
+      
+      const tablesWithStatus = allTables.map(table => {
+        // Check if table is occupied during the request time
+        const conflictingBooking = bookings.find(booking => {
+          if (booking.id === request.id) return false // Skip self
+          if (!booking.tables || booking.tables.length === 0) return false
+          if (!booking.tables.some((t: any) => t.id === table.id)) return false
+          
+          const bookingTime = new Date(booking.booking_time)
+          const bookingEndTime = addMinutes(bookingTime, booking.turn_time_minutes || 120)
+          
+          // Check for time overlap
+          return (requestTime < bookingEndTime && requestEndTime > bookingTime)
+        })
+        
+        // Check if table is currently occupied
+        const currentlyOccupied = bookings.find(booking => {
+          const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+          return occupiedStatuses.includes(booking.status) && 
+                 booking.tables?.some((t: any) => t.id === table.id)
+        })
+        
+        return {
+          ...table,
+          isAvailable: !conflictingBooking && !currentlyOccupied,
+          conflictingBooking,
+          currentlyOccupied,
+          canBeSelected: !conflictingBooking && !currentlyOccupied
+        }
+      })
+      
+      statusMap[request.id] = tablesWithStatus
+    })
+    
+    return statusMap
+  }, [allTables, bookings, pendingRequests])
+
+  // Fetch available tables for each pending request (simplified)
+  const availableTablesForRequests = useMemo(() => {
+    const availability: Record<string, any> = {}
+    
+    pendingRequests.forEach(request => {
+      const tableStatus = tableStatusForRequests[request.id] || []
+      const availableTables = tableStatus.filter(t => t.canBeSelected)
+      
+      // Group by capacity
+      const singleTables = availableTables.filter(t => t.capacity >= request.party_size)
+      const allAvailable = availableTables
+      
+      availability[request.id] = {
+        singleTables,
+        allAvailable,
+        hasAvailable: singleTables.length > 0 || allAvailable.length > 0
+      }
+    })
+    
+    return availability
+  }, [pendingRequests, tableStatusForRequests])
 
   const handleAccept = async (bookingId: string) => {
     setProcessingId(bookingId)
@@ -164,7 +270,7 @@ export function PendingRequestsPanel({
 
   return (
     <Card className={cn(
-      "m-4 border-2 shadow-xl",
+      "w-full border-2 shadow-xl",
       urgentCount > 0 
         ? "border-red-400 bg-gradient-to-br from-red-100 to-red-50 animate-pulse" 
         : "border-orange-300 bg-gradient-to-br from-orange-100 to-orange-50"
@@ -209,22 +315,23 @@ export function PendingRequestsPanel({
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <ScrollArea className="h-[320px]">
-          <div className="space-y-3 pr-4">
+        <ScrollArea className="h-[450px]">
+          <div className="space-y-4 pr-4">
             {pendingRequests.map((booking) => {
               const bookingTime = new Date(booking.booking_time)
               const isProcessing = processingId === booking.id
-              const availability = availableTables?.[booking.id]
-              const hasAvailableTables = availability && 
-                (availability.singleTables.length > 0 || availability.combinations.length > 0)
+              const availability = availableTablesForRequests[booking.id]
+              const hasAvailableTables = availability?.hasAvailable
               const expiry = getTimeUntilExpiry(booking)
               const isUrgent = expiry && !expiry.expired && expiry.hoursLeft < 2
+              const customerData = customersData[booking.user?.id]
+              const tableStatus = tableStatusForRequests[booking.id] || []
               
               return (
                 <div
                   key={booking.id}
                   className={cn(
-                    "p-4 rounded-xl border-2 bg-white shadow-lg",
+                    "p-5 rounded-xl border-2 bg-white shadow-lg",
                     "transition-all hover:shadow-xl",
                     isProcessing && "opacity-50",
                     !hasAvailableTables && "border-red-300 bg-gradient-to-br from-red-50 to-white",
@@ -265,35 +372,59 @@ export function PendingRequestsPanel({
                     </Alert>
                   )}
 
-                  {/* Guest info */}
+                  {/* Guest info with VIP status */}
                   <div className="mb-3">
-                    <p className="font-bold text-lg text-gray-900">
-                      {booking.user?.full_name || booking.guest_name || 'Guest'}
-                    </p>
-                    {(booking.user?.phone_number || booking.guest_phone) && (
-                      <p className="text-sm text-gray-600 flex items-center gap-1.5 mt-1">
-                        <Phone className="h-3.5 w-3.5" />
-                        {booking.user?.phone_number || booking.guest_phone}
-                      </p>
-                    )}
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-lg text-gray-900">
+                            {booking.user?.full_name || booking.guest_name || 'Guest'}
+                          </p>
+                          {customerData?.vip_status && (
+                            <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                              <Star className="h-3 w-3 mr-1" />
+                              VIP
+                            </Badge>
+                          )}
+                          {customerData?.blacklisted && (
+                            <Badge variant="destructive" className="bg-red-100 text-red-800 border-red-300">
+                              <UserX className="h-3 w-3 mr-1" />
+                              Blacklisted
+                            </Badge>
+                          )}
+                        </div>
+                        {(booking.user?.phone_number || booking.guest_phone) && (
+                          <p className="text-sm text-gray-600 flex items-center gap-1.5 mt-1">
+                            <Phone className="h-3.5 w-3.5" />
+                            {booking.user?.phone_number || booking.guest_phone}
+                          </p>
+                        )}
+                        {customerData && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            {customerData.total_bookings} previous bookings
+                            {customerData.no_show_count > 0 && ` • ${customerData.no_show_count} no-shows`}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   {/* Booking details */}
-                  <div className="grid grid-cols-3 gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
+                  <div className="grid grid-cols-3 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
                     <div className="text-center">
-                      <Clock className="h-5 w-5 text-gray-500 mx-auto mb-1" />
-                      <p className="text-sm font-semibold">{format(bookingTime, 'h:mm a')}</p>
-                      <p className="text-xs text-gray-600">{format(bookingTime, 'MMM d')}</p>
+                      <Clock className="h-6 w-6 text-gray-500 mx-auto mb-2" />
+                      <p className="text-base font-semibold">{format(bookingTime, 'h:mm a')}</p>
+                      <p className="text-sm text-gray-600">{format(bookingTime, 'MMM d, yyyy')}</p>
                     </div>
                     <div className="text-center">
-                      <Users className="h-5 w-5 text-gray-500 mx-auto mb-1" />
-                      <p className="text-sm font-semibold">{booking.party_size} guests</p>
-                      <p className="text-xs text-gray-600">Party size</p>
+                      <Users className="h-6 w-6 text-gray-500 mx-auto mb-2" />
+                      <p className="text-base font-semibold">{booking.party_size} guests</p>
+                      <p className="text-sm text-gray-600">Party size</p>
                     </div>
                     <div className="text-center">
-                      <Timer className="h-5 w-5 text-gray-500 mx-auto mb-1" />
-                      <p className="text-sm font-semibold">{booking.turn_time_minutes}m</p>
-                      <p className="text-xs text-gray-600">Duration</p>
+                      <Timer className="h-6 w-6 text-gray-500 mx-auto mb-2" />
+                      <p className="text-base font-semibold">{booking.turn_time_minutes || 120}m</p>
+                      <p className="text-sm text-gray-600">Duration</p>
                     </div>
                   </div>
 
@@ -307,53 +438,85 @@ export function PendingRequestsPanel({
                     </div>
                   )}
 
-                  {/* Table selection */}
+                  {/* Enhanced table selection with status */}
                   {hasAvailableTables && (
                     <div className="mb-3">
-                      <p className="text-xs font-medium text-gray-700 mb-2">Quick table assignment:</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {availability.singleTables.slice(0, 6).map((table: any) => (
-                          <Button
-                            key={table.id}
-                            size="sm"
-                            variant={
-                              (selectedTables[booking.id] || []).includes(table.id) 
-                                ? "default" 
-                                : "outline"
-                            }
-                            className={cn(
-                              "h-7 text-xs px-3",
-                              (selectedTables[booking.id] || []).includes(table.id) &&
-                              "bg-blue-600 hover:bg-blue-700"
-                            )}
-                            onClick={() => {
-                              setSelectedTables(prev => ({
-                                ...prev,
-                                [booking.id]: prev[booking.id]?.includes(table.id)
-                                  ? prev[booking.id].filter(id => id !== table.id)
-                                  : [...(prev[booking.id] || []), table.id]
-                              }))
-                            }}
-                            disabled={isProcessing}
-                          >
-                            T{table.table_number}
-                          </Button>
-                        ))}
-                        {availability.singleTables.length > 6 && (
-                          <span className="text-xs text-gray-500 flex items-center">
-                            +{availability.singleTables.length - 6} more
+                      <p className="text-xs font-medium text-gray-700 mb-2">
+                        Quick table assignment ({availability.singleTables.length} suitable):
+                      </p>
+                      <div className="grid grid-cols-4 gap-1.5 max-h-20 overflow-y-auto">
+                        {availability.singleTables.slice(0, 12).map((table: any) => {
+                          const isSelected = (selectedTables[booking.id] || []).includes(table.id)
+                          const tableStatusInfo = tableStatus.find(t => t.id === table.id)
+                          
+                          return (
+                            <Button
+                              key={table.id}
+                              size="sm"
+                              variant={isSelected ? "default" : "outline"}
+                              className={cn(
+                                "h-8 text-xs px-2 relative",
+                                isSelected && "bg-blue-600 hover:bg-blue-700 border-blue-600",
+                                !tableStatusInfo?.canBeSelected && "opacity-50 cursor-not-allowed",
+                                tableStatusInfo?.currentlyOccupied && "bg-red-100 border-red-300 text-red-700",
+                                tableStatusInfo?.conflictingBooking && "bg-orange-100 border-orange-300 text-orange-700"
+                              )}
+                              onClick={() => {
+                                if (!tableStatusInfo?.canBeSelected) return
+                                
+                                setSelectedTables(prev => ({
+                                  ...prev,
+                                  [booking.id]: isSelected
+                                    ? prev[booking.id].filter(id => id !== table.id)
+                                    : [...(prev[booking.id] || []), table.id]
+                                }))
+                              }}
+                              disabled={isProcessing || !tableStatusInfo?.canBeSelected}
+                              title={
+                                tableStatusInfo?.currentlyOccupied ? "Currently occupied" :
+                                tableStatusInfo?.conflictingBooking ? "Booked during this time" :
+                                `Table ${table.table_number} (${table.capacity} seats)`
+                              }
+                            >
+                              T{table.table_number}
+                              <span className="ml-1 text-xs opacity-70">({table.capacity})</span>
+                              {!tableStatusInfo?.canBeSelected && (
+                                <div className="absolute inset-0 bg-gray-200 opacity-50 rounded" />
+                              )}
+                            </Button>
+                          )
+                        })}
+                        {availability.singleTables.length > 12 && (
+                          <span className="text-xs text-gray-500 flex items-center col-span-2">
+                            +{availability.singleTables.length - 12} more
                           </span>
                         )}
+                      </div>
+                      
+                      {/* Show table status legend */}
+                      <div className="flex items-center gap-3 text-xs text-gray-600 mt-2">
+                        <div className="flex items-center gap-1">
+                          <div className="w-3 h-3 bg-white border border-gray-300 rounded"></div>
+                          Available
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-3 h-3 bg-red-100 border border-red-300 rounded"></div>
+                          Occupied
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-3 h-3 bg-orange-100 border border-orange-300 rounded"></div>
+                          Booked
+                        </div>
                       </div>
                     </div>
                   )}
 
                   {/* Action buttons */}
-                  <div className="flex gap-2">
+                  <div className="flex gap-3">
                     <Button
-                      size="sm"
+                      size="default"
                       className={cn(
-                        "flex-1 h-9 font-medium shadow-md",
+                        "flex-1 h-10 font-medium shadow-md",
                         hasAvailableTables || selectedTables[booking.id]?.length
                           ? "bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white"
                           : "bg-gray-200 text-gray-500 cursor-not-allowed"
@@ -361,17 +524,17 @@ export function PendingRequestsPanel({
                       onClick={() => handleAccept(booking.id)}
                       disabled={isProcessing || (!hasAvailableTables && !selectedTables[booking.id]?.length)}
                     >
-                      <CheckCircle className="h-4 w-4 mr-1.5" />
-                      Accept
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Accept Request
                     </Button>
                     <Button
-                      size="sm"
+                      size="default"
                       variant="outline"
-                      className="flex-1 h-9 font-medium border-red-300 text-red-700 hover:bg-red-50 hover:border-red-400 shadow-md"
+                      className="flex-1 h-10 font-medium border-red-300 text-red-700 hover:bg-red-50 hover:border-red-400 shadow-md"
                       onClick={() => handleDecline(booking.id)}
                       disabled={isProcessing}
                     >
-                      <XCircle className="h-4 w-4 mr-1.5" />
+                      <XCircle className="h-4 w-4 mr-2" />
                       Decline
                     </Button>
                   </div>

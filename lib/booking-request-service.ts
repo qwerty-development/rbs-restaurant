@@ -272,7 +272,7 @@ export class BookingRequestService {
       }
 
       // Proceed with acceptance
-      const { error: updateError } = await this.supabase
+      const { data: updatedBooking, error: updateError } = await this.supabase
         .from("bookings")
         .update({
           status: "confirmed",
@@ -281,9 +281,16 @@ export class BookingRequestService {
           acceptance_failed_reason: null
         })
         .eq("id", bookingId)
+        .select()
+        .single()
 
       if (updateError) {
+        console.error("Update booking error:", updateError)
         throw new Error("Failed to update booking status")
+      }
+
+      if (!updatedBooking) {
+        throw new Error("No booking found with this ID")
       }
 
       // Assign tables if provided
@@ -327,7 +334,7 @@ export class BookingRequestService {
 
       return { 
         success: true, 
-        booking: { ...booking, status: 'confirmed', tables: tableIds } 
+        booking: { ...updatedBooking, status: 'confirmed', tables: tableIds } 
       }
 
     } catch (error) {

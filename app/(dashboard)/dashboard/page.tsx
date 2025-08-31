@@ -949,22 +949,11 @@ export default function DashboardPage() {
         </div>
 
         {/* Right Sidebar with Tabs for Queue and Waitlist */}
-        <div className="w-[260px] border-l border-border bg-card flex flex-col flex-shrink-0 overflow-hidden">
+        <div className="w-[380px] border-l border-border bg-card flex flex-col flex-shrink-0 overflow-hidden">
           {/* Pending Requests Section */}
           {stats.pendingCount > 0 && (
             <div className="border-b border-border flex-shrink-0">
-              <div className="px-2 py-1.5 bg-destructive/20 border-b border-destructive/30">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <Timer className="h-3.5 w-3.5 text-destructive" />
-                    Pending Requests
-                  </h3>
-                  <div className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
-                    {stats.pendingCount}
-                  </div>
-                </div>
-              </div>
-              <div className="max-h-40 overflow-y-auto">
+              <div className="p-3">
                 <PendingRequestsPanel
                   bookings={todaysBookings}
                   restaurantId={restaurantId}
