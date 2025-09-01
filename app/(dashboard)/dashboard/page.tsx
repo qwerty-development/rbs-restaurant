@@ -170,14 +170,24 @@ export default function DashboardPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         setUserId(user.id)
-        const { data: staffData } = await supabase
-          .from("restaurant_staff")
-          .select("restaurant_id")
-          .eq("user_id", user.id)
-          .single()
         
-        if (staffData) {
-          setRestaurantId(staffData.restaurant_id)
+        // Get restaurant ID from URL parameters
+        const urlParams = new URLSearchParams(window.location.search)
+        const restaurantParam = urlParams.get('restaurant')
+        
+        if (restaurantParam) {
+          // Verify user has access to this restaurant
+          const { data: staffData } = await supabase
+            .from("restaurant_staff")
+            .select("restaurant_id")
+            .eq("user_id", user.id)
+            .eq("restaurant_id", restaurantParam)
+            .eq("is_active", true)
+            .single()
+          
+          if (staffData) {
+            setRestaurantId(staffData.restaurant_id)
+          }
         }
       }
     }

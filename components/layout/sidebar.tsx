@@ -6,7 +6,8 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useSidebar } from '@/lib/contexts/sidebar-context'
-import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react'
+import { useRestaurantContext } from '@/lib/contexts/restaurant-context'
+import { ChevronLeft, ChevronRight, LogOut, Building2, Grid3X3, ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -108,13 +109,11 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
       >
       {/* Header - Optimized for tablets */}
       <div className="flex items-center justify-between p-3 md:p-4 border-b border-sidebar-border">
-        <div className={cn(
-          "transition-all duration-200 ease-out overflow-hidden",
-          isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
-        )}>
-          <h2 className="text-base md:text-lg font-semibold truncate whitespace-nowrap">{restaurant.name}</h2>
-          <p className="text-xs md:text-sm text-sidebar-foreground/60 capitalize whitespace-nowrap">{role}</p>
-        </div>
+        <RestaurantHeader 
+          restaurant={restaurant}
+          role={role}
+          isCollapsed={isCollapsed}
+        />
 
         <Button
           variant="ghost"
@@ -228,5 +227,29 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
       </div>
     </aside>
     </>
+  )
+}
+
+// Restaurant Header Component
+interface RestaurantHeaderProps {
+  restaurant: {
+    id: string
+    name: string
+    main_image_url?: string
+  }
+  role: Role
+  isCollapsed: boolean
+}
+
+function RestaurantHeader({ restaurant, role, isCollapsed }: RestaurantHeaderProps) {
+
+
+  // For now, just return the basic header without multi-restaurant features
+  // This will be enhanced when the context is properly integrated
+  return (
+    <div className="transition-all duration-200 ease-out overflow-hidden w-auto opacity-100">
+      <h2 className="text-base md:text-lg font-semibold truncate whitespace-nowrap">{restaurant.name}</h2>
+      <p className="text-xs md:text-sm text-sidebar-foreground/60 capitalize whitespace-nowrap">{role}</p>
+    </div>
   )
 }

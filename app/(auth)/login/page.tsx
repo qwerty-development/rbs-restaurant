@@ -72,7 +72,7 @@ export default function LoginPage() {
       }
   
       // Check if user has restaurant access
-      const { data: staffData, error: staffError }:any = await supabase
+      const { data: staffData, error: staffError } = await supabase
         .from("restaurant_staff")
         .select(`
           id,
@@ -82,23 +82,27 @@ export default function LoginPage() {
         `)
         .eq("user_id", authData.user.id)
         .eq("is_active", true)
-        .single()
   
-      if (staffError || !staffData) {
+      if (staffError || !staffData || staffData.length === 0) {
         await supabase.auth.signOut()
         throw new Error("You don't have access to any restaurant. Please contact your restaurant owner.")
       }
   
-      // Update user metadata
-      await supabase.auth.updateUser({
-        data: {
-          restaurant_id: staffData.restaurant_id,
-          restaurant_name: staffData.restaurant?.name,
-          role: staffData.role,
-        }
-      })
-  
-      toast.success(`Welcome back! Logging in to ${staffData.restaurant?.name}`)
+      // For multi-restaurant users, we'll let the dashboard handle restaurant selection
+      // For single restaurant users, we can set some basic metadata
+      if (staffData.length === 1) {
+        const singleRestaurant = staffData[0]
+        await supabase.auth.updateUser({
+          data: {
+            restaurant_id: singleRestaurant.restaurant_id,
+            restaurant_name: (singleRestaurant.restaurant as any)?.name,
+            role: singleRestaurant.role,
+          }
+        })
+        toast.success(`Welcome back! Logging in to ${(singleRestaurant.restaurant as any)?.name}`)
+      } else {
+        toast.success(`Welcome back! You have access to ${staffData.length} restaurants.`)
+      }
       
       // IMPORTANT: Use window.location.href instead of router.push
       // This forces a full page reload which ensures the session is properly set
