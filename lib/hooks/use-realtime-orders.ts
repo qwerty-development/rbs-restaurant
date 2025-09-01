@@ -124,11 +124,11 @@ export function useRealtimeBookings(restaurantId: string) {
             if (status === 'confirmed') {
               toast.success('✅ Booking confirmed')
             } else if (status === 'arrived') {
-              toast.info('👋 Guest has arrived')
+              toast('👋 Guest has arrived', { icon: '👋' })
             }
           }
           
-          if (payload.new?.id) {
+          if (payload.new && 'id' in payload.new && payload.new.id) {
             queryClient.invalidateQueries({ queryKey: ['booking', payload.new.id] })
           }
         }
@@ -145,7 +145,7 @@ export function useRealtimeBookings(restaurantId: string) {
           
           queryClient.invalidateQueries({ queryKey: ['bookings'] })
           
-          if (payload.new?.booking_id) {
+          if (payload.new && 'booking_id' in payload.new && payload.new.booking_id) {
             queryClient.invalidateQueries({ queryKey: ['booking', payload.new.booking_id] })
           }
         }
