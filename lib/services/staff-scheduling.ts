@@ -26,7 +26,7 @@ export class StaffSchedulingService {
           id,
           user_id,
           role,
-          user:profiles(
+          user:profiles!restaurant_staff_user_id_fkey(
             id,
             full_name,
             email,
@@ -57,7 +57,7 @@ export class StaffSchedulingService {
           id,
           user_id,
           role,
-          user:profiles(
+          user:profiles!restaurant_staff_user_id_fkey(
             id,
             full_name,
             email,
@@ -73,7 +73,7 @@ export class StaffSchedulingService {
         shifts:staff_shifts(
           *,
           staff:restaurant_staff(
-            user:profiles(full_name, email)
+            user:profiles!restaurant_staff_user_id_fkey(full_name, email)
           )
         )
       `)
@@ -127,6 +127,8 @@ export class StaffSchedulingService {
     endDate?: string
     status?: string
   }) {
+    console.log('🔍 getStaffShifts called with:', restaurantId, filters)
+    
     let query = this.supabase
       .from('staff_shifts')
       .select(`
@@ -135,7 +137,7 @@ export class StaffSchedulingService {
           id,
           user_id,
           role,
-          user:profiles(
+          user:profiles!restaurant_staff_user_id_fkey(
             id,
             full_name,
             email,
@@ -171,6 +173,7 @@ export class StaffSchedulingService {
 
     const { data, error } = await query.order('shift_date', { ascending: true })
 
+    console.log('🔍 getStaffShifts result:', { data, error })
     if (error) throw error
     return data as StaffShift[]
   }
@@ -184,7 +187,7 @@ export class StaffSchedulingService {
           id,
           user_id,
           role,
-          user:profiles(
+          user:profiles!restaurant_staff_user_id_fkey(
             id,
             full_name,
             email,
@@ -259,7 +262,7 @@ export class StaffSchedulingService {
       .select(`
         *,
         staff:restaurant_staff(
-          user:profiles(full_name, email)
+          user:profiles!restaurant_staff_user_id_fkey(full_name, email)
         ),
         shift:staff_shifts(
           shift_date,
@@ -285,6 +288,8 @@ export class StaffSchedulingService {
     endDate?: string
     status?: string
   }) {
+    console.log('🔍 getTimeClockEntries called with:', restaurantId, filters)
+    
     let query = this.supabase
       .from('time_clock_entries')
       .select(`
@@ -293,7 +298,7 @@ export class StaffSchedulingService {
           id,
           user_id,
           role,
-          user:profiles(
+          user:profiles!restaurant_staff_user_id_fkey(
             id,
             full_name,
             email,
@@ -332,6 +337,7 @@ export class StaffSchedulingService {
 
     const { data, error } = await query.order('clock_in_time', { ascending: false })
 
+    console.log('🔍 getTimeClockEntries result:', { data, error })
     if (error) throw error
     return data as TimeClockEntry[]
   }
@@ -474,7 +480,7 @@ export class StaffSchedulingService {
           id,
           user_id,
           role,
-          user:profiles(
+          user:profiles!restaurant_staff_user_id_fkey(
             id,
             full_name,
             email,
@@ -564,7 +570,7 @@ export class StaffSchedulingService {
           id,
           user_id,
           role,
-          user:profiles(
+          user:profiles!restaurant_staff_user_id_fkey(
             id,
             full_name,
             email,
@@ -668,7 +674,7 @@ export class StaffSchedulingService {
         *,
         assignments:staff_position_assignments(
           staff:restaurant_staff(
-            user:profiles(full_name)
+            user:profiles!restaurant_staff_user_id_fkey(full_name)
           )
         )
       `)
@@ -773,6 +779,8 @@ export class StaffSchedulingService {
   // ===============================
 
   async getRestaurantStaff(restaurantId: string) {
+    console.log('🔍 getRestaurantStaff called with:', restaurantId)
+    
     const { data, error } = await this.supabase
       .from('restaurant_staff')
       .select(`
@@ -794,6 +802,8 @@ export class StaffSchedulingService {
       .eq('restaurant_id', restaurantId)
       .eq('is_active', true)
       .order('created_at', { ascending: true })
+
+    console.log('🔍 getRestaurantStaff result:', { data, error })
 
     if (error) throw error
     // Normalize: ensure 'user' is a single object (not array)

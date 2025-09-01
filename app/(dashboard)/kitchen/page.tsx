@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useKitchenOrders, useUpdateOrderStatus } from "@/lib/hooks/use-orders"
 import { useRealTimeService } from "@/lib/services/real-time-service"
 import { getWorkflowAutomationService } from "@/lib/services/workflow-automation"
 import { useRestaurantOrchestrator } from "@/lib/services/restaurant-orchestrator"
@@ -393,43 +394,25 @@ export default function KitchenDashboard() {
     return unsubscribe
   }, [restaurantId, subscribe, queryClient, soundEnabled])
 
-  // Fetch kitchen orders with performance monitoring
-  const { data: ordersData, isLoading, error } = useQuery({
-    queryKey: ['kitchen-orders', restaurantId, selectedStation],
-    queryFn: async () => {
-      if (!restaurantId) return { orders: [], summary: {} }
-
-      const startTime = performance.now()
-
-      const params = new URLSearchParams({
-        status: 'active',
-        ...(selectedStation !== 'all' && { station_id: selectedStation })
-      })
-
-      try {
-        const response = await fetch(`/api/kitchen/orders?${params}`)
-        if (!response.ok) throw new Error('Failed to fetch orders')
-
-        const data = await response.json()
-        const duration = performance.now() - startTime
-
-        // Log performance for monitoring
-        if (duration > 500) {
-          console.warn(`Kitchen orders fetch took ${duration.toFixed(2)}ms`)
-        }
-
-        return data
-      } catch (error) {
-        const duration = performance.now() - startTime
-        console.error(`Kitchen orders fetch failed after ${duration.toFixed(2)}ms:`, error)
-        throw error
-      }
-    },
-    enabled: !!restaurantId,
-    refetchInterval: autoRefresh ? 30000 : false, // 30 seconds
-    staleTime: 15000, // Consider data stale after 15 seconds
-    gcTime: 60000, // Keep in cache for 1 minute
-  })
+  // Fetch kitchen orders using direct Supabase hook
+  const { data: kitchenOrdersData, isLoading, error } = useKitchenOrders(
+    restaurantId, 
+    selectedStation !== 'all' ? selectedStation : undefined
+  )
+  
+  // Transform data to match expected format - creating separate variables to avoid conflicts
+  const currentOrders = kitchenOrdersData || []
+  const currentSummary = {
+    pending: currentOrders.filter(o => o.status === 'confirmed').length,
+    preparing: currentOrders.filter(o => o.status === 'preparing').length,
+    ready: currentOrders.filter(o => o.status === 'ready').length,
+    confirmed: currentOrders.filter(o => o.status === 'confirmed').length,
+    overdue: currentOrders.filter(o => {
+      if (!o.estimated_ready_at) return false
+      return new Date(o.estimated_ready_at) < new Date()
+    }).length,
+    total: currentOrders.length
+  }
 
   // Fetch kitchen stations
   const { data: stationsData } = useQuery({
@@ -478,8 +461,8 @@ export default function KitchenDashboard() {
     }
   })
 
-  const orders = ordersData?.orders || []
-  const summary = ordersData?.summary || {}
+  const orders = currentOrders
+  const summary = currentSummary
 
   // Handle print requests
   const handlePrint = async (orderId: string, ticketType: 'kitchen' | 'service') => {
@@ -503,35 +486,16 @@ export default function KitchenDashboard() {
     return acc
   }, {})
 
+  // Use order status update hook
+  const updateOrderStatusMutation = useUpdateOrderStatus()
+
   const handleStatusUpdate = (orderId: string, newStatus: string, orderItemId?: string) => {
-    if (orderItemId) {
-      // Handle order item status updates
-      updateStatusMutation.mutate({
-        orderId: orderItemId ? undefined : orderId,
-        orderItemId,
-        status: newStatus
-      })
-    } else {
-      // Handle order-level status updates
-      const updateOrderStatus = async () => {
-        const response = await fetch(`/api/orders/${orderId}/status`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            status: newStatus,
-            notes: `Status updated from kitchen display`
-          })
-        })
-
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || 'Failed to update status')
-        }
-
-        return response.json()
-      }
-
-      updateOrderStatus().then(async () => {
+    updateOrderStatusMutation.mutate({
+      orderId: orderId,
+      status: newStatus,
+      notes: `Status updated from kitchen display`
+    }, {
+      onSuccess: async () => {
         // Trigger workflow automation
         const workflowService = getWorkflowAutomationService(restaurantId)
         const order = orders.find((o: any) => o.id === orderId)
@@ -550,18 +514,12 @@ export default function KitchenDashboard() {
           )
         }
 
-        queryClient.invalidateQueries({ queryKey: ['kitchen-orders'] })
-        toast.success('Status updated successfully')
-
         // Auto-print tickets based on status change
         if (order) {
           await autoPrint(orderId, newStatus, order.order_type)
         }
-      }).catch((error) => {
-        toast.error(error.message || 'Failed to update status')
-        console.error('Status update error:', error)
-      })
-    }
+      }
+    })
 
     // Trigger immediate UI update
     triggerOrderUpdate({

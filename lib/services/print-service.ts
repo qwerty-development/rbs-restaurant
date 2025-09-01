@@ -1,6 +1,8 @@
 // lib/services/print-service.ts
 "use client"
 
+import { createClient } from "@/lib/supabase/client"
+
 export interface PrintOptions {
   copies?: number
   paperSize?: 'receipt' | 'a4' | 'letter'
@@ -25,6 +27,7 @@ export interface PrintJob {
 export class PrintService {
   private printQueue: PrintJob[] = []
   private isProcessing = false
+  private supabase = createClient()
 
   // Print order ticket
   async printOrderTicket(
@@ -33,13 +36,52 @@ export class PrintService {
     options: PrintOptions = {}
   ): Promise<boolean> {
     try {
-      // Get order data
-      const response = await fetch(`/api/orders/${orderId}`)
-      if (!response.ok) {
+      // Get order data using direct Supabase call
+      const { data: order, error } = await this.supabase
+        .from('orders')
+        .select(`
+          *,
+          booking:bookings!orders_booking_id_fkey(
+            id,
+            guest_name,
+            party_size,
+            profiles!bookings_user_id_fkey(
+              id,
+              full_name,
+              phone_number
+            )
+          ),
+          table:restaurant_tables!orders_table_id_fkey(
+            id,
+            table_number,
+            table_type
+          ),
+          order_items(
+            *,
+            menu_item:menu_items!order_items_menu_item_id_fkey(
+              id,
+              name,
+              description,
+              price,
+              dietary_tags,
+              allergens
+            ),
+            order_modifications(
+              *,
+              modification:menu_modifications!order_modifications_modification_id_fkey(
+                id,
+                name,
+                price_adjustment
+              )
+            )
+          )
+        `)
+        .eq('id', orderId)
+        .single()
+
+      if (error || !order) {
         throw new Error('Failed to fetch order data')
       }
-      
-      const { order } = await response.json()
       
       // Generate ticket content
       const ticketContent = this.generateTicketHTML(order, ticketType)

@@ -22,11 +22,11 @@ import {
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Plus, Link, Trash2 } from "lucide-react"
-import type { RestaurantTable } from "@/types"
+import type { RestaurantTable, RestaurantTableCombinationWithTables } from "@/types"
 
 interface TableCombinationsManagerProps {
   tables: RestaurantTable[]
-  combinations: any[]
+  combinations: RestaurantTableCombinationWithTables[]
   onCreateCombination: (data: {
     primaryTableId: string
     secondaryTableId: string
@@ -123,7 +123,7 @@ export function TableCombinationsManager({
                           Table {combo.primary_table.table_number}
                         </span>
                         <span className="text-sm text-muted-foreground">
-                          (Cap: {combo.primary_table.capacity})
+                          (Cap: {combo.primary_table.max_capacity})
                         </span>
                       </div>
                       
@@ -136,7 +136,7 @@ export function TableCombinationsManager({
                           Table {combo.secondary_table.table_number}
                         </span>
                         <span className="text-sm text-muted-foreground">
-                          (Cap: {combo.secondary_table.capacity})
+                          (Cap: {combo.secondary_table.max_capacity})
                         </span>
                       </div>
                     </div>
@@ -183,7 +183,7 @@ export function TableCombinationsManager({
                     .filter(t => t.is_combinable && t.id !== secondaryTableId)
                     .map((table) => (
                       <SelectItem key={table.id} value={table.id}>
-                        Table {table.table_number} ({table.table_type} - Capacity: {table.capacity})
+                        Table {table.table_number} ({table.table_type} - Capacity: {table.max_capacity})
                       </SelectItem>
                     ))}
                 </SelectContent>
@@ -201,7 +201,7 @@ export function TableCombinationsManager({
                     .filter(t => t.is_combinable && t.id !== primaryTableId)
                     .map((table) => (
                       <SelectItem key={table.id} value={table.id}>
-                        Table {table.table_number} ({table.table_type} - Capacity: {table.capacity})
+                        Table {table.table_number} ({table.table_type} - Capacity: {table.max_capacity})
                       </SelectItem>
                     ))}
                 </SelectContent>

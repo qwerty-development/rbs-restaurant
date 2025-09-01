@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useOrders, useUpdateOrderStatus } from "@/lib/hooks/use-orders"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -297,53 +298,14 @@ export default function OrdersPage() {
     getRestaurantId()
   }, [supabase])
 
-  // Fetch orders
-  const { data: ordersData, isLoading, error } = useQuery({
-    queryKey: ['orders', restaurantId, selectedTab],
-    queryFn: async () => {
-      if (!restaurantId) return { orders: [] }
-      
-      const params = new URLSearchParams()
-      if (selectedTab === 'active') {
-        params.set('status', 'pending,confirmed,preparing,ready')
-      } else if (selectedTab !== 'all') {
-        params.set('status', selectedTab)
-      }
-      params.set('date', format(new Date(), 'yyyy-MM-dd'))
-      
-      const response = await fetch(`/api/orders?${params}`)
-      if (!response.ok) throw new Error('Failed to fetch orders')
-      return response.json()
-    },
-    enabled: !!restaurantId,
-    refetchInterval: 30000 // 30 seconds
+  // Fetch orders using hooks
+  const { data: ordersData, isLoading, error } = useOrders(restaurantId, {
+    status: selectedTab === 'active' ? 'pending,confirmed,preparing,ready' : (selectedTab !== 'all' ? selectedTab : undefined),
+    date: format(new Date(), 'yyyy-MM-dd')
   })
 
-  // Update order status mutation
-  const updateOrderMutation = useMutation({
-    mutationFn: async ({ orderId, status, notes }: {
-      orderId: string
-      status: string
-      notes?: string
-    }) => {
-      const response = await fetch(`/api/orders/${orderId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, notes })
-      })
-      
-      if (!response.ok) throw new Error('Failed to update order')
-      return response.json()
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] })
-      toast.success('Order updated successfully')
-    },
-    onError: (error) => {
-      toast.error('Failed to update order')
-      console.error('Update error:', error)
-    }
-  })
+    // Update order status using hook
+  const updateOrderMutation = useUpdateOrderStatus()
 
   // Delete order mutation
   const deleteOrderMutation = useMutation({
@@ -367,7 +329,7 @@ export default function OrdersPage() {
     }
   })
 
-  const orders = ordersData?.orders || []
+  const orders = ordersData || []
 
   // Group orders by status for better organization
   const groupedOrders = orders.reduce((acc: any, order: Order) => {

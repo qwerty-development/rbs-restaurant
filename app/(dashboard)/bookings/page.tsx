@@ -185,96 +185,7 @@ export default function BookingsPage() {
   
   const supabase = createClient()
   const queryClient = useQueryClient()
-  const tableService = new TableAvailabilityService()
-
-  // Enhanced Keyboard Shortcuts & Gestures
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Only trigger if not typing in an input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-      
-      switch (e.key) {
-        case 'r':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault()
-            handleRefresh()
-            setLastRefresh(new Date())
-            if (soundEnabled) {
-              // Play refresh sound (would need audio implementation)
-              toast.success('Data refreshed! 🔄')
-            }
-          }
-          break
-        case 'n':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault()
-            setShowManualBooking(true)
-            toast.success('Quick booking mode activated! ⚡')
-          }
-          break
-        case 'a':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault()
-            setShowAnalytics(!showAnalytics)
-            toast.success('Analytics toggled! 📊')
-          }
-          break
-        case 't':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault()
-            setViewMode("tables")
-            toast.success('Table view activated! 🏓')
-          }
-          break
-        case '1':
-          e.preventDefault()
-          setViewMode("upcoming")
-          toast.success('Upcoming view! 📅')
-          break
-        case '2':
-          e.preventDefault()
-          setViewMode("list")
-          toast.success('List view! 📋')
-          break
-        case '3':
-          e.preventDefault()
-          setViewMode("calendar")
-          toast.success('Calendar view! 📆')
-          break
-        case '4':
-          e.preventDefault()
-          setViewMode("tables")
-          toast.success('Table view! 🏓')
-          break
-        case 'p':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault()
-            setRequestFilter("pending")
-            toast.success('Showing pending bookings! ⏳')
-          }
-          break
-        case 'f':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault()
-            // Focus search input
-            const searchInput = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement
-            searchInput?.focus()
-            toast.success('Search activated! 🔍')
-          }
-          break
-        case 'Escape':
-          setSelectedBookings([])
-          setSelectedBooking(null)
-          setShowManualBooking(false)
-          setShowAnalytics(false)
-          toast.success('Cleared selections! ✨')
-          break
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [soundEnabled, showAnalytics])
+  const tableService = useMemo(() => new TableAvailabilityService(), [])
 
   // Enhanced Auto-refresh with Smart Performance
   useEffect(() => {
@@ -617,6 +528,95 @@ export default function BookingsPage() {
     queryClient.invalidateQueries({ queryKey: ["tables"] })
     toast.success("Data refreshed")
   }, [queryClient])
+
+  // Enhanced Keyboard Shortcuts & Gestures
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only trigger if not typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      
+      switch (e.key) {
+        case 'r':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault()
+            handleRefresh()
+            setLastRefresh(new Date())
+            if (soundEnabled) {
+              // Play refresh sound (would need audio implementation)
+              toast.success('Data refreshed! 🔄')
+            }
+          }
+          break
+        case 'n':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault()
+            setShowManualBooking(true)
+            toast.success('Quick booking mode activated! ⚡')
+          }
+          break
+        case 'a':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault()
+            setShowAnalytics(!showAnalytics)
+            toast.success('Analytics toggled! 📊')
+          }
+          break
+        case 't':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault()
+            setViewMode("tables")
+            toast.success('Table view activated! 🏓')
+          }
+          break
+        case '1':
+          e.preventDefault()
+          setViewMode("upcoming")
+          toast.success('Upcoming view! 📅')
+          break
+        case '2':
+          e.preventDefault()
+          setViewMode("list")
+          toast.success('List view! 📋')
+          break
+        case '3':
+          e.preventDefault()
+          setViewMode("calendar")
+          toast.success('Calendar view! 📆')
+          break
+        case '4':
+          e.preventDefault()
+          setViewMode("tables")
+          toast.success('Table view! 🏓')
+          break
+        case 'p':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault()
+            setRequestFilter("pending")
+            toast.success('Showing pending bookings! ⏳')
+          }
+          break
+        case 'f':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault()
+            // Focus search input
+            const searchInput = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement
+            searchInput?.focus()
+            toast.success('Search activated! 🔍')
+          }
+          break
+        case 'Escape':
+          setSelectedBookings([])
+          setSelectedBooking(null)
+          setShowManualBooking(false)
+          setShowAnalytics(false)
+          toast.success('Cleared selections! ✨')
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [soundEnabled, showAnalytics, handleRefresh])
 
   // Table assignment functions
   const openTableAssignment = useCallback(async (bookingId: string) => {

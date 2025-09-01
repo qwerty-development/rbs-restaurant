@@ -91,6 +91,94 @@ export default function CustomersPage() {
   const [customerToMerge, setCustomerToMerge] = useState<RestaurantCustomer | null>(null)
   const [customerToEdit, setCustomerToEdit] = useState<RestaurantCustomer | null>(null)
 
+  const loadCustomers = useCallback(async (restaurantId: string) => {
+    try {
+      // First, get all customers
+      const { data: customersData, error: customersError } = await supabase
+        .from('restaurant_customers')
+        .select(`
+          *,
+          profile:profiles!restaurant_customers_user_id_fkey(
+            id,
+            full_name,
+            email,
+            phone_number,
+            avatar_url,
+            allergies,
+            dietary_restrictions,
+            favorite_cuisines,
+            preferred_party_size,
+            notification_preferences,
+            loyalty_points,
+            membership_tier,
+            privacy_settings,
+            user_rating,
+            total_bookings,
+            completed_bookings,
+            cancelled_bookings,
+            no_show_bookings,
+            rating_last_updated,
+            created_at,
+            updated_at
+          )
+        `)
+        .eq('restaurant_id', restaurantId)
+        .order('created_at', { ascending: false })
+
+      if (customersError) throw customersError
+
+      // Get all profiles for customers who don't have profile data
+      const customerUserIds = customersData?.map(c => c.user_id).filter(id => id !== null) || []
+      const { data: profilesData, error: profilesError } = customerUserIds.length > 0 
+        ? await supabase
+            .from('profiles')
+            .select('*')
+            .in('id', customerUserIds)
+        : { data: [], error: null }
+
+      if (profilesError) throw profilesError
+
+      // Transform data to merge customer and profile information
+      const transformedData = customersData?.map(customer => {
+        // If profile is already included from the join, use it
+        if (customer.profile) {
+          return {
+            ...customer,
+            profile: customer.profile
+          }
+        }
+        
+        // Otherwise, find the profile in the separate query
+        const profile = profilesData?.find(p => p.id === customer.user_id)
+        return {
+          ...customer,
+          profile: profile || null
+        }
+      }) || []
+
+      setCustomers(transformedData)
+    } catch (error) {
+      console.error('Error loading customers:', error)
+      toast.error('Failed to load customers')
+    }
+  }, [supabase])
+
+  const loadTags = useCallback(async (restaurantId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('customer_tags')
+        .select('*')
+        .eq('restaurant_id', restaurantId)
+        .order('name')
+
+      if (error) throw error
+      setTags(data || [])
+    } catch (error) {
+      console.error('Error loading tags:', error)
+      toast.error('Failed to load tags')
+    }
+  }, [supabase])
+
   const loadInitialData = useCallback(async () => {
     try {
       setLoading(true)
@@ -144,102 +232,12 @@ export default function CustomersPage() {
     } finally {
       setLoading(false)
     }
-  }, [router])
+  }, [router, loadCustomers, loadTags, supabase])
 
   // Load initial data
   useEffect(() => {
     loadInitialData()
   }, [loadInitialData])
-
-  const loadCustomers = async (restaurantId: string) => {
-    try {
-      // First, get all customers
-      const { data: customersData, error: customersError } = await supabase
-        .from('restaurant_customers')
-        .select(`
-          *,
-          profile:profiles!restaurant_customers_user_id_fkey(
-            id,
-            full_name,
-            email,
-            phone_number,
-            avatar_url,
-            allergies,
-            dietary_restrictions,
-            favorite_cuisines,
-            preferred_party_size,
-            loyalty_points,
-            membership_tier,
-            notification_preferences,
-            total_bookings,
-            completed_bookings,
-            cancelled_bookings,
-            no_show_bookings,
-            user_rating
-          ),
-          tags:customer_tag_assignments(
-            tag:customer_tags(*)
-          ),
-          notes:customer_notes(
-            *,
-            created_by_profile:profiles!customer_notes_created_by_fkey(
-              full_name,
-              avatar_url
-            )
-          )
-        `)
-        .eq('restaurant_id', restaurantId)
-        .order('last_visit', { ascending: false })
-
-      if (customersError) throw customersError
-
-      // Get all active VIP users for this restaurant
-      const { data: vipData, error: vipError } = await supabase
-        .from('restaurant_vip_users')
-        .select('user_id, extended_booking_days, priority_booking, valid_until')
-        .eq('restaurant_id', restaurantId)
-        .gte('valid_until', new Date().toISOString())
-
-      if (vipError) throw vipError
-
-      // Create a Set of VIP user IDs for quick lookup
-      const vipUserIds = new Set(vipData?.map(vip => vip.user_id) || [])
-      
-      // Email is now included in the profiles query above
-
-      // Transform the data and check VIP status
-      const transformedData = customersData?.map(customer => {
-        // Check if customer has active VIP status
-        const isVip = customer.vip_status || (customer.user_id && vipUserIds.has(customer.user_id))
-        
-        return {
-          ...customer,
-          vip_status: isVip, // Override with combined VIP status
-          tags: customer.tags?.map((t: any) => t.tag) || []
-        }
-      }) || []
-
-      setCustomers(transformedData)
-    } catch (error) {
-      console.error('Error loading customers:', error)
-      toast.error('Failed to load customers')
-    }
-  }
-
-  const loadTags = async (restaurantId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('customer_tags')
-        .select('*')
-        .eq('restaurant_id', restaurantId)
-        .order('name')
-
-      if (error) throw error
-      setTags(data || [])
-    } catch (error) {
-      console.error('Error loading tags:', error)
-    }
-  }
 
   // Filter customers
   const filteredCustomers = useMemo(() => {

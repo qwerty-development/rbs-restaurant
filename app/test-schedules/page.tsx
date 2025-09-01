@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { useRouter } from "next/navigation"
 import { format, startOfWeek, endOfWeek } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -30,23 +29,18 @@ import {
   Settings,
   Download
 } from "lucide-react"
-import { restaurantAuth } from "@/lib/restaurant-auth"
-import { createClient } from "@/lib/supabase/client"
 import { staffSchedulingService } from "@/lib/services/staff-scheduling"
 import { ScheduleCalendar } from "@/components/staff/schedule-calendar"
-import { ShiftForm } from "@/components/staff/shift-form"
 import { TimeClock } from "@/components/staff/time-clock"
 import type { StaffShift, RestaurantStaff, TimeClockEntry, StaffPosition } from "@/types"
 import { toast } from "react-hot-toast"
 
-export default function SchedulesPage() {
-  const router = useRouter()
-  const supabase = createClient()
+export default function TestSchedulesPage() {
+  // Hard-coded test data
+  const restaurantId = "660e8400-e29b-41d4-a716-446655440005"
+  const canManageSchedules = true
   
   // State
-  const [currentUser, setCurrentUser] = useState<any>(null)
-  const [currentStaff, setCurrentStaff] = useState<any>(null)
-  const [restaurantId, setRestaurantId] = useState<string>("")
   const [staffMembers, setStaffMembers] = useState<RestaurantStaff[]>([])
   const [shifts, setShifts] = useState<StaffShift[]>([])
   const [timeClockEntries, setTimeClockEntries] = useState<TimeClockEntry[]>([])
@@ -71,73 +65,42 @@ export default function SchedulesPage() {
 
   const loadInitialData = async () => {
     try {
+      console.log('🎯 Starting loadInitialData...')
       setLoading(true)
 
-      // Get current user
-      const { data: { user } }:any = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/login')
-        return
-      }
-      setCurrentUser(user)
-
-      // Get current staff data
-      const { data: staffData, error: staffError } = await supabase
-        .from('restaurant_staff')
-        .select('id, role, permissions, restaurant_id')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .single()
-
-      if (staffError || !staffData) {
-        toast.error("You don't have access to schedules")
-        router.push('/dashboard')
-        return
-      }
-
-      setCurrentStaff(staffData)
-      setRestaurantId(staffData.restaurant_id)
-
-      // Check permissions
-      const canViewSchedules = restaurantAuth.hasPermission(
-        staffData.permissions,
-        'schedules.view',
-        staffData.role
-      )
-
-      if (!canViewSchedules) {
-        toast.error("You don't have permission to view schedules")
-        router.push('/dashboard')
-        return
-      }
-
       // Load data in parallel
+      console.log('🔄 Loading data in parallel...')
       await Promise.all([
-        loadStaffMembers(staffData.restaurant_id),
-        loadShifts(staffData.restaurant_id),
-        loadTimeClockEntries(staffData.restaurant_id),
-        loadPositions(staffData.restaurant_id)
+        loadStaffMembers(),
+        loadShifts(),
+        loadTimeClockEntries(),
+        loadPositions()
       ])
+      
+      console.log('✅ All data loaded successfully')
 
     } catch (error) {
-      console.error('Error loading initial data:', error)
+      console.error('❌ Error loading initial data:', error)
       toast.error('Failed to load schedule data')
     } finally {
+      console.log('🏁 Loading completed, setting loading to false')
       setLoading(false)
     }
   }
 
-  const loadStaffMembers = async (restaurantId: string) => {
+  const loadStaffMembers = async () => {
     try {
+      console.log('🚀 Starting to load staff members...')
       const data = await staffSchedulingService.getRestaurantStaff(restaurantId)
+      console.log('✅ Staff members loaded in component:', data)
       setStaffMembers(data)
     } catch (error) {
-      console.error('Error loading staff members:', error)
+      console.error('❌ Error loading staff members in component:', error)
       toast.error('Failed to load staff members')
     }
   }
 
-  const loadShifts = async (restaurantId: string) => {
+  const loadShifts = async () => {
     try {
       const weekStart = startOfWeek(new Date())
       const weekEnd = endOfWeek(new Date())
@@ -146,6 +109,7 @@ export default function SchedulesPage() {
         startDate: format(weekStart, 'yyyy-MM-dd'),
         endDate: format(weekEnd, 'yyyy-MM-dd')
       })
+      console.log('Shifts loaded:', data)
       setShifts(data)
     } catch (error) {
       console.error('Error loading shifts:', error)
@@ -153,13 +117,14 @@ export default function SchedulesPage() {
     }
   }
 
-  const loadTimeClockEntries = async (restaurantId: string) => {
+  const loadTimeClockEntries = async () => {
     try {
       const today = format(new Date(), 'yyyy-MM-dd')
       const data = await staffSchedulingService.getTimeClockEntries(restaurantId, {
         startDate: today,
         endDate: today
       })
+      console.log('Time clock entries loaded:', data)
       setTimeClockEntries(data)
     } catch (error) {
       console.error('Error loading time clock entries:', error)
@@ -167,12 +132,14 @@ export default function SchedulesPage() {
     }
   }
 
-  const loadPositions = async (restaurantId: string) => {
+  const loadPositions = async () => {
     try {
       const data = await staffSchedulingService.getStaffPositions(restaurantId)
+      console.log('Positions loaded:', data)
       setPositions(data)
     } catch (error) {
       console.error('Error loading positions:', error)
+      toast.error('Failed to load positions')
     }
   }
 
@@ -191,8 +158,8 @@ export default function SchedulesPage() {
   }
 
   const handleShiftFormSuccess = () => {
-    loadShifts(restaurantId)
-    loadTimeClockEntries(restaurantId)
+    loadShifts()
+    loadTimeClockEntries()
   }
 
   // Filtered staff members
@@ -206,15 +173,8 @@ export default function SchedulesPage() {
     })
   }, [staffMembers, searchQuery])
 
-  // Current staff member for time clock
-  const currentStaffMember = staffMembers.find(staff => staff.user_id === currentUser?.id)
-
-  // Permission checks
-  const canManageSchedules = !!(currentStaff && restaurantAuth.hasPermission(
-    currentStaff.permissions,
-    'schedules.manage',
-    currentStaff.role
-  ))
+  // Current staff member for time clock (use first staff member)
+  const currentStaffMember = staffMembers[0]
 
   // Statistics
   const stats = useMemo(() => {
@@ -226,6 +186,8 @@ export default function SchedulesPage() {
     const totalHours = timeClockEntries.reduce((sum, entry) => 
       sum + (entry.total_hours || 0), 0
     )
+
+    console.log('Stats calculated:', { totalShifts, activeClockIns, scheduledToday, totalHours })
 
     return {
       totalShifts,
@@ -290,9 +252,9 @@ export default function SchedulesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Staff Schedules</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Staff Schedules (Test)</h1>
           <p className="text-muted-foreground">
-            Manage staff schedules, shifts, and time tracking
+            Testing staff schedules, shifts, and time tracking
           </p>
         </div>
         
@@ -334,6 +296,29 @@ export default function SchedulesPage() {
         />
       </div>
 
+      {/* Debug Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Debug Info</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <strong>Restaurant ID:</strong> {restaurantId}
+            </div>
+            <div>
+              <strong>Staff Members:</strong> {staffMembers.length}
+            </div>
+            <div>
+              <strong>Shifts:</strong> {shifts.length}
+            </div>
+            <div>
+              <strong>Time Clock Entries:</strong> {timeClockEntries.length}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Main Content */}
       <Tabs value={selectedTab} onValueChange={setSelectedTab}>
         <TabsList className="grid w-full grid-cols-3">
@@ -345,12 +330,10 @@ export default function SchedulesPage() {
             <Clock className="h-4 w-4" />
             <span>Time Clock</span>
           </TabsTrigger>
-          {canManageSchedules && (
-            <TabsTrigger value="management" className="flex items-center space-x-2">
-              <Settings className="h-4 w-4" />
-              <span>Management</span>
-            </TabsTrigger>
-          )}
+          <TabsTrigger value="management" className="flex items-center space-x-2">
+            <Settings className="h-4 w-4" />
+            <span>Management</span>
+          </TabsTrigger>
         </TabsList>
 
         {/* Schedule Calendar Tab */}
@@ -424,7 +407,7 @@ export default function SchedulesPage() {
                 <Clock className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                 <h3 className="text-lg font-semibold mb-2">Time Clock Unavailable</h3>
                 <p className="text-muted-foreground">
-                  You need to be registered as a staff member to use the time clock.
+                  Loading staff member data...
                 </p>
               </CardContent>
             </Card>
@@ -432,85 +415,63 @@ export default function SchedulesPage() {
         </TabsContent>
 
         {/* Management Tab */}
-        {canManageSchedules && (
-          <TabsContent value="management" className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* Quick Actions */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Button 
-                    onClick={() => handleCreateShift()}
-                    className="w-full justify-start"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create New Shift
-                  </Button>
-                  <Button 
-                    variant="outline"
-                    onClick={() => loadShifts(restaurantId)}
-                    className="w-full justify-start"
-                  >
-                    <BarChart3 className="mr-2 h-4 w-4" />
-                    View Reports
-                  </Button>
-                  <Button 
-                    variant="outline"
-                    className="w-full justify-start"
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Export Schedule
-                  </Button>
-                </CardContent>
-              </Card>
+        <TabsContent value="management" className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Quick Actions */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Quick Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button 
+                  onClick={() => handleCreateShift()}
+                  className="w-full justify-start"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create New Shift
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => loadShifts()}
+                  className="w-full justify-start"
+                >
+                  <BarChart3 className="mr-2 h-4 w-4" />
+                  Refresh Data
+                </Button>
+              </CardContent>
+            </Card>
 
-              {/* Recent Activity */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Activity</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {timeClockEntries.slice(0, 5).map(entry => (
-                      <div key={entry.id} className="flex items-center justify-between text-sm">
-                        <div>
-                          <span className="font-medium">{entry.staff?.user?.full_name}</span>
-                          <span className="text-muted-foreground ml-2">
-                            clocked {entry.clock_out_time ? 'out' : 'in'}
-                          </span>
-                        </div>
-                        <Badge variant="outline">
-                          {format(new Date(entry.clock_in_time), 'HH:mm')}
-                        </Badge>
+            {/* Recent Activity */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent Activity</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {timeClockEntries.slice(0, 5).map(entry => (
+                    <div key={entry.id} className="flex items-center justify-between text-sm">
+                      <div>
+                        <span className="font-medium">{entry.staff?.user?.full_name}</span>
+                        <span className="text-muted-foreground ml-2">
+                          clocked {entry.clock_out_time ? 'out' : 'in'}
+                        </span>
                       </div>
-                    ))}
-                    {timeClockEntries.length === 0 && (
-                      <p className="text-muted-foreground text-center py-4">
-                        No recent activity
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-        )}
+                      <Badge variant="outline">
+                        {format(new Date(entry.clock_in_time), 'HH:mm')}
+                      </Badge>
+                    </div>
+                  ))}
+                  {timeClockEntries.length === 0 && (
+                    <p className="text-muted-foreground text-center py-4">
+                      No recent activity
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
       </Tabs>
-
-      {/* Shift Form Modal */}
-      <ShiftForm
-        open={isShiftFormOpen}
-        onOpenChange={setIsShiftFormOpen}
-        restaurantId={restaurantId}
-        staffMembers={staffMembers}
-        positions={positions}
-        shift={editingShift}
-        initialDate={shiftFormInitialDate}
-        initialStaffId={shiftFormInitialStaffId}
-        onSuccess={handleShiftFormSuccess}
-      />
     </div>
   )
 }

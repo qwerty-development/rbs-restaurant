@@ -14,6 +14,7 @@ import { FloorPlanEditor } from "@/components/tables/floor-plan-editor"
 import { TableForm } from "@/components/tables/table-form"
 import { SectionManager } from "@/components/tables/section-manager"
 import { TableCombinationsManager } from "@/components/tables/table-combinations-manager"
+import { useTableCombinations, useCreateTableCombination, useDeleteTableCombination } from "@/lib/hooks/use-table-combinations"
 import { toast } from "react-hot-toast"
 import { 
   Plus, 
@@ -99,6 +100,13 @@ export default function TablesPage() {
     },
     enabled: !!restaurantId,
   })
+
+  // Fetch table combinations
+  const { data: tableCombinations, isLoading: combinationsLoading } = useTableCombinations(restaurantId)
+  
+  // Table combination mutations
+  const createCombinationMutation = useCreateTableCombination()
+  const deleteCombinationMutation = useDeleteTableCombination()
 
   // Table mutations
   const tableMutation = useMutation({
@@ -246,6 +254,27 @@ export default function TablesPage() {
 
   const handleTableSectionChange = (tableId: string, sectionId: string) => {
     updateTableSection.mutate({ tableId, sectionId })
+  }
+
+  const handleCreateCombination = (data: {
+    primaryTableId: string
+    secondaryTableId: string
+    combinedCapacity: number
+  }) => {
+    if (!restaurantId) return
+    
+    createCombinationMutation.mutate({
+      restaurantId,
+      ...data,
+    })
+  }
+
+  const handleDeleteCombination = (id: string) => {
+    if (!restaurantId) return
+    
+    if (confirm("Are you sure you want to delete this table combination?")) {
+      deleteCombinationMutation.mutate({ id, restaurantId })
+    }
   }
 
   // Calculate statistics
@@ -438,15 +467,9 @@ export default function TablesPage() {
         <TabsContent value="combinations">
           <TableCombinationsManager
             tables={tables || []}
-            combinations={[]} // TODO: Add proper combinations query
-            onCreateCombination={() => {
-              // TODO: Implement combination creation
-              toast("Table combinations feature coming soon")
-            }}
-            onDeleteCombination={() => {
-              // TODO: Implement combination deletion
-              toast("Table combinations feature coming soon")
-            }}
+            combinations={tableCombinations || []}
+            onCreateCombination={handleCreateCombination}
+            onDeleteCombination={handleDeleteCombination}
           />
         </TabsContent>
       </Tabs>
