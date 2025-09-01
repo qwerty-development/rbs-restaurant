@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks, subWeeks, isSameDay, parseISO } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -39,10 +39,18 @@ export function ScheduleCalendar({
   const [currentDate, setCurrentDate] = useState(new Date())
   const [shifts, setShifts] = useState<StaffShift[]>([])
   const [loading, setLoading] = useState(true)
+  const loadingRef = useRef(false)
+  const lastLoadedWeekRef = useRef<string>('')
 
-  const weekStart = startOfWeek(currentDate)
-  const weekEnd = endOfWeek(currentDate)
-  const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd })
+  // Memoize week calculations to prevent unnecessary re-renders
+  const weekStart = useMemo(() => startOfWeek(currentDate), [currentDate])
+  const weekEnd = useMemo(() => endOfWeek(currentDate), [currentDate])
+  const weekDays = useMemo(() => eachDayOfInterval({ start: weekStart, end: weekEnd }), [weekStart, weekEnd])
+  const weekStartFormatted = useMemo(() => format(weekStart, 'yyyy-MM-dd'), [weekStart])
+  const weekEndFormatted = useMemo(() => format(weekEnd, 'yyyy-MM-dd'), [weekEnd])
+
+  // Create a unique key for the current week to prevent duplicate loads
+  const weekKey = useMemo(() => `${weekStartFormatted}-${weekEndFormatted}-${selectedStaffId || 'all'}`, [weekStartFormatted, weekEndFormatted, selectedStaffId])
 
   // Filtered staff members
   const displayStaff = useMemo(() => {
@@ -52,25 +60,38 @@ export function ScheduleCalendar({
     return staffMembers
   }, [staffMembers, selectedStaffId])
 
+  // Load shifts effect - only trigger when essential dependencies change
   useEffect(() => {
-    loadShifts()
-  }, [restaurantId, weekStart, weekEnd, selectedStaffId])
-
-  const loadShifts = async () => {
-    try {
-      setLoading(true)
-      const data = await staffSchedulingService.getStaffShifts(restaurantId, {
-        startDate: format(weekStart, 'yyyy-MM-dd'),
-        endDate: format(weekEnd, 'yyyy-MM-dd'),
-        staffId: selectedStaffId
-      })
-      setShifts(data)
-    } catch (error) {
-      console.error('Error loading shifts:', error)
-    } finally {
-      setLoading(false)
+    // Prevent duplicate loading
+    if (!restaurantId || loadingRef.current || lastLoadedWeekRef.current === weekKey) {
+      return
     }
-  }
+
+    const loadShifts = async () => {
+      try {
+        loadingRef.current = true
+        setLoading(true)
+        console.log('📅 Loading shifts for week:', weekStartFormatted, 'to', weekEndFormatted)
+        
+        const data = await staffSchedulingService.getStaffShifts(restaurantId, {
+          startDate: weekStartFormatted,
+          endDate: weekEndFormatted,
+          staffId: selectedStaffId
+        })
+        
+        console.log('📅 Loaded shifts:', data.length)
+        setShifts(data)
+        lastLoadedWeekRef.current = weekKey
+      } catch (error) {
+        console.error('Error loading shifts:', error)
+      } finally {
+        setLoading(false)
+        loadingRef.current = false
+      }
+    }
+
+    loadShifts()
+  }, [restaurantId, weekKey, weekStartFormatted, weekEndFormatted, selectedStaffId])
 
   const getShiftsForDay = (date: Date, staffId: string) => {
     return shifts.filter(shift => 

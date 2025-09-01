@@ -155,12 +155,27 @@ export default function SchedulesPage() {
 
   const loadTimeClockEntries = async (restaurantId: string) => {
     try {
+      // Load today's entries for general display
       const today = format(new Date(), 'yyyy-MM-dd')
-      const data = await staffSchedulingService.getTimeClockEntries(restaurantId, {
+      const todayData = await staffSchedulingService.getTimeClockEntries(restaurantId, {
         startDate: today,
         endDate: today
       })
-      setTimeClockEntries(data)
+      
+      // Also load all active entries (regardless of date) for accurate stats
+      const activeData = await staffSchedulingService.getTimeClockEntries(restaurantId, {
+        status: 'active'
+      })
+      
+      // Combine both datasets, removing duplicates
+      const allEntries = [...todayData]
+      activeData.forEach(activeEntry => {
+        if (!allEntries.find(entry => entry.id === activeEntry.id)) {
+          allEntries.push(activeEntry)
+        }
+      })
+      
+      setTimeClockEntries(allEntries)
     } catch (error) {
       console.error('Error loading time clock entries:', error)
       toast.error('Failed to load time clock entries')
@@ -417,6 +432,10 @@ export default function SchedulesPage() {
             <TimeClock
               restaurantId={restaurantId}
               currentStaff={currentStaffMember}
+              onTimeClockChange={() => {
+                // Refresh time clock entries when clock in/out happens
+                loadTimeClockEntries(restaurantId)
+              }}
             />
           ) : (
             <Card>

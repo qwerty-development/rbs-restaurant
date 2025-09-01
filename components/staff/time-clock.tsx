@@ -29,9 +29,10 @@ import { toast } from "react-hot-toast"
 interface TimeClockProps {
   restaurantId: string
   currentStaff: RestaurantStaff
+  onTimeClockChange?: () => void
 }
 
-export function TimeClock({ restaurantId, currentStaff }: TimeClockProps) {
+export function TimeClock({ restaurantId, currentStaff, onTimeClockChange }: TimeClockProps) {
   const [currentEntry, setCurrentEntry] = useState<TimeClockEntry | null>(null)
   const [todayShifts, setTodayShifts] = useState<StaffShift[]>([])
   const [loading, setLoading] = useState(true)
@@ -104,6 +105,9 @@ export function TimeClock({ restaurantId, currentStaff }: TimeClockProps) {
 
       setCurrentEntry(entry)
       toast.success('Clocked in successfully')
+      
+      // Notify parent component
+      onTimeClockChange?.()
     } catch (error: any) {
       console.error('Error clocking in:', error)
       toast.error(error.message || 'Failed to clock in')
@@ -125,6 +129,9 @@ export function TimeClock({ restaurantId, currentStaff }: TimeClockProps) {
       
       // Reload data to get updated shifts
       await loadData()
+      
+      // Notify parent component
+      onTimeClockChange?.()
     } catch (error: any) {
       console.error('Error clocking out:', error)
       toast.error(error.message || 'Failed to clock out')
@@ -143,6 +150,9 @@ export function TimeClock({ restaurantId, currentStaff }: TimeClockProps) {
       setCurrentEntry(updatedEntry)
       setOnBreak(true)
       toast.success('Break started')
+      
+      // Notify parent component
+      onTimeClockChange?.()
     } catch (error: any) {
       console.error('Error starting break:', error)
       toast.error(error.message || 'Failed to start break')
@@ -161,6 +171,9 @@ export function TimeClock({ restaurantId, currentStaff }: TimeClockProps) {
       setCurrentEntry(updatedEntry)
       setOnBreak(false)
       toast.success('Break ended')
+      
+      // Notify parent component
+      onTimeClockChange?.()
     } catch (error: any) {
       console.error('Error ending break:', error)
       toast.error(error.message || 'Failed to end break')
