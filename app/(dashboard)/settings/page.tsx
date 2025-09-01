@@ -66,8 +66,6 @@ type Restaurant = {
   whatsapp_number?: string
   website_url?: string
   instagram_handle?: string
-  opening_time: string
-  closing_time: string
   booking_window_days: number
   cancellation_window_hours: number
   table_turnover_minutes: number
@@ -93,8 +91,6 @@ const generalSettingsSchema = z.object({
 })
 
 const operationalSettingsSchema = z.object({
-  opening_time: z.string(),
-  closing_time: z.string(),
   booking_window_days: z.number().min(1).max(90),
   cancellation_window_hours: z.number().min(1).max(48),
   table_turnover_minutes: z.number().min(30).max(240),
@@ -176,8 +172,6 @@ export default function SettingsPage() {
   const operationalForm = useForm<OperationalSettingsData>({
     resolver: zodResolver(operationalSettingsSchema),
     defaultValues: {
-      opening_time: "09:00",
-      closing_time: "22:00",
       booking_window_days: 30,
       cancellation_window_hours: 24,
       table_turnover_minutes: 120,
@@ -212,8 +206,6 @@ export default function SettingsPage() {
       })
 
       operationalForm.reset({
-        opening_time: restaurant.opening_time,
-        closing_time: restaurant.closing_time,
         booking_window_days: restaurant.booking_window_days,
         cancellation_window_hours: restaurant.cancellation_window_hours,
         table_turnover_minutes: restaurant.table_turnover_minutes,
@@ -521,45 +513,6 @@ export default function SettingsPage() {
             <CardContent>
               <Form {...operationalForm}>
                 <form onSubmit={operationalForm.handleSubmit(handleOperationalSubmit)} className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={operationalForm.control}
-                      name="opening_time"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Opening Time</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="time"
-                              {...field}
-                              disabled={updateRestaurantMutation.isPending}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={operationalForm.control}
-                      name="closing_time"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Closing Time</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="time"
-                              {...field}
-                              disabled={updateRestaurantMutation.isPending}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
-                  <Separator />
                   
                   <FormField
                     control={operationalForm.control}
