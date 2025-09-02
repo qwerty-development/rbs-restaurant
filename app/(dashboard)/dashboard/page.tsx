@@ -667,10 +667,38 @@ export default function DashboardPage() {
         }
       }
 
-      if (bookingData.table_ids && bookingData.table_ids.length > 0 && booking.status !== 'pending') {
+      // Handle shared table booking
+      if (bookingData.is_shared_booking && bookingData.table_ids && bookingData.table_ids.length > 0) {
+        const { error: sharedTableError } = await supabase
+          .from("bookings")
+          .update({
+            is_shared_booking: true
+          })
+          .eq("id", booking.id)
+
+        if (sharedTableError) {
+          await supabase.from("bookings").delete().eq("id", booking.id)
+          throw sharedTableError
+        }
+
+        // Insert into booking_tables with proper seats_occupied for shared table
+        const { error: tableError } = await supabase
+          .from("booking_tables")
+          .insert({
+            booking_id: booking.id,
+            table_id: bookingData.table_ids[0], // Shared tables use the first (and only) table ID
+            seats_occupied: bookingData.party_size // Use party_size for seats_occupied
+          })
+
+        if (tableError) {
+          await supabase.from("bookings").delete().eq("id", booking.id)
+          throw tableError
+        }
+      } else if (bookingData.table_ids && bookingData.table_ids.length > 0 && booking.status !== 'pending') {
         const tableAssignments = bookingData.table_ids.map((tableId: string) => ({
           booking_id: booking.id,
           table_id: tableId,
+          seats_occupied: 1 // Default for regular tables
         }))
 
         const { error: tableError } = await supabase
@@ -691,6 +719,8 @@ export default function DashboardPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["shared-tables-summary", restaurantId] })
+      queryClient.invalidateQueries({ queryKey: ["shared-table-availability"] })
       toast.success("Booking created successfully")
       setShowManualBooking(false)
     },
@@ -701,18 +731,40 @@ export default function DashboardPage() {
   })
 
   const handleQuickSeat = (guestData: any, tableIds: string[]) => {
-    const validation = validateTableAvailability(tableIds, '', guestData.party_size)
-    
-    if (!validation.valid) {
-      validation.errors.forEach(error => toast.error(error))
-      return
-    }
+    // Skip regular table validation for shared table bookings
+    if (!guestData.is_shared_booking) {
+      const validation = validateTableAvailability(tableIds, '', guestData.party_size)
+      
+      if (!validation.valid) {
+        validation.errors.forEach(error => toast.error(error))
+        return
+      }
 
-    if (validation.warnings.length > 0) {
-      validation.warnings.forEach(warning => toast.error(warning, { 
-        duration: 4000,
-        style: { backgroundColor: '#7A2E4A', color: 'white' }
-      }))
+      if (validation.warnings.length > 0) {
+        validation.warnings.forEach(warning => toast.error(warning, { 
+          duration: 4000,
+          style: { backgroundColor: '#7A2E4A', color: 'white' }
+        }))
+      }
+    } else if (guestData.is_shared_booking) {
+      // Basic validation for shared tables - check if there are enough available seats
+      const sharedTableId = tableIds && tableIds[0] // Use the tableIds parameter instead
+      const sharedTable = tables.find(t => t.id === sharedTableId)
+      
+      console.log("Shared table validation:", { sharedTableId, sharedTable, tablesCount: tables.length })
+      
+      if (!sharedTable) {
+        console.error("Shared table not found:", { sharedTableId, availableTables: tables.map(t => ({ id: t.id, table_number: t.table_number })) })
+        toast.error("Selected shared table not found")
+        return
+      }
+
+      // Note: Real availability check is handled by the UI before reaching this point
+      // This is just a safety check
+      if (guestData.party_size > sharedTable.capacity) {
+        toast.error(`Party size (${guestData.party_size}) exceeds table capacity (${sharedTable.capacity})`)
+        return
+      }
     }
 
     const bookingData = {

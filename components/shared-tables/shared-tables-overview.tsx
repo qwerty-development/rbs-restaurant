@@ -11,6 +11,7 @@ import { useSharedTablesSummary, useSharedTableStats } from "@/hooks/use-shared-
 import { SharedTableCard } from "@/components/shared-tables/shared-table-card"
 import { SharedTableBookingsModal } from "@/components/shared-tables/shared-table-bookings-modal"
 import { SharedTableAnalytics } from "@/components/shared-tables/shared-table-analytics"
+import { CreateSharedTableModal } from "@/components/shared-tables/create-shared-table-modal"
 import { 
   Users, 
   Clock, 
@@ -33,6 +34,7 @@ export function SharedTablesOverview({ restaurantId }: SharedTablesOverviewProps
   const [selectedTable, setSelectedTable] = useState<SharedTableSummary | null>(null)
   const [showBookingsModal, setShowBookingsModal] = useState(false)
   const [showAnalytics, setShowAnalytics] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
 
   const { 
     data: sharedTables, 
@@ -82,14 +84,11 @@ export function SharedTablesOverview({ restaurantId }: SharedTablesOverviewProps
             Manage communal dining and social bookings
           </p>
         </div>
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" onClick={() => setShowAnalytics(true)}>
-            <TrendingUp className="h-4 w-4 mr-2" />
-            Analytics
-          </Button>
-          <Button variant="outline">
-            <Settings className="h-4 w-4 mr-2" />
-            Settings
+        
+        <div className="flex gap-2">
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Shared Table
           </Button>
         </div>
       </div>
@@ -124,18 +123,7 @@ export function SharedTablesOverview({ restaurantId }: SharedTablesOverviewProps
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Today's Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalRevenue)}</div>
-            <p className="text-xs text-muted-foreground">
-              Estimated from shared tables
-            </p>
-          </CardContent>
-        </Card>
+     
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -185,7 +173,7 @@ export function SharedTablesOverview({ restaurantId }: SharedTablesOverviewProps
               <p className="text-muted-foreground mb-4">
                 You haven't created any shared tables yet.
               </p>
-              <Button>
+              <Button onClick={() => setShowCreateModal(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Create Shared Table
               </Button>
@@ -212,6 +200,13 @@ export function SharedTablesOverview({ restaurantId }: SharedTablesOverviewProps
           <SharedTableAnalytics restaurantId={restaurantId} />
         </DialogContent>
       </Dialog>
+
+      {/* Create Shared Table Modal */}
+      <CreateSharedTableModal
+        restaurantId={restaurantId}
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+      />
     </div>
   )
 }

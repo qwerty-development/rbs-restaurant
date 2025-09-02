@@ -63,7 +63,7 @@ export function TableGrid({ tables, isLoading, onEdit, onDelete }: TableGridProp
   return (
     <div className="space-y-6">
       {Object.entries(groupedTables).map(([type, typeTables]) => {
-        const config = TABLE_TYPE_CONFIG[type as keyof typeof TABLE_TYPE_CONFIG]
+        const config = TABLE_TYPE_CONFIG[type as keyof typeof TABLE_TYPE_CONFIG] || { label: type, color: "bg-muted" }
         
         return (
           <div key={type} className="space-y-3">

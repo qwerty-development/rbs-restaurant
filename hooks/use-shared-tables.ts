@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { toast } from "react-hot-toast"
 import type { SharedTableSummary, SharedTableAvailability, SharedTableBooking, RestaurantTable } from "@/types"
 
 export function useSharedTablesSummary(restaurantId: string, date?: Date) {
@@ -307,5 +308,70 @@ export function useSharedTableStats(restaurantId: string, days: number = 7) {
       return stats
     },
     enabled: !!restaurantId,
+  })
+}
+
+export function useCreateSharedTable() {
+  const supabase = createClient()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      restaurantId,
+      tableNumber,
+      capacity,
+      sectionId,
+      features,
+      xPosition,
+      yPosition,
+      width,
+      height,
+      shape
+    }: {
+      restaurantId: string
+      tableNumber: string
+      capacity: number
+      sectionId?: string
+      features?: string[]
+      xPosition?: number
+      yPosition?: number
+      width?: number
+      height?: number
+      shape?: 'rectangle' | 'circle' | 'square'
+    }) => {
+      const { data, error } = await supabase
+        .from("restaurant_tables")
+        .insert({
+          restaurant_id: restaurantId,
+          table_number: tableNumber,
+          table_type: "shared",
+          capacity,
+          section_id: sectionId,
+          features: features || [],
+          x_position: xPosition || 100,
+          y_position: yPosition || 100,
+          width: width || 120,
+          height: height || 80,
+          shape: shape || 'rectangle',
+          min_capacity: 1,
+          max_capacity: capacity,
+          is_active: true,
+          is_combinable: false
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+      return data
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["shared-tables-summary", variables.restaurantId] })
+      queryClient.invalidateQueries({ queryKey: ["restaurant-tables", variables.restaurantId] })
+      toast.success(`Shared table ${variables.tableNumber} created successfully`)
+    },
+    onError: (error: any) => {
+      console.error("Error creating shared table:", error)
+      toast.error("Failed to create shared table")
+    },
   })
 }

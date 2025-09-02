@@ -72,8 +72,6 @@ const formSchema = z.object({
   status: z.enum(["pending", "confirmed", "completed"]),
   acceptTerms: z.boolean().default(true), // Staff-created bookings default to accepted
   is_shared_booking: z.boolean().default(false),
-  shared_table_id: z.string().optional(),
-  seats_requested: z.number().min(1).max(10).optional(),
 })
 
 type FormData = z.input<typeof formSchema>
@@ -111,9 +109,7 @@ export function ManualBookingForm({
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 })
   const [mounted, setMounted] = useState(false)
-  const [isSharedTableBooking, setIsSharedTableBooking] = useState(false)
   const [selectedSharedTable, setSelectedSharedTable] = useState<string | null>(null)
-  const [sharedTableSeats, setSharedTableSeats] = useState<number>(1)
   const inputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
   const tableService = new TableAvailabilityService()
@@ -203,7 +199,6 @@ export function ManualBookingForm({
       booking_time: prefillData?.booking_time || format(new Date(), "HH:mm"),
       acceptTerms: true, // Default to true for staff-created bookings
       is_shared_booking: false,
-      seats_requested: 1,
     },
   })
 
@@ -212,7 +207,6 @@ export function ManualBookingForm({
   const partySize = watch("party_size")
   const turnTime = watch("turn_time_minutes")
   const isSharedBooking = watch("is_shared_booking")
-  const seatsRequested = watch("seats_requested")
 
   // Set prefilled customer if provided
   useEffect(() => {
@@ -245,8 +239,8 @@ export function ManualBookingForm({
   })
 
   // Filter tables by type
-  const regularTables = allTables?.filter(table => !table.is_shared_table) || []
-  const sharedTables = allTables?.filter(table => table.is_shared_table) || []
+  const regularTables = allTables?.filter(table => table.table_type !== 'shared') || []
+  const sharedTables = allTables?.filter(table => table.table_type === 'shared') || []
 
   // Check available shared tables for the booking time
   const getSharedTableAvailability = async (tableId: string) => {
@@ -505,15 +499,15 @@ export function ManualBookingForm({
         return
       }
       
-      // Validate seats requested
-      if (!data.seats_requested || data.seats_requested <= 0) {
-        toast.error("Please specify number of seats")
+      // Use party_size for shared table validation
+      if (!data.party_size || data.party_size <= 0) {
+        toast.error("Please specify party size")
         return
       }
 
       // Check if enough seats are available
       const availabilityCheck = await getSharedTableAvailability(selectedSharedTable)
-      if (availabilityCheck && data.seats_requested > availabilityCheck.available_seats) {
+      if (availabilityCheck && data.party_size > availabilityCheck.available_seats) {
         toast.error(`Only ${availabilityCheck.available_seats} seats available at this table`)
         return
       }
@@ -602,8 +596,6 @@ export function ManualBookingForm({
       booking_time: bookingDateTime.toISOString(),
       table_ids: data.is_shared_booking ? [selectedSharedTable] : selectedTables,
       is_shared_booking: data.is_shared_booking || false,
-      shared_table_id: data.is_shared_booking ? selectedSharedTable : null,
-      seats_requested: data.is_shared_booking ? data.seats_requested : null,
     }
 
     // If no selected customer but meaningful guest info is provided, prompt to add/use existing
@@ -1164,11 +1156,8 @@ export function ManualBookingForm({
               checked={isSharedBooking}
               onCheckedChange={(checked) => {
                 setValue("is_shared_booking", checked as boolean)
-                setIsSharedTableBooking(checked as boolean)
                 if (!checked) {
                   setSelectedSharedTable(null)
-                  setValue("shared_table_id", "")
-                  setValue("seats_requested", 1)
                 }
               }}
               disabled={isLoading}
@@ -1185,45 +1174,29 @@ export function ManualBookingForm({
 
           {isSharedBooking && (
             <div className="mt-4 space-y-4 border-t pt-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="seats_requested">Seats Requested *</Label>
-                  <div className="relative">
-                    <Users className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="seats_requested"
-                      type="number"
-                      min="1"
-                      max="10"
-                      {...register("seats_requested", { valueAsNumber: true })}
-                      className="pl-10"
-                      disabled={isLoading}
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <Label htmlFor="shared_table">Shared Table *</Label>
-                  <Select
-                    value={selectedSharedTable || ""}
-                    onValueChange={(value) => {
-                      setSelectedSharedTable(value)
-                      setValue("shared_table_id", value)
-                    }}
-                    disabled={isLoading}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a shared table" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sharedTables.map((table) => (
-                        <SelectItem key={table.id} value={table.id}>
-                          Table {table.table_number} (Capacity: {table.capacity})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div>
+                <Label htmlFor="shared_table">Shared Table *</Label>
+                <Select
+                  value={selectedSharedTable || ""}
+                  onValueChange={(value) => {
+                    setSelectedSharedTable(value)
+                  }}
+                  disabled={isLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a shared table" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sharedTables.map((table) => (
+                      <SelectItem key={table.id} value={table.id}>
+                        Table {table.table_number} (Capacity: {table.capacity})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">
+                  Your party of {partySize} will be seated at this shared table
+                </p>
               </div>
             </div>
           )}
@@ -1239,7 +1212,7 @@ export function ManualBookingForm({
               </h3>
               <p className="text-sm text-slate-600 dark:text-slate-300">
                 {isSharedBooking 
-                  ? `Select shared table for ${seatsRequested || 1} seats`
+                  ? `Shared table selected for ${partySize} guests`
                   : `Select tables for ${partySize} guests (Selected capacity: ${selectedTablesCapacity})`
                 }
               </p>
@@ -1585,11 +1558,11 @@ export function ManualBookingForm({
             type="submit"
             disabled={
               isLoading ||
-              selectedTables.length === 0 ||
+              (isSharedBooking ? !selectedSharedTable : selectedTables.length === 0) ||
               (availability && !availability.available) ||
-              (selectedTablesCapacity > 0 && selectedTablesCapacity < partySize) ||
-              // Check if any selected tables will conflict with the booking time
-              (!!bookingDate && !!bookingTime && selectedTables.some(tableId => {
+              (!isSharedBooking && selectedTablesCapacity > 0 && selectedTablesCapacity < partySize) ||
+              // Check if any selected tables will conflict with the booking time (only for regular tables)
+              (!!bookingDate && !!bookingTime && !isSharedBooking && selectedTables.some(tableId => {
                 const [hours, minutes] = bookingTime.split(":")
                 const bookingDateTime = new Date(bookingDate)
                 bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
