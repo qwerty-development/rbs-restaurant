@@ -51,14 +51,26 @@ export default function ForgotPasswordPage() {
     try {
       setIsLoading(true)
 
+      // First check if user exists
+      const { data: user, error: userError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', data.email)
+        .single()
+
+      if (userError || !user) {
+        toast.error("No account found with this email address")
+        return
+      }
+
       const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: `${window.location.origin}/enter-token`,
       })
 
       if (error) throw error
 
       setIsSuccess(true)
-      toast.success("Password reset email sent!")
+      toast.success("Password reset token sent!")
     } catch (error: any) {
       console.error("Password reset error:", error)
       toast.error(error.message || "Failed to send reset email")
@@ -76,18 +88,24 @@ export default function ForgotPasswordPage() {
           </div>
           <CardTitle className="text-2xl font-bold">Check your email</CardTitle>
           <CardDescription>
-            We've sent a password reset link to {form.getValues("email")}
+            We've sent a password reset token to {form.getValues("email")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Alert>
             <Mail className="h-4 w-4" />
             <AlertDescription>
-              Click the link in the email to reset your password. The link will expire in 1 hour.
+              Copy the 6-digit token from your email and enter it in the next step. The token will expire in 1 hour.
             </AlertDescription>
           </Alert>
         </CardContent>
         <CardFooter className="flex flex-col space-y-2">
+          <Link 
+            href="/enter-token" 
+            className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+          >
+            Enter Token
+          </Link>
           <Link href="/login" className="text-sm text-primary hover:underline">
             Back to login
           </Link>
@@ -103,7 +121,7 @@ export default function ForgotPasswordPage() {
           Forgot password?
         </CardTitle>
         <CardDescription className="text-center">
-          Enter your email address and we'll send you a reset link
+          Enter your email address and we'll send you a reset token
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -140,7 +158,7 @@ export default function ForgotPasswordPage() {
               ) : (
                 <>
                   <Mail className="mr-2 h-4 w-4" />
-                  Send reset link
+                  Send reset token
                 </>
               )}
             </Button>

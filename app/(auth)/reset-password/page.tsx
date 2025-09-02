@@ -102,14 +102,14 @@ export default function ResetPasswordPage() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
             <AlertCircle className="h-6 w-6 text-red-600" />
           </div>
-          <CardTitle className="text-2xl font-bold">Invalid or Expired Link</CardTitle>
+          <CardTitle className="text-2xl font-bold">Invalid or Expired Token</CardTitle>
           <CardDescription>
-            This password reset link is invalid or has expired
+            Your password reset token is invalid or has expired
           </CardDescription>
         </CardHeader>
         <CardFooter className="flex flex-col space-y-2">
           <Link href="/forgot-password" className="text-sm text-primary hover:underline">
-            Request a new password reset link
+            Request a new password reset token
           </Link>
           <Link href="/login" className="text-sm text-muted-foreground hover:underline">
             Back to login
