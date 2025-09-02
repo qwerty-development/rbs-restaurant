@@ -42,10 +42,12 @@ import {
   Building,
   Maximize2,
   Pencil,
-  X
+  X,
+  Users
 } from "lucide-react"
 import { format, addMinutes, differenceInMinutes } from "date-fns"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
+import { useSharedTablesSummary } from "@/hooks/use-shared-tables"
 import {
   Tooltip,
   TooltipContent,
@@ -198,6 +200,9 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
     },
     enabled: !!restaurantId,
   })
+
+  // Fetch shared tables data
+  const { data: sharedTablesSummary = [] } = useSharedTablesSummary(restaurantId, currentTime)
 
   // Set first section as default when sections are loaded
   useEffect(() => {
@@ -639,10 +644,22 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
   }, [handleTableDragMove, handleTableDragEnd])
 
   const getTableBookingInfo = (table: any) => {
+    // Check if this is a shared table
+    const sharedTableInfo = sharedTablesSummary.find(st => st.table_id === table.id)
+    const isSharedTable = !!sharedTableInfo
+
     // Get all bookings for this table (current, upcoming, and recent)
-    const allTableBookings = bookings.filter(booking => 
+    let allTableBookings = bookings.filter(booking => 
       booking.tables?.some((t: any) => t.id === table.id)
     )
+
+    // For shared tables, also include shared table bookings
+    if (isSharedTable) {
+      const sharedBookings = bookings.filter(booking => 
+        booking.is_shared_booking && booking.shared_table_id === table.id
+      )
+      allTableBookings = [...allTableBookings, ...sharedBookings]
+    }
 
     // Current active bookings
     const activeBookings = allTableBookings.filter(booking =>
@@ -686,7 +703,10 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
       upcoming: upcomingBookings[0],
       allUpcoming: upcomingBookings,
       recentHistory,
-      status: tableStatuses.get(table.id)
+      status: tableStatuses.get(table.id),
+      sharedTableInfo,
+      isSharedTable,
+      activeSharedBookings: isSharedTable ? activeBookings.filter(b => b.is_shared_booking) : []
     }
   }
 
@@ -727,9 +747,9 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
   }
 
   const renderTable = (table: any) => {
-    const { current, upcoming, allUpcoming, recentHistory } = getTableBookingInfo(table)
+    const { current, upcoming, allUpcoming, recentHistory, sharedTableInfo, isSharedTable, activeSharedBookings } = getTableBookingInfo(table)
     const isOccupied = !!current
-    const StatusIcon = current ? STATUS_ICONS[current.status as DiningStatus] : Table2
+    const StatusIcon = current ? STATUS_ICONS[current.status as DiningStatus] : (isSharedTable ? Users : Table2)
     const isHighlighted = isTableHighlighted(table, current)
     const bookingTime = current ? new Date(current.booking_time) : null
     
@@ -749,6 +769,8 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               className={cn(
                 "relative rounded-2xl border-3 cursor-pointer transition-all duration-300 ease-out focus:outline-none focus:ring-4 focus:ring-primary focus:ring-offset-2",
                 TABLE_TYPE_COLORS[table.table_type] || "bg-gradient-to-br from-background to-card border-border shadow-lg",
+                // Shared table styling
+                isSharedTable && "ring-2 ring-purple-400/50 border-purple-300/50",
                 // Occupied table styling
                 isOccupied && "ring-4 ring-offset-2 ring-offset-background shadow-xl",
                 isOccupied && STATUS_COLORS[current.status as DiningStatus],
@@ -881,11 +903,26 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               {/* Table header - Ultra compact */}
               <div className="flex flex-col items-center mb-0.5">
                 <div className="flex items-center gap-0.5">
-                  <StatusIcon className="h-2.5 w-2.5 text-current" />
+                  <StatusIcon className={cn(
+                    "h-2.5 w-2.5 text-current",
+                    isSharedTable && "text-purple-500"
+                  )} />
                   <span className="font-bold text-[10px] text-foreground">T{table.table_number}</span>
+                  {isSharedTable && (
+                    <div className="bg-purple-500 text-white text-[6px] px-1 rounded-full">
+                      SHARED
+                    </div>
+                  )}
                 </div>
                 <span className="text-[8px] text-muted-foreground font-medium">
-                  <UserCheck className="h-2.5 w-2.5 inline-block mr-0.5" />{table.max_capacity}
+                  <UserCheck className="h-2.5 w-2.5 inline-block mr-0.5" />
+                  {isSharedTable ? (
+                    <span className="text-purple-600">
+                      {sharedTableInfo?.current_occupancy || 0}/{sharedTableInfo?.capacity || table.max_capacity}
+                    </span>
+                  ) : (
+                    table.max_capacity
+                  )}
                 </span>
               </div>
 
@@ -896,6 +933,9 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                   <div>
                     <p className="font-bold text-[9px] truncate text-foreground mb-0.5 leading-tight">
                       {(current.guest_name || current.user?.full_name || 'Guest').split(' ')[0]}
+                      {current.is_shared_booking && (
+                        <span className="ml-1 text-purple-500">({current.seats_requested} seats)</span>
+                      )}
                     </p>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -954,10 +994,30 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               ) : (
                 <div className="text-center py-1">
                   <div className="mb-1">
-                    <div className="w-4 h-4 mx-auto bg-green-500 rounded-full flex items-center justify-center">
-                      <span className="text-white text-[8px] font-bold">✓</span>
-                    </div>
+                    {isSharedTable ? (
+                      <div className="w-4 h-4 mx-auto bg-purple-500 rounded-full flex items-center justify-center">
+                        <Users className="text-white text-[8px]" />
+                      </div>
+                    ) : (
+                      <div className="w-4 h-4 mx-auto bg-green-500 rounded-full flex items-center justify-center">
+                        <span className="text-white text-[8px] font-bold">✓</span>
+                      </div>
+                    )}
                   </div>
+                  
+                  {/* Shared table availability info */}
+                  {isSharedTable && sharedTableInfo && (
+                    <div className="text-center p-1 bg-purple-50 border border-purple-200 rounded text-[8px] mb-1">
+                      <div className="font-bold text-purple-800">
+                        {(sharedTableInfo.capacity - sharedTableInfo.current_occupancy)} seats available
+                      </div>
+                      {activeSharedBookings.length > 0 && (
+                        <div className="text-purple-700 text-[7px]">
+                          {activeSharedBookings.length} active booking{activeSharedBookings.length > 1 ? 's' : ''}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   
                   {/* Compact upcoming booking */}
                   {upcoming && (
@@ -967,6 +1027,9 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                       </div>
                       <div className="text-blue-700 truncate">
                         {(upcoming.guest_name || upcoming.user?.full_name || '').split(' ')[0]} ({upcoming.party_size})
+                        {upcoming.is_shared_booking && (
+                          <span className="text-purple-600"> - {upcoming.seats_requested} seats</span>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1015,6 +1078,9 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 <p className="font-semibold">{current.guest_name || current.user?.full_name}</p>
                 <div className="space-y-1 text-sm">
                   <p>Party of {current.party_size}</p>
+                  {current.is_shared_booking && (
+                    <p className="text-purple-600">Shared table booking ({current.seats_requested} seats)</p>
+                  )}
                   <p>Arrived: {format(bookingTime!, 'h:mm a')}</p>
                   <p>Status: {current.status.replace(/_/g, ' ')}</p>
                   {current.special_requests && (
@@ -1030,9 +1096,19 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 <p className="font-semibold">Table {table.table_number}</p>
                 <p className="text-sm">Capacity: {table.min_capacity}-{table.max_capacity}</p>
                 <p className="text-sm">Type: {table.table_type}</p>
+                {isSharedTable && sharedTableInfo && (
+                  <div className="text-sm mt-2">
+                    <p className="text-purple-600 font-medium">🤝 Shared Table</p>
+                    <p>Occupancy: {sharedTableInfo.current_occupancy}/{sharedTableInfo.capacity}</p>
+                    <p>Available: {sharedTableInfo.capacity - sharedTableInfo.current_occupancy} seats</p>
+                  </div>
+                )}
                 {upcoming && (
                   <p className="text-sm mt-2">
                     Next: {format(new Date(upcoming.booking_time), 'h:mm a')}
+                    {upcoming.is_shared_booking && (
+                      <span className="text-purple-600"> ({upcoming.seats_requested} seats)</span>
+                    )}
                   </p>
                 )}
               </div>

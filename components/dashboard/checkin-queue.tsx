@@ -41,6 +41,7 @@ import { toast } from "react-hot-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
 import { BookingConflictService } from "@/lib/services/booking-conflict-service"
+import { useSharedTablesSummary } from "@/hooks/use-shared-tables"
 
 const TABLE_TYPE_COLORS: Record<string, string> = {
   booth: "bg-gradient-to-br from-primary/80 to-primary text-primary-foreground border-primary/70",
@@ -149,6 +150,11 @@ export function CheckInQueue({
     confirmationStep: false
   })
 
+  // Shared tables state
+  const [selectedSharedTableId, setSelectedSharedTableId] = useState<string>("")
+  const [sharedTableSeatsRequested, setSharedTableSeatsRequested] = useState<number>(2)
+  const [isSharedBookingMode, setIsSharedBookingMode] = useState(false)
+
   // Advanced settings
   const [advancedMode, setAdvancedMode] = useState(false)
   const [autoSuggestEnabled, setAutoSuggestEnabled] = useState(true)
@@ -194,6 +200,9 @@ export function CheckInQueue({
 
   // Fetch table combinations with enhanced filtering
   const { data: tableCombinations = [], isLoading: combinationsLoading } = useTableCombinations(restaurantId)
+
+  // Fetch shared tables data
+  const { data: sharedTablesSummary = [] } = useSharedTablesSummary(restaurantId, currentTime)
 
   // Enhanced customer search with caching
   const { data: customers, error: customersError, isLoading: customersLoading } = useQuery({
@@ -850,6 +859,61 @@ export function CheckInQueue({
   }
 
   const handleWalkIn = async () => {
+    // For shared table bookings, check shared table selection
+    if (isSharedBookingMode) {
+      if (!selectedSharedTableId) {
+        toast.error("Please select a shared table")
+        return
+      }
+
+      const partySize = typeof walkInData.partySize === 'number' ? walkInData.partySize : (parseInt(walkInData.partySize as string) || 1)
+      
+      if (sharedTableSeatsRequested > partySize) {
+        toast.error("Seats requested cannot exceed party size")
+        return
+      }
+
+      // Create shared table booking
+      const sharedBookingData = {
+        customer_id: selectedCustomer?.id || null,
+        user_id: selectedCustomer?.user_id || null,
+        guest_name: selectedCustomer
+          ? (selectedCustomer.profile?.full_name || selectedCustomer.guest_name)
+          : (walkInData.guestName.trim() || `Walk-in ${format(currentTime, 'HH:mm')}`),
+        guest_phone: selectedCustomer
+          ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
+          : (walkInData.guestPhone?.trim() || null),
+        guest_email: selectedCustomer?.guest_email || null,
+        party_size: partySize,
+        shared_table_id: selectedSharedTableId,
+        seats_requested: sharedTableSeatsRequested,
+        booking_time: currentTime.toISOString(),
+        turn_time_minutes: walkInData.estimatedDuration,
+        status: 'arrived',
+        is_shared_booking: true
+      }
+
+      onQuickSeat(sharedBookingData, [selectedSharedTableId])
+      
+      // Reset form
+      setWalkInData({ guestName: "", guestPhone: "", partySize: 2, estimatedDuration: 120, preferences: [] })
+      setSelectedSharedTableId("")
+      setSharedTableSeatsRequested(2)
+      setSelectedCustomer(null)
+      setCustomerSearch("")
+      
+      const sharedTable = sharedTablesSummary.find(t => t.table_id === selectedSharedTableId)
+      toast.success(
+        <div>
+          <p className="font-medium">Shared Table Walk-in Seated</p>
+          <p className="text-sm mt-1">{sharedBookingData.guest_name} → Table {sharedTable?.table_number} ({sharedTableSeatsRequested} seats)</p>
+        </div>,
+        { duration: 3000 }
+      )
+      return
+    }
+
+    // Regular table booking logic
     if (selectedTableIds.length === 0) {
       toast.error("Please select at least one table")
       return
@@ -1386,11 +1450,18 @@ export function CheckInQueue({
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>{format(new Date(booking.booking_time), 'h:mm')}</span>
               <span>{booking.party_size}p</span>
-              {hasTable && (
+              {booking.is_shared_booking ? (
+                <div className="flex items-center gap-1">
+                  <Users className="h-2.5 w-2.5 text-purple-400" />
+                  <span className="text-purple-400 text-xs">
+                    T{booking.shared_table?.table_number || 'Unknown'} ({booking.seats_requested} seats)
+                  </span>
+                </div>
+              ) : hasTable ? (
                 <span className="text-secondary-foreground text-xs">
                   T{booking.tables.map((t: any) => t.table_number).join(",")}
                 </span>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -1504,11 +1575,18 @@ export function CheckInQueue({
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>{format(new Date(booking.booking_time), 'h:mm')}</span>
               <span>{booking.party_size}p</span>
-              {hasTable && (
+              {booking.is_shared_booking ? (
+                <div className="flex items-center gap-1">
+                  <Users className="h-2.5 w-2.5 text-purple-400" />
+                  <span className="text-purple-400">
+                    T{booking.shared_table?.table_number || 'Unknown'} ({booking.seats_requested} seats)
+                  </span>
+                </div>
+              ) : hasTable ? (
                 <span className="text-secondary-foreground">
                   T{booking.tables.map((t: any) => t.table_number).join(",")}
                 </span>
-              )}
+              ) : null}
               <span className="text-muted-foreground">{elapsedMinutes}m</span>
             </div>
 
@@ -1899,7 +1977,135 @@ export function CheckInQueue({
                   </div>
                 </div>
 
-                {/* Table selection */}
+                {/* Booking Mode Toggle */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-foreground mb-1 block">
+                    Booking Mode
+                  </Label>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={!isSharedBookingMode ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        setIsSharedBookingMode(false)
+                        setSelectedSharedTableId("")
+                        setSharedTableSeatsRequested(2)
+                      }}
+                      className="h-6 text-xs flex-1"
+                    >
+                      <Table2 className="h-3 w-3 mr-1" />
+                      Regular Table
+                    </Button>
+                    <Button
+                      variant={isSharedBookingMode ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        setIsSharedBookingMode(true)
+                        setSelectedTableIds([])
+                      }}
+                      className="h-6 text-xs flex-1"
+                    >
+                      <Users className="h-3 w-3 mr-1" />
+                      Shared Table
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Shared Table Selection */}
+                {isSharedBookingMode && (
+                  <div className="space-y-2">
+                    <Label className="text-xs text-foreground mb-1 block">
+                      Select Shared Table
+                    </Label>
+                    
+                    {sharedTablesSummary.length > 0 ? (
+                      <div className="space-y-1">
+                        {sharedTablesSummary.map((table) => {
+                          const isSelected = selectedSharedTableId === table.table_id
+                          const availableSeats = table.capacity - table.current_occupancy
+                          const canBook = availableSeats >= sharedTableSeatsRequested
+                          
+                          return (
+                            <div
+                              key={table.table_id}
+                              className={cn(
+                                "p-2 rounded border cursor-pointer transition-colors text-xs",
+                                isSelected 
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : canBook
+                                    ? "bg-card border-border hover:border-primary/50"
+                                    : "bg-muted border-border opacity-50 cursor-not-allowed"
+                              )}
+                              onClick={() => {
+                                if (canBook) {
+                                  setSelectedSharedTableId(table.table_id)
+                                }
+                              }}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Users className="h-3 w-3" />
+                                  <span className="font-medium">Table {table.table_number}</span>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-medium">
+                                    {table.current_occupancy}/{table.capacity} seats
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    {availableSeats} available
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        
+                        {/* Seats requested for shared table */}
+                        <div className="mt-2">
+                          <Label className="text-xs text-foreground mb-1 block">
+                            Seats Requested
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSharedTableSeatsRequested(Math.max(1, sharedTableSeatsRequested - 1))}
+                              disabled={sharedTableSeatsRequested <= 1}
+                              className="h-6 w-6 p-0"
+                            >
+                              -
+                            </Button>
+                            <span className="text-xs w-8 text-center">{sharedTableSeatsRequested}</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const maxSeats = selectedSharedTableId 
+                                  ? (sharedTablesSummary.find(t => t.table_id === selectedSharedTableId)?.capacity || 10) - 
+                                    (sharedTablesSummary.find(t => t.table_id === selectedSharedTableId)?.current_occupancy || 0)
+                                  : 10
+                                setSharedTableSeatsRequested(Math.min(maxSeats, sharedTableSeatsRequested + 1))
+                              }}
+                              disabled={selectedSharedTableId ? 
+                                sharedTableSeatsRequested >= ((sharedTablesSummary.find(t => t.table_id === selectedSharedTableId)?.capacity || 10) - 
+                                (sharedTablesSummary.find(t => t.table_id === selectedSharedTableId)?.current_occupancy || 0)) : false}
+                              className="h-6 w-6 p-0"
+                            >
+                              +
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground p-2 text-center">
+                        No shared tables available
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Regular Table selection */}
+                {!isSharedBookingMode && (
                 <div>
                   <Label className="text-xs text-foreground mb-1 block">
                     Select Table - {availableTables.length} available
@@ -2100,9 +2306,10 @@ export function CheckInQueue({
                     )
                   })()}
                 </div>
+                )}
 
                 {/* Capacity warning */}
-                {selectedTableIds.length > 0 && (() => {
+                {!isSharedBookingMode && selectedTableIds.length > 0 && (() => {
                   const totalCapacity = selectedTableIds.reduce((sum, id) => {
                     const table = tableStatus.find(t => t.id === id)
                     return sum + (table?.max_capacity || 0)
@@ -2128,14 +2335,29 @@ export function CheckInQueue({
                 <Button
                   className="w-full h-8 text-xs font-medium bg-secondary hover:bg-secondary/90 text-secondary-foreground disabled:bg-muted disabled:text-muted-foreground"
                   onClick={handleWalkIn}
-                  disabled={selectedTableIds.length === 0 || !walkInData.partySize || walkInData.partySize === '' || (typeof walkInData.partySize === 'number' && walkInData.partySize < 1)}
-                >
-                  {selectedTableIds.length > 0
-                    ? `Seat at Table ${selectedTableIds.map(id =>
-                        tableStatus.find(t => t.id === id)?.table_number
-                      ).join(', ')}`
-                    : 'Select a Table'
+                  disabled={
+                    !walkInData.partySize || 
+                    walkInData.partySize === '' || 
+                    (typeof walkInData.partySize === 'number' && walkInData.partySize < 1) ||
+                    (isSharedBookingMode ? !selectedSharedTableId : selectedTableIds.length === 0)
                   }
+                >
+                  {isSharedBookingMode ? (
+                    selectedSharedTableId ? (
+                      (() => {
+                        const table = sharedTablesSummary.find(t => t.table_id === selectedSharedTableId)
+                        return `Book ${sharedTableSeatsRequested} seats at Table ${table?.table_number || selectedSharedTableId}`
+                      })()
+                    ) : (
+                      'Select a Shared Table'
+                    )
+                  ) : (
+                    selectedTableIds.length > 0
+                      ? `Seat at Table ${selectedTableIds.map(id =>
+                          tableStatus.find(t => t.id === id)?.table_number
+                        ).join(', ')}`
+                      : 'Select a Table'
+                  )}
                 </Button>
               </div>
             </div>

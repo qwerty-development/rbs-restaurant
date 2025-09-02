@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useQuery } from "@tanstack/react-query"
 import { TableAvailabilityService } from "@/lib/table-availability"
 import { RestaurantAvailability } from "@/lib/restaurant-availability"
+import { useSharedTableAvailability } from "@/hooks/use-shared-tables"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -55,7 +56,7 @@ import {
 import { toast } from "react-hot-toast"
 import { BookingTermsCheckbox } from "@/components/ui/terms-checkbox"
 
-// Updated form schema with proper null handling
+// Updated form schema with proper null handling and shared tables
 const formSchema = z.object({
   customer_id: z.string().optional(),
   guest_name: z.string().optional(),
@@ -70,6 +71,9 @@ const formSchema = z.object({
   table_ids: z.array(z.string()).optional(),
   status: z.enum(["pending", "confirmed", "completed"]),
   acceptTerms: z.boolean().default(true), // Staff-created bookings default to accepted
+  is_shared_booking: z.boolean().default(false),
+  shared_table_id: z.string().optional(),
+  seats_requested: z.number().min(1).max(10).optional(),
 })
 
 type FormData = z.input<typeof formSchema>
@@ -107,6 +111,9 @@ export function ManualBookingForm({
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 })
   const [mounted, setMounted] = useState(false)
+  const [isSharedTableBooking, setIsSharedTableBooking] = useState(false)
+  const [selectedSharedTable, setSelectedSharedTable] = useState<string | null>(null)
+  const [sharedTableSeats, setSharedTableSeats] = useState<number>(1)
   const inputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
   const tableService = new TableAvailabilityService()
@@ -195,6 +202,8 @@ export function ManualBookingForm({
       booking_date: prefillData?.booking_date || new Date(),
       booking_time: prefillData?.booking_time || format(new Date(), "HH:mm"),
       acceptTerms: true, // Default to true for staff-created bookings
+      is_shared_booking: false,
+      seats_requested: 1,
     },
   })
 
@@ -202,6 +211,8 @@ export function ManualBookingForm({
   const bookingTime = watch("booking_time")
   const partySize = watch("party_size")
   const turnTime = watch("turn_time_minutes")
+  const isSharedBooking = watch("is_shared_booking")
+  const seatsRequested = watch("seats_requested")
 
   // Set prefilled customer if provided
   useEffect(() => {
@@ -217,7 +228,7 @@ export function ManualBookingForm({
     }
   }, [prefillData])
 
-  // Fetch all tables
+  // Fetch all tables including shared tables
   const { data: allTables } = useQuery({
     queryKey: ["restaurant-tables", restaurantId],
     queryFn: async () => {
@@ -232,6 +243,26 @@ export function ManualBookingForm({
       return data
     },
   })
+
+  // Filter tables by type
+  const regularTables = allTables?.filter(table => !table.is_shared_table) || []
+  const sharedTables = allTables?.filter(table => table.is_shared_table) || []
+
+  // Check available shared tables for the booking time
+  const getSharedTableAvailability = async (tableId: string) => {
+    if (!bookingDate || !bookingTime) return null
+    
+    try {
+      const { data } = await supabase.rpc('get_shared_table_availability', {
+        p_table_id: tableId,
+        p_booking_time: `${bookingDate.toISOString().split('T')[0]}T${bookingTime}:00`
+      })
+      return data
+    } catch (error) {
+      console.error('Error checking shared table availability:', error)
+      return null
+    }
+  }
 
   // Fetch customers for search
   const { data: customers, error: customersError, isLoading: customersLoading } = useQuery({
@@ -465,12 +496,32 @@ export function ManualBookingForm({
     setValue("guest_phone", "")
   }
 
-  // Fixed handleFormSubmit function with proper null handling
-  const handleFormSubmit: SubmitHandler<FormData> = (data: FormData): void => {
-    // Validate table selection
-    if (selectedTables.length === 0) {
-      toast.error("Please select at least one table")
-      return
+  // Fixed handleFormSubmit function with proper null handling and shared tables
+  const handleFormSubmit: SubmitHandler<FormData> = async (data: FormData): Promise<void> => {
+    // Validate table selection for regular bookings or shared table selection
+    if (data.is_shared_booking) {
+      if (!selectedSharedTable) {
+        toast.error("Please select a shared table")
+        return
+      }
+      
+      // Validate seats requested
+      if (!data.seats_requested || data.seats_requested <= 0) {
+        toast.error("Please specify number of seats")
+        return
+      }
+
+      // Check if enough seats are available
+      const availabilityCheck = await getSharedTableAvailability(selectedSharedTable)
+      if (availabilityCheck && data.seats_requested > availabilityCheck.available_seats) {
+        toast.error(`Only ${availabilityCheck.available_seats} seats available at this table`)
+        return
+      }
+    } else {
+      if (selectedTables.length === 0) {
+        toast.error("Please select at least one table")
+        return
+      }
     }
 
     // Check if any selected tables will be occupied during the booking time
@@ -549,7 +600,10 @@ export function ManualBookingForm({
         ? (selectedCustomer.guest_email || null)
         : (data.guest_email?.trim() || null),
       booking_time: bookingDateTime.toISOString(),
-      table_ids: selectedTables,
+      table_ids: data.is_shared_booking ? [selectedSharedTable] : selectedTables,
+      is_shared_booking: data.is_shared_booking || false,
+      shared_table_id: data.is_shared_booking ? selectedSharedTable : null,
+      seats_requested: data.is_shared_booking ? data.seats_requested : null,
     }
 
     // If no selected customer but meaningful guest info is provided, prompt to add/use existing
@@ -1102,30 +1156,107 @@ export function ManualBookingForm({
           </div>
         </div>
 
+        {/* Shared Table Booking Toggle */}
+        <div className="space-y-4 rounded-xl border border-slate-200/60 dark:border-slate-700/60 p-6 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm dark:shadow-slate-900/20">
+          <div className="flex items-center space-x-3">
+            <Checkbox
+              id="is_shared_booking"
+              checked={isSharedBooking}
+              onCheckedChange={(checked) => {
+                setValue("is_shared_booking", checked as boolean)
+                setIsSharedTableBooking(checked as boolean)
+                if (!checked) {
+                  setSelectedSharedTable(null)
+                  setValue("shared_table_id", "")
+                  setValue("seats_requested", 1)
+                }
+              }}
+              disabled={isLoading}
+            />
+            <div>
+              <Label htmlFor="is_shared_booking" className="text-base font-medium cursor-pointer">
+                Shared Table Booking
+              </Label>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Book individual seats at a communal table
+              </p>
+            </div>
+          </div>
+
+          {isSharedBooking && (
+            <div className="mt-4 space-y-4 border-t pt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="seats_requested">Seats Requested *</Label>
+                  <div className="relative">
+                    <Users className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="seats_requested"
+                      type="number"
+                      min="1"
+                      max="10"
+                      {...register("seats_requested", { valueAsNumber: true })}
+                      className="pl-10"
+                      disabled={isLoading}
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <Label htmlFor="shared_table">Shared Table *</Label>
+                  <Select
+                    value={selectedSharedTable || ""}
+                    onValueChange={(value) => {
+                      setSelectedSharedTable(value)
+                      setValue("shared_table_id", value)
+                    }}
+                    disabled={isLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a shared table" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sharedTables.map((table) => (
+                        <SelectItem key={table.id} value={table.id}>
+                          Table {table.table_number} (Capacity: {table.capacity})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Table Assignment */}
         <div className="space-y-4 rounded-xl border border-slate-200/60 dark:border-slate-700/60 p-6 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm shadow-sm dark:shadow-slate-900/20">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <Table2 className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-                Table Assignment
+                {isSharedBooking ? "Shared Table Selection" : "Table Assignment"}
               </h3>
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                Select tables for {partySize} guests
-                (Selected capacity: {selectedTablesCapacity})
+                {isSharedBooking 
+                  ? `Select shared table for ${seatsRequested || 1} seats`
+                  : `Select tables for ${partySize} guests (Selected capacity: ${selectedTablesCapacity})`
+                }
               </p>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={suggestTables}
-              disabled={checkingAvailability || isLoading}
-              className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 shadow-sm"
-            >
-              <RefreshCw className={`h-4 w-4 mr-1 ${checkingAvailability ? 'animate-spin' : ''}`} />
-              Auto-suggest
-            </Button>
+            {!isSharedBooking && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={suggestTables}
+                disabled={checkingAvailability || isLoading}
+                className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 shadow-sm"
+              >
+                <RefreshCw className={`h-4 w-4 mr-1 ${checkingAvailability ? 'animate-spin' : ''}`} />
+                Auto-suggest
+              </Button>
+            )}
           </div>
 
           {/* Show occupied tables warning */}
@@ -1220,8 +1351,10 @@ export function ManualBookingForm({
             </Alert>
           )}
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {allTables?.map((table) => {
+          {!isSharedBooking ? (
+            // Regular table selection
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {regularTables?.map((table) => {
               const isSelected = selectedTables.includes(table.id)
               const isAvailable = getTableAvailability(table.id)
               const availabilityInfo = availability?.tables.find(t => t.tableId === table.id)
@@ -1331,10 +1464,60 @@ export function ManualBookingForm({
                 </label>
               )
             })}
-          </div>
+            </div>
+          ) : (
+            // Shared table selection
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {sharedTables?.map((table) => {
+                const isSelected = selectedSharedTable === table.id
+                
+                return (
+                  <label
+                    key={table.id}
+                    className={cn(
+                      "flex items-center p-4 border rounded-xl cursor-pointer transition-all duration-200",
+                      isSelected && "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 shadow-sm ring-1 ring-blue-200 dark:ring-blue-800",
+                      !isSelected && "hover:bg-slate-50 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700"
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="shared_table"
+                      value={table.id}
+                      checked={isSelected}
+                      onChange={() => {
+                        setSelectedSharedTable(table.id)
+                        setValue("shared_table_id", table.id)
+                      }}
+                      className="mr-3"
+                      disabled={isLoading}
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Table2 className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                        <span className="font-semibold">Table {table.table_number}</span>
+                        <Badge variant="secondary" className="text-xs">
+                          Shared
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        <Users className="h-3 w-3 inline mr-1" />
+                        Capacity: {table.capacity}
+                      </p>
+                      {table.max_party_size_per_booking && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          Max {table.max_party_size_per_booking} seats per booking
+                        </p>
+                      )}
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+          )}
 
           {/* Show suggested combinations if no single table works */}
-          {availableTablesData?.combinations && 
+          {!isSharedBooking && availableTablesData?.combinations && 
            availableTablesData.combinations.length > 0 &&
            availableTablesData.singleTables.length === 0 && (
             <Alert>

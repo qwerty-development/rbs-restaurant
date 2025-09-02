@@ -18,6 +18,7 @@ import { BookingConflictAlerts } from "@/components/dashboard/booking-conflict-a
 import { TableAvailabilityService } from "@/lib/table-availability"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
 import { BookingRequestService } from "@/lib/booking-request-service"
+import { useSharedTablesSummary } from "@/hooks/use-shared-tables"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -40,7 +41,8 @@ import {
   BarChart3,
   AlertTriangle,
   List,
-  Badge
+  Badge,
+  Users
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -293,6 +295,9 @@ export default function DashboardPage() {
     },
     enabled: !!restaurantId,
   })
+
+  // Fetch shared tables summary
+  const { data: sharedTablesSummary } = useSharedTablesSummary(restaurantId, currentTime)
 
   // Fetch customer data
   const { data: customersData = {} } = useQuery({
@@ -761,7 +766,11 @@ export default function DashboardPage() {
     // Waitlist stats
     waitlistActive: waitlistStats.active,
     waitlistNotified: waitlistStats.notified,
-    waitlistTotal: waitlistStats.total
+    waitlistTotal: waitlistStats.total,
+    // Shared tables stats
+    sharedTablesOccupancy: sharedTablesSummary?.reduce((sum, table) => sum + table.current_occupancy, 0) || 0,
+    sharedTablesCapacity: sharedTablesSummary?.reduce((sum, table) => sum + table.capacity, 0) || 0,
+    sharedTablesCount: sharedTablesSummary?.length || 0
   }
 
   // Filtered bookings based on search and quick filter
@@ -845,6 +854,16 @@ export default function DashboardPage() {
                     <Timer className="h-3 w-3 text-orange-400" />
                     <span className="text-xs font-bold text-orange-400">{stats.waitlistActive}</span>
                     <span className="text-xs text-slate-400">waiting</span>
+                  </div>
+                </>
+              )}
+              {stats.sharedTablesCount > 0 && (
+                <>
+                  <div className="w-px h-3.5 bg-slate-600" />
+                  <div className="flex items-center gap-1">
+                    <Users className="h-3 w-3 text-purple-400" />
+                    <span className="text-xs font-bold text-purple-400">{stats.sharedTablesOccupancy}/{stats.sharedTablesCapacity}</span>
+                    <span className="text-xs text-slate-400">shared</span>
                   </div>
                 </>
               )}

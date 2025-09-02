@@ -54,7 +54,7 @@ export interface Restaurant {
     id: string
     restaurant_id: string
     table_number: string
-    table_type: "booth" | "window" | "patio" | "standard" | "bar" | "private"
+    table_type: "booth" | "window" | "patio" | "standard" | "bar" | "private" | "shared"
     capacity: number
     x_position: number
     y_position: number
@@ -680,4 +680,49 @@ export interface RestaurantSection {
     // Relations
     staff?: RestaurantStaff
     position?: StaffPosition
+  }
+
+  // Shared Tables Types
+  export interface SharedTableSummary {
+    table_id: string
+    table_number: string
+    capacity: number
+    section_name: string
+    current_occupancy: number
+    total_bookings_today: number
+    revenue_today: number
+    peak_occupancy_time: string | null
+  }
+
+  export interface SharedTableBooking {
+    booking_id: string
+    user_id: string
+    user_name: string
+    guest_name?: string
+    party_size: number
+    seats_occupied: number
+    booking_time: string
+    status: string
+    special_requests?: string
+    is_social: boolean
+    checked_in_at?: string
+  }
+
+  export interface SharedTableAvailability {
+    table_id: string
+    table: RestaurantTable
+    total_seats: number
+    available_seats: number
+    occupied_seats: number
+    current_bookings: SharedTableBooking[]
+  }
+
+  export interface SharedTableSettings {
+    restaurant_id: string
+    max_party_size_per_booking: number
+    allow_social_features: boolean
+    auto_assign_shared_tables: boolean
+    shared_table_turn_time_minutes: number
+    require_approval_for_shared_bookings: boolean
+    social_dining_discount_percentage?: number
   }

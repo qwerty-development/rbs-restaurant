@@ -29,6 +29,7 @@ import {
 } from "lucide-react"
 import type { RestaurantTable, RestaurantSection } from "@/types"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { SharedTablesOverview } from "@/components/shared-tables"
 import { Separator } from "@/components/ui/separator"
 
 export default function TablesPage() {
@@ -377,6 +378,10 @@ export default function TablesPage() {
               <Link className="h-4 w-4" />
               Combinations
             </TabsTrigger>
+            <TabsTrigger value="shared-tables" className="gap-2">
+              <Building className="h-4 w-4" />
+              Shared Tables
+            </TabsTrigger>
           </TabsList>
 
           <div className="flex gap-2">
@@ -471,6 +476,11 @@ export default function TablesPage() {
             onCreateCombination={handleCreateCombination}
             onDeleteCombination={handleDeleteCombination}
           />
+        </TabsContent>
+
+        {/* Shared Tables View */}
+        <TabsContent value="shared-tables">
+          <SharedTablesOverview restaurantId={restaurantId} />
         </TabsContent>
       </Tabs>
 

@@ -30,6 +30,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { BookingList } from "@/components/bookings/booking-list"
 import { BookingDetails } from "@/components/bookings/booking-details"
 import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
+import { SharedTablesOverview } from "@/components/shared-tables"
 import { TableAvailabilityService } from "@/lib/table-availability"
 import { toast } from "react-hot-toast"
 import { cn } from "@/lib/utils"
@@ -1136,7 +1137,7 @@ export default function BookingsPage() {
       {/* Enhanced View Toggle with Live Indicator */}
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)}>
         <div className="flex flex-col tablet:flex-row items-start tablet:items-center justify-between gap-4">
-          <TabsList className="grid w-full tablet:w-[480px] grid-cols-2 tablet:grid-cols-4 h-auto">
+          <TabsList className="grid w-full tablet:w-[600px] grid-cols-2 tablet:grid-cols-5 h-auto">
             <TabsTrigger value="upcoming" className="relative min-h-touch-lg px-4 py-3">
               <span className="flex items-center gap-2">
                 <span>Upcoming</span>
@@ -1162,6 +1163,12 @@ export default function BookingsPage() {
                 {tableStats?.utilization && tableStats.utilization > 80 && (
                   <div className="h-2 w-2 bg-yellow-500 rounded-full animate-pulse" />
                 )}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="shared" className="min-h-touch-lg px-4 py-3">
+              <span className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                <span>Shared</span>
               </span>
             </TabsTrigger>
           </TabsList>
@@ -1897,6 +1904,11 @@ export default function BookingsPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Shared Tables View */}
+        <TabsContent value="shared" className="space-y-4">
+          <SharedTablesOverview restaurantId={restaurantId} />
         </TabsContent>
       </Tabs>
 
