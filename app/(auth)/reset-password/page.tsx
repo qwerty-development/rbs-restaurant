@@ -57,11 +57,24 @@ export default function ResetPasswordPage() {
   })
 
   useEffect(() => {
-    // Check if we have a valid recovery token
+    // Check if we have a valid recovery token and user is restaurant staff
     const checkToken = async () => {
       const { data: { session }, error } = await supabase.auth.getSession()
       
       if (error || !session) {
+        setIsValidToken(false)
+        return
+      }
+
+      // Check if user has restaurant staff access
+      const { data: staff, error: staffError } = await supabase
+        .from('restaurant_staff')
+        .select('id, is_active')
+        .eq('user_id', session.user.id)
+        .eq('is_active', true)
+        .maybeSingle()
+
+      if (staffError || !staff) {
         setIsValidToken(false)
       }
     }

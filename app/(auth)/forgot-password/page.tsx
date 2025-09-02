@@ -51,23 +51,19 @@ export default function ForgotPasswordPage() {
     try {
       setIsLoading(true)
 
-      // First check if user exists
-      const { data: user, error: userError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', data.email)
-        .single()
-
-      if (userError || !user) {
-        toast.error("No account found with this email address")
-        return
-      }
-
+      // Send the reset email - Supabase will only send to existing users
       const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
         redirectTo: `${window.location.origin}/enter-token`,
       })
 
-      if (error) throw error
+      if (error) {
+        toast.error("No account found with this email address")
+        return
+      }
+
+      // Note: The actual restaurant staff verification should be done in the 
+      // reset password flow or via RLS policies. For now, we trust that
+      // only restaurant staff users will have accounts in the system.
 
       setIsSuccess(true)
       toast.success("Password reset token sent!")

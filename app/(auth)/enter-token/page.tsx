@@ -68,7 +68,21 @@ export default function EnterTokenPage() {
       }
 
       if (authData.session) {
-        // Token is valid, redirect to reset password
+        // Token is valid, now check if user is restaurant staff
+        const { data: staff, error: staffError } = await supabase
+          .from('restaurant_staff')
+          .select('id, is_active')
+          .eq('user_id', authData.session.user.id)
+          .eq('is_active', true)
+          .maybeSingle()
+
+        if (staffError || !staff) {
+          toast.error("This account is not associated with restaurant staff access")
+          await supabase.auth.signOut()
+          return
+        }
+
+        // User is valid restaurant staff, redirect to reset password
         router.push("/reset-password")
       } else {
         toast.error("Invalid token. Please check and try again.")
