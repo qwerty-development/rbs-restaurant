@@ -43,12 +43,40 @@ const formSchema = z.object({
   restaurantName: z.string().min(2, "Restaurant name must be at least 2 characters"),
   description: z.string().min(10, "Description must be at least 10 characters"),
   address: z.string().min(5, "Address is required"),
-  phoneNumber: z.string().min(10, "Valid phone number is required"),
+  phoneNumber: z.string()
+    .min(1, "Phone number is required")
+    .refine(
+      (phone) => {
+        // Remove all non-digit characters
+        const digits = phone.replace(/\D/g, "")
+        
+        // Lebanese phone numbers:
+        // Mobile: +961 XX XXX XXX (8 digits after country code)
+        // Landline: +961 X XXX XXX (7 digits after country code)
+        // With country code: 961XXXXXXXX or 961XXXXXXX
+        // Without country code: 0XXXXXXXX or 0XXXXXXX
+        
+        if (digits.startsWith("961")) {
+          // With country code +961
+          const remaining = digits.slice(3)
+          return remaining.length === 8 || remaining.length === 7
+        } else if (digits.startsWith("0")) {
+          // Without country code, starts with 0
+          const remaining = digits.slice(1)
+          return remaining.length === 8 || remaining.length === 7
+        }
+        
+        return false
+      },
+      {
+        message: "Please enter a valid Lebanese phone number (+961 XX XXX XXX or 0X XXX XXX)"
+      }
+    ),
   cuisineType: z.string().min(1, "Please select a cuisine type"),
   
   // Owner details
   ownerName: z.string().min(2, "Owner name is required"),
-  email: z.string().email("Invalid email address"),
+  email: z.string().email({ message: "Invalid email address" }),
   password: z.string().min(6, "Password must be at least 6 characters"),
   confirmPassword: z.string(),
   
@@ -128,7 +156,7 @@ export default function RegisterPage() {
           address: data.address,
           phone_number: data.phoneNumber,
           cuisine_type: data.cuisineType,
-          owner_id: authData.user.id,
+          location: `POINT(35.5018 33.8938)`, // Default to Beirut coordinates
           // Set default values
           opening_time: "09:00",
           closing_time: "22:00",
@@ -141,7 +169,7 @@ export default function RegisterPage() {
           valet_parking: false,
           outdoor_seating: false,
           shisha_available: false,
-          is_active: true,
+          status: "active",
         })
         .select()
         .single()
@@ -179,8 +207,6 @@ export default function RegisterPage() {
           restaurant_id: restaurant.id,
           current_balance: 10000, // Start with 10,000 points
           total_purchased: 10000,
-          total_awarded: 0,
-          total_redeemed: 0,
         })
 
       if (loyaltyError) throw loyaltyError
