@@ -426,6 +426,8 @@ export default function DashboardPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["shared-tables-summary", restaurantId] })
+      queryClient.invalidateQueries({ queryKey: ["shared-table-availability"] })
       toast.success("Booking updated")
     },
     onError: (error: any) => {
@@ -511,6 +513,8 @@ export default function DashboardPage() {
       }
 
       await queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+      await queryClient.invalidateQueries({ queryKey: ["shared-tables-summary", restaurantId] })
+      await queryClient.invalidateQueries({ queryKey: ["shared-table-availability"] })
       await refetchBookings()
     } catch (error) {
       console.error("Proceed check-in error:", error)
@@ -574,6 +578,8 @@ export default function DashboardPage() {
 
       await statusService.switchTables(bookingId, newTableIds, userId, "Table switch requested")
       await queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+      await queryClient.invalidateQueries({ queryKey: ["shared-tables-summary", restaurantId] })
+      await queryClient.invalidateQueries({ queryKey: ["shared-table-availability"] })
       
       const tableNumbers = newTableIds
         .map((id: string) => tables.find(t => t.id === id)?.table_number)
