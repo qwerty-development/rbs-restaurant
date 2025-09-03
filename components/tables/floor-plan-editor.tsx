@@ -39,6 +39,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { toast } from "react-hot-toast"
 
 interface FloorPlanEditorProps {
   restaurantId: string
@@ -845,6 +846,12 @@ export function FloorPlanEditor({
 
   // Print handler
   const handlePrint = useCallback(() => {
+    // Ensure a section is selected
+    if (!selectedSection) {
+      toast.error("Please select a section to print")
+      return
+    }
+
     // Deselect any selected table for clean print
     setSelectedTable(null)
 
@@ -856,7 +863,9 @@ export function FloorPlanEditor({
         return
       }
 
-      const safeTables = (tables || []).filter(t => t.is_active)
+      const safeTables = filteredTables.filter(t => t.is_active)
+      const currentSection = sections?.find(s => s.id === selectedSection)
+      const sectionName = currentSection?.name || 'Selected Section'
       const getPos = (id: string, fallback: {x:number;y:number}) => finalPositionsRef.current[id] || fallback
       const getSize = (id: string, fallback: {width:number;height:number}) => finalSizesRef.current[id] || fallback
 
@@ -883,7 +892,7 @@ export function FloorPlanEditor({
         <html>
           <head>
             <meta charset="utf-8" />
-            <title>Restaurant Floor Plan</title>
+            <title>Floor Plan - ${sectionName}</title>
             <style>
               @media print {
                 @page { size: landscape; margin: 0; }
@@ -904,6 +913,9 @@ export function FloorPlanEditor({
             </style>
           </head>
           <body>
+            <div style="position: absolute; top: 10px; left: 10px; z-index: 1000; background: rgba(255,255,255,0.9); padding: 8px 12px; border-radius: 4px; font-size: 14px; font-weight: bold;">
+              ${sectionName} - ${safeTables.length} Tables
+            </div>
             <div class="fp">
               <div class="area">
                 ${showGrid ? gridHtml : ''}
@@ -921,7 +933,7 @@ export function FloorPlanEditor({
         setTimeout(() => printWindow.close(), 500)
       }, 250)
     }, 50)
-  }, [showGrid, tables])
+  }, [selectedSection, filteredTables, sections, showGrid])
 
   // Keyboard shortcuts with optimized movement and resizing
   useEffect(() => {
@@ -1585,14 +1597,24 @@ export function FloorPlanEditor({
             </div>
 
             <div className="flex items-center gap-2">
-              <Button
-                variant={showGrid ? "default" : "outline"}
-                size="sm"
-                onClick={() => setShowGrid(!showGrid)}
-              >
-                <Grid3X3 className="h-4 w-4 mr-2" />
-                Grid
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={showGrid ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setShowGrid(!showGrid)}
+                      className={showGrid ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}
+                    >
+                      <Grid3X3 className="h-4 w-4 mr-2" />
+                      Grid {showGrid ? "ON" : "OFF"}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{showGrid ? "Hide" : "Show"} grid overlay for alignment</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <Button
                 variant="outline"
                 size="sm"
@@ -1640,21 +1662,22 @@ export function FloorPlanEditor({
             {/* Grid */}
             {showGrid && (
               <div 
-                className="absolute inset-0 opacity-20 pointer-events-none"
+                className="absolute inset-0 pointer-events-none z-0"
                 style={{
                   backgroundImage: `
                     linear-gradient(to right, #cbd5e1 1px, transparent 1px),
                     linear-gradient(to bottom, #cbd5e1 1px, transparent 1px)
                   `,
                   backgroundSize: "30px 30px",
+                  opacity: 0.3
                 }}
               />
             )}
 
             {/* Empty State */}
             {filteredTables.filter(t => t.is_active).length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                <div className="text-center bg-white/80 backdrop-blur-sm rounded-lg p-6 shadow-sm">
                   <Info className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                   <h3 className="text-lg font-medium mb-2">No Tables in This Section</h3>
                   <p className="text-sm text-muted-foreground">
