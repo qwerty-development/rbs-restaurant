@@ -25,9 +25,10 @@ import {
   Building,
   Eye,
   EyeOff,
-  Maximize2,
+  Map,
   Info,
-  Utensils
+  Utensils,
+  X
 } from "lucide-react"
 import type { RestaurantTable, RestaurantSection } from "@/types"
 import { useQuery } from "@tanstack/react-query"
@@ -1042,37 +1043,115 @@ export function FloorPlanEditor({
     if (!showMinimap) return null
 
     return (
-      <Card className="absolute bottom-4 right-4 w-48 h-32 z-50 shadow-lg">
-        <CardContent className="p-2 relative h-full">
-          <div className="text-xs font-medium mb-1">Overview</div>
-          <div className="relative w-full h-20 bg-slate-100 rounded border">
-            {/* Mini representations of all sections */}
-            {sections?.map((section, idx) => {
-              const sectionTables = tables.filter(t => t.section_id === section.id)
-              const isActive = section.id === selectedSection
-              
-              return (
-                <div
-                  key={section.id}
-                  className={cn(
-                    "absolute cursor-pointer transition-all",
-                    isActive ? "ring-2 ring-blue-400 bg-blue-50" : "bg-white hover:bg-slate-50"
-                  )}
-                  style={{
-                    left: `${(idx * 30) % 90}%`,
-                    top: `${Math.floor(idx / 3) * 30}%`,
-                    width: "25%",
-                    height: "25%",
-                    border: `1px solid ${section.color}`,
-                    borderRadius: "2px"
-                  }}
-                  onClick={() => setSelectedSection(section.id)}
-                >
-                  <div className="text-[6px] text-center">{sectionTables.length}</div>
-                </div>
-              )
-            })}
+      <Card className="absolute top-4 right-4 w-80 max-w-[calc(100vw-2rem)] h-52 z-50 shadow-xl border-2 border-blue-200 bg-white overview-map-enter sm:overview-map-mobile">
+        <CardContent className="p-4 relative h-full">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Map className="h-4 w-4 text-blue-600" />
+              <div className="text-sm font-semibold text-slate-700">Section Overview</div>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowMinimap(false)}
+              className="h-7 w-7 p-0 hover:bg-slate-100 rounded-full"
+            >
+              <X className="h-3 w-3" />
+            </Button>
           </div>
+          
+          <div className="relative w-full h-32 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-200 p-3">
+            {/* Section grid layout */}
+            <div className="grid grid-cols-3 gap-2 h-full">
+              {sections?.slice(0, 6).map((section, idx) => {
+                const sectionTables = tables.filter(t => t.section_id === section.id)
+                const isActive = section.id === selectedSection
+                const Icon = SECTION_ICONS[section.icon as keyof typeof SECTION_ICONS] || Grid3X3
+                
+                return (
+                  <div
+                    key={section.id}
+                    className={cn(
+                      "relative cursor-pointer transition-all duration-200 rounded-lg p-2 border-2 hover:shadow-md group",
+                      isActive 
+                        ? "border-blue-500 bg-blue-50 shadow-lg transform scale-105" 
+                        : "border-slate-300 bg-white hover:bg-slate-50 hover:border-slate-400 hover:scale-102"
+                    )}
+                    style={{
+                      borderColor: isActive ? '#3b82f6' : section.color,
+                      backgroundColor: isActive ? '#eff6ff' : 'white'
+                    }}
+                    onClick={() => setSelectedSection(section.id)}
+                    title={`${section.name} - ${sectionTables.length} tables`}
+                  >
+                    <div className="flex flex-col items-center justify-center h-full text-center">
+                      <Icon 
+                        className={cn(
+                          "h-4 w-4 mb-1 transition-transform group-hover:scale-110",
+                          isActive && "animate-pulse"
+                        )}
+                        style={{ color: isActive ? '#3b82f6' : section.color }} 
+                      />
+                      <div className="text-[10px] font-medium text-slate-700 truncate w-full leading-tight">
+                        {section.name}
+                      </div>
+                      <div className={cn(
+                        "text-[8px] mt-1 px-1 py-0.5 rounded",
+                        isActive 
+                          ? "text-blue-600 bg-blue-100" 
+                          : "text-slate-500 bg-slate-100"
+                      )}>
+                        {sectionTables.length} tables
+                      </div>
+                    </div>
+                    
+                    {/* Active indicator */}
+                    {isActive && (
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full flex items-center justify-center animate-pulse">
+                        <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                      </div>
+                    )}
+                    
+                    {/* Hover effect border */}
+                    <div className={cn(
+                      "absolute inset-0 rounded-lg border-2 transition-opacity",
+                      "opacity-0 group-hover:opacity-100 border-blue-300"
+                    )}></div>
+                  </div>
+                )
+              })}
+            </div>
+            
+            {/* Show message if more sections exist */}
+            {sections && sections.length > 6 && (
+              <div className="absolute bottom-1 left-3 right-3 text-center">
+                <div className="text-[9px] text-slate-500 bg-white/80 backdrop-blur-sm px-2 py-1 rounded border shadow-sm">
+                  +{sections.length - 6} more sections available
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Current section info */}
+          {selectedSection && sections && (
+            <div className="mt-3 p-2 bg-slate-50 rounded-lg border">
+              <div className="text-[10px] text-slate-600">
+                <div className="flex items-center gap-1.5">
+                  <div 
+                    className="w-2.5 h-2.5 rounded-full ring-1 ring-white shadow-sm" 
+                    style={{ backgroundColor: sections.find(s => s.id === selectedSection)?.color }}
+                  ></div>
+                  <span className="font-medium text-slate-700">
+                    {sections.find(s => s.id === selectedSection)?.name}
+                  </span>
+                  <span className="text-slate-400">•</span>
+                  <span className="text-slate-500">
+                    {filteredTables.length} table{filteredTables.length !== 1 ? 's' : ''} visible
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     )
@@ -1114,11 +1193,11 @@ export function FloorPlanEditor({
                       variant={showMinimap ? "default" : "outline"}
                       onClick={() => setShowMinimap(!showMinimap)}
                     >
-                      <Maximize2 className="h-4 w-4" />
+                      <Map className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>{showMinimap ? "Hide" : "Show"} section overview minimap</p>
+                    <p>{showMinimap ? "Hide" : "Show"} section overview map</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1255,6 +1334,52 @@ export function FloorPlanEditor({
           50% { 
             border-color: rgba(34, 197, 94, 1);
             box-shadow: 0 0 0 8px rgba(34, 197, 94, 0.2);
+          }
+        }
+        
+        /* Section overview map enhancements */
+        .overview-map-enter {
+          animation: overview-slide-in 0.3s ease-out forwards;
+        }
+        
+        .overview-map-exit {
+          animation: overview-slide-out 0.2s ease-in forwards;
+        }
+        
+        @keyframes overview-slide-in {
+          from {
+            opacity: 0;
+            transform: translateY(-10px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        
+        @keyframes overview-slide-out {
+          from {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+          to {
+            opacity: 0;
+            transform: translateY(-10px) scale(0.95);
+          }
+        }
+        
+        /* Scale hover effect for section cards */
+        .hover\\:scale-102:hover {
+          transform: scale(1.02);
+        }
+        
+        /* Mobile responsive adjustments for overview map */
+        @media (max-width: 640px) {
+          .overview-map-mobile {
+            width: calc(100vw - 1rem) !important;
+            max-width: none !important;
+            left: 0.5rem !important;
+            right: 0.5rem !important;
           }
         }
         
