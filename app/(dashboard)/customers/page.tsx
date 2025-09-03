@@ -5,6 +5,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { 
   Search, 
   Plus, 
@@ -60,6 +61,7 @@ import type { RestaurantCustomer, CustomerTag, CustomerFilters } from '@/types/c
 export default function CustomersPage() {
   const router = useRouter()
   const supabase = createClient()
+  const queryClient = useQueryClient()
   
   // State
   const [customers, setCustomers] = useState<RestaurantCustomer[]>([])
@@ -348,27 +350,58 @@ export default function CustomersPage() {
 
   const handleToggleVIP = async (customer: RestaurantCustomer) => {
     try {
+      console.log('Starting VIP toggle for customer:', {
+        id: customer.id,
+        user_id: customer.user_id,
+        current_vip_status: customer.vip_status,
+        name: customer.profile?.full_name || customer.guest_name,
+        restaurantId
+      })
+
       if (customer.vip_status) {
-        // Remove VIP status - set valid_until to current date for any active VIP records
-        const { error } = await supabase
+        // Remove VIP status - delete the record completely
+        console.log('Removing VIP status...')
+        
+        // First find the VIP record
+        const { data: vipRecord, error: findError } = await supabase
           .from('restaurant_vip_users')
-          .update({ 
-            valid_until: new Date().toISOString()
-          })
+          .select('id')
           .eq('restaurant_id', restaurantId)
           .eq('user_id', customer.user_id)
-          .gte('valid_until', new Date().toISOString())
+          .single()
 
-        if (error) throw error
+        if (findError && findError.code !== 'PGRST116') { // PGRST116 is "not found"
+          console.error('Error finding VIP record:', findError)
+          throw findError
+        }
 
-        // Also update the restaurant_customers table
-        await supabase
+        // Delete the VIP record if it exists
+        if (vipRecord) {
+          const { error: deleteError } = await supabase
+            .from('restaurant_vip_users')
+            .delete()
+            .eq('id', vipRecord.id)
+
+          if (deleteError) {
+            console.error('Error deleting VIP record:', deleteError)
+            throw deleteError
+          }
+        }
+
+        // Update the restaurant_customers table
+        console.log('Updating customer VIP status to false...')
+        const { error: customerError } = await supabase
           .from('restaurant_customers')
           .update({ 
             vip_status: false,
             updated_at: new Date().toISOString()
           })
           .eq('id', customer.id)
+
+        if (customerError) {
+          console.error('Error updating customer VIP status:', customerError)
+          throw customerError
+        }
 
       } else {
         // Add VIP status
@@ -377,7 +410,19 @@ export default function CustomersPage() {
           return
         }
 
-        const { error } = await supabase
+        console.log('Adding VIP status...')
+        
+        // First, delete any existing VIP record to avoid constraint issues
+        const { error: deleteError } = await supabase
+          .from('restaurant_vip_users')
+          .delete()
+          .eq('restaurant_id', restaurantId)
+          .eq('user_id', customer.user_id)
+
+        // We don't check for error here since record might not exist
+
+        // Now insert the new VIP record
+        const { error: insertError } = await supabase
           .from('restaurant_vip_users')
           .insert({
             restaurant_id: restaurantId,
@@ -387,23 +432,85 @@ export default function CustomersPage() {
             valid_until: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // 1 year from now
           })
 
-        if (error) throw error
+        if (insertError) {
+          console.error('Error inserting VIP record:', insertError)
+          throw insertError
+        }
 
-        // Also update the restaurant_customers table
-        await supabase
+        // Update the restaurant_customers table
+        console.log('Updating customer VIP status to true...')
+        const { error: customerError } = await supabase
           .from('restaurant_customers')
           .update({ 
             vip_status: true,
             updated_at: new Date().toISOString()
           })
           .eq('id', customer.id)
+
+        if (customerError) {
+          console.error('Error updating customer VIP status:', customerError)
+          throw customerError
+        }
       }
 
+      console.log('VIP toggle completed successfully')
       toast.success(`Customer ${customer.vip_status ? 'removed from' : 'added to'} VIP list`)
+      
+      // Refresh customers data
       await loadCustomers(restaurantId)
+      
+      // Invalidate VIP page queries so they refresh automatically
+      console.log('Invalidating VIP queries for restaurantId:', restaurantId)
+      
+      // Add a small delay to ensure the database transaction is complete
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Try multiple invalidation strategies to ensure cache refresh
+      queryClient.invalidateQueries({ queryKey: ["vip-users", restaurantId] })
+      queryClient.invalidateQueries({ queryKey: ["existing-customers", restaurantId] })
+      
+      // Also try invalidating by predicate to catch any variations
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const keys = query.queryKey as string[]
+          return keys.includes("vip-users") || keys.includes("existing-customers")
+        }
+      })
+      
+      // Force refetch of VIP queries if they exist
+      queryClient.refetchQueries({ queryKey: ["vip-users", restaurantId] })
+      queryClient.refetchQueries({ queryKey: ["existing-customers", restaurantId] })
+      
+      console.log('✅ VIP cache invalidation completed')
     } catch (error) {
-      console.error('Error updating VIP status:', error)
-      toast.error('Failed to update VIP status')
+      console.error('Error updating VIP status:', {
+        error,
+        errorMessage: (error as any)?.message,
+        errorCode: (error as any)?.code,
+        customerInfo: {
+          id: customer.id,
+          user_id: customer.user_id,
+          current_vip_status: customer.vip_status,
+          name: customer.profile?.full_name || customer.guest_name
+        },
+        restaurantId
+      })
+      
+      // Show more specific error message based on error type
+      if (error && typeof error === 'object') {
+        const errorObj = error as any
+        if (errorObj.code === '23505') {
+          toast.error('VIP record conflict. Please refresh and try again.')
+        } else if (errorObj.code === '42501') {
+          toast.error('Permission denied. You may not have access to modify VIP status.')
+        } else if (errorObj.message) {
+          toast.error(`Failed to update VIP status: ${errorObj.message}`)
+        } else {
+          toast.error('Failed to update VIP status. Please try again.')
+        }
+      } else {
+        toast.error('Failed to update VIP status. Please try again.')
+      }
     }
   }
 
