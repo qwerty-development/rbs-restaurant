@@ -1,7 +1,7 @@
 // app/(dashboard)/profile/page.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -89,7 +89,7 @@ export default function ProfilePage() {
     },
   })
 
-  const fetchUserData = async () => {
+  const fetchUserData = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
@@ -131,11 +131,11 @@ export default function ProfilePage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase, router, profileForm])
 
   useEffect(() => {
     fetchUserData()
-  }, [])
+  }, [fetchUserData])
 
   const handleProfileUpdate = async (data: ProfileFormData) => {
     try {
