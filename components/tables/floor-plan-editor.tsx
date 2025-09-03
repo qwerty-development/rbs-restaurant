@@ -12,7 +12,6 @@ import {
   ZoomIn, 
   ZoomOut, 
   Grid3X3, 
-  Trash2,
   Printer,
   Layers,
   ChevronLeft,
@@ -48,7 +47,6 @@ interface FloorPlanEditorProps {
   tables: RestaurantTable[]
   onTableUpdate: (tableId: string, position: { x: number; y: number }) => void
   onTableResize?: (tableId: string, dimensions: { width: number; height: number }) => void
-  onTableDelete?: (tableId: string) => void
   onTableSectionChange?: (tableId: string, sectionId: string) => void
 }
 
@@ -116,7 +114,6 @@ export function FloorPlanEditor({
   tables, 
   onTableUpdate, 
   onTableResize, 
-  onTableDelete,
   onTableSectionChange 
 }: FloorPlanEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -936,13 +933,6 @@ export function FloorPlanEditor({
       let deltaWidth = 0, deltaHeight = 0
 
       switch (e.key) {
-        case "Delete":
-        case "Backspace":
-          if (onTableDelete) {
-            onTableDelete(selectedTable)
-            setSelectedTable(null)
-          }
-          break
         case "Escape":
           setSelectedTable(null)
           break
@@ -1033,7 +1023,7 @@ export function FloorPlanEditor({
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [selectedTable, isDragging, isResizing, viewMode, editMode, filteredTables, onTableDelete, onTableUpdate, onTableResize])
+  }, [selectedTable, isDragging, isResizing, viewMode, editMode, filteredTables, onTableUpdate, onTableResize])
 
   // Minimap render function
   const renderMinimap = () => {
@@ -1799,24 +1789,6 @@ export function FloorPlanEditor({
                         </div>
                       )}
                       
-                      {/* Action buttons - Enhanced for touch */}
-                      <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 flex gap-2 pointer-events-auto">
-                        {onTableDelete && (
-                          <Button 
-                            size="sm" 
-                            variant="destructive" 
-                            className="h-10 w-10 p-0 shadow-md touch-manipulation"
-                            style={{ touchAction: 'manipulation' }}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onTableDelete(table.id)
-                              setSelectedTable(null)
-                            }}
-                          >
-                            <Trash2 className="h-5 w-5" />
-                          </Button>
-                        )}
-                      </div>
                     </>
                   )}
                 </div>

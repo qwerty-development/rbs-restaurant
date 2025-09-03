@@ -76,7 +76,6 @@ export default function TablesPage() {
           section:restaurant_sections(*)
         `)
         .eq("restaurant_id", restaurantId)
-        .eq("is_active", true)
         .order("table_number", { ascending: true })
 
       if (error) throw error
@@ -101,27 +100,35 @@ export default function TablesPage() {
       if (sectionsError) throw sectionsError
       if (!sectionsData) return []
 
-      // Fetch table counts for each section
+      // Fetch all tables (active and inactive) for each section
       const { data: tablesData, error: tablesError } = await supabase
         .from("restaurant_tables")
-        .select("section_id, id")
+        .select("section_id, id, is_active")
         .eq("restaurant_id", restaurantId)
-        .eq("is_active", true)
 
       if (tablesError) throw tablesError
 
-      // Count tables per section
+      // Count active and inactive tables per section
       const tableCounts = tablesData?.reduce((acc, table) => {
         if (table.section_id) {
-          acc[table.section_id] = (acc[table.section_id] || 0) + 1
+          if (!acc[table.section_id]) {
+            acc[table.section_id] = { active: 0, inactive: 0 }
+          }
+          if (table.is_active) {
+            acc[table.section_id].active += 1
+          } else {
+            acc[table.section_id].inactive += 1
+          }
         }
         return acc
-      }, {} as Record<string, number>) || {}
+      }, {} as Record<string, { active: number; inactive: number }>)
 
       // Add table counts to sections
       return sectionsData.map(section => ({
         ...section,
-        table_count: tableCounts[section.id] || 0
+        active_table_count: tableCounts?.[section.id]?.active || 0,
+        inactive_table_count: tableCounts?.[section.id]?.inactive || 0,
+        table_count: (tableCounts?.[section.id]?.active || 0) + (tableCounts?.[section.id]?.inactive || 0)
       })) as RestaurantSection[]
     },
     enabled: !!restaurantId,
@@ -242,23 +249,23 @@ export default function TablesPage() {
     },
   })
 
-  const deleteTableMutation = useMutation({
-    mutationFn: async (tableId: string) => {
+  const toggleTableStatusMutation = useMutation({
+    mutationFn: async ({ tableId, isActive }: { tableId: string; isActive: boolean }) => {
       const { error } = await supabase
         .from("restaurant_tables")
-        .update({ is_active: false })
+        .update({ is_active: isActive })
         .eq("id", tableId)
+      
       if (error) throw error
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.refetchQueries({ queryKey: ["tables-with-sections", restaurantId] })
       queryClient.refetchQueries({ queryKey: ["restaurant-sections-with-counts", restaurantId] })
-      queryClient.refetchQueries({ queryKey: ["restaurant-sections-active", restaurantId] })
-      toast.success("Table deleted")
+      toast.success(variables.isActive ? "Table activated successfully" : "Table deactivated successfully")
     },
     onError: (error: any) => {
-      console.error("Delete table error:", error)
-      toast.error("Failed to delete table")
+      console.error("Table status toggle error:", error)
+      toast.error("Failed to update table status")
     },
   })
 
@@ -268,16 +275,22 @@ export default function TablesPage() {
     setIsAddingTable(true)
   }
 
+  const handleToggleStatus = (table: RestaurantTable) => {
+    const action = table.is_active ? "deactivate" : "activate"
+    const message = table.is_active 
+      ? `Are you sure you want to deactivate Table ${table.table_number}? This will make it unavailable for bookings.`
+      : `Are you sure you want to activate Table ${table.table_number}? This will make it available for bookings.`
+    
+    if (confirm(message)) {
+      toggleTableStatusMutation.mutate({ tableId: table.id, isActive: !table.is_active })
+    }
+  }
+
   const handleAdd = () => {
     setSelectedTable(null)
     setIsAddingTable(true)
   }
 
-  const handleDelete = (tableId: string) => {
-    if (confirm("Are you sure you want to delete this table?")) {
-      deleteTableMutation.mutate(tableId)
-    }
-  }
 
   const handleTableUpdate = (tableId: string, position: { x: number; y: number }) => {
     updateTablePosition.mutate({ tableId, position })
@@ -477,7 +490,7 @@ export default function TablesPage() {
                   tables={tables?.filter(t => t.section_id === selectedSectionId) || []}
                   isLoading={tablesLoading}
                   onEdit={handleEdit}
-                  onDelete={handleDelete}
+                  onDeactivate={handleToggleStatus}
                 />
               </CardContent>
             </Card>
@@ -491,7 +504,6 @@ export default function TablesPage() {
             tables={tables || []}
             onTableUpdate={handleTableUpdate}
             onTableResize={handleTableResize}
-            onTableDelete={handleDelete}
             onTableSectionChange={handleTableSectionChange}
           />
         </TabsContent>
@@ -502,7 +514,7 @@ export default function TablesPage() {
             tables={tables || []}
             isLoading={tablesLoading}
             onEdit={handleEdit}
-            onDelete={handleDelete}
+            onDeactivate={handleToggleStatus}
           />
         </TabsContent>
 
