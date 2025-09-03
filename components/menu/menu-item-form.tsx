@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { MenuImageUpload } from "@/components/menu/menu-image-upload"
 import { X } from "lucide-react"
 import type { MenuItem, MenuCategory } from "@/types"
 
@@ -32,7 +33,7 @@ const menuItemSchema = z.object({
   description: z.string().optional(),
   price: z.number().min(0.01, "Price must be greater than 0"),
   category_id: z.string().min(1, "Category is required"),
-  image_url: z.string().url().optional().or(z.literal("")),
+  image_url: z.string().optional(),
   dietary_tags: z.array(z.string()),
   allergens: z.array(z.string()),
   calories: z.number().optional(),
@@ -46,6 +47,7 @@ type MenuItemFormData = z.infer<typeof menuItemSchema>
 interface MenuItemFormProps {
   item?: MenuItem
   categories: MenuCategory[]
+  restaurantId?: string
   onSubmit: (data: Partial<MenuItem>) => void
   onCancel: () => void
   isLoading: boolean
@@ -77,6 +79,7 @@ const ALLERGEN_OPTIONS = [
 export function MenuItemForm({
   item,
   categories,
+  restaurantId,
   onSubmit,
   onCancel,
   isLoading,
@@ -193,16 +196,19 @@ export function MenuItemForm({
             control={form.control}
             name="image_url"
             render={({ field }) => (
-              <FormItem>
-                <FormLabel>Image URL</FormLabel>
+              <FormItem className="col-span-2">
+                <FormLabel>Menu Item Image</FormLabel>
                 <FormControl>
-                  <Input
-                    type="url"
-                    {...field}
-                    disabled={isLoading}
-                    placeholder="https://..."
+                  <MenuImageUpload
+                    restaurantId={restaurantId || ""}
+                    value={field.value}
+                    onChange={field.onChange}
+                    disabled={isLoading || !restaurantId}
                   />
                 </FormControl>
+                <FormDescription>
+                  Upload an image or provide an image URL for this menu item
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}

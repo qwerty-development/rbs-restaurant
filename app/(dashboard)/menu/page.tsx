@@ -390,6 +390,7 @@ export default function MenuPage() {
               <div className="overflow-y-auto">
                 <MenuItemForm
                   categories={categories || []}
+                  restaurantId={restaurantId}
                   onSubmit={(data) => itemMutation.mutate(data)}
                   onCancel={() => setIsAddingItem(false)}
                   isLoading={itemMutation.isPending}
@@ -577,6 +578,7 @@ export default function MenuPage() {
             <MenuItemForm
               item={selectedItem || undefined}
               categories={categories || []}
+              restaurantId={restaurantId}
               onSubmit={(data) => itemMutation.mutate({ ...data, id: selectedItem?.id })}
               onCancel={() => {
                 setSelectedItem(null)
