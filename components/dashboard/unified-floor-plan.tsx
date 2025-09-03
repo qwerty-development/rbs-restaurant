@@ -5,8 +5,6 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { Card } from "@/components/ui/card"
 import {
   Select,
@@ -23,15 +21,11 @@ import {
   Timer,
   CreditCard,
   Coffee,
-  Utensils,
-  Cake,
   UserCheck,
   Hand,
   Eye,
   Move,
   Layers,
-  ChevronLeft,
-  ChevronRight,
   Grid3X3,
   Home,
   Trees,
@@ -251,20 +245,6 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
     })
   }, [sections, tables, bookings])
 
-  // Section navigation
-  const currentSectionIndex = sections?.findIndex(s => s.id === selectedSection) ?? -1
-  const hasNextSection = currentSectionIndex < (sections?.length ?? 0) - 1
-  const hasPrevSection = currentSectionIndex > 0
-
-  const navigateSection = (direction: 'next' | 'prev') => {
-    if (!sections) return
-    
-    if (direction === 'next' && hasNextSection) {
-      setSelectedSection(sections[currentSectionIndex + 1].id)
-    } else if (direction === 'prev' && hasPrevSection) {
-      setSelectedSection(sections[currentSectionIndex - 1].id)
-    }
-  }
 
   // Initialize positions
   useEffect(() => {
@@ -275,12 +255,12 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
     finalPositionsRef.current = { ...positions }
   }, [tables])
 
-  // Section overview component
+  // Section overview component - responsive
   const SectionOverview = () => {
     if (!showSectionOverview || !sections) return null
 
     return (
-      <Card className="absolute top-4 right-4 w-64 z-50 shadow-xl">
+      <Card className="fixed top-4 right-4 w-64 max-w-[calc(100vw-2rem)] z-50 shadow-xl max-h-[calc(100vh-6rem)] overflow-auto">
         <div className="p-4">
           <h3 className="font-semibold mb-3 flex items-center gap-2">
             <Layers className="h-4 w-4" />
@@ -295,25 +275,28 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 <button
                   key={stat.id}
                   className={cn(
-                    "w-full p-2 rounded-lg border text-left transition-all",
+                    "w-full p-2 rounded-lg border text-left transition-all touch-action-manipulation",
                     isActive 
                       ? "bg-primary/10 border-primary shadow-sm" 
                       : "hover:bg-muted border-border"
                   )}
-                  onClick={() => setSelectedSection(stat.id)}
+                  onClick={() => {
+                    setSelectedSection(stat.id)
+                    setShowSectionOverview(false) // Auto-hide on mobile after selection
+                  }}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <Icon 
-                        className="h-4 w-4" 
+                        className="h-4 w-4 flex-shrink-0" 
                         style={{ color: stat.color }}
                       />
-                      <span className="font-medium text-sm">{stat.name}</span>
+                      <span className="font-medium text-sm truncate">{stat.name}</span>
                     </div>
                     <Badge 
                       variant={stat.occupancyRate > 80 ? "destructive" : 
                                stat.occupancyRate > 50 ? "secondary" : "outline"}
-                      className="text-xs"
+                      className="text-xs flex-shrink-0"
                     >
                       {stat.occupancyRate}%
                     </Badge>
@@ -1122,83 +1105,46 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
 
   return (
     <div className="h-full w-full flex flex-col bg-gradient-to-br from-background to-card ">
-      {/* Section Navigation Bar */}
-      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="p-3">
+      {/* Ultra-compact section navigation */}
+      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 relative z-10">
+        <div className="px-3 py-1.5">
           {sectionViewMode === "tabs" ? (
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => navigateSection('prev')}
-                disabled={!hasPrevSection}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              
-              <ScrollArea className="flex-1">
-                <Tabs value={selectedSection} onValueChange={setSelectedSection}>
-                  <TabsList className="w-full justify-start">
-                    {sectionStats.map(stat => {
-                      const Icon = SECTION_ICONS[stat.icon as keyof typeof SECTION_ICONS] || Grid3X3
-                      
-                      return (
-                        <TabsTrigger key={stat.id} value={stat.id} className="gap-2">
-                          <Icon className="h-4 w-4" style={{ color: stat.color }} />
-                          {stat.name}
-                          <div className="flex gap-1 ml-1">
-                            <Badge 
-                              variant="secondary" 
-                              className="text-xs"
-                            >
-                              {stat.tableCount}
-                            </Badge>
-                            {stat.occupiedCount > 0 && (
-                              <Badge 
-                                variant="destructive" 
-                                className="text-xs"
-                              >
-                                {stat.occupiedCount}
-                              </Badge>
-                            )}
-                          </div>
-                        </TabsTrigger>
-                      )
-                    })}
-                  </TabsList>
-                </Tabs>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
-              
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => navigateSection('next')}
-                disabled={!hasNextSection}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setSectionViewMode("dropdown")}
-              >
-                <Eye className="h-4 w-4" />
-              </Button>
-              
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setShowSectionOverview(!showSectionOverview)}
-              >
-                <Maximize2 className="h-4 w-4" />
-              </Button>
+            /* Horizontal inline layout - minimal height */
+            <div className="flex items-center gap-1 flex-wrap">
+              {sectionStats.map(stat => {
+                const Icon = SECTION_ICONS[stat.icon as keyof typeof SECTION_ICONS] || Grid3X3
+                const isActive = stat.id === selectedSection
+                
+                return (
+                  <button
+                    key={stat.id}
+                    onClick={() => setSelectedSection(stat.id)}
+                    className={cn(
+                      "inline-flex items-center gap-1 px-2 py-1 rounded text-xs transition-all touch-manipulation relative",
+                      isActive 
+                        ? "bg-primary/15 text-primary border border-primary/40" 
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/20 border border-transparent"
+                    )}
+                  >
+                    <div className="relative">
+                      <Icon className="h-3 w-3" style={{ color: stat.color }} />
+                      {stat.occupiedCount > 0 && (
+                        <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                      )}
+                    </div>
+                    <span className="font-medium truncate max-w-16">{stat.name}</span>
+                    <span className="text-[9px] text-muted-foreground bg-muted/50 px-1 rounded">
+                      {stat.tableCount}{stat.occupiedCount > 0 && <span className="text-red-600">/{stat.occupiedCount}</span>}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           ) : (
+            /* Compact dropdown mode */
             <div className="flex items-center gap-2">
               <Select value={selectedSection} onValueChange={setSelectedSection}>
-                <SelectTrigger className="w-[250px]">
+                <SelectTrigger className="w-48 h-7 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1207,9 +1153,9 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                     
                     return (
                       <SelectItem key={stat.id} value={stat.id}>
-                        <div className="flex items-center gap-2">
-                          <Icon className="h-4 w-4" style={{ color: stat.color }} />
-                          {stat.name} ({stat.tableCount} tables, {stat.occupiedCount} occupied)
+                        <div className="flex items-center gap-2 text-xs">
+                          <Icon className="h-3 w-3" style={{ color: stat.color }} />
+                          {stat.name} ({stat.tableCount}/{stat.occupiedCount})
                         </div>
                       </SelectItem>
                     )
@@ -1217,53 +1163,37 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 </SelectContent>
               </Select>
               
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setSectionViewMode("tabs")}
-              >
-                <Layers className="h-4 w-4" />
-              </Button>
-              
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setShowSectionOverview(!showSectionOverview)}
-              >
-                <Maximize2 className="h-4 w-4" />
-              </Button>
-              
-              {/* Section Stats Summary */}
-              <div className="ml-auto flex items-center gap-3 text-sm">
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-green-500 rounded-full" />
-                  <span>Available: {filteredTables.filter(t => {
+              {/* Compact stats */}
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                  {filteredTables.filter(t => {
                     const hasBooking = bookings.some(b => 
                       b.tables?.some((bt: any) => bt.id === t.id) &&
                       ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(b.status)
                     )
                     return !hasBooking
-                  }).length}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-red-500 rounded-full" />
-                  <span>Occupied: {filteredTables.filter(t => {
+                  }).length}
+                </span>
+                <span className="flex items-center gap-1">
+                  <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
+                  {filteredTables.filter(t => {
                     const hasBooking = bookings.some(b => 
                       b.tables?.some((bt: any) => bt.id === t.id) &&
                       ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(b.status)
                     )
                     return hasBooking
-                  }).length}</span>
-                </div>
+                  }).length}
+                </span>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Edit Mode Toggle */}
+      {/* Edit Mode Toggle - Fixed positioning to avoid section header overlap */}
       {onTableUpdate && (
-        <div className="absolute top-28 left-20 z-20 ">
+        <div className="fixed top-20 left-4 z-30">
           <Button
             size="icon"
             aria-label={editMode ? "Exit Edit Layout" : "Edit Layout"}
@@ -1287,7 +1217,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               }
             }}
             className={cn(
-              "shadow-md transition-all duration-200",
+              "shadow-lg transition-all duration-200",
               editMode 
                 ? "bg-red-600 hover:bg-red-700 text-white" 
                 : "bg-background/90 hover:bg-background text-foreground border border-border"
@@ -1298,8 +1228,33 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
         </div>
       )}
 
-      {/* Floor Plan Area */}
+      Floor Plan Area
       <div className="flex-1 relative bg-gradient-to-br from-card to-muted overflow-auto px-3 md:px-6" ref={floorPlanRef}>
+        
+        {/* Floating control buttons - top right */}
+        {/* 
+        <div className="fixed top-4 right-4 z-40 flex gap-1">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setSectionViewMode(sectionViewMode === "tabs" ? "dropdown" : "tabs")}
+            className="h-6 w-6 p-0 shadow-lg bg-background/90 hover:bg-background border"
+            title="Toggle view mode"
+          >
+            <Eye className="h-3 w-3" />
+          </Button>
+          
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setShowSectionOverview(!showSectionOverview)}
+            className="h-6 w-6 p-0 shadow-lg bg-background/90 hover:bg-background border"
+            title="Section overview"
+          >
+            <Maximize2 className="h-3 w-3" />
+          </Button>
+        </div>
+        */}
         <div 
           className="relative w-full h-full"
           style={{ minHeight: "600px", minWidth: "700px" }}
@@ -1314,7 +1269,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
           {/* Render filtered tables */}
           {filteredTables.filter(t => t.is_active).map(renderTable)}
           
-          {/* Floating Quick Actions Menu - positioned outside tables */}
+          {/* Floating Quick Actions Menu - positioned to avoid overlap with section headers */}
           {selectedTable && activeMenuTable && (() => {
             const selectedTableData = filteredTables.find(t => t.id === selectedTable)
             if (!selectedTableData) return null
@@ -1326,13 +1281,13 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               <div 
                 className="fixed z-[9999] bg-background/95 backdrop-blur-sm border border-border rounded-lg shadow-2xl p-2 pointer-events-auto animate-in fade-in-0 slide-in-from-bottom-4 duration-300"
                 style={{
-                  left: '50%',
+                  right: '20px',
                   bottom: '20px',
-                  transform: 'translateX(-50%)',
+                  maxWidth: 'calc(100vw - 40px)',
                 }}
               >
-                <div className="flex gap-2 items-center">
-                  <span className="text-xs font-medium text-muted-foreground mr-2">
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-xs font-medium text-muted-foreground mr-2 whitespace-nowrap">
                     T{selectedTableData.table_number}:
                   </span>
                   
