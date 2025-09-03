@@ -473,7 +473,7 @@ export function SectionManager({
                         style={{ color: section.color }}
                       />
                     </div>
-                    <div className="flex gap-1 flex-shrink-0">
+                    <div className="flex gap-2 flex-shrink-0 ml-2 mr-1">
                       <Button
                         size="sm"
                         variant="ghost"
@@ -505,11 +505,19 @@ export function SectionManager({
                       </Button>
                     </div>
                   </div>
-                  <CardTitle className="text-sm font-medium line-clamp-1 break-words">{section.name}</CardTitle>
+                  <CardTitle 
+                    className="text-sm font-medium line-clamp-1 break-words" 
+                    title={section.name.length > 30 ? section.name : undefined}
+                  >
+                    {section.name}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
                   {section.description && (
-                    <p className="text-xs text-muted-foreground mb-2 line-clamp-2 break-words">
+                    <p 
+                      className="text-xs text-muted-foreground mb-2 line-clamp-2 break-words"
+                      title={section.description && section.description.length > 60 ? section.description : undefined}
+                    >
                       {section.description}
                     </p>
                   )}
