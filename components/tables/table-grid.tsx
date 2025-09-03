@@ -4,11 +4,12 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { 
   Edit, 
-  Trash2, 
   Users, 
   Maximize2,
   Circle,
   Square,
+  Power,
+  Layers,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { RestaurantTable } from "@/types"
@@ -18,7 +19,7 @@ interface TableGridProps {
   tables: RestaurantTable[]
   isLoading: boolean
   onEdit: (table: RestaurantTable) => void
-  onDelete: (tableId: string) => void
+  onDeactivate?: (table: RestaurantTable) => void
 }
 
 const TABLE_TYPE_CONFIG = {
@@ -36,7 +37,7 @@ const SHAPE_ICONS = {
   square: Square,
 }
 
-export function TableGrid({ tables, isLoading, onEdit, onDelete }: TableGridProps) {
+export function TableGrid({ tables, isLoading, onEdit, onDeactivate }: TableGridProps) {
   if (isLoading) {
     return <div className="text-center py-8">Loading tables...</div>
   }
@@ -80,7 +81,8 @@ export function TableGrid({ tables, isLoading, onEdit, onDelete }: TableGridProp
                 return (
                   <Card key={table.id} className={cn(
                     "relative",
-                    !table.is_active && "opacity-60"
+                    !table.is_active && "opacity-60",
+                    table.section && !table.section.is_active && "border-dashed border-muted-foreground/30"
                   )}>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
@@ -89,6 +91,17 @@ export function TableGrid({ tables, isLoading, onEdit, onDelete }: TableGridProp
                         </CardTitle>
                         <ShapeIcon className="h-4 w-4 text-muted-foreground" />
                       </div>
+                      {table.section && (
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <Layers className="h-3 w-3" />
+                          <span>{table.section.name}</span>
+                          {!table.section.is_active && (
+                            <Badge variant="outline" className="text-xs text-muted-foreground">
+                              Section Inactive
+                            </Badge>
+                          )}
+                        </div>
+                      )}
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="flex items-center justify-between text-sm">
@@ -126,13 +139,25 @@ export function TableGrid({ tables, isLoading, onEdit, onDelete }: TableGridProp
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onDelete(table.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {onDeactivate && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onDeactivate(table)}
+                            disabled={!table.is_active && table.section && !table.section.is_active}
+                            className={table.is_active 
+                              ? "text-destructive hover:text-destructive hover:border-destructive/50"
+                              : "text-green-600 hover:text-green-600 hover:border-green-500/50"
+                            }
+                            title={
+                              !table.is_active && table.section && !table.section.is_active
+                                ? "Cannot activate table - section is inactive"
+                                : table.is_active ? "Deactivate table" : "Activate table"
+                            }
+                          >
+                            <Power className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

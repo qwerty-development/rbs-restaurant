@@ -113,9 +113,9 @@ export function TableForm({
   
   const supabase = createClient()
 
-  // Fetch sections
+  // Fetch active sections for form selection
   const { data: sections, isLoading: sectionsLoading } = useQuery({
-    queryKey: ["restaurant-sections", restaurantId],
+    queryKey: ["restaurant-sections-active", restaurantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("restaurant_sections")
@@ -185,16 +185,16 @@ export function TableForm({
   )
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4 w-full min-w-0">
       {/* Section Selection - Primary importance */}
-      <Card>
+      <Card className="w-full">
         <CardHeader>
           <CardTitle className="text-sm">Section Assignment</CardTitle>
           <CardDescription>
             Assign this table to a section for better organization
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0">
           {sectionsLoading ? (
             <div className="text-sm text-muted-foreground">Loading sections...</div>
           ) : sections && sections.length > 0 ? (
@@ -219,7 +219,7 @@ export function TableForm({
                           />
                           <span>{section.name}</span>
                           {section.description && (
-                            <span className="text-muted-foreground text-xs ml-2">
+                            <span className="text-muted-foreground text-xs ml-2 truncate max-w-[120px]">
                               ({section.description})
                             </span>
                           )}
@@ -231,16 +231,16 @@ export function TableForm({
               </Select>
               
               {selectedSection && (
-                <div className="mt-3 p-3 bg-muted rounded-lg">
-                  <div className="flex items-center gap-2">
+                <div className="mt-3 p-3 bg-muted rounded-lg min-w-0 max-w-full">
+                  <div className="flex items-center gap-2 min-w-0">
                     <SectionIcon 
-                      className="h-4 w-4" 
+                      className="h-4 w-4 flex-shrink-0" 
                       style={{ color: selectedSection.color }}
                     />
-                    <span className="font-medium text-sm">{selectedSection.name}</span>
+                    <span className="font-medium text-sm truncate">{selectedSection.name}</span>
                   </div>
                   {selectedSection.description && (
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2 break-words overflow-hidden">
                       {selectedSection.description}
                     </p>
                   )}

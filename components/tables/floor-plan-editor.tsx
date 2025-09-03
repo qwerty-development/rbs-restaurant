@@ -12,7 +12,6 @@ import {
   ZoomIn, 
   ZoomOut, 
   Grid3X3, 
-  Trash2,
   Printer,
   Layers,
   ChevronLeft,
@@ -48,7 +47,6 @@ interface FloorPlanEditorProps {
   tables: RestaurantTable[]
   onTableUpdate: (tableId: string, position: { x: number; y: number }) => void
   onTableResize?: (tableId: string, dimensions: { width: number; height: number }) => void
-  onTableDelete?: (tableId: string) => void
   onTableSectionChange?: (tableId: string, sectionId: string) => void
 }
 
@@ -116,7 +114,6 @@ export function FloorPlanEditor({
   tables, 
   onTableUpdate, 
   onTableResize, 
-  onTableDelete,
   onTableSectionChange 
 }: FloorPlanEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -161,9 +158,9 @@ export function FloorPlanEditor({
   
   const supabase = createClient()
   
-  // Fetch sections
+  // Fetch active sections for floor plan
   const { data: sections, isLoading: sectionsLoading } = useQuery({
-    queryKey: ["restaurant-sections", restaurantId],
+    queryKey: ["restaurant-sections-active", restaurantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("restaurant_sections")
@@ -936,13 +933,6 @@ export function FloorPlanEditor({
       let deltaWidth = 0, deltaHeight = 0
 
       switch (e.key) {
-        case "Delete":
-        case "Backspace":
-          if (onTableDelete) {
-            onTableDelete(selectedTable)
-            setSelectedTable(null)
-          }
-          break
         case "Escape":
           setSelectedTable(null)
           break
@@ -1033,7 +1023,7 @@ export function FloorPlanEditor({
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [selectedTable, isDragging, isResizing, viewMode, editMode, filteredTables, onTableDelete, onTableUpdate, onTableResize])
+  }, [selectedTable, isDragging, isResizing, viewMode, editMode, filteredTables, onTableUpdate, onTableResize])
 
   // Minimap render function
   const renderMinimap = () => {
@@ -1124,9 +1114,9 @@ export function FloorPlanEditor({
                       const tableCount = tables.filter(t => t.section_id === section.id).length
                       
                       return (
-                        <TabsTrigger key={section.id} value={section.id} className="gap-2">
+                        <TabsTrigger key={section.id} value={section.id} className="gap-2 flex-shrink-0">
                           <Icon className="h-4 w-4" style={{ color: section.color }} />
-                          {section.name}
+                          <span className="truncate max-w-[120px]">{section.name}</span>
                           <Badge variant="secondary" className="ml-1">
                             {tableCount}
                           </Badge>
@@ -1161,7 +1151,8 @@ export function FloorPlanEditor({
                     <SelectItem key={section.id} value={section.id}>
                       <div className="flex items-center gap-2">
                         <Icon className="h-4 w-4" style={{ color: section.color }} />
-                        {section.name} ({tableCount} tables)
+                        <span className="truncate max-w-[200px]">{section.name}</span> 
+                        <span className="text-muted-foreground">({tableCount} tables)</span>
                       </div>
                     </SelectItem>
                   )
@@ -1190,9 +1181,9 @@ export function FloorPlanEditor({
                         <Icon className="h-5 w-5" style={{ color: section.color }} />
                       </div>
                       <div>
-                        <h4 className="font-medium">{section.name}</h4>
+                        <h4 className="font-medium truncate">{section.name}</h4>
                         {section.description && (
-                          <p className="text-sm text-muted-foreground">{section.description}</p>
+                          <p className="text-sm text-muted-foreground line-clamp-2 break-words">{section.description}</p>
                         )}
                       </div>
                     </div>
@@ -1798,24 +1789,6 @@ export function FloorPlanEditor({
                         </div>
                       )}
                       
-                      {/* Action buttons - Enhanced for touch */}
-                      <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 flex gap-2 pointer-events-auto">
-                        {onTableDelete && (
-                          <Button 
-                            size="sm" 
-                            variant="destructive" 
-                            className="h-10 w-10 p-0 shadow-md touch-manipulation"
-                            style={{ touchAction: 'manipulation' }}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onTableDelete(table.id)
-                              setSelectedTable(null)
-                            }}
-                          >
-                            <Trash2 className="h-5 w-5" />
-                          </Button>
-                        )}
-                      </div>
                     </>
                   )}
                 </div>
