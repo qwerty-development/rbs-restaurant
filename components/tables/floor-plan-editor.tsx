@@ -28,7 +28,9 @@ import {
   Map,
   Info,
   Utensils,
-  X
+  X,
+  ChevronUp,
+  ChevronDown
 } from "lucide-react"
 import type { RestaurantTable, RestaurantSection } from "@/types"
 import { useQuery } from "@tanstack/react-query"
@@ -156,6 +158,7 @@ export function FloorPlanEditor({
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   const [showMinimap, setShowMinimap] = useState(false)
+  const [isMinimapExpanded, setIsMinimapExpanded] = useState(true)
   const [sectionViewMode, setSectionViewMode] = useState<"tabs" | "dropdown">("tabs")
   
   const supabase = createClient()
@@ -939,6 +942,20 @@ export function FloorPlanEditor({
   // Keyboard shortcuts with optimized movement and resizing
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Close minimap with Escape when it's open
+      if (e.key === "Escape" && showMinimap) {
+        setShowMinimap(false)
+        return
+      }
+      
+      // Toggle minimap with 'M' key
+      if (e.key === "m" || e.key === "M") {
+        if (!isDragging && !isResizing && viewMode === "edit") {
+          setShowMinimap(!showMinimap)
+          return
+        }
+      }
+      
       if (!selectedTable || isDragging || isResizing || viewMode === "preview") return
 
       const step = e.shiftKey ? 5 : 1
@@ -1036,118 +1053,194 @@ export function FloorPlanEditor({
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [selectedTable, isDragging, isResizing, viewMode, editMode, filteredTables, onTableUpdate, onTableResize])
+  }, [selectedTable, isDragging, isResizing, viewMode, editMode, filteredTables, onTableUpdate, onTableResize, showMinimap])
 
   // Minimap render function
   const renderMinimap = () => {
     if (!showMinimap) return null
 
+    const allSections = sections || []
+    const sectionsPerRow = 4
+    const maxVisibleRows = 3
+    const maxVisibleSections = sectionsPerRow * maxVisibleRows
+
     return (
-      <Card className="absolute top-4 right-4 w-80 max-w-[calc(100vw-2rem)] h-52 z-50 shadow-xl border-2 border-blue-200 bg-white overview-map-enter sm:overview-map-mobile">
-        <CardContent className="p-4 relative h-full">
-          <div className="flex items-center justify-between mb-3">
+      <Card className="fixed top-20 right-4 w-96 max-w-[calc(100vw-2rem)] max-h-[calc(100vh-6rem)] z-50 shadow-2xl border-2 border-blue-200 bg-white/95 backdrop-blur-sm overview-map-enter sm:overview-map-mobile overflow-hidden transition-all duration-300">
+        <CardContent className="p-0 relative h-full">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100 sticky top-0 z-10">
             <div className="flex items-center gap-2">
               <Map className="h-4 w-4 text-blue-600" />
               <div className="text-sm font-semibold text-slate-700">Section Overview</div>
+              <Badge variant="secondary" className="text-xs">
+                {allSections.length} sections
+              </Badge>
             </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setShowMinimap(false)}
-              className="h-7 w-7 p-0 hover:bg-slate-100 rounded-full"
-            >
-              <X className="h-3 w-3" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setIsMinimapExpanded(!isMinimapExpanded)}
+                className="h-7 w-7 p-0 hover:bg-blue-100 rounded-full"
+                title={isMinimapExpanded ? "Collapse" : "Expand"}
+              >
+                {isMinimapExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowMinimap(false)}
+                className="h-7 w-7 p-0 hover:bg-blue-100 rounded-full"
+                title="Close"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
           
-          <div className="relative w-full h-32 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-200 p-3">
-            {/* Section grid layout */}
-            <div className="grid grid-cols-3 gap-2 h-full">
-              {sections?.slice(0, 6).map((section, idx) => {
-                const sectionTables = tables.filter(t => t.section_id === section.id)
-                const isActive = section.id === selectedSection
-                const Icon = SECTION_ICONS[section.icon as keyof typeof SECTION_ICONS] || Grid3X3
-                
-                return (
-                  <div
-                    key={section.id}
-                    className={cn(
-                      "relative cursor-pointer transition-all duration-200 rounded-lg p-2 border-2 hover:shadow-md group",
-                      isActive 
-                        ? "border-blue-500 bg-blue-50 shadow-lg transform scale-105" 
-                        : "border-slate-300 bg-white hover:bg-slate-50 hover:border-slate-400 hover:scale-102"
-                    )}
-                    style={{
-                      borderColor: isActive ? '#3b82f6' : section.color,
-                      backgroundColor: isActive ? '#eff6ff' : 'white'
-                    }}
-                    onClick={() => setSelectedSection(section.id)}
-                    title={`${section.name} - ${sectionTables.length} tables`}
-                  >
-                    <div className="flex flex-col items-center justify-center h-full text-center">
-                      <Icon 
-                        className={cn(
-                          "h-4 w-4 mb-1 transition-transform group-hover:scale-110",
-                          isActive && "animate-pulse"
-                        )}
-                        style={{ color: isActive ? '#3b82f6' : section.color }} 
-                      />
-                      <div className="text-[10px] font-medium text-slate-700 truncate w-full leading-tight">
-                        {section.name}
+          {/* Collapsible content */}
+          {isMinimapExpanded && (
+            <>
+              {/* Scrollable sections grid */}
+              <div className="max-h-80 overflow-y-auto custom-scrollbar">
+                <div className="p-4">
+                  <div className={cn(
+                    "grid gap-2",
+                    allSections.length <= 4 ? "grid-cols-2" :
+                    allSections.length <= 8 ? "grid-cols-3" : "grid-cols-4"
+                  )}>
+                    {allSections.map((section, idx) => {
+                      const sectionTables = tables.filter(t => t.section_id === section.id)
+                      const isActive = section.id === selectedSection
+                      const Icon = SECTION_ICONS[section.icon as keyof typeof SECTION_ICONS] || Grid3X3
+                      
+                      return (
+                        <div
+                          key={section.id}
+                          className={cn(
+                            "relative cursor-pointer transition-all duration-200 rounded-lg p-3 border-2 hover:shadow-md group",
+                            isActive 
+                              ? "border-blue-500 bg-blue-50 shadow-lg transform scale-105 ring-2 ring-blue-200" 
+                              : "border-slate-300 bg-white hover:bg-slate-50 hover:border-slate-400 hover:scale-102"
+                          )}
+                          style={{
+                            borderColor: isActive ? '#3b82f6' : section.color,
+                            backgroundColor: isActive ? '#eff6ff' : 'white'
+                          }}
+                          onClick={() => setSelectedSection(section.id)}
+                          title={`${section.name} - ${sectionTables.length} tables`}
+                        >
+                          <div className="flex flex-col items-center justify-center text-center min-h-[4rem]">
+                            <Icon 
+                              className={cn(
+                                "h-5 w-5 mb-2 transition-transform group-hover:scale-110",
+                                isActive && "animate-pulse"
+                              )}
+                              style={{ color: isActive ? '#3b82f6' : section.color }} 
+                            />
+                            <div className="text-[10px] font-medium text-slate-700 truncate w-full leading-tight mb-1">
+                              {section.name}
+                            </div>
+                            <div className={cn(
+                              "text-[8px] px-2 py-1 rounded-full border",
+                              isActive 
+                                ? "text-blue-600 bg-blue-100 border-blue-200" 
+                                : "text-slate-500 bg-slate-100 border-slate-200"
+                            )}>
+                              {sectionTables.length} table{sectionTables.length !== 1 ? 's' : ''}
+                            </div>
+                          </div>
+                          
+                          {/* Active indicator */}
+                          {isActive && (
+                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center animate-pulse">
+                              <div className="w-2 h-2 bg-white rounded-full"></div>
+                            </div>
+                          )}
+                          
+                          {/* Section color indicator */}
+                          <div 
+                            className="absolute top-1 left-1 w-2 h-2 rounded-full ring-1 ring-white shadow-sm"
+                            style={{ backgroundColor: section.color }}
+                          ></div>
+                          
+                          {/* Hover effect border */}
+                          <div className={cn(
+                            "absolute inset-0 rounded-lg border-2 transition-opacity",
+                            "opacity-0 group-hover:opacity-100 border-blue-300"
+                          )}></div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  
+                  {/* Quick stats */}
+                  <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="text-xs text-slate-600 space-y-1">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">Total Tables:</span>
+                        <span className="text-slate-800 font-semibold">{tables.length}</span>
                       </div>
-                      <div className={cn(
-                        "text-[8px] mt-1 px-1 py-0.5 rounded",
-                        isActive 
-                          ? "text-blue-600 bg-blue-100" 
-                          : "text-slate-500 bg-slate-100"
-                      )}>
-                        {sectionTables.length} tables
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">Active Sections:</span>
+                        <span className="text-slate-800 font-semibold">{allSections.length}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">Total Capacity:</span>
+                        <span className="text-slate-800 font-semibold">
+                          {tables.reduce((sum, t) => sum + t.max_capacity, 0)} seats
+                        </span>
                       </div>
                     </div>
-                    
-                    {/* Active indicator */}
-                    {isActive && (
-                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full flex items-center justify-center animate-pulse">
-                        <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-                      </div>
-                    )}
-                    
-                    {/* Hover effect border */}
-                    <div className={cn(
-                      "absolute inset-0 rounded-lg border-2 transition-opacity",
-                      "opacity-0 group-hover:opacity-100 border-blue-300"
-                    )}></div>
                   </div>
-                )
-              })}
-            </div>
-            
-            {/* Show message if more sections exist */}
-            {sections && sections.length > 6 && (
-              <div className="absolute bottom-1 left-3 right-3 text-center">
-                <div className="text-[9px] text-slate-500 bg-white/80 backdrop-blur-sm px-2 py-1 rounded border shadow-sm">
-                  +{sections.length - 6} more sections available
                 </div>
               </div>
-            )}
-          </div>
+              
+              {/* Current section info - sticky bottom */}
+              {selectedSection && sections && (
+                <div className="sticky bottom-0 p-3 bg-gradient-to-r from-slate-50 to-blue-50 border-t border-slate-200">
+                  <div className="text-xs text-slate-600">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div 
+                        className="w-3 h-3 rounded-full ring-2 ring-white shadow-sm" 
+                        style={{ backgroundColor: sections.find(s => s.id === selectedSection)?.color }}
+                      ></div>
+                      <span className="font-semibold text-slate-700">
+                        {sections.find(s => s.id === selectedSection)?.name}
+                      </span>
+                      <Badge variant="outline" className="text-[9px] h-4 px-1">
+                        Current
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-slate-500">
+                        {filteredTables.length} table{filteredTables.length !== 1 ? 's' : ''} visible
+                      </span>
+                      <span className="text-slate-500">
+                        {filteredTables.reduce((sum, t) => sum + t.max_capacity, 0)} total seats
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
           
-          {/* Current section info */}
-          {selectedSection && sections && (
-            <div className="mt-3 p-2 bg-slate-50 rounded-lg border">
-              <div className="text-[10px] text-slate-600">
-                <div className="flex items-center gap-1.5">
+          {/* Collapsed state - show only current section */}
+          {!isMinimapExpanded && selectedSection && sections && (
+            <div className="p-3 bg-gradient-to-r from-slate-50 to-blue-50">
+              <div className="text-xs text-slate-600">
+                <div className="flex items-center gap-2">
                   <div 
-                    className="w-2.5 h-2.5 rounded-full ring-1 ring-white shadow-sm" 
+                    className="w-3 h-3 rounded-full ring-2 ring-white shadow-sm" 
                     style={{ backgroundColor: sections.find(s => s.id === selectedSection)?.color }}
                   ></div>
-                  <span className="font-medium text-slate-700">
+                  <span className="font-semibold text-slate-700">
                     {sections.find(s => s.id === selectedSection)?.name}
                   </span>
-                  <span className="text-slate-400">•</span>
-                  <span className="text-slate-500">
-                    {filteredTables.length} table{filteredTables.length !== 1 ? 's' : ''} visible
-                  </span>
+                  <Badge variant="outline" className="text-[9px] h-4 px-1">
+                    {filteredTables.length} tables
+                  </Badge>
                 </div>
               </div>
             </div>
@@ -1197,7 +1290,10 @@ export function FloorPlanEditor({
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>{showMinimap ? "Hide" : "Show"} section overview map</p>
+                    <div className="text-center">
+                      <p>{showMinimap ? "Hide" : "Show"} section overview map</p>
+                      <p className="text-xs text-muted-foreground mt-1">Press 'M' for quick toggle</p>
+                    </div>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1335,6 +1431,31 @@ export function FloorPlanEditor({
             border-color: rgba(34, 197, 94, 1);
             box-shadow: 0 0 0 8px rgba(34, 197, 94, 0.2);
           }
+        }
+        
+        /* Custom scrollbar for overview map */
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: #cbd5e1 #f1f5f9;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #f1f5f9;
+          border-radius: 3px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 3px;
+          transition: background 0.2s ease;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
         }
         
         /* Section overview map enhancements */
