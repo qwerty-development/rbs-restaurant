@@ -70,8 +70,12 @@ const SECTION_COLORS = [
 ]
 
 const sectionSchema = z.object({
-  name: z.string().min(1, "Section name is required"),
-  description: z.string().optional(),
+  name: z.string()
+    .min(1, "Section name is required")
+    .max(30, "Section name must be 30 characters or less"),
+  description: z.string()
+    .max(100, "Description must be 100 characters or less")
+    .optional(),
   color: z.string(),
   icon: z.string(),
   display_order: z.number().min(0),
@@ -121,7 +125,7 @@ export function SectionManager({
 
   // Fetch sections with table count
   const { data: sections, isLoading } = useQuery({
-    queryKey: ["restaurant-sections", restaurantId],
+    queryKey: ["restaurant-sections-with-counts", restaurantId],
     queryFn: async () => {
       // Fetch sections (including disabled ones for management)
       const { data: sectionsData, error: sectionsError } = await supabase
@@ -193,7 +197,9 @@ export function SectionManager({
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["restaurant-sections"] })
+      queryClient.refetchQueries({ queryKey: ["restaurant-sections-with-counts", restaurantId] })
+      queryClient.refetchQueries({ queryKey: ["restaurant-sections-active", restaurantId] })
+      queryClient.refetchQueries({ queryKey: ["tables-with-sections", restaurantId] })
       toast.success(editingSection ? "Section updated" : "Section created")
       setIsDialogOpen(false)
       setEditingSection(null)
@@ -228,7 +234,9 @@ export function SectionManager({
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["restaurant-sections"] })
+      queryClient.refetchQueries({ queryKey: ["restaurant-sections-with-counts", restaurantId] })
+      queryClient.refetchQueries({ queryKey: ["restaurant-sections-active", restaurantId] })
+      queryClient.refetchQueries({ queryKey: ["tables-with-sections", restaurantId] })
       toast.success("Section deleted")
       setDeletingId(null)
     },
@@ -276,8 +284,9 @@ export function SectionManager({
       if (sectionError) throw sectionError
     },
     onSuccess: (_, { isActive }) => {
-      queryClient.invalidateQueries({ queryKey: ["restaurant-sections"] })
-      queryClient.invalidateQueries({ queryKey: ["tables-with-sections"] })
+      queryClient.refetchQueries({ queryKey: ["restaurant-sections-with-counts", restaurantId] })
+      queryClient.refetchQueries({ queryKey: ["restaurant-sections-active", restaurantId] })
+      queryClient.refetchQueries({ queryKey: ["tables-with-sections", restaurantId] })
       toast.success(isActive ? "Section enabled successfully" : "Section disabled successfully")
       setTogglingId(null)
     },
@@ -361,10 +370,18 @@ export function SectionManager({
                   {...register("name")}
                   placeholder="e.g., Main Floor, Patio, VIP Area"
                   disabled={sectionMutation.isPending}
+                  maxLength={30}
                 />
-                {errors.name && (
-                  <p className="text-sm text-red-600 mt-1">{errors.name.message}</p>
-                )}
+                <div className="flex justify-between items-center mt-1">
+                  <div>
+                    {errors.name && (
+                      <p className="text-sm text-red-600">{errors.name.message}</p>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {watch("name")?.length || 0}/30
+                  </p>
+                </div>
               </div>
 
               <div>
@@ -375,7 +392,18 @@ export function SectionManager({
                   placeholder="Optional description of this section"
                   disabled={sectionMutation.isPending}
                   rows={2}
+                  maxLength={100}
                 />
+                <div className="flex justify-between items-center mt-1">
+                  <div>
+                    {errors.description && (
+                      <p className="text-sm text-red-600">{errors.description.message}</p>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {watch("description")?.length || 0}/100
+                  </p>
+                </div>
               </div>
 
               <div>
@@ -528,11 +556,11 @@ export function SectionManager({
                       </Button>
                     </div>
                   </div>
-                  <CardTitle className="text-sm font-medium line-clamp-1">{section.name}</CardTitle>
+                  <CardTitle className="text-sm font-medium line-clamp-1 break-words">{section.name}</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
                   {section.description && (
-                    <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
+                    <p className="text-xs text-muted-foreground mb-2 line-clamp-2 break-words">
                       {section.description}
                     </p>
                   )}

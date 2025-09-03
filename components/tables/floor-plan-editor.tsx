@@ -161,9 +161,9 @@ export function FloorPlanEditor({
   
   const supabase = createClient()
   
-  // Fetch sections
+  // Fetch active sections for floor plan
   const { data: sections, isLoading: sectionsLoading } = useQuery({
-    queryKey: ["restaurant-sections", restaurantId],
+    queryKey: ["restaurant-sections-active", restaurantId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("restaurant_sections")
@@ -1124,9 +1124,9 @@ export function FloorPlanEditor({
                       const tableCount = tables.filter(t => t.section_id === section.id).length
                       
                       return (
-                        <TabsTrigger key={section.id} value={section.id} className="gap-2">
+                        <TabsTrigger key={section.id} value={section.id} className="gap-2 flex-shrink-0">
                           <Icon className="h-4 w-4" style={{ color: section.color }} />
-                          {section.name}
+                          <span className="truncate max-w-[120px]">{section.name}</span>
                           <Badge variant="secondary" className="ml-1">
                             {tableCount}
                           </Badge>
@@ -1161,7 +1161,8 @@ export function FloorPlanEditor({
                     <SelectItem key={section.id} value={section.id}>
                       <div className="flex items-center gap-2">
                         <Icon className="h-4 w-4" style={{ color: section.color }} />
-                        {section.name} ({tableCount} tables)
+                        <span className="truncate max-w-[200px]">{section.name}</span> 
+                        <span className="text-muted-foreground">({tableCount} tables)</span>
                       </div>
                     </SelectItem>
                   )
@@ -1190,9 +1191,9 @@ export function FloorPlanEditor({
                         <Icon className="h-5 w-5" style={{ color: section.color }} />
                       </div>
                       <div>
-                        <h4 className="font-medium">{section.name}</h4>
+                        <h4 className="font-medium truncate">{section.name}</h4>
                         {section.description && (
-                          <p className="text-sm text-muted-foreground">{section.description}</p>
+                          <p className="text-sm text-muted-foreground line-clamp-2 break-words">{section.description}</p>
                         )}
                       </div>
                     </div>

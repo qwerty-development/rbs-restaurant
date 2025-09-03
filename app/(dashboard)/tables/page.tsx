@@ -85,21 +85,48 @@ export default function TablesPage() {
     enabled: !!restaurantId,
   })
 
-  // Fetch sections (including disabled ones for management purposes)
+  // Fetch sections with table counts for management
   const { data: sections, isLoading: sectionsLoading } = useQuery({
-    queryKey: ["restaurant-sections", restaurantId],
+    queryKey: ["restaurant-sections-with-counts", restaurantId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      if (!restaurantId) return []
+      
+      // Fetch sections (including disabled ones for management)
+      const { data: sectionsData, error: sectionsError } = await supabase
         .from("restaurant_sections")
         .select("*")
         .eq("restaurant_id", restaurantId)
-        .eq("is_active", true)
         .order("display_order", { ascending: true })
 
-      if (error) throw error
-      return data as RestaurantSection[]
+      if (sectionsError) throw sectionsError
+      if (!sectionsData) return []
+
+      // Fetch table counts for each section
+      const { data: tablesData, error: tablesError } = await supabase
+        .from("restaurant_tables")
+        .select("section_id, id")
+        .eq("restaurant_id", restaurantId)
+        .eq("is_active", true)
+
+      if (tablesError) throw tablesError
+
+      // Count tables per section
+      const tableCounts = tablesData?.reduce((acc, table) => {
+        if (table.section_id) {
+          acc[table.section_id] = (acc[table.section_id] || 0) + 1
+        }
+        return acc
+      }, {} as Record<string, number>) || {}
+
+      // Add table counts to sections
+      return sectionsData.map(section => ({
+        ...section,
+        table_count: tableCounts[section.id] || 0
+      })) as RestaurantSection[]
     },
     enabled: !!restaurantId,
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   })
 
   // Fetch table combinations
@@ -137,7 +164,10 @@ export default function TablesPage() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tables-with-sections"] })
+      // Use refetchQueries to ensure fresh data
+      queryClient.refetchQueries({ queryKey: ["tables-with-sections", restaurantId] })
+      queryClient.refetchQueries({ queryKey: ["restaurant-sections-with-counts", restaurantId] })
+      queryClient.refetchQueries({ queryKey: ["restaurant-sections-active", restaurantId] })
       toast.success(selectedTable ? "Table updated" : "Table created")
       setIsAddingTable(false)
       setSelectedTable(null)
@@ -161,7 +191,7 @@ export default function TablesPage() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tables-with-sections"] })
+      queryClient.invalidateQueries({ queryKey: ["tables-with-sections", restaurantId] })
     },
     onError: (error: any) => {
       console.error("Position update error:", error)
@@ -182,7 +212,7 @@ export default function TablesPage() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tables-with-sections"] })
+      queryClient.invalidateQueries({ queryKey: ["tables-with-sections", restaurantId] })
       toast.success("Table size updated successfully")
     },
     onError: (error: any) => {
@@ -201,7 +231,9 @@ export default function TablesPage() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tables-with-sections"] })
+      queryClient.refetchQueries({ queryKey: ["tables-with-sections", restaurantId] })
+      queryClient.refetchQueries({ queryKey: ["restaurant-sections-with-counts", restaurantId] })
+      queryClient.refetchQueries({ queryKey: ["restaurant-sections-active", restaurantId] })
       toast.success("Table moved to new section")
     },
     onError: (error: any) => {
@@ -219,7 +251,9 @@ export default function TablesPage() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tables-with-sections"] })
+      queryClient.refetchQueries({ queryKey: ["tables-with-sections", restaurantId] })
+      queryClient.refetchQueries({ queryKey: ["restaurant-sections-with-counts", restaurantId] })
+      queryClient.refetchQueries({ queryKey: ["restaurant-sections-active", restaurantId] })
       toast.success("Table deleted")
     },
     onError: (error: any) => {
@@ -387,7 +421,11 @@ export default function TablesPage() {
           <div className="flex gap-2">
             <Button
               variant="outline"
-              onClick={() => queryClient.invalidateQueries({ queryKey: ["tables-with-sections"] })}
+              onClick={() => {
+                queryClient.refetchQueries({ queryKey: ["tables-with-sections", restaurantId] })
+                queryClient.refetchQueries({ queryKey: ["restaurant-sections-with-counts", restaurantId] })
+                queryClient.refetchQueries({ queryKey: ["restaurant-sections-active", restaurantId] })
+              }}
             >
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
