@@ -86,7 +86,10 @@ export function TableGrid({ tables, isLoading, onEdit, onDeactivate }: TableGrid
                   )}>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">
+                        <CardTitle 
+                          className="text-lg"
+                          title={`Table ${table.table_number} - ${table.table_type} (${table.min_capacity}-${table.max_capacity} guests)${table.section ? ` in ${table.section.name}` : ''}`}
+                        >
                           Table {table.table_number}
                         </CardTitle>
                         <ShapeIcon className="h-4 w-4 text-muted-foreground" />
@@ -94,7 +97,12 @@ export function TableGrid({ tables, isLoading, onEdit, onDeactivate }: TableGrid
                       {table.section && (
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
                           <Layers className="h-3 w-3" />
-                          <span>{table.section.name}</span>
+                          <span 
+                            title={table.section.name.length > 20 ? table.section.name : undefined}
+                            className="truncate"
+                          >
+                            {table.section.name}
+                          </span>
                           {!table.section.is_active && (
                             <Badge variant="outline" className="text-xs text-muted-foreground">
                               Section Inactive
@@ -115,9 +123,17 @@ export function TableGrid({ tables, isLoading, onEdit, onDeactivate }: TableGrid
                       </div>
                       
                       {table.features && table.features.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
+                        <div 
+                          className="flex flex-wrap gap-1"
+                          title={table.features.length > 3 ? `Features: ${table.features.join(', ')}` : undefined}
+                        >
                           {table.features.map((feature) => (
-                            <Badge key={feature} variant="outline" className="text-xs">
+                            <Badge 
+                              key={feature} 
+                              variant="outline" 
+                              className="text-xs"
+                              title={feature.length > 10 ? feature : undefined}
+                            >
                               {feature}
                             </Badge>
                           ))}

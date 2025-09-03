@@ -110,6 +110,7 @@ export function TableForm({
 }: TableFormProps) {
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>(table?.features || [])
   const [combinableWith, setCombinableWith] = useState<string[]>(table?.combinable_with || [])
+  const [customValidationError, setCustomValidationError] = useState<string>("")
   
   const supabase = createClient()
 
@@ -163,7 +164,37 @@ export function TableForm({
     }
   }, [sections, table, selectedSectionId, setValue, defaultSectionId])
 
+  // Check for duplicate table numbers
+  const validateTableNumber = (tableNumber: string): string | null => {
+    // Skip validation if editing the same table
+    if (table && table.table_number === tableNumber) {
+      return null
+    }
+    
+    // Check if table number already exists in the restaurant
+    const existingTable = tables.find(t => 
+      t.table_number.toLowerCase() === tableNumber.toLowerCase() && 
+      t.id !== table?.id
+    )
+    
+    if (existingTable) {
+      return `Table number "${tableNumber}" already exists. Please choose a different number.`
+    }
+    
+    return null
+  }
+
   const handleFormSubmit = (data: FormData) => {
+    // Clear any previous validation errors
+    setCustomValidationError("")
+    
+    // Validate table number for duplicates
+    const tableNumberError = validateTableNumber(data.table_number)
+    if (tableNumberError) {
+      setCustomValidationError(tableNumberError)
+      return
+    }
+
     onSubmit({
       ...data,
       features: selectedFeatures,
@@ -186,6 +217,15 @@ export function TableForm({
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4 w-full min-w-0">
+      {/* Custom Validation Error Alert */}
+      {customValidationError && (
+        <Alert className="border-red-500 text-red-700">
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            {customValidationError}
+          </AlertDescription>
+        </Alert>
+      )}
       {/* Section Selection - Primary importance */}
       <Card className="w-full">
         <CardHeader>
@@ -270,11 +310,29 @@ export function TableForm({
           <Label htmlFor="table_number">Table Number *</Label>
           <Input
             id="table_number"
-            {...register("table_number")}
+            {...register("table_number", {
+              onChange: (e) => {
+                // Clear custom validation error when user starts typing
+                if (customValidationError) {
+                  setCustomValidationError("")
+                }
+              }
+            })}
             disabled={isLoading}
+            className={customValidationError && customValidationError.includes("already exists") ? "border-red-500" : ""}
           />
           {errors.table_number && (
             <p className="text-sm text-red-600 mt-1">{errors.table_number.message}</p>
+          )}
+          {/* Show real-time duplicate validation */}
+          {!errors.table_number && customValidationError && customValidationError.includes("already exists") && (
+            <p className="text-sm text-red-600 mt-1">{customValidationError}</p>
+          )}
+          {/* Show helpful hint for new tables */}
+          {!table && !errors.table_number && !customValidationError && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Table numbers must be unique within your restaurant
+            </p>
           )}
         </div>
 
@@ -354,7 +412,7 @@ export function TableForm({
       {/* Shape and Priority */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label htmlFor="shape">Shape</Label>
+          <Label htmlFor="shape">Table Shape *</Label>
           <Select
             value={watch("shape")}
             onValueChange={(value: any) => setValue("shape", value)}

@@ -181,7 +181,44 @@ export default function TablesPage() {
     },
     onError: (error: any) => {
       console.error("Table mutation error:", error)
-      toast.error("Failed to save table")
+      
+      // Parse database errors for better user experience
+      let errorMessage = "Failed to save table"
+      
+      if (error?.message) {
+        // Check for unique constraint violation
+        if (error.message.includes('restaurant_tables_restaurant_id_table_number_key')) {
+          errorMessage = "A table with this number already exists in your restaurant. Please choose a different table number."
+        }
+        // Check for foreign key constraint violations
+        else if (error.message.includes('restaurant_tables_section_id_fkey')) {
+          errorMessage = "The selected section is no longer valid. Please select a different section."
+        }
+        // Check for other constraint violations
+        else if (error.message.includes('violates check constraint')) {
+          if (error.message.includes('capacity')) {
+            errorMessage = "Table capacity values are invalid. Please check your capacity settings."
+          } else if (error.message.includes('table_type')) {
+            errorMessage = "Invalid table type selected. Please choose a valid table type."
+          } else if (error.message.includes('shape')) {
+            errorMessage = "Invalid table shape selected. Please choose a valid shape."
+          }
+        }
+        // Check for null violations
+        else if (error.message.includes('violates not-null constraint')) {
+          errorMessage = "Required fields are missing. Please fill out all required information."
+        }
+        // Generic database errors
+        else if (error.message.includes('duplicate key')) {
+          errorMessage = "This table information conflicts with an existing table. Please check your inputs."
+        }
+        // Show specific error message if it's user-friendly
+        else if (error.message.length < 100 && !error.message.includes('function') && !error.message.includes('relation')) {
+          errorMessage = error.message
+        }
+      }
+      
+      toast.error(errorMessage)
     },
   })
 
