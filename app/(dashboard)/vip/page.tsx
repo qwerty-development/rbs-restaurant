@@ -102,6 +102,7 @@ export default function VIPPage() {
           .single()
         
         if (staffData) {
+          console.log('🏪 VIP Page - Restaurant ID set:', staffData.restaurant_id)
           setRestaurantId(staffData.restaurant_id)
         }
       }
@@ -109,10 +110,19 @@ export default function VIPPage() {
     getRestaurantId()
   }, [supabase])
 
+  // Debug: Expose queryClient to window for manual testing
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).queryClient = queryClient
+      console.log('🔧 VIP Page - QueryClient exposed to window for debugging')
+    }
+  }, [queryClient])
+
   // Fetch VIP users with proper user data
   const { data: vipUsers, isLoading } = useQuery({
     queryKey: ["vip-users", restaurantId],
     queryFn: async () => {
+      console.log('🔄 Fetching VIP users for restaurant:', restaurantId)
       if (!restaurantId) return []
       
       const { data, error } = await supabase
@@ -147,9 +157,13 @@ export default function VIPPage() {
         }
       }))
       
+      console.log('✅ VIP users fetched:', enrichedData.length)
       return enrichedData as RestaurantVIPUser[]
     },
     enabled: !!restaurantId,
+    staleTime: 0, // Consider data stale immediately to force refetch
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   })
 
   // Fetch existing customers who have made bookings
@@ -203,6 +217,9 @@ export default function VIPPage() {
       return enrichedUsers
     },
     enabled: !!restaurantId,
+    staleTime: 0, // Consider data stale immediately to force refetch
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   })
 
   // Add VIP form
@@ -236,7 +253,7 @@ export default function VIPPage() {
 
       console.log("Adding VIP for user:", userId)
 
-      // Check if already VIP
+      // Check if already VIP (active VIP)
       const { data: existingVIP } = await supabase
         .from("restaurant_vip_users")
         .select("id")
@@ -248,6 +265,15 @@ export default function VIPPage() {
       if (existingVIP) {
         throw new Error("User is already a VIP")
       }
+
+      // Delete any existing VIP record for this user (including expired ones) to avoid constraint issues
+      const { error: deleteError } = await supabase
+        .from("restaurant_vip_users")
+        .delete()
+        .eq("restaurant_id", restaurantId)
+        .eq("user_id", userId)
+
+      // We don't check for error here since record might not exist
 
       // Add VIP status
       const { error } = await supabase
@@ -264,9 +290,27 @@ export default function VIPPage() {
         console.error("Error adding VIP:", error)
         throw error
       }
+
+      // Also update the restaurant_customers table
+      const { error: customerError } = await supabase
+        .from('restaurant_customers')
+        .update({ 
+          vip_status: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('restaurant_id', restaurantId)
+        .eq('user_id', userId)
+
+      if (customerError) {
+        console.log("Warning: Could not update customer VIP status in restaurant_customers:", customerError)
+        // Don't throw error here as the customer might not exist in restaurant_customers yet
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vip-users"] })
+      queryClient.invalidateQueries({ queryKey: ["existing-customers"] })
+      // Also invalidate any potential customers queries for cross-page consistency
+      queryClient.invalidateQueries({ queryKey: ["customers"] })
       toast.success("VIP user added successfully")
       setIsAddingVIP(false)
       form.reset()
@@ -285,15 +329,45 @@ export default function VIPPage() {
   // Remove VIP status
   const removeVIPMutation = useMutation({
     mutationFn: async (vipId: string) => {
+      // Get the VIP record first to know which user_id to update
+      const { data: vipRecord, error: getError } = await supabase
+        .from("restaurant_vip_users")
+        .select("user_id")
+        .eq("id", vipId)
+        .single()
+
+      if (getError) throw getError
+
+      // Delete the VIP record completely to avoid constraint issues
       const { error } = await supabase
         .from("restaurant_vip_users")
-        .update({ valid_until: new Date().toISOString() })
+        .delete()
         .eq("id", vipId)
 
       if (error) throw error
+
+      // Also update the restaurant_customers table
+      if (vipRecord) {
+        const { error: customerError } = await supabase
+          .from('restaurant_customers')
+          .update({ 
+            vip_status: false,
+            updated_at: new Date().toISOString()
+          })
+          .eq('restaurant_id', restaurantId)
+          .eq('user_id', vipRecord.user_id)
+
+        if (customerError) {
+          console.log("Warning: Could not update customer VIP status in restaurant_customers:", customerError)
+          // Don't throw error here as the customer might not exist in restaurant_customers yet
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vip-users"] })
+      queryClient.invalidateQueries({ queryKey: ["existing-customers"] })
+      // Also invalidate any potential customers queries for cross-page consistency
+      queryClient.invalidateQueries({ queryKey: ["customers"] })
       toast.success("VIP status removed")
     },
     onError: () => {
