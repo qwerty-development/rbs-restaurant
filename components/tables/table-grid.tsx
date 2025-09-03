@@ -81,7 +81,8 @@ export function TableGrid({ tables, isLoading, onEdit, onDeactivate }: TableGrid
                 return (
                   <Card key={table.id} className={cn(
                     "relative",
-                    !table.is_active && "opacity-60"
+                    !table.is_active && "opacity-60",
+                    table.section && !table.section.is_active && "border-dashed border-muted-foreground/30"
                   )}>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
@@ -94,6 +95,11 @@ export function TableGrid({ tables, isLoading, onEdit, onDeactivate }: TableGrid
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
                           <Layers className="h-3 w-3" />
                           <span>{table.section.name}</span>
+                          {!table.section.is_active && (
+                            <Badge variant="outline" className="text-xs text-muted-foreground">
+                              Section Inactive
+                            </Badge>
+                          )}
                         </div>
                       )}
                     </CardHeader>
@@ -138,11 +144,16 @@ export function TableGrid({ tables, isLoading, onEdit, onDeactivate }: TableGrid
                             variant="outline"
                             size="sm"
                             onClick={() => onDeactivate(table)}
+                            disabled={!table.is_active && table.section && !table.section.is_active}
                             className={table.is_active 
                               ? "text-destructive hover:text-destructive hover:border-destructive/50"
                               : "text-green-600 hover:text-green-600 hover:border-green-500/50"
                             }
-                            title={table.is_active ? "Deactivate table" : "Activate table"}
+                            title={
+                              !table.is_active && table.section && !table.section.is_active
+                                ? "Cannot activate table - section is inactive"
+                                : table.is_active ? "Deactivate table" : "Activate table"
+                            }
                           >
                             <Power className="h-4 w-4" />
                           </Button>

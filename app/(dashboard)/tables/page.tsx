@@ -276,7 +276,12 @@ export default function TablesPage() {
   }
 
   const handleToggleStatus = (table: RestaurantTable) => {
-    const action = table.is_active ? "deactivate" : "activate"
+    // Check if trying to activate a table in a deactivated section
+    if (!table.is_active && table.section && !table.section.is_active) {
+      toast.error(`Cannot activate table in deactivated section "${table.section.name}". Please activate the section first.`)
+      return
+    }
+
     const message = table.is_active 
       ? `Are you sure you want to deactivate Table ${table.table_number}? This will make it unavailable for bookings.`
       : `Are you sure you want to activate Table ${table.table_number}? This will make it available for bookings.`
