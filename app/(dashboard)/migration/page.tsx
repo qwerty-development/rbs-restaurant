@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { 
@@ -59,11 +59,7 @@ export default function MigrationPage() {
   // Results
   const [migrationResults, setMigrationResults] = useState<MigrationResults | null>(null)
 
-  useEffect(() => {
-    loadInitialData()
-  }, [])
-
-  const loadInitialData = async () => {
+  const loadInitialData = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
@@ -74,7 +70,8 @@ export default function MigrationPage() {
       // Get current staff data
       const { data: staffData, error: staffError } = await supabase
         .from('restaurant_staff')
-        .select(`
+        .select(
+          `
           id,
           role,
           permissions,
@@ -107,7 +104,11 @@ export default function MigrationPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase, router])
+
+  useEffect(() => {
+    loadInitialData()
+  }, [loadInitialData])
 
   const handleFileUpload = (file: File, type: 'customers' | 'bookings' | 'tables') => {
     // Validate file type
@@ -181,18 +182,11 @@ export default function MigrationPage() {
 
   const downloadSampleFiles = () => {
     // Create sample CSV content
-    const sampleCustomers = `Customer Name,Email,Phone,VIP,Notes,Dietary Restrictions,Allergies,Tags,First Visit,Last Visit,Total Visits,Total Spent
-John Smith,john.smith@email.com,555-123-4567,Yes,Regular customer,Vegetarian,Nuts,VIP;Regular,2023-01-15,2024-08-20,24,850.50
-Sarah Johnson,sarah.j@email.com,555-234-5678,No,Celebrates anniversaries here,None,Shellfish,Anniversary,2023-06-10,2024-07-15,8,320.75`
+    const sampleCustomers = `Customer Name,Email,Phone,VIP,Notes,Dietary Restrictions,Allergies,Tags,First Visit,Last Visit,Total Visits,Total Spent\nJohn Smith,john.smith@email.com,555-123-4567,Yes,Regular customer,Vegetarian,Nuts,VIP;Regular,2023-01-15,2024-08-20,24,850.50\nSarah Johnson,sarah.j@email.com,555-234-5678,No,Celebrates anniversaries here,None,Shellfish,Anniversary,2023-06-10,2024-07-15,8,320.75`
 
-    const sampleBookings = `Date & Time,Party Size,Customer Email,Status,Special Requests,Table,Notes,Occasion,Created,Confirmation Code,Source
-2024-08-25 19:00:00,2,john.smith@email.com,Completed,Window seat preferred,Table 5,Customer arrived on time,Date Night,2024-08-20 10:30:00,ABC123,Phone
-2024-08-24 18:30:00,4,sarah.j@email.com,Completed,Anniversary celebration,Table 12,Brought flowers,Anniversary,2024-08-22 14:15:00,DEF456,Online`
+    const sampleBookings = `Date & Time,Party Size,Customer Email,Status,Special Requests,Table,Notes,Occasion,Created,Confirmation Code,Source\n2024-08-25 19:00:00,2,john.smith@email.com,Completed,Window seat preferred,Table 5,Customer arrived on time,Date Night,2024-08-20 10:30:00,ABC123,Phone\n2024-08-24 18:30:00,4,sarah.j@email.com,Completed,Anniversary celebration,Table 12,Brought flowers,Anniversary,2024-08-22 14:15:00,DEF456,Online`
 
-    const sampleTables = `Table Name,Capacity,Type,Section,Active
-Table 1,2,Standard,Main Dining,Yes
-Table 2,4,Booth,Main Dining,Yes
-Table 3,6,Standard,Main Dining,Yes`
+    const sampleTables = `Table Name,Capacity,Type,Section,Active\nTable 1,2,Standard,Main Dining,Yes\nTable 2,4,Booth,Main Dining,Yes\nTable 3,6,Standard,Main Dining,Yes`
 
     // Download files
     const downloadFile = (content: string, filename: string) => {
