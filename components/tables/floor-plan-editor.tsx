@@ -1041,7 +1041,7 @@ export function FloorPlanEditor({
   const renderMinimap = () => {
     if (!showMinimap) return null
 
-  return (
+    return (
       <Card className="absolute bottom-4 right-4 w-48 h-32 z-50 shadow-lg">
         <CardContent className="p-2 relative h-full">
           <div className="text-xs font-medium mb-1">Overview</div>
@@ -1089,20 +1089,39 @@ export function FloorPlanEditor({
               Floor Sections
             </CardTitle>
             <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setSectionViewMode(sectionViewMode === "tabs" ? "dropdown" : "tabs")}
-              >
-                {sectionViewMode === "tabs" ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowMinimap(!showMinimap)}
-              >
-                <Maximize2 className="h-4 w-4" />
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant={sectionViewMode === "dropdown" ? "default" : "outline"}
+                      onClick={() => setSectionViewMode(sectionViewMode === "tabs" ? "dropdown" : "tabs")}
+                    >
+                      {sectionViewMode === "tabs" ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Switch to {sectionViewMode === "tabs" ? "dropdown" : "tabs"} view</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant={showMinimap ? "default" : "outline"}
+                      onClick={() => setShowMinimap(!showMinimap)}
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{showMinimap ? "Hide" : "Show"} section overview minimap</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
         </CardHeader>
