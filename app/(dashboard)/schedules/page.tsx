@@ -36,6 +36,7 @@ import { staffSchedulingService } from "@/lib/services/staff-scheduling"
 import { ScheduleCalendar } from "@/components/staff/schedule-calendar"
 import { ShiftForm } from "@/components/staff/shift-form"
 import { TimeClock } from "@/components/staff/time-clock"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import type { StaffShift, RestaurantStaff, TimeClockEntry, StaffPosition } from "@/types"
 import { toast } from "react-hot-toast"
 
@@ -64,6 +65,9 @@ export default function SchedulesPage() {
   const [editingShift, setEditingShift] = useState<StaffShift | null>(null)
   const [shiftFormInitialDate, setShiftFormInitialDate] = useState<string>("")
   const [shiftFormInitialStaffId, setShiftFormInitialStaffId] = useState<string>("")
+  const [shiftToDelete, setShiftToDelete] = useState<StaffShift | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   useEffect(() => {
     loadInitialData()
@@ -206,8 +210,79 @@ export default function SchedulesPage() {
   }
 
   const handleShiftFormSuccess = () => {
+    // Trigger refresh of the calendar
+    setRefreshTrigger(prev => prev + 1)
+    
+    // Also reload the parent data
     loadShifts(restaurantId)
     loadTimeClockEntries(restaurantId)
+  }
+
+  const handleDeleteShift = async (shift: StaffShift) => {
+    if (!canManageSchedules) {
+      toast.error("You don't have permission to delete shifts")
+      return
+    }
+
+    // Check if the shift has any time clock entries
+    try {
+      const { data: entries, error } = await supabase
+        .from('time_clock_entries')
+        .select('id, status')
+        .eq('shift_id', shift.id)
+
+      if (error) {
+        console.error('Error checking time clock entries:', error)
+        toast.error('Failed to check shift dependencies')
+        return
+      }
+
+      // If there are active time clock entries, prevent deletion
+      if (entries && entries.length > 0) {
+        const activeEntries = entries.filter(entry => entry.status === 'active')
+        if (activeEntries.length > 0) {
+          toast.error('Cannot delete shift: Staff member is currently clocked in for this shift')
+          return
+        }
+        
+        // If there are completed time clock entries, show a warning
+        if (entries.length > 0) {
+          const confirmed = window.confirm(
+            `This shift has ${entries.length} time clock entries. Deleting the shift will also remove these time tracking records. Are you sure you want to continue?`
+          )
+          if (!confirmed) return
+        }
+      }
+    } catch (error) {
+      console.error('Error checking shift dependencies:', error)
+      toast.error('Failed to verify shift can be deleted')
+      return
+    }
+
+    setShiftToDelete(shift)
+  }
+
+  const confirmDeleteShift = async () => {
+    if (!shiftToDelete) return
+
+    try {
+      setIsDeleting(true)
+      await staffSchedulingService.deleteStaffShift(shiftToDelete.id)
+      toast.success('Shift deleted successfully')
+      
+      // Trigger refresh of the calendar
+      setRefreshTrigger(prev => prev + 1)
+      
+      // Also reload the parent data
+      loadShifts(restaurantId)
+      loadTimeClockEntries(restaurantId)
+      setShiftToDelete(null)
+    } catch (error: any) {
+      console.error('Error deleting shift:', error)
+      toast.error(error.message || 'Failed to delete shift')
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   // Filtered staff members
@@ -423,6 +498,8 @@ export default function SchedulesPage() {
             selectedStaffId={selectedStaffId === "all" ? undefined : selectedStaffId}
             onCreateShift={canManageSchedules ? handleCreateShift : undefined}
             onEditShift={canManageSchedules ? handleEditShift : undefined}
+            onDeleteShift={canManageSchedules ? handleDeleteShift : undefined}
+            refreshTrigger={refreshTrigger}
           />
         </TabsContent>
 
@@ -529,6 +606,21 @@ export default function SchedulesPage() {
         initialDate={shiftFormInitialDate}
         initialStaffId={shiftFormInitialStaffId}
         onSuccess={handleShiftFormSuccess}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={!!shiftToDelete}
+        onOpenChange={(open) => !open && setShiftToDelete(null)}
+        title="Delete Shift"
+        description={
+          shiftToDelete 
+            ? `Are you sure you want to delete the shift for ${shiftToDelete.staff?.user?.full_name || 'Unknown'} on ${format(new Date(shiftToDelete.shift_date), 'MMM d, yyyy')} from ${shiftToDelete.start_time} to ${shiftToDelete.end_time}? This action cannot be undone.`
+            : "Are you sure you want to delete this shift?"
+        }
+        confirmText="Delete Shift"
+        onConfirm={confirmDeleteShift}
+        isLoading={isDeleting}
       />
     </div>
   )
