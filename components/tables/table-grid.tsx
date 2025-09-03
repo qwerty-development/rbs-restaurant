@@ -10,10 +10,10 @@ import {
   Square,
   Power,
   Layers,
+  RectangleHorizontal,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { RestaurantTable } from "@/types"
-import { Rectangle } from "recharts"
 
 interface TableGridProps {
   tables: RestaurantTable[]
@@ -32,7 +32,7 @@ const TABLE_TYPE_CONFIG = {
 }
 
 const SHAPE_ICONS = {
-  rectangle: Rectangle,
+  rectangle: RectangleHorizontal,
   circle: Circle,
   square: Square,
 }

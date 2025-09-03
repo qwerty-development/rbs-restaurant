@@ -440,8 +440,13 @@ export function SectionManager({
         </Dialog>
       </div>
 
-      {/* Sections Grid */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Sections Grid - Auto-responsive layout that prevents overflow */}
+      <div 
+        className="grid gap-3 auto-rows-max"
+        style={{
+          gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))'
+        }}
+      >
         {isLoading ? (
           <div className="col-span-full text-center py-8">
             <div className="text-sm text-muted-foreground">Loading sections...</div>

@@ -32,9 +32,7 @@ import {
 import type { RestaurantTable, RestaurantSection } from "@/types"
 import { useQuery } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Tooltip,
   TooltipContent,
@@ -57,6 +55,7 @@ const TABLE_TYPE_COLORS = {
   standard: "bg-slate-50 border-slate-400 text-slate-800 shadow-slate-100",
   bar: "bg-purple-50 border-purple-400 text-purple-800 shadow-purple-100",
   private: "bg-rose-50 border-rose-400 text-rose-800 shadow-rose-100",
+  shared: "bg-indigo-50 border-indigo-400 text-indigo-800 shadow-indigo-100",
 }
 
 const TABLE_TYPE_ICONS = {
@@ -66,6 +65,7 @@ const TABLE_TYPE_ICONS = {
   standard: "🪑",
   bar: "🍺",
   private: "🔒",
+  shared: "🤝",
 }
 
 const SECTION_ICONS = {
@@ -1106,27 +1106,33 @@ export function FloorPlanEditor({
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               
-              <ScrollArea className="flex-1">
+              <div className="flex-1 min-w-0">
                 <Tabs value={selectedSection} onValueChange={setSelectedSection}>
-                  <TabsList className="w-full justify-start">
+                  <div className="w-full">
+                    <TabsList className="w-full justify-start flex-wrap min-h-[2.5rem] h-auto p-1">
                     {sections?.map(section => {
                       const Icon = SECTION_ICONS[section.icon as keyof typeof SECTION_ICONS] || Grid3X3
                       const tableCount = tables.filter(t => t.section_id === section.id).length
                       
                       return (
-                        <TabsTrigger key={section.id} value={section.id} className="gap-2 flex-shrink-0">
+                        <TabsTrigger 
+                          key={section.id} 
+                          value={section.id} 
+                          className="gap-2 flex-shrink-0 whitespace-nowrap min-w-fit px-3 py-2 mb-1 touch-manipulation"
+                          style={{ touchAction: 'manipulation' }}
+                        >
                           <Icon className="h-4 w-4" style={{ color: section.color }} />
-                          <span className="truncate max-w-[120px]">{section.name}</span>
-                          <Badge variant="secondary" className="ml-1">
+                          <span className="max-w-[100px] truncate">{section.name}</span>
+                          <Badge variant="secondary" className="ml-1 text-xs">
                             {tableCount}
                           </Badge>
                         </TabsTrigger>
                       )
                     })}
                   </TabsList>
+                  </div>
                 </Tabs>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
+              </div>
               
               <Button
                 size="sm"
@@ -1504,7 +1510,7 @@ export function FloorPlanEditor({
               </Badge>
               <div className="flex items-center gap-2">
                 <Select value={viewMode} onValueChange={(value: "edit" | "preview") => setViewMode(value)}>
-                  <SelectTrigger className="w-24">
+                  <SelectTrigger className="w-28">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
