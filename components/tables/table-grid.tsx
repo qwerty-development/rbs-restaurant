@@ -1,4 +1,5 @@
 // components/tables/table-grid.tsx
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,6 +12,9 @@ import {
   Power,
   Layers,
   RectangleHorizontal,
+  Filter,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { RestaurantTable } from "@/types"
@@ -21,6 +25,8 @@ interface TableGridProps {
   onEdit: (table: RestaurantTable) => void
   onDeactivate?: (table: RestaurantTable) => void
 }
+
+type FilterType = "active" | "inactive" | "all"
 
 const TABLE_TYPE_CONFIG = {
   booth: { label: "Booth", color: "bg-primary" },
@@ -38,6 +44,8 @@ const SHAPE_ICONS = {
 }
 
 export function TableGrid({ tables, isLoading, onEdit, onDeactivate }: TableGridProps) {
+  const [filter, setFilter] = useState<FilterType>("active")
+
   if (isLoading) {
     return <div className="text-center py-8">Loading tables...</div>
   }
@@ -52,8 +60,22 @@ export function TableGrid({ tables, isLoading, onEdit, onDeactivate }: TableGrid
     )
   }
 
-  // Group tables by type
-  const groupedTables = tables.reduce((acc, table) => {
+  // Filter tables based on status
+  const filteredTables = tables.filter(table => {
+    switch (filter) {
+      case "active":
+        return table.is_active
+      case "inactive":
+        return !table.is_active
+      case "all":
+        return true
+      default:
+        return true
+    }
+  })
+
+  // Group filtered tables by type
+  const groupedTables = filteredTables.reduce((acc, table) => {
     if (!acc[table.table_type]) {
       acc[table.table_type] = []
     }
@@ -61,18 +83,81 @@ export function TableGrid({ tables, isLoading, onEdit, onDeactivate }: TableGrid
     return acc
   }, {} as Record<string, RestaurantTable[]>)
 
+  const activeTables = tables.filter(t => t.is_active).length
+  const inactiveTables = tables.filter(t => !t.is_active).length
+  const totalTables = tables.length
+
   return (
     <div className="space-y-6">
-      {Object.entries(groupedTables).map(([type, typeTables]) => {
-        const config = TABLE_TYPE_CONFIG[type as keyof typeof TABLE_TYPE_CONFIG] || { label: type, color: "bg-muted" }
+      {/* Filter Controls */}
+      <div className="flex items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg">
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Filter Tables:</span>
+        </div>
         
-        return (
-          <div key={type} className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className={cn("w-3 h-3 rounded", config.color)} />
-              <h3 className="text-lg font-semibold">{config.label} Tables</h3>
-              <Badge variant="secondary">{typeTables.length}</Badge>
-            </div>
+        <div className="flex gap-2">
+          <Button
+            variant={filter === "active" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("active")}
+            className="gap-2"
+          >
+            <Eye className="h-4 w-4" />
+            Active ({activeTables})
+          </Button>
+          
+          <Button
+            variant={filter === "inactive" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("inactive")}
+            className="gap-2"
+          >
+            <EyeOff className="h-4 w-4" />
+            Inactive ({inactiveTables})
+          </Button>
+          
+          <Button
+            variant={filter === "all" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("all")}
+            className="gap-2"
+          >
+            All ({totalTables})
+          </Button>
+        </div>
+      </div>
+
+      {/* Empty State for Filtered Results */}
+      {filteredTables.length === 0 ? (
+        <Card>
+          <CardContent className="text-center py-8">
+            <p className="text-muted-foreground">
+              No {filter === "all" ? "" : filter} tables found
+            </p>
+            {filter !== "all" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFilter("all")}
+                className="mt-2"
+              >
+                Show all tables
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        Object.entries(groupedTables).map(([type, typeTables]) => {
+          const config = TABLE_TYPE_CONFIG[type as keyof typeof TABLE_TYPE_CONFIG] || { label: type, color: "bg-muted" }
+          
+          return (
+            <div key={type} className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className={cn("w-3 h-3 rounded", config.color)} />
+                <h3 className="text-lg font-semibold">{config.label} Tables</h3>
+                <Badge variant="secondary">{typeTables.length}</Badge>
+              </div>
             
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {typeTables.map((table) => {
@@ -182,7 +267,8 @@ export function TableGrid({ tables, isLoading, onEdit, onDeactivate }: TableGrid
             </div>
           </div>
         )
-      })}
+      })
+      )}
     </div>
   )
 }
