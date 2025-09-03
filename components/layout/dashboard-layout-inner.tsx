@@ -43,6 +43,7 @@ export function DashboardLayoutInner({ children, staffData }: DashboardLayoutInn
       return
     }
   }, [
+    restaurants,
     restaurants.length, 
     currentRestaurant, 
     isLoading, 
@@ -73,7 +74,7 @@ export function DashboardLayoutInner({ children, staffData }: DashboardLayoutInn
   // For overview page, render without restaurant-specific layout
   if (isOverviewPage) {
     return (
-      <div className="min-h-screen bg-background relative\">
+      <div className="min-h-screen bg-background relative">
         <main className="min-h-screen">
           {children}
         </main>

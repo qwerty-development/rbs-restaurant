@@ -54,7 +54,7 @@ const SECTION_ICONS = {
 const formSchema = z.object({
   table_number: z.string().min(1, "Table number is required"),
   section_id: z.string().min(1, "Section is required"),
-  table_type: z.enum(["booth", "window", "patio", "standard", "bar", "private"]),
+  table_type: z.enum(["booth", "window", "patio", "standard", "bar", "private", "shared"]),
   capacity: z.number().min(1).max(50),
   min_capacity: z.number().min(1).max(20),
   max_capacity: z.number().min(1).max(50),

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { format, differenceInMinutes } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -50,20 +50,7 @@ export function TimeClock({ restaurantId, currentStaff, onTimeClockChange }: Tim
     return () => clearInterval(timer)
   }, [])
 
-  useEffect(() => {
-    loadData()
-  }, [restaurantId, currentStaff.id])
-
-  useEffect(() => {
-    // Check if currently on break
-    if (currentEntry?.break_start_time && !currentEntry?.break_end_time) {
-      setOnBreak(true)
-    } else {
-      setOnBreak(false)
-    }
-  }, [currentEntry])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
       
@@ -85,7 +72,20 @@ export function TimeClock({ restaurantId, currentStaff, onTimeClockChange }: Tim
     } finally {
       setLoading(false)
     }
-  }
+  }, [restaurantId, currentStaff.id])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    // Check if currently on break
+    if (currentEntry?.break_start_time && !currentEntry?.break_end_time) {
+      setOnBreak(true)
+    } else {
+      setOnBreak(false)
+    }
+  }, [currentEntry])
 
   const handleClockIn = async (shiftId?: string) => {
     try {

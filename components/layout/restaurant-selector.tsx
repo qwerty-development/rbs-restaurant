@@ -22,6 +22,7 @@ import {
   Activity
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import Image from "next/image"
 
 export function RestaurantSelector() {
   const { 
@@ -141,9 +142,11 @@ export function RestaurantSelector() {
                   <div className="flex items-center justify-between w-full">
                     <div className="flex items-center gap-3">
                       {restaurant.restaurant.main_image_url ? (
-                        <img
+                        <Image
                           src={restaurant.restaurant.main_image_url}
                           alt={restaurant.restaurant.name}
+                          width={32}
+                          height={32}
                           className="h-8 w-8 rounded object-cover"
                         />
                       ) : (

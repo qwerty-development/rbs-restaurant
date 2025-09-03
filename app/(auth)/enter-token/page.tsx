@@ -1,8 +1,8 @@
 // app/(auth)/enter-token/page.tsx
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
@@ -36,10 +36,22 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>
 
-export default function EnterTokenPage() {
+function EnterTokenContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
+  const [email, setEmail] = useState<string>("")
   const supabase = createClient()
+
+  useEffect(() => {
+    const emailParam = searchParams.get('email')
+    if (emailParam) {
+      setEmail(emailParam)
+    } else {
+      // Redirect back to login if no email provided
+      router.push('/login')
+    }
+  }, [searchParams, router])
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -52,8 +64,14 @@ export default function EnterTokenPage() {
     try {
       setIsLoading(true)
 
+      if (!email) {
+        toast.error("Email is required for token verification")
+        return
+      }
+
       // Verify token by attempting to exchange it for a session
       const { data: authData, error } = await supabase.auth.verifyOtp({
+        email: email,
         token: data.token,
         type: 'email',
       })
@@ -175,5 +193,13 @@ export default function EnterTokenPage() {
         </Link>
       </CardFooter>
     </Card>
+  )
+}
+
+export default function EnterTokenPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <EnterTokenContent />
+    </Suspense>
   )
 }

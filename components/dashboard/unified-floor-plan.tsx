@@ -215,7 +215,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
         setSelectedSection(sections[0].id)
       }
     }
-  }, [sections, defaultSectionId])
+  }, [sections, defaultSectionId, selectedSection])
 
   // Filter tables by selected section
   const filteredTables = useMemo(() => {

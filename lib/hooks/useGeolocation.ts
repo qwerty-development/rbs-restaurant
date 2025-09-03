@@ -1,7 +1,7 @@
 // lib/hooks/useGeolocation.ts
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Coordinates } from '@/lib/utils/location';
 
 export interface GeolocationState {
@@ -40,7 +40,7 @@ export function useGeolocation(options: GeolocationOptions = {}) {
     supported: typeof navigator !== 'undefined' && 'geolocation' in navigator
   });
 
-  const mergedOptions = { ...DEFAULT_OPTIONS, ...options };
+  const mergedOptions = useMemo(() => ({ ...DEFAULT_OPTIONS, ...options }), [options]);
 
   const handleSuccess = useCallback((position: GeolocationPosition) => {
     setState(prev => ({

@@ -1,5 +1,5 @@
 // lib/hooks/use-booking-customers.ts
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Booking } from '@/types'
 import type { RestaurantCustomer } from '@/types/customer'
@@ -21,13 +21,7 @@ export function useBookingCustomers(bookings: Booking[], restaurantId: string) {
   
   const supabase = createClient()
 
-  useEffect(() => {
-    if (bookings.length > 0 && restaurantId) {
-      loadCustomerData()
-    }
-  }, [bookings, restaurantId])
-
-  const loadCustomerData = async () => {
+  const loadCustomerData = useCallback(async () => {
     try {
       setLoading(true)
       const result: BookingCustomerData = {}
@@ -117,7 +111,13 @@ export function useBookingCustomers(bookings: Booking[], restaurantId: string) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [bookings, restaurantId, supabase])
+
+  useEffect(() => {
+    if (bookings.length > 0 && restaurantId) {
+      loadCustomerData()
+    }
+  }, [bookings, restaurantId, loadCustomerData])
 
   return { customerData, loading, refetch: loadCustomerData }
 }

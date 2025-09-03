@@ -1460,7 +1460,8 @@ export function ManualBookingForm({
                       checked={isSelected}
                       onChange={() => {
                         setSelectedSharedTable(table.id)
-                        setValue("shared_table_id", table.id)
+                        setValue("table_ids", [table.id])
+                        setValue("is_shared_booking", true)
                       }}
                       className="mr-3"
                       disabled={isLoading}
