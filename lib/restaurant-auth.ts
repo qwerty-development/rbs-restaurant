@@ -193,8 +193,21 @@ class RestaurantAuth {
     }
   }
 
-  // Remove staff member
+  // Remove staff member completely
   async removeStaffMember(staffId: string, removedBy: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('restaurant_staff')
+      .delete()
+      .eq('id', staffId)
+
+    if (error) {
+      console.error('Error removing staff member:', error)
+      throw new Error('Failed to remove staff member')
+    }
+  }
+
+  // Deactivate staff member (soft delete)
+  async deactivateStaffMember(staffId: string, deactivatedBy: string): Promise<void> {
     const { error } = await this.supabase
       .from('restaurant_staff')
       .update({
@@ -204,8 +217,8 @@ class RestaurantAuth {
       .eq('id', staffId)
 
     if (error) {
-      console.error('Error removing staff member:', error)
-      throw new Error('Failed to remove staff member')
+      console.error('Error deactivating staff member:', error)
+      throw new Error('Failed to deactivate staff member')
     }
   }
 

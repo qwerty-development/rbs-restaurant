@@ -60,7 +60,6 @@ import {
   Filter,
   MoreVertical,
   Edit,
-  Trash2,
   Mail,
   Phone,
   Shield,
@@ -594,22 +593,6 @@ export default function StaffPage() {
     }
   }
 
-  // Remove staff member
-  const handleRemoveStaff = async (staffId: string, staffName: string) => {
-    if (!currentUser) return
-    if (!confirm(`Are you sure you want to remove ${staffName}?`)) return
-
-    try {
-      await restaurantAuth.removeStaffMember(staffId, currentUser.id)
-      toast.success("Staff member removed successfully")
-      await loadStaffMembers(restaurantId)
-
-    } catch (error: any) {
-      console.error('Error removing staff:', error)
-      toast.error(error.message || "Failed to remove staff member")
-    }
-  }
-
   // Filter staff members
   const filteredStaff = useMemo(() => {
     return staffMembers.filter(staff => {
@@ -1136,17 +1119,6 @@ export default function StaffPage() {
                         >
                           {staff.is_active ? 'Deactivate' : 'Activate'}
                         </Button>
-                        
-                        {currentStaff?.role === 'owner' && staff.role !== 'owner' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveStaff(staff.id, staff.user.full_name)}
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
                       </div>
                     </TableCell>
                   </TableRow>
