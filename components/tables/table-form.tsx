@@ -412,7 +412,7 @@ export function TableForm({
       {/* Shape and Priority */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label htmlFor="shape">Shape</Label>
+          <Label htmlFor="shape">Table Shape *</Label>
           <Select
             value={watch("shape")}
             onValueChange={(value: any) => setValue("shape", value)}
