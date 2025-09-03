@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ChevronLeft, ChevronRight, Plus, Clock, Users, User } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus, Clock, Users, User, Trash2 } from "lucide-react"
 import { staffSchedulingService } from "@/lib/services/staff-scheduling"
 import type { StaffShift, RestaurantStaff } from "@/types"
 import { cn } from "@/lib/utils"
@@ -16,7 +16,9 @@ interface ScheduleCalendarProps {
   staffMembers: RestaurantStaff[]
   onCreateShift?: (date: string, staffId?: string) => void
   onEditShift?: (shift: StaffShift) => void
+  onDeleteShift?: (shift: StaffShift) => void
   selectedStaffId?: string
+  refreshTrigger?: number // Add this to force refresh
 }
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -34,7 +36,9 @@ export function ScheduleCalendar({
   staffMembers, 
   onCreateShift, 
   onEditShift,
-  selectedStaffId 
+  onDeleteShift,
+  selectedStaffId,
+  refreshTrigger 
 }: ScheduleCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [shifts, setShifts] = useState<StaffShift[]>([])
@@ -62,8 +66,13 @@ export function ScheduleCalendar({
 
   // Load shifts effect - only trigger when essential dependencies change
   useEffect(() => {
-    // Prevent duplicate loading
-    if (!restaurantId || loadingRef.current || lastLoadedWeekRef.current === weekKey) {
+    // Reset cache when refresh is triggered
+    if (refreshTrigger && refreshTrigger > 0) {
+      lastLoadedWeekRef.current = ''
+    }
+
+    // Prevent duplicate loading (but allow refresh trigger to override)
+    if (!restaurantId || (loadingRef.current && !refreshTrigger) || (!refreshTrigger && lastLoadedWeekRef.current === weekKey)) {
       return
     }
 
@@ -71,7 +80,7 @@ export function ScheduleCalendar({
       try {
         loadingRef.current = true
         setLoading(true)
-        console.log('📅 Loading shifts for week:', weekStartFormatted, 'to', weekEndFormatted)
+        console.log('📅 Loading shifts for week:', weekStartFormatted, 'to', weekEndFormatted, refreshTrigger ? '(forced refresh)' : '')
         
         const data = await staffSchedulingService.getStaffShifts(restaurantId, {
           startDate: weekStartFormatted,
@@ -91,7 +100,7 @@ export function ScheduleCalendar({
     }
 
     loadShifts()
-  }, [restaurantId, weekKey, weekStartFormatted, weekEndFormatted, selectedStaffId])
+  }, [restaurantId, weekKey, weekStartFormatted, weekEndFormatted, selectedStaffId, refreshTrigger])
 
   const getShiftsForDay = (date: Date, staffId: string) => {
     return shifts.filter(shift => 
@@ -104,30 +113,60 @@ export function ScheduleCalendar({
     setCurrentDate(prev => direction === 'prev' ? subWeeks(prev, 1) : addWeeks(prev, 1))
   }
 
-  const ShiftCard = ({ shift }: { shift: StaffShift }) => (
-    <div
-      key={shift.id}
-      className={cn(
-        "p-2 rounded border text-xs cursor-pointer hover:shadow-sm transition-shadow",
-        STATUS_COLORS[shift.status]
-      )}
-      onClick={() => onEditShift?.(shift)}
-    >
-      <div className="font-medium truncate">
-        {shift.start_time} - {shift.end_time}
+  const ShiftCard = ({ shift }: { shift: StaffShift }) => {
+    // Check if shift has active time clock entries
+    const hasActiveTimeEntry = shift.time_clock_entries?.some(entry => entry.status === 'active')
+    
+    return (
+      <div
+        key={shift.id}
+        className={cn(
+          "p-2 rounded border text-xs hover:shadow-sm transition-shadow group relative cursor-pointer",
+          STATUS_COLORS[shift.status]
+        )}
+        onClick={() => onEditShift?.(shift)}
+      >
+        <div className="font-medium truncate">
+          {shift.start_time} - {shift.end_time}
+          {hasActiveTimeEntry && (
+            <span className="ml-1 inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Currently clocked in" />
+          )}
+        </div>
+        {shift.role && (
+          <div className="text-xs opacity-75 truncate">
+            {shift.role}
+          </div>
+        )}
+        {shift.station && (
+          <div className="text-xs opacity-75 truncate">
+            📍 {shift.station}
+          </div>
+        )}
+        
+        {/* Delete button - show on hover */}
+        {onDeleteShift && (
+          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onDeleteShift(shift)
+              }}
+              className={cn(
+                "p-1 rounded",
+                hasActiveTimeEntry 
+                  ? "opacity-50 cursor-not-allowed" 
+                  : "hover:bg-red-100 text-red-600"
+              )}
+              title={hasActiveTimeEntry ? "Cannot delete - staff is clocked in" : "Delete shift"}
+              disabled={hasActiveTimeEntry}
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+        )}
       </div>
-      {shift.role && (
-        <div className="text-xs opacity-75 truncate">
-          {shift.role}
-        </div>
-      )}
-      {shift.station && (
-        <div className="text-xs opacity-75 truncate">
-          📍 {shift.station}
-        </div>
-      )}
-    </div>
-  )
+    )
+  }
 
   if (loading) {
     return (
