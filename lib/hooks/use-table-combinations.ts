@@ -50,6 +50,23 @@ export function useCreateTableCombination() {
       secondaryTableId: string
       combinedCapacity: number
     }) => {
+      // Check if combination already exists (either direction)
+      const { data: existingCombinations, error: checkError } = await supabase
+        .from("table_combinations")
+        .select("id")
+        .eq("restaurant_id", restaurantId)
+        .eq("is_active", true)
+        .or(
+          `and(primary_table_id.eq.${primaryTableId},secondary_table_id.eq.${secondaryTableId}),` +
+          `and(primary_table_id.eq.${secondaryTableId},secondary_table_id.eq.${primaryTableId})`
+        )
+
+      if (checkError) throw checkError
+
+      if (existingCombinations && existingCombinations.length > 0) {
+        throw new Error("Table combination already exists!")
+      }
+
       const { data, error } = await supabase
         .from("table_combinations")
         .insert({
@@ -69,7 +86,40 @@ export function useCreateTableCombination() {
     },
     onError: (error: any) => {
       console.error("Error creating table combination:", error)
-      toast.error("Failed to create table combination")
+      
+      // Parse database errors for better user experience
+      let errorMessage = "Failed to create table combination"
+      
+      if (error?.message) {
+        // Check for unique constraint violation (duplicate combination)
+        if (error.message.includes('duplicate key') || 
+            error.message.includes('violates unique constraint') ||
+            error.message.includes('already exists')) {
+          errorMessage = "Table combination already exists!"
+        }
+        // Check for foreign key constraint violations
+        else if (error.message.includes('table_combinations_primary_table_id_fkey') ||
+                 error.message.includes('table_combinations_secondary_table_id_fkey')) {
+          errorMessage = "One of the selected tables is no longer valid. Please refresh and try again."
+        }
+        else if (error.message.includes('table_combinations_restaurant_id_fkey')) {
+          errorMessage = "Invalid restaurant. Please refresh and try again."
+        }
+        // Check for check constraint violations
+        else if (error.message.includes('violates check constraint')) {
+          errorMessage = "Invalid combination settings. Please check your inputs."
+        }
+        // Check for null violations
+        else if (error.message.includes('violates not-null constraint')) {
+          errorMessage = "Required information is missing. Please fill out all fields."
+        }
+        // Show specific error message if it's user-friendly
+        else if (error.message.length < 100 && !error.message.includes('function') && !error.message.includes('relation')) {
+          errorMessage = error.message
+        }
+      }
+      
+      toast.error(errorMessage)
     },
   })
 }

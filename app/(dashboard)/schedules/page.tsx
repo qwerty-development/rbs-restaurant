@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { format, startOfWeek, endOfWeek } from "date-fns"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -69,11 +69,71 @@ export default function SchedulesPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
 
-  useEffect(() => {
-    loadInitialData()
+  const loadStaffMembers = useCallback(async (restaurantId: string) => {
+    try {
+      const data = await staffSchedulingService.getRestaurantStaff(restaurantId)
+      setStaffMembers(data)
+    } catch (error) {
+      console.error('Error loading staff members:', error)
+      toast.error('Failed to load staff members')
+    }
   }, [])
 
-  const loadInitialData = async () => {
+  const loadShifts = useCallback(async (restaurantId: string) => {
+    try {
+      const weekStart = startOfWeek(new Date())
+      const weekEnd = endOfWeek(new Date())
+      
+      const data = await staffSchedulingService.getStaffShifts(restaurantId, {
+        startDate: format(weekStart, 'yyyy-MM-dd'),
+        endDate: format(weekEnd, 'yyyy-MM-dd')
+      })
+      setShifts(data)
+    } catch (error) {
+      console.error('Error loading shifts:', error)
+      toast.error('Failed to load shifts')
+    }
+  }, [])
+
+  const loadTimeClockEntries = useCallback(async (restaurantId: string) => {
+    try {
+      // Load today's entries for general display
+      const today = format(new Date(), 'yyyy-MM-dd')
+      const todayData = await staffSchedulingService.getTimeClockEntries(restaurantId, {
+        startDate: today,
+        endDate: today
+      })
+      
+      // Also load all active entries (regardless of date) for accurate stats
+      const activeData = await staffSchedulingService.getTimeClockEntries(restaurantId, {
+        status: 'active'
+      })
+      
+      // Combine both datasets, removing duplicates
+      const allEntries = [...todayData]
+      activeData.forEach(activeEntry => {
+        if (!allEntries.find(entry => entry.id === activeEntry.id)) {
+          allEntries.push(activeEntry)
+        }
+      })
+      
+      setTimeClockEntries(allEntries)
+    } catch (error) {
+      console.error('Error loading time clock entries:', error)
+      toast.error('Failed to load time clock entries')
+    }
+  }, [])
+
+  const loadPositions = useCallback(async (restaurantId: string) => {
+    try {
+      const data = await staffSchedulingService.getStaffPositions(restaurantId)
+      setPositions(data)
+    } catch (error) {
+      console.error('Error loading positions:', error)
+    }
+  }, [])
+
+  const loadInitialData = useCallback(async () => {
     try {
       setLoading(true)
 
@@ -88,7 +148,13 @@ export default function SchedulesPage() {
       // Get current staff data
       const { data: staffData, error: staffError } = await supabase
         .from('restaurant_staff')
-        .select('id, role, permissions, restaurant_id')
+        .select(`
+          id,
+          role,
+          permissions,
+          restaurant_id,
+          user_id
+        `)
         .eq('user_id', user.id)
         .eq('is_active', true)
         .single()
@@ -129,71 +195,11 @@ export default function SchedulesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase, router, loadStaffMembers, loadShifts, loadTimeClockEntries, loadPositions])
 
-  const loadStaffMembers = async (restaurantId: string) => {
-    try {
-      const data = await staffSchedulingService.getRestaurantStaff(restaurantId)
-      setStaffMembers(data)
-    } catch (error) {
-      console.error('Error loading staff members:', error)
-      toast.error('Failed to load staff members')
-    }
-  }
-
-  const loadShifts = async (restaurantId: string) => {
-    try {
-      const weekStart = startOfWeek(new Date())
-      const weekEnd = endOfWeek(new Date())
-      
-      const data = await staffSchedulingService.getStaffShifts(restaurantId, {
-        startDate: format(weekStart, 'yyyy-MM-dd'),
-        endDate: format(weekEnd, 'yyyy-MM-dd')
-      })
-      setShifts(data)
-    } catch (error) {
-      console.error('Error loading shifts:', error)
-      toast.error('Failed to load shifts')
-    }
-  }
-
-  const loadTimeClockEntries = async (restaurantId: string) => {
-    try {
-      // Load today's entries for general display
-      const today = format(new Date(), 'yyyy-MM-dd')
-      const todayData = await staffSchedulingService.getTimeClockEntries(restaurantId, {
-        startDate: today,
-        endDate: today
-      })
-      
-      // Also load all active entries (regardless of date) for accurate stats
-      const activeData = await staffSchedulingService.getTimeClockEntries(restaurantId, {
-        status: 'active'
-      })
-      
-      // Combine both datasets, removing duplicates
-      const allEntries = [...todayData]
-      activeData.forEach(activeEntry => {
-        if (!allEntries.find(entry => entry.id === activeEntry.id)) {
-          allEntries.push(activeEntry)
-        }
-      })
-      
-      setTimeClockEntries(allEntries)
-    } catch (error) {
-      console.error('Error loading time clock entries:', error)
-      toast.error('Failed to load time clock entries')
-    }
-  }
-
-  const loadPositions = async (restaurantId: string) => {
-    try {
-      const data = await staffSchedulingService.getStaffPositions(restaurantId)
-      setPositions(data)
-    } catch (error) {
-      console.error('Error loading positions:', error)
-    }
-  }
+  useEffect(() => {
+    loadInitialData()
+  }, [loadInitialData])
 
   const handleCreateShift = (date?: string, staffId?: string) => {
     setShiftFormInitialDate(date || "")
@@ -329,7 +335,7 @@ export default function SchedulesPage() {
     return (
       <div className="space-y-8">
         <div className="flex items-center justify-between">
-          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-6 w-32" />
           <Skeleton className="h-10 w-32" />
         </div>
         

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useQueryClient } from '@tanstack/react-query'
 import { Booking } from '@/types'
@@ -41,7 +41,7 @@ export function useRealtimeBookings(options: UseRealtimeBookingsOptions) {
   })
 
   // Sound notification function
-  const playNotificationSound = (type: 'new' | 'update' | 'urgent') => {
+  const playNotificationSound = useCallback((type: 'new' | 'update' | 'urgent') => {
     if (!enableSound) return
     
     try {
@@ -63,7 +63,7 @@ export function useRealtimeBookings(options: UseRealtimeBookingsOptions) {
     } catch (error) {
       console.warn('Notification sound error:', error)
     }
-  }
+  }, [enableSound])
 
   useEffect(() => {
     if (!restaurantId) return
@@ -273,7 +273,7 @@ export function useRealtimeBookings(options: UseRealtimeBookingsOptions) {
         isConnected: false
       }))
     }
-  }, [restaurantId, queryClient, onBookingCreated, onBookingUpdated, onBookingDeleted, enableToasts, enableSound, state.connectionErrors])
+  }, [restaurantId, queryClient, onBookingCreated, onBookingUpdated, onBookingDeleted, enableToasts, enableSound, state.connectionErrors, supabase, playNotificationSound])
 
   // Method to manually reconnect
   const reconnect = () => {

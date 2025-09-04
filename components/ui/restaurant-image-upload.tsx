@@ -53,7 +53,7 @@ export function RestaurantImageUpload({
   // Keep Supabase client stable across renders
   const supabaseRef = useRef(createClient())
 
-  const validateFile = (file: File): string | null => {
+  const validateFile = useCallback((file: File): string | null => {
     // Check file type
     if (!file.type.startsWith('image/')) {
       return 'Please select an image file'
@@ -71,15 +71,15 @@ export function RestaurantImageUpload({
     }
 
     return null
-  }
+  }, [maxFileSize])
 
-  const generateFileName = (file: File, isMainImage: boolean = false): string => {
+  const generateFileName = useCallback((file: File, isMainImage: boolean = false): string => {
     const timestamp = Date.now()
     const random = Math.random().toString(36).substring(7)
     const extension = file.name.split('.').pop()
     const prefix = isMainImage ? 'main' : 'gallery'
     return `${restaurantId}/${prefix}_${timestamp}_${random}.${extension}`
-  }
+  }, [restaurantId])
 
   const uploadToSupabase = async (
     file: File, 
@@ -219,7 +219,7 @@ export function RestaurantImageUpload({
     setTimeout(() => {
       setUploads(prev => prev.filter(u => u.error || !u.url))
     }, 2000)
-  }, [currentImages, currentMainImage, maxImages, maxFileSize, onImagesChange, onMainImageChange, uploadToSupabase])
+  }, [currentImages, currentMainImage, maxImages, onImagesChange, onMainImageChange, uploadToSupabase, generateFileName, validateFile])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()

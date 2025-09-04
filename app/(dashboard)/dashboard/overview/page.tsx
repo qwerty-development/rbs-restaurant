@@ -52,6 +52,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { format, formatDistanceToNow } from "date-fns"
+import Image from "next/image"
 
 export default function RestaurantOverviewPage() {
   const router = useRouter()
@@ -519,9 +520,11 @@ function EnhancedRestaurantCard({ data, onSelect, onQuickAction }: EnhancedResta
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             {data.restaurant.main_image_url ? (
-              <img
+              <Image
                 src={data.restaurant.main_image_url}
                 alt={data.restaurant.name}
+                width={48}
+                height={48}
                 className="w-12 h-12 rounded-lg object-cover"
               />
             ) : (
@@ -640,9 +643,11 @@ function DetailedRestaurantCard({ data, onSelect, onQuickAction }: EnhancedResta
         <div className="space-y-4">
           <div className="flex items-center gap-4">
             {data.restaurant.main_image_url ? (
-              <img
+              <Image
                 src={data.restaurant.main_image_url}
                 alt={data.restaurant.name}
+                width={64}
+                height={64}
                 className="w-16 h-16 rounded-lg object-cover"
               />
             ) : (

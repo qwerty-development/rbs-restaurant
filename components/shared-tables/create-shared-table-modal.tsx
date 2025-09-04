@@ -21,8 +21,8 @@ const formSchema = z.object({
   tableNumber: z.string().min(1, "Table number is required"),
   capacity: z.number().min(2, "Shared tables must have at least 2 seats").max(20, "Maximum capacity is 20"),
   sectionId: z.string().optional(),
-  shape: z.enum(["rectangle", "circle", "square"]).default("rectangle"),
-  features: z.array(z.string()).default([]),
+  shape: z.enum(["rectangle", "circle", "square"]),
+  features: z.array(z.string()),
 })
 
 type FormData = z.infer<typeof formSchema>

@@ -197,6 +197,14 @@ export function EnhancedRestaurantImageUpload({
     })
   }
 
+  const updateImageArrays = useCallback((imageList: ImageItem[]) => {
+    const mainImg = imageList.find(img => img.isMain)
+    const galleryImgs = imageList.filter(img => !img.isMain)
+    
+    onMainImageChange?.(mainImg?.url || "")
+    onImagesChange?.(galleryImgs.map(img => img.url))
+  }, [onMainImageChange, onImagesChange])
+
   const handleFiles = useCallback(async (files: FileList) => {
     const fileArray = Array.from(files)
     
@@ -259,15 +267,7 @@ export function EnhancedRestaurantImageUpload({
     setTimeout(() => {
       setUploads(prev => prev.filter(u => u.error || !u.url))
     }, 2000)
-  }, [allImages.length, maxImages, validateFile, generateFileName, uploadToSupabase])
-
-  const updateImageArrays = (imageList: ImageItem[]) => {
-    const mainImg = imageList.find(img => img.isMain)
-    const galleryImgs = imageList.filter(img => !img.isMain)
-    
-    onMainImageChange?.(mainImg?.url || "")
-    onImagesChange?.(galleryImgs.map(img => img.url))
-  }
+  }, [allImages, maxImages, validateFile, generateFileName, uploadToSupabase, updateImageArrays])
 
   const setAsMainImage = async (imageId: string) => {
     const newImages = allImages.map(img => ({

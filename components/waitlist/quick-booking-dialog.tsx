@@ -1,6 +1,6 @@
 // components/waitlist/quick-booking-dialog.tsx
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { format, parseISO } from 'date-fns'
 import { 
@@ -86,14 +86,7 @@ export function QuickBookingDialog({
     }
   }, [open, supabase])
 
-  // Check table availability when dialog opens
-  useEffect(() => {
-    if (open && restaurantId) {
-      checkTableAvailability()
-    }
-  }, [open, restaurantId])
-
-  const checkTableAvailability = async () => {
+  const checkTableAvailability = useCallback(async () => {
     setIsCheckingAvailability(true)
     try {
       // Get all tables that match the criteria
@@ -158,7 +151,14 @@ export function QuickBookingDialog({
     } finally {
       setIsCheckingAvailability(false)
     }
-  }
+  }, [restaurantId, waitlistEntry, supabase])
+
+  // Check table availability when dialog opens
+  useEffect(() => {
+    if (open && restaurantId) {
+      checkTableAvailability()
+    }
+  }, [open, restaurantId, checkTableAvailability])
 
   const handleCreateBooking = async () => {
     if (!selectedTableId) {

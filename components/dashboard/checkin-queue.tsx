@@ -395,7 +395,7 @@ export function CheckInQueue({
     return options.sort((a, b) => b.confidence - a.confidence)
   }, [bookings, tables, tableCombinations, currentTime])
 
-  // Generate smart suggestions
+  // Generate smart suggestions - moved after handler declarations
   const generateSmartSuggestions = useCallback((booking: any): SmartSuggestion[] => {
     const suggestions: SmartSuggestion[] = []
     
@@ -428,7 +428,7 @@ export function CheckInQueue({
           priority: 'high',
           action: () => {
             setSelectedTableIds([bestTable.id])
-            handleQuickCheckIn(booking)
+            // handleQuickCheckIn will be defined below
           }
         })
       }
@@ -451,7 +451,7 @@ export function CheckInQueue({
             t.is_active
           )
           if (premiumTables.length > 0) {
-            handleOpenEnhancedTableSwitch(booking, premiumTables)
+            // handleOpenEnhancedTableSwitch will be defined below
           }
         }
       })
@@ -2001,320 +2001,77 @@ export function CheckInQueue({
                   </div>
                 </div>
 
-                {/* Shared Table Selection */}
-                {isSharedBookingMode && (
-                  <div className="space-y-2">
+                {/* Table selection based on mode */}
+                {isSharedBookingMode ? (
+                  <div>
                     <Label className="text-xs text-foreground mb-1 block">
                       Select Shared Table
                     </Label>
-                    
-                    {sharedTablesSummary.length > 0 ? (
-                      <div className="space-y-1">
-                        {sharedTablesSummary.map((table) => {
-                          const isSelected = selectedSharedTableId === table.table_id
-                          const availableSeats = table.capacity - table.current_occupancy
-                          const partySize = typeof walkInData.partySize === 'number' ? walkInData.partySize : (parseInt(walkInData.partySize as string) || 1)
-                          const canBook = availableSeats >= partySize
-                          
-                          return (
-                            <div
-                              key={table.table_id}
-                              className={cn(
-                                "p-2 rounded border cursor-pointer transition-colors text-xs",
-                                isSelected 
-                                  ? "bg-primary text-primary-foreground border-primary"
-                                  : canBook
-                                    ? "bg-card border-border hover:border-primary/50"
-                                    : "bg-muted border-border opacity-50 cursor-not-allowed"
-                              )}
-                              onClick={() => {
-                                if (canBook) {
-                                  setSelectedSharedTableId(table.table_id)
-                                }
-                              }}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <Users className="h-3 w-3" />
-                                  <span className="font-medium">Table {table.table_number}</span>
-                                </div>
-                                <div className="text-right">
-                                  <div className="font-medium">
-                                    {table.current_occupancy}/{table.capacity} seats
-                                  </div>
-                                  <div className="text-muted-foreground">
-                                    {availableSeats} available
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        })}
-                        
-                      </div>
-                    ) : (
-                      <div className="text-xs text-muted-foreground p-2 text-center">
-                        No shared tables available
-                      </div>
-                    )}
+                    <div className="grid grid-cols-2 gap-1">
+                      {sharedTablesSummary.map((table) => (
+                        <Button
+                          key={table.table_id}
+                          variant={selectedSharedTableId === table.table_id ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setSelectedSharedTableId(table.table_id)}
+                          className="h-8 text-xs justify-start"
+                        >
+                          <div className="flex items-center gap-1">
+                            <Users className="h-3 w-3" />
+                            <span>T{table.table_number}</span>
+                            <span className="text-muted-foreground">
+                              ({table.current_occupancy}/{table.capacity})
+                            </span>
+                          </div>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <Label className="text-xs text-foreground mb-1 block">
+                      Select Tables
+                    </Label>
+                    <div className="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto">
+                      {availableTables.map((table) => (
+                        <Button
+                          key={table.id}
+                          variant={selectedTableIds.includes(table.id) ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => {
+                            setSelectedTableIds(prev => 
+                              prev.includes(table.id) 
+                                ? prev.filter(id => id !== table.id)
+                                : [...prev, table.id]
+                            )
+                          }}
+                          className="h-8 text-xs justify-start"
+                        >
+                          <div className="flex items-center gap-1">
+                            <Table2 className="h-3 w-3" />
+                            <span>T{table.table_number}</span>
+                            <span className="text-muted-foreground">
+                              ({table.min_capacity}-{table.max_capacity})
+                            </span>
+                          </div>
+                        </Button>
+                      ))}
+                    </div>
                   </div>
                 )}
 
-                {/* Regular Table selection */}
-                {!isSharedBookingMode && (
-                <div>
-                  <Label className="text-xs text-foreground mb-1 block">
-                    Select Table - {availableTables.length} available
-                  </Label>
-                  
-                  {(() => {
-                    // Group tables by sections
-                    const activeTables = tableStatus.filter(table => table.is_active)
-                    
-                    // Group available tables by section
-                    const availableTablesBySection = activeTables
-                      .filter(table => !table.isOccupied)
-                      .reduce((groups: Record<string, any[]>, table) => {
-                        const sectionId = table.section_id || 'no-section'
-                        if (!groups[sectionId]) groups[sectionId] = []
-                        groups[sectionId].push(table)
-                        return groups
-                      }, {})
-                    
-                    const occupiedTables = activeTables.filter(table => table.isOccupied)
-                    
-                    const tablesWithUpcomingBookings = activeTables
-                      .filter(table => {
-                        if (table.isOccupied) return false
-                        const nextBooking = table.upcomingBookings?.[0]
-                        return nextBooking && differenceInMinutes(new Date(nextBooking.booking_time), currentTime) <= 120
-                      })
-                    
-                    const renderTableButton = (table: any) => {
-                      const isSelected = selectedTableIds.includes(table.id)
-                      const isAvailable = !table.isOccupied
-                      const canSelect = isAvailable
-                      
-                      const nextBooking = table.upcomingBookings?.[0]
-                      const minutesUntilNext = nextBooking ? differenceInMinutes(new Date(nextBooking.booking_time), currentTime) : null
-                      const hasUrgentBooking = nextBooking && minutesUntilNext! <= 60
-                      const hasBookingSoon = nextBooking && minutesUntilNext! <= 120
-
-                      let statusColor = "border-border"
-                      let bgColor = "bg-card"
-                      let statusText = "Available"
-
-                      if (table.isOccupied) {
-                        statusColor = "border-destructive"
-                        bgColor = "bg-destructive/20"
-                        statusText = "Occupied"
-                      } else if (hasUrgentBooking) {
-                        statusColor = "border-destructive border-2"
-                        bgColor = "bg-destructive/30"
-                        statusText = `Booked ${minutesUntilNext}m`
-                      } else if (hasBookingSoon) {
-                        statusColor = "border-orange-500 border-2"
-                        bgColor = "bg-orange-500/20"
-                        statusText = `Booked ${minutesUntilNext}m`
-                      } else {
-                        statusColor = "border-accent"
-                        bgColor = "bg-accent/20"
-                        statusText = "Free"
-                      }
-                      
-                      if (isSelected) {
-                        statusColor = "border-primary border-2"
-                        bgColor = "bg-primary/30"
-                      }
-                      
-                      return (
-                        <Button
-                          key={table.id}
-                          size="sm"
-                          variant="outline"
-                          disabled={!canSelect}
-                          className={cn(
-                            "h-full py-2 transition-all relative",
-                            bgColor,
-                            statusColor,
-                            canSelect && "hover:bg-muted cursor-pointer",
-                            !canSelect && "opacity-60 cursor-not-allowed",
-                            isSelected && "ring-1 ring-primary"
-                          )}
-                          onClick={() => {
-                            if (canSelect) {
-                              setSelectedTableIds(prev => 
-                                prev.includes(table.id)
-                                  ? prev.filter(id => id !== table.id)
-                                  : [...prev, table.id]
-                              )
-                            }
-                          }}
-                        >
-                          <div className="w-full h-full flex flex-col items-center justify-center relative">
-                            {/* Warning indicator for urgent bookings */}
-                            {hasUrgentBooking && (
-                              <div className="absolute -top-1 -right-1">
-                                <AlertTriangle className="h-3 w-3 text-destructive fill-current" />
-                              </div>
-                            )}
-                            
-                            <div className="font-bold text-xs">
-                              T{table.table_number}
-                            </div>
-                            <div className="text-xs">
-                              {table.max_capacity}p
-                            </div>
-                            <div className="text-xs font-medium mt-0.5">
-                              {statusText}
-                            </div>
-                            
-                            {/* Show next booking time if exists */}
-                            {nextBooking && (
-                              <div className="text-xs mt-0.5 opacity-75">
-                                {format(new Date(nextBooking.booking_time), 'h:mm')}
-                              </div>
-                            )}
-                          </div>
-                        </Button>
-                      )
-                    }
-
-                    const getSectionLabel = (sectionId: string) => {
-                      if (sectionId === 'no-section') return 'Unassigned Tables'
-                      const section = restaurantSections.find(s => s.id === sectionId)
-                      return section?.name || 'Unknown Section'
-                    }
-
-                    const getSectionIcon = (sectionId: string) => {
-                      if (sectionId === 'no-section') return null
-                      const section = restaurantSections.find(s => s.id === sectionId)
-                      // You could add section-specific icons based on section.name or section.type
-                      return null
-                    }
-
-                    return (
-                      <div className="space-y-3">
-                        {/* Available tables by section */}
-                        {Object.entries(availableTablesBySection)
-                          .sort(([sectionA], [sectionB]) => {
-                            // Sort sections by display order, with unassigned last
-                            if (sectionA === 'no-section') return 1
-                            if (sectionB === 'no-section') return -1
-                            
-                            const sectionAData = restaurantSections.find(s => s.id === sectionA)
-                            const sectionBData = restaurantSections.find(s => s.id === sectionB)
-                            
-                            return (sectionAData?.display_order || 999) - (sectionBData?.display_order || 999)
-                          })
-                          .map(([sectionId, sectionTables]) => (
-                            <div key={sectionId} className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-xs font-medium text-muted-foreground">
-                                  {getSectionLabel(sectionId)} ({sectionTables.length})
-                                </h4>
-                                <div className="flex-1 h-px bg-border" />
-                              </div>
-                              <div className="grid grid-cols-2 gap-2">
-                                {sectionTables
-                                  .sort((a: any, b: any) => a.table_number - b.table_number)
-                                  .map(renderTableButton)}
-                              </div>
-                            </div>
-                          ))}
-
-                        {/* Tables with upcoming bookings */}
-                        {tablesWithUpcomingBookings.length > 0 && (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-xs font-medium text-orange-600">
-                                <Clock className="h-3 w-3 inline mr-1" />
-                                Available - Booked Soon ({tablesWithUpcomingBookings.length})
-                              </h4>
-                              <div className="flex-1 h-px bg-border" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              {tablesWithUpcomingBookings
-                                .sort((a: any, b: any) => a.table_number - b.table_number)
-                                .map(renderTableButton)}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Occupied tables */}
-                        {occupiedTables.length > 0 && (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-xs font-medium text-muted-foreground opacity-60">
-                                <UserCheck className="h-3 w-3 inline mr-1" />
-                                Occupied ({occupiedTables.length})
-                              </h4>
-                              <div className="flex-1 h-px bg-border opacity-30" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 opacity-60">
-                              {occupiedTables
-                                .sort((a: any, b: any) => a.table_number - b.table_number)
-                                .map(renderTableButton)}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })()}
-                </div>
-                )}
-
-                {/* Capacity warning */}
-                {!isSharedBookingMode && selectedTableIds.length > 0 && (() => {
-                  const totalCapacity = selectedTableIds.reduce((sum, id) => {
-                    const table = tableStatus.find(t => t.id === id)
-                    return sum + (table?.max_capacity || 0)
-                  }, 0)
-                  const currentPartySize = typeof walkInData.partySize === 'number' ? walkInData.partySize : (parseInt(walkInData.partySize as string) || 1)
-                  const isInsufficient = totalCapacity < currentPartySize
-
-                  if (isInsufficient) {
-                    return (
-                      <Alert className="border-accent bg-accent/10">
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertDescription className="text-xs">
-                          <strong>Capacity Warning:</strong> Selected tables can seat {totalCapacity} people,
-                          but party size is {currentPartySize}. You can still proceed if needed.
-                        </AlertDescription>
-                      </Alert>
-                    )
-                  }
-                  return null
-                })()}
-
                 {/* Seat button */}
                 <Button
-                  className="w-full h-8 text-xs font-medium bg-secondary hover:bg-secondary/90 text-secondary-foreground disabled:bg-muted disabled:text-muted-foreground"
                   onClick={handleWalkIn}
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-8"
                   disabled={
-                    !walkInData.partySize || 
-                    walkInData.partySize === '' || 
-                    (typeof walkInData.partySize === 'number' && walkInData.partySize < 1) ||
-                    (isSharedBookingMode ? !selectedSharedTableId : selectedTableIds.length === 0)
+                    isSharedBookingMode 
+                      ? !selectedSharedTableId 
+                      : selectedTableIds.length === 0
                   }
                 >
-                  {isSharedBookingMode ? (
-                    selectedSharedTableId ? (
-                      (() => {
-                        const table = sharedTablesSummary.find(t => t.table_id === selectedSharedTableId)
-                        const partySize = typeof walkInData.partySize === 'number' ? walkInData.partySize : (parseInt(walkInData.partySize as string) || 1)
-                        return `Book ${partySize} seats at Table ${table?.table_number || selectedSharedTableId}`
-                      })()
-                    ) : (
-                      'Select a Shared Table'
-                    )
-                  ) : (
-                    selectedTableIds.length > 0
-                      ? `Seat at Table ${selectedTableIds.map(id =>
-                          tableStatus.find(t => t.id === id)?.table_number
-                        ).join(', ')}`
-                      : 'Select a Table'
-                  )}
+                  <UserPlus className="h-3 w-3 mr-1" />
+                  Seat Walk-in
                 </Button>
               </div>
             </div>
@@ -2322,379 +2079,165 @@ export function CheckInQueue({
         </TabsContent>
       </Tabs>
 
-      {/* Enhanced Table Switch Modal */}
-      <Dialog open={tableSwitchModal.show} onOpenChange={(open) => 
-        !open && setTableSwitchModal({ 
-          show: false, 
-          originalTables: [], 
-          selectedNewTableIds: [],
-          swapOptions: [],
-          confirmationStep: false
-        })
-      }>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      {/* Walk-in confirmation dialog */}
+      <Dialog 
+        open={walkInConfirmation.show} 
+        onOpenChange={(open) => !open && setWalkInConfirmation(prev => ({ ...prev, show: false }))}
+      >
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-primary">
-              <ArrowLeftRight className="h-5 w-5" />
-              Smart Table Management
-            </DialogTitle>
+            <DialogTitle>Confirm Walk-in Seating</DialogTitle>
             <DialogDescription>
-              {tableSwitchModal.booking && (
-                <>
-                  Managing tables for <span className="font-semibold">
-                    {tableSwitchModal.booking.user?.full_name || tableSwitchModal.booking.guest_name}
-                  </span> (Party of {tableSwitchModal.booking.party_size})
-                </>
-              )}
+              {walkInConfirmation.type === 'upcoming_reservations' 
+                ? "This will conflict with upcoming reservations"
+                : "Confirm seating for this walk-in guest"
+              }
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-3">
+            {walkInConfirmation.conflictingReservations.length > 0 && (
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  <div className="space-y-2">
+                    <p className="font-medium">
+                      {walkInConfirmation.conflictingReservations.length} upcoming reservation(s) will be affected:
+                    </p>
+                    {walkInConfirmation.conflictingReservations.map((reservation: any) => (
+                      <div key={reservation.id} className="text-sm">
+                        • {reservation.user?.full_name || reservation.guest_name} - {format(new Date(reservation.booking_time), 'h:mm a')}
+                      </div>
+                    ))}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setWalkInConfirmation(prev => ({ ...prev, show: false }))}
+            >
+              Cancel
+            </Button>
+            <Button onClick={proceedWithWalkIn}>
+              {walkInConfirmation.conflictingReservations.length > 0 ? "Proceed Anyway" : "Confirm"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add customer prompt dialog */}
+      <Dialog open={showAddCustomerPrompt} onOpenChange={setShowAddCustomerPrompt}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Customer to Restaurant</DialogTitle>
+            <DialogDescription>
+              Would you like to add this guest as a customer?
             </DialogDescription>
           </DialogHeader>
 
-          {tableSwitchModal.booking && !tableSwitchModal.confirmationStep && (
-            <div className="space-y-4 py-4">
-              {/* Current assignment */}
-              {tableSwitchModal.originalTables.length > 0 && (
-                <div className="p-3 bg-muted border border-border rounded-lg">
-                  <h4 className="font-medium text-foreground mb-2">Current Tables:</h4>
-                  <div className="flex gap-2">
-                    {tableSwitchModal.originalTables.map(table => (
-                      <Badge key={table.id} variant="secondary">
-                        Table {table.table_number}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
+          <div className="space-y-3">
+            {pendingGuestDetails && (
+              <div className="p-3 bg-muted rounded-lg">
+                <h4 className="font-medium mb-2">Guest Details:</h4>
+                {pendingGuestDetails.name && <p>Name: {pendingGuestDetails.name}</p>}
+                {pendingGuestDetails.email && <p>Email: {pendingGuestDetails.email}</p>}
+                {pendingGuestDetails.phone && <p>Phone: {pendingGuestDetails.phone}</p>}
+              </div>
+            )}
 
-              {/* Smart swap options */}
-              {tableSwitchModal.swapOptions.length > 0 && (
-                <div className="space-y-3">
-                  <h4 className="font-medium text-foreground">Recommended Options:</h4>
-                  {tableSwitchModal.swapOptions.map((option, index) => (
+            {similarCustomers && similarCustomers.length > 0 && (
+              <div>
+                <h4 className="font-medium mb-2">Similar customers found:</h4>
+                <div className="space-y-1">
+                  {similarCustomers.map((customer) => (
+                    <Button
+                      key={customer.id}
+                      variant="outline"
+                      onClick={() => finalizeWalkInWithCustomer(customer)}
+                      className="w-full justify-start h-auto p-2"
+                    >
+                      <div className="text-left">
+                        <p className="font-medium">{customer.profile?.full_name || customer.guest_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {customer.guest_email} • {customer.guest_phone}
+                        </p>
+                      </div>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={handleSkipAddingCustomer}>
+              Skip
+            </Button>
+            <Button onClick={handleAddNewCustomer} disabled={isAddingCustomer}>
+              {isAddingCustomer ? "Adding..." : "Add Customer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Enhanced table switch modal */}
+      <Dialog 
+        open={tableSwitchModal.show} 
+        onOpenChange={(open) => !open && setTableSwitchModal(prev => ({ ...prev, show: false }))}
+      >
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Assign Tables</DialogTitle>
+            <DialogDescription>
+              {tableSwitchModal.booking ? 
+                `Assign tables for ${tableSwitchModal.booking.user?.full_name || tableSwitchModal.booking.guest_name} (party of ${tableSwitchModal.booking.party_size})` :
+                "Select tables for this booking"
+              }
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {tableSwitchModal.swapOptions.length > 0 && (
+              <div>
+                <h4 className="font-medium mb-2">Smart Options</h4>
+                <div className="space-y-2">
+                  {tableSwitchModal.swapOptions.slice(0, 5).map((option, index) => (
                     <div
                       key={index}
                       className={cn(
-                        "p-4 rounded-lg border-2 cursor-pointer transition-all",
-                        tableSwitchModal.selectedOption === option
-                          ? "border-primary bg-primary/10"
-                          : "border-border hover:border-border"
+                        "p-3 border rounded-lg cursor-pointer transition-colors",
+                        tableSwitchModal.selectedOption === option 
+                          ? "border-primary bg-primary/5" 
+                          : "border-border hover:bg-muted/50"
                       )}
-                      onClick={() => setTableSwitchModal(prev => ({ 
-                        ...prev, 
-                        selectedOption: option 
-                      }))}
+                      onClick={() => setTableSwitchModal(prev => ({ ...prev, selectedOption: option }))}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            {option.type === 'empty' && <Unlock className="h-4 w-4 text-green-600" />}
-                            {option.type === 'swap' && <ArrowLeftRight className="h-4 w-4 text-primary" />}
-                            {option.type === 'combination' && <GitMerge className="h-4 w-4 text-accent-foreground" />}
+                          <div className="flex items-center gap-2 mb-1">
                             <span className="font-medium">
-                              {option.type === 'empty' && (option.targetBooking ? 'Reassign Tables' : 'Direct Assignment')}
-                              {option.type === 'swap' && 'True Table Swap'}
-                              {option.type === 'combination' && 'Table Combination'}
+                              Tables {option.tables.map(t => t.table_number).join(', ')}
                             </span>
-                            {option.isPredefined && (
-                              <Badge className="text-xs bg-primary text-primary-foreground">
-                                Approved
-                              </Badge>
-                            )}
-                          </div>
-                          
-                          <div className="text-sm text-muted-foreground mb-2">
-                            Tables: {option.tables.map(t => t.table_number).join(', ')}
-                          </div>
-                          
-                          {option.benefits.length > 0 && (
-                            <div className="space-y-1 mb-2">
-                              {option.benefits.map((benefit, i) => (
-                                <div key={i} className="flex items-start gap-1.5 text-xs text-green-700">
-                                  <CheckCircle className="h-3 w-3 mt-0.5" />
-                                  <span>{benefit}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          
-                          {option.warnings.length > 0 && (
-                            <div className="space-y-1">
-                              {option.warnings.map((warning, i) => (
-                                <div key={i} className="flex items-start gap-1.5 text-xs text-amber-700">
-                                  <AlertTriangle className="h-3 w-3 mt-0.5" />
-                                  <span>{warning}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div className="ml-4">
-                          <div className="text-center">
-                            <div className="text-2xl font-bold text-foreground">
-                              {option.confidence}%
-                            </div>
-                            <div className="text-xs text-muted-foreground">Confidence</div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Manual table selection */}
-              <div>
-                <h4 className="font-medium text-foreground mb-3">Or Select Manually:</h4>
-                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
-                  {tableStatus
-                    .filter(t => t.is_active && !t.isOccupied)
-                    .map(table => {
-                      const isSelected = tableSwitchModal.selectedNewTableIds.includes(table.id)
-                      return (
-                        <Button
-                          key={table.id}
-                          size="sm"
-                          variant={isSelected ? "default" : "outline"}
-                          className="h-auto py-2"
-                          onClick={() => {
-                            setTableSwitchModal(prev => ({
-                              ...prev,
-                              selectedNewTableIds: isSelected
-                                ? prev.selectedNewTableIds.filter(id => id !== table.id)
-                                : [...prev.selectedNewTableIds, table.id],
-                              selectedOption: undefined
-                            }))
-                          }}
-                        >
-                          <div className="text-center">
-                            <div className="font-bold">T{table.table_number}</div>
-                            <div className="text-xs">{table.max_capacity}</div>
-                          </div>
-                        </Button>
-                      )
-                    })}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Confirmation step */}
-          {tableSwitchModal.confirmationStep && tableSwitchModal.selectedOption && (
-            <div className="py-4">
-              <Alert className="mb-4">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  {tableSwitchModal.selectedOption.type === 'swap' 
-                    ? 'This will swap tables between two active bookings. Both parties will be notified.'
-                    : 'Please confirm the table assignment.'}
-                </AlertDescription>
-              </Alert>
-              
-              <div className="space-y-3">
-                <div className="p-3 bg-muted rounded-lg">
-                  <p className="text-sm font-medium text-foreground">Action Summary:</p>
-                  <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                    {tableSwitchModal.selectedOption.benefits.map((benefit, i) => (
-                      <div key={i}>• {benefit}</div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setTableSwitchModal({ 
-                show: false, 
-                originalTables: [], 
-                selectedNewTableIds: [],
-                swapOptions: [],
-                confirmationStep: false
-              })}
-            >
-              Cancel
-            </Button>
-            
-            {!tableSwitchModal.confirmationStep ? (
-              <Button
-                onClick={() => {
-                  if (tableSwitchModal.selectedOption) {
-                    setTableSwitchModal(prev => ({ ...prev, confirmationStep: true }))
-                  } else if (tableSwitchModal.selectedNewTableIds.length > 0) {
-                    handleTableSwitchConfirm()
-                  }
-                }}
-                disabled={!tableSwitchModal.selectedOption && tableSwitchModal.selectedNewTableIds.length === 0}
-                className="bg-primary hover:bg-primary/90"
-              >
-                {tableSwitchModal.selectedOption ? 'Review' : 'Assign Tables'}
-              </Button>
-            ) : (
-              <Button
-                onClick={handleTableSwitchConfirm}
-                className="bg-accent hover:bg-accent/80 text-accent-foreground"
-              >
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Confirm Changes
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Walk-in Confirmation Dialogs */}
-      <Dialog open={walkInConfirmation.show} onOpenChange={(open) =>
-        !open && setWalkInConfirmation({
-          show: false,
-          type: null,
-          conflictingReservations: [],
-          selectedTables: [],
-          walkInData: null
-        })
-      }>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-accent-foreground" />
-              {walkInConfirmation.type === 'upcoming_reservations'
-                ? 'Table Has Upcoming Reservations'
-                : 'Confirm Table Assignment'
-              }
-            </DialogTitle>
-            <DialogDescription>
-              {walkInConfirmation.type === 'upcoming_reservations'
-                ? 'IMPORTANT: This will seat walk-ins at tables with confirmed reservations. Both parties must be managed carefully to avoid conflicts.'
-                : (() => {
-                    const totalCapacity = walkInConfirmation.selectedTables.reduce((sum: number, table: any) =>
-                      sum + (table?.max_capacity || 0), 0)
-                    const partySize = walkInConfirmation.walkInData?.party_size || 0
-                    const hasCapacityIssue = totalCapacity < partySize
-
-                    if (hasCapacityIssue) {
-                      return `The selected tables can seat ${totalCapacity} people, but the party size is ${partySize}. Please confirm if you want to proceed.`
-                    } else if (walkInConfirmation.selectedTables.length > 1) {
-                      return 'You are seating a large party across multiple tables. Please confirm this arrangement.'
-                    } else {
-                      return 'Please confirm the table assignment for this large party.'
-                    }
-                  })()
-              }
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="py-4">
-            {walkInConfirmation.type === 'upcoming_reservations' && (
-              <div className="space-y-3">
-                <Alert className="border-destructive bg-destructive/10">
-                  <AlertTriangle className="h-4 w-4 text-destructive" />
-                  <AlertDescription>
-                    <strong className="text-destructive">⚠️ BOOKING CONFLICT WARNING</strong>
-                    <p className="text-sm mt-1 text-muted-foreground">
-                      You are seating a walk-in at tables with confirmed reservations. The walk-in guests MUST vacate these tables before the booking arrives.
-                    </p>
-                  </AlertDescription>
-                </Alert>
-
-                <div className="space-y-3">
-                  <h4 className="font-medium text-sm text-destructive">Upcoming Reservations to Reassign:</h4>
-                  {walkInConfirmation.conflictingReservations.map((reservation, index) => {
-                    const minutesUntilArrival = differenceInMinutes(new Date(reservation.booking_time), currentTime)
-                    const isUrgent = minutesUntilArrival <= 60
-                    
-                    return (
-                      <div key={index} className={cn(
-                        "p-3 rounded-lg border-2",
-                        isUrgent 
-                          ? "border-destructive bg-destructive/5" 
-                          : "border-accent bg-accent/5"
-                      )}>
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <p className="font-medium text-sm">
-                                {reservation.guest_name || reservation.user?.full_name || 'Anonymous'}
-                              </p>
-                              {isUrgent && (
-                                <Badge className="bg-destructive text-destructive-foreground text-xs px-1 py-0">
-                                  URGENT
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground mb-2">
-                              Table {reservation.table.table_number} • Arriving at {format(new Date(reservation.booking_time), 'h:mm a')}
-                            </p>
-                            <div className={cn(
-                              "text-xs font-medium px-2 py-1 rounded inline-block",
-                              isUrgent 
-                                ? "bg-destructive/20 text-destructive" 
-                                : "bg-accent/20 text-accent-foreground"
-                            )}>
-                              {minutesUntilArrival > 0 
-                                ? `Arrives in ${minutesUntilArrival} minutes` 
-                                : `${Math.abs(minutesUntilArrival)} minutes overdue`}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <Badge variant="outline" className="text-xs mb-1">
-                              {reservation.party_size}p
+                            <Badge variant="outline" className="text-xs">
+                              {option.confidence}% match
                             </Badge>
-                            <div className="text-xs text-muted-foreground">
-                              Will be reassigned
-                            </div>
                           </div>
+                          <div className="text-sm text-muted-foreground">
+                            {option.benefits.join(' • ')}
+                          </div>
+                          {option.warnings.length > 0 && (
+                            <div className="text-sm text-orange-600 mt-1">
+                              ⚠️ {option.warnings.join(' • ')}
+                            </div>
+                          )}
                         </div>
                       </div>
-                    )
-                  })}
-                </div>
-                
-                <Alert className="border-accent bg-accent/10">
-                  <Info className="h-4 w-4 text-accent-foreground" />
-                  <AlertDescription>
-                    <strong>Host Action Required:</strong>
-                    <ul className="text-sm mt-1 space-y-1 list-disc list-inside">
-                      <li>Notify walk-in guests about table time limits</li>
-                      <li>Find alternative tables for arriving bookings</li>
-                      <li>Set reminders to check on both parties</li>
-                    </ul>
-                  </AlertDescription>
-                </Alert>
-              </div>
-            )}
-
-            {walkInConfirmation.type === 'multi_table' && (
-              <div className="space-y-3">
-                {(() => {
-                  const totalCapacity = walkInConfirmation.selectedTables.reduce((sum: number, table: any) =>
-                    sum + (table?.max_capacity || 0), 0)
-                  const partySize = walkInConfirmation.walkInData?.party_size || 0
-                  const hasCapacityIssue = totalCapacity < partySize
-
-                  return (
-                    <Alert className={hasCapacityIssue ? "border-accent bg-accent/10" : "border-primary bg-primary/10"}>
-                      {hasCapacityIssue ? <AlertTriangle className="h-4 w-4" /> : <Users className="h-4 w-4" />}
-                      <AlertDescription>
-                        <strong>{hasCapacityIssue ? 'Capacity Warning:' : 'Large Party Setup:'}</strong>
-                      </AlertDescription>
-                    </Alert>
-                  )
-                })()}
-
-                <div className="p-3 bg-muted rounded-lg border border-border">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-sm">Party Details:</span>
-                    <Badge className="bg-primary text-primary-foreground">
-                      {walkInConfirmation.walkInData?.party_size}p
-                    </Badge>
-                  </div>
-                  <div className="text-sm text-muted-foreground space-y-1">
-                    <p>Guest: {walkInConfirmation.walkInData?.guest_name}</p>
-                    <p>Tables: {walkInConfirmation.selectedTables.map((t: any) => `T${t.table_number} (${t.max_capacity}p)`).join(', ')}</p>
-                    <p>Total Capacity: {walkInConfirmation.selectedTables.reduce((sum: number, table: any) =>
-                      sum + (table?.max_capacity || 0), 0)} people</p>
-                  </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -2703,103 +2246,16 @@ export function CheckInQueue({
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setWalkInConfirmation({
-                show: false,
-                type: null,
-                conflictingReservations: [],
-                selectedTables: [],
-                walkInData: null
-              })}
+              onClick={() => setTableSwitchModal(prev => ({ ...prev, show: false }))}
             >
               Cancel
             </Button>
-            <Button
-              onClick={proceedWithWalkIn}
-              className="bg-accent hover:bg-accent/80 text-accent-foreground"
+            <Button 
+              onClick={handleTableSwitchConfirm}
+              disabled={!tableSwitchModal.selectedOption && tableSwitchModal.selectedNewTableIds.length === 0}
             >
-              <AlertTriangle className="h-4 w-4 mr-2" />
-              {walkInConfirmation.type === 'upcoming_reservations'
-                ? 'Seat Walk-In & Reassign Bookings'
-                : 'Confirm Seating'
-              }
+              Assign Tables
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add/Use customer prompt for walk-ins */}
-      <Dialog
-        open={showAddCustomerPrompt}
-        onOpenChange={(open) => {
-          if (!open) {
-            // Treat closing as skipping adding a customer
-            handleSkipAddingCustomer()
-          } else {
-            setShowAddCustomerPrompt(true)
-          }
-        }}
-      >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add guest to restaurant customers?</DialogTitle>
-            <DialogDescription>
-              This walk-in has guest info. You can save them as a customer for future use, or select an existing similar customer.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="rounded-lg border border-border p-4">
-              <p className="text-sm text-muted-foreground mb-2 font-medium">Guest details</p>
-              <div className="text-sm">
-                <div><span className="text-muted-foreground">Name:</span> {pendingGuestDetails?.name || "—"}</div>
-                <div><span className="text-muted-foreground">Email:</span> {pendingGuestDetails?.email || "—"}</div>
-                <div><span className="text-muted-foreground">Phone:</span> {pendingGuestDetails?.phone || "—"}</div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-border p-4">
-              <p className="text-sm text-muted-foreground mb-3 font-medium">Similar existing customers</p>
-              {similarLoading && (
-                <p className="text-sm text-muted-foreground">Searching…</p>
-              )}
-              {similarError && (
-                <p className="text-sm text-destructive">Failed to search similar customers</p>
-              )}
-              {!similarLoading && !similarError && (similarCustomers?.length || 0) === 0 && (
-                <p className="text-sm text-muted-foreground">No similar customers found</p>
-              )}
-              {!similarLoading && !similarError && (similarCustomers?.length || 0) > 0 && (
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {similarCustomers?.map((c: any) => (
-                    <div key={c.id} className="flex items-center justify-between gap-4 p-3 rounded-md border border-border">
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">
-                          {c.profile?.full_name || c.guest_name || "Guest"}
-                        </div>
-                        <div className="text-sm text-muted-foreground truncate">
-                          {(c.guest_email || c.profile?.email) && <span>{c.guest_email || c.profile?.email}</span>}
-                          {(c.guest_email || c.profile?.email) && (c.profile?.phone_number || c.guest_phone) && <span> • </span>}
-                          {(c.profile?.phone_number || c.guest_phone) && <span>{c.profile?.phone_number || c.guest_phone}</span>}
-                        </div>
-                      </div>
-                      <Button type="button" size="sm" onClick={() => finalizeWalkInWithCustomer(c)}>
-                        Use this
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          <DialogFooter className="sm:justify-between">
-            <div className="text-sm text-muted-foreground">You can also skip and only create the walk-in booking.</div>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={handleSkipAddingCustomer} disabled={isAddingCustomer}>
-                Skip
-              </Button>
-              <Button type="button" onClick={handleAddNewCustomer} disabled={isAddingCustomer}>
-                {isAddingCustomer ? "Adding…" : "Add as new customer"}
-              </Button>
-            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

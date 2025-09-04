@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useQueryClient } from '@tanstack/react-query'
 import { RestaurantTable, Booking } from '@/types'
@@ -39,7 +39,7 @@ export function useRealtimeTables(options: UseRealtimeTablesOptions) {
   })
 
   // Helper function to determine if a table is occupied
-  const isTableOccupied = async (tableId: string): Promise<{
+  const isTableOccupied = useCallback(async (tableId: string): Promise<{
     isOccupied: boolean
     currentBooking?: Booking
     nextBooking?: Booking
@@ -91,10 +91,10 @@ export function useRealtimeTables(options: UseRealtimeTablesOptions) {
       currentBooking,
       nextBooking
     }
-  }
+  }, [supabase])
 
   // Update table status
-  const updateTableStatus = async (tableId: string) => {
+  const updateTableStatus = useCallback(async (tableId: string) => {
     try {
       const { isOccupied, currentBooking, nextBooking } = await isTableOccupied(tableId)
       
@@ -146,7 +146,7 @@ export function useRealtimeTables(options: UseRealtimeTablesOptions) {
     } catch (error) {
       console.error('Error updating table status:', error)
     }
-  }
+  }, [isTableOccupied, onTableOccupancyChanged, queryClient, restaurantId, supabase])
 
   useEffect(() => {
     if (!restaurantId) return
@@ -270,7 +270,7 @@ export function useRealtimeTables(options: UseRealtimeTablesOptions) {
         isConnected: false
       }))
     }
-  }, [restaurantId, queryClient, onTableUpdated, onTableOccupancyChanged])
+  }, [restaurantId, queryClient, onTableUpdated, onTableOccupancyChanged, supabase, updateTableStatus])
 
   // Get status for a specific table
   const getTableStatus = (tableId: string): TableStatus | null => {
