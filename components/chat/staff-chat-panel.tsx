@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { ConversationMessage } from '@/lib/services/conversation-memory'
+import { createClient } from '@/lib/supabase/client'
 
 type MessageRole = 'user' | 'assistant' | 'system'
 
@@ -118,8 +119,6 @@ export default function StaffChatPanel() {
     
     setIsSending(true)
     try {
-      const url = '/api/staff-ai'
-      
       // Get conversation history for API request
       const conversationHistory = getConversationHistory()
       const formattedHistory = conversationHistory.map(msg => ({
@@ -134,51 +133,32 @@ export default function StaffChatPanel() {
         session_id: sessionId ?? 'staff_default',
       }
       
-      const isUuid = typeof restaurantId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(restaurantId)
-      const startedAt = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()
-
-      // BEFORE sending
-      console.log('[StaffChat] Sending request with conversation history', { 
-        url, 
-        payload: { ...payload, conversation_history: `${formattedHistory.length} messages` }, 
-        navigatorOnline: typeof navigator !== 'undefined' ? navigator.onLine : undefined, 
-        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined, 
-        isUuid 
-      })
-
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        mode: 'same-origin',
-        cache: 'no-store',
-      })
-
-      const finishedAt = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()
-      const durationMs = finishedAt - startedAt
-
-      // AFTER receiving headers
-      console.log('[StaffChat] Response meta', { status: res.status, ok: res.ok, durationMs })
-
-      let data: any = null
-      try {
-        data = await res.json()
-      } catch (parseError) {
-        console.error('[StaffChat] Failed to parse JSON response', parseError)
-        throw parseError
+      // Get JWT token from Supabase session
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`
       }
 
-      // AFTER parsing body
-      console.log('[StaffChat] Response body', data)
+      const response = await fetch('/api/staff-ai', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
 
       if (typeof data?.session_id === 'string') {
-        console.log('[StaffChat] Updating sessionId', { sessionId: data.session_id })
         setSessionId(data.session_id)
-      }
-      if (!res.ok) {
-        console.error('[StaffChat] Request failed', { status: res.status, body: data })
-        const errorMessage = handleStaffChatError(data?.error || 'Request failed', res)
-        throw new Error(errorMessage)
       }
       
       const assistantResponse = data?.response ?? 'No response'
@@ -197,11 +177,14 @@ export default function StaffChatPanel() {
       
     } catch (error: any) {
       console.error('[StaffChat] Error sending message', error)
-      try {
-        console.error('[StaffChat] Error details', { name: error?.name, message: error?.message, stack: error?.stack })
-      } catch {}
       
-      const errorMessage = error?.message || 'Error contacting Staff AI. Please try again.'
+      let errorMessage = 'An error occurred. Please try again.'
+      if (error.message?.includes('401')) {
+        errorMessage = 'Authentication required. Please refresh the page and log in.'
+      } else if (error.message?.includes('403')) {
+        errorMessage = 'Access denied. Please check your permissions.'
+      }
+      
       const errMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'system',
@@ -275,10 +258,12 @@ export default function StaffChatPanel() {
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-2 bg-muted/20">
           {messages.length === 0 && (
-            <div className="text-center text-sm text-muted-foreground py-8">
-              <p className="mb-2">👋 Welcome to Staff Assistant!</p>
-              <p className="text-xs">Ask about bookings, capacity, customers, or anything restaurant-related.</p>
-              <p className="text-xs mt-1">Your conversation will be remembered during your shift.</p>
+            <div className="text-center text-sm text-muted-foreground py-8 space-y-3">
+              <div>
+                <p className="mb-2">👋 Welcome to Staff Assistant!</p>
+                <p className="text-xs">Ask about bookings, capacity, customers, or anything restaurant-related.</p>
+                <p className="text-xs mt-1">Your conversation will be remembered during your shift.</p>
+              </div>
             </div>
           )}
           {messages.map(m => (

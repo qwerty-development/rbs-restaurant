@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +18,33 @@ export async function POST(request: Request) {
       status: 'error', 
       error: 'Message is required' 
     }, { status: 400 })
+  }
+
+  // Handle JWT authentication
+  const authHeader = request.headers.get('authorization')
+  let user = null
+  
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7)
+    try {
+      const supabase = await createClient()
+      const { data: { user: authUser }, error } = await supabase.auth.getUser(token)
+      
+      if (!error && authUser) {
+        user = authUser
+        console.log('[StaffAI Proxy] Authenticated user:', authUser.id)
+      } else {
+        console.log('[StaffAI Proxy] JWT validation failed:', error?.message)
+      }
+    } catch (jwtError) {
+      console.error('[StaffAI Proxy] JWT processing error:', jwtError)
+    }
+  }
+
+  // Add user context to payload if authenticated
+  if (user) {
+    payload.user_id = user.id
+    payload.user_email = user.email
   }
 
   const baseUrl = process.env.RESTOAI_BASE_URL || 'https://ai-agent-two-theta.vercel.app'
