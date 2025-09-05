@@ -12,6 +12,7 @@ export interface BookingCustomerData {
     isVip: boolean
     isBlacklisted: boolean
     tagCount: number
+    userRating: number | null
   }
 }
 
@@ -36,7 +37,7 @@ export function useBookingCustomers(bookings: Booking[], restaurantId: string) {
           .from('restaurant_customers')
           .select(`
             *,
-            profile:profiles(full_name, allergies, dietary_restrictions),
+            profile:profiles(full_name, allergies, dietary_restrictions, user_rating),
             tags:customer_tag_assignments(tag:customer_tags(*)),
             notes:customer_notes(is_important, category)
           `)
@@ -57,7 +58,8 @@ export function useBookingCustomers(bookings: Booking[], restaurantId: string) {
               ),
               isVip: customer.vip_status || false,
               isBlacklisted: customer.blacklisted || false,
-              tagCount: customer.tags?.length || 0
+              tagCount: customer.tags?.length || 0,
+              userRating: customer.profile?.user_rating || null
             }
           })
         })
@@ -85,7 +87,8 @@ export function useBookingCustomers(bookings: Booking[], restaurantId: string) {
               hasDietaryRestrictions: customer.notes?.some((n: any) => n.category === 'dietary') || false,
               isVip: customer.vip_status || false,
               isBlacklisted: customer.blacklisted || false,
-              tagCount: customer.tags?.length || 0
+              tagCount: customer.tags?.length || 0,
+              userRating: customer.profile?.user_rating || null
             }
           })
         })
@@ -100,7 +103,8 @@ export function useBookingCustomers(bookings: Booking[], restaurantId: string) {
             hasDietaryRestrictions: false,
             isVip: false,
             isBlacklisted: false,
-            tagCount: 0
+            tagCount: 0,
+            userRating: null
           }
         }
       })

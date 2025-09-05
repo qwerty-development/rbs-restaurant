@@ -50,6 +50,7 @@ import type { Booking } from "@/types"
 import { Alert, AlertDescription } from "../ui/alert"
 import { useBookingCustomers } from "@/lib/hooks/use-booking-customers"
 import { toast } from "react-hot-toast"
+import { LowRatingFlag } from "@/components/ui/low-rating-flag"
 
 interface BookingListProps {
   bookings: Booking[]
@@ -399,6 +400,12 @@ export function BookingList({
                             <AlertTriangle className="h-3 w-3 mr-1" />
                             Dietary
                           </Badge>
+                        )}
+                        {customerData[booking.id]?.userRating && customerData[booking.id].userRating! <= 2 && (
+                          <LowRatingFlag 
+                            rating={customerData[booking.id].userRating!}
+                            size="sm"
+                          />
                         )}
                       </div>
                     )}

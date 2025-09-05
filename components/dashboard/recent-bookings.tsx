@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Users, Calendar, Clock } from "lucide-react"
+import { LowRatingFlag } from "@/components/ui/low-rating-flag"
 
 interface Booking {
   id: string
@@ -26,6 +27,7 @@ interface Booking {
     id: string
     full_name: string
     phone_number?: string | null
+    user_rating?: number
   } | null
 }
 
@@ -118,6 +120,12 @@ export function RecentBookings({ bookings, customersData = {} }: RecentBookingsP
                             <Badge variant="destructive" className="text-xs px-1.5 py-0.5">
                               🚫
                             </Badge>
+                          )}
+                          {booking.user?.user_rating && booking.user.user_rating <= 2 && (
+                            <LowRatingFlag 
+                              rating={booking.user.user_rating}
+                              size="sm"
+                            />
                           )}
                         </div>
                       </div>

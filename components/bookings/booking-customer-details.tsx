@@ -32,6 +32,7 @@ import type { Booking } from "@/types"
 import type { RestaurantCustomer, CustomerNote, CustomerRelationship, CustomerTag } from "@/types/customer"
 import { QuickCustomerNote } from "./quick-customer-note"
 import { CustomerBookingHistory } from "./customer-booking-history"
+import { LowRatingFlag, CustomerRatingDisplay } from "@/components/ui/low-rating-flag"
 
 interface BookingCustomerDetailsProps {
   booking: Booking
@@ -67,7 +68,8 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
             phone_number,
             avatar_url,
             allergies,
-            dietary_restrictions
+            dietary_restrictions,
+            user_rating
           ),
           tags:customer_tag_assignments(
             tag:customer_tags(*)
@@ -211,6 +213,13 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
               </div>
             </div>
             <div className="flex flex-col items-end gap-2">
+              {customerData.profile?.user_rating && (
+                <CustomerRatingDisplay 
+                  rating={customerData.profile.user_rating} 
+                  size="md"
+                  className="bg-white border border-gray-200 px-2 py-1 rounded"
+                />
+              )}
               {customerData.vip_status && (
                 <Badge variant="default" className="bg-gold text-gold-foreground">
                   <Star className="h-3 w-3 mr-1" />
@@ -330,6 +339,32 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
           )}
         </CardContent>
       </Card>
+
+      {/* Low Rating Alert */}
+      {customerData.profile?.user_rating && customerData.profile.user_rating <= 2 && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0">
+                <LowRatingFlag 
+                  rating={customerData.profile.user_rating} 
+                  size="lg"
+                  showValue={true}
+                />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-red-800">
+                  Customer has a low rating ({customerData.profile.user_rating.toFixed(1)}/5.0)
+                </p>
+                <p className="text-xs text-red-700 mt-1">
+                  Please provide exceptional service and monitor this booking closely. 
+                  Consider reviewing previous visit notes and any reported issues.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Customer Notes */}
       {customerData.notes && customerData.notes.length > 0 && (

@@ -43,6 +43,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
 import { BookingConflictService } from "@/lib/services/booking-conflict-service"
 import { useSharedTablesSummary } from "@/hooks/use-shared-tables"
+import { LowRatingFlag } from "@/components/ui/low-rating-flag"
 
 const TABLE_TYPE_COLORS: Record<string, string> = {
   booth: "bg-gradient-to-br from-primary/80 to-primary text-primary-foreground border-primary/70",
@@ -1494,6 +1495,12 @@ export function CheckInQueue({
                   V
                 </Badge>
               )}
+              {booking.user?.user_rating && booking.user.user_rating <= 2 && (
+                <LowRatingFlag 
+                  rating={booking.user.user_rating}
+                  size="sm"
+                />
+              )}
             </div>
             
             {/* Time and party size in compact format */}
@@ -1618,6 +1625,12 @@ export function CheckInQueue({
                 <Badge className="text-xs px-1 py-0 bg-accent text-accent-foreground h-3 min-w-0">
                   V
                 </Badge>
+              )}
+              {booking.user?.user_rating && booking.user.user_rating <= 2 && (
+                <LowRatingFlag 
+                  rating={booking.user.user_rating}
+                  size="sm"
+                />
               )}
             </div>
 
