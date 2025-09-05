@@ -402,7 +402,7 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
                               variant="outline" 
                               className="text-xs"
                             >
-                              {note.category}
+                              {titleCase(note.category)}
                             </Badge>
                             {note.is_important && (
                               <Badge variant="destructive" className="text-xs">
