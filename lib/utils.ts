@@ -11,3 +11,12 @@ export function formatCurrency(amount: number, currency: string = "USD"): string
     currency,
   }).format(amount)
 }
+
+export function titleCase(s?: string) {
+  if (!s) return ''
+  return s
+    .replace(/_/g, ' ')
+    .split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}

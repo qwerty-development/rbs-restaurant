@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { cn } from "@/lib/utils"
+import { cn, titleCase } from "@/lib/utils"
 import { format, differenceInMinutes, addMinutes } from "date-fns"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
@@ -487,7 +487,7 @@ export function CheckInQueue({
       if (onStatusUpdate) {
         onStatusUpdate(bookingId, newStatus)
       }
-      toast.success(`Status updated to ${newStatus.replace(/_/g, ' ')}`)
+  toast.success(`Status updated to ${titleCase(newStatus)}`)
     } catch (error) {
       console.error('Status update error:', error)
       toast.error('Failed to update status')

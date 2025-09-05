@@ -33,6 +33,7 @@ import type { RestaurantCustomer, CustomerNote, CustomerRelationship, CustomerTa
 import { QuickCustomerNote } from "./quick-customer-note"
 import { CustomerBookingHistory } from "./customer-booking-history"
 import { LowRatingFlag, CustomerRatingDisplay } from "@/components/ui/low-rating-flag"
+import { titleCase } from "@/lib/utils"
 
 interface BookingCustomerDetailsProps {
   booking: Booking
@@ -254,22 +255,22 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
               {customerData.last_visit && (
                 <div className="flex items-center gap-2 text-sm">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span>Last visit: {format(new Date(customerData.last_visit), 'MMM d, yyyy')}</span>
+                  <span>Last Visit: {format(new Date(customerData.last_visit), 'MMM d, yyyy')}</span>
                 </div>
               )}
             </div>
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm">
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                <span>{customerData.total_bookings} total bookings</span>
+                <span>Total Bookings: {customerData.total_bookings}</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
-                <span>${customerData.total_spent?.toFixed(2) || '0.00'} total spent</span>
+                <span>Total Spent: ${customerData.total_spent?.toFixed(2) || '0.00'}</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <Users className="h-4 w-4 text-muted-foreground" />
-                <span>Avg party size: {customerData.average_party_size}</span>
+                <span>Avg Party Size: {customerData.average_party_size}</span>
               </div>
             </div>
           </div>
@@ -517,7 +518,7 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
                       'secondary'
                     }
                   >
-                    {pastBooking.status.replace('_', ' ')}
+                    {titleCase(pastBooking.status)}
                   </Badge>
                 </div>
               ))}

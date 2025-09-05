@@ -56,7 +56,7 @@ import {
   Timer,
   Activity
 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, titleCase } from "@/lib/utils"
 import type { Booking } from "@/types"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "../ui/card"
 import { BookingCustomerDetails } from "./booking-customer-details"
@@ -81,6 +81,8 @@ const STATUS_CONFIGS = {
   no_show: { icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-100' },
   cancelled: { icon: X, color: 'text-red-600', bg: 'bg-red-100' }
 }
+
+
 
 export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsProps) {
   const [isEditing, setIsEditing] = useState(false)
@@ -224,7 +226,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
       await statusService.updateBookingStatus(booking.id, newStatus, userId)
       onUpdate({ status: newStatus })
       queryClient.invalidateQueries({ queryKey: ["booking-status-history"] })
-      toast.success(`Status updated to ${newStatus.replace(/_/g, ' ')}`)
+      toast.success(`Status updated to ${titleCase(newStatus)}`)
     } catch (error) {
       toast.error("Failed to update status")
     }
@@ -417,7 +419,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                       <Label className="text-sm text-muted-foreground">Status</Label>
                       <div>
                         <Badge className={cn("text-sm", statusConfig?.bg, statusConfig?.color)}>
-                          {booking.status.replace(/_/g, ' ')}
+                          {titleCase(booking.status)}
                         </Badge>
                       </div>
                     </div>
@@ -551,7 +553,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={booking.status} disabled>
-                          {booking.status.charAt(0).toUpperCase() + booking.status.slice(1).replace('_', ' ')} (Current)
+                          {titleCase(booking.status)} (Current)
                         </SelectItem>
                         {allAvailableStatuses.map(status => (
                           <SelectItem 
@@ -559,10 +561,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                             value={status.to}
                             className={status.requiresConfirmation ? "text-red-600" : ""}
                           >
-                            {status.to === 'appetizers' || status.to === 'main_course' ? 
-                              status.to.replace('_', ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') :
-                              status.to.charAt(0).toUpperCase() + status.to.slice(1)
-                            }
+                            {titleCase(status.to)}
                             {status.requiresConfirmation && " ⚠️"}
                           </SelectItem>
                         ))}
@@ -581,8 +580,8 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                       <div className="flex items-center gap-3">
                         <StatusIcon className={cn("h-8 w-8", statusConfig?.color)} />
                         <div>
-                          <p className="font-semibold text-lg capitalize">
-                            {booking.status.replace(/_/g, ' ')}
+                          <p className="font-semibold text-lg">
+                            {titleCase(booking.status)}
                           </p>
                           {isCurrentlyDining && (
                             <p className="text-sm text-muted-foreground">
@@ -768,10 +767,10 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                                 <p className="font-medium">
                                   {entry.old_status ? (
                                     <>
-                                      {entry.old_status.replace(/_/g, ' ')} → {entry.new_status.replace(/_/g, ' ')}
+                                      {titleCase(entry.old_status)} → {titleCase(entry.new_status)}
                                     </>
                                   ) : (
-                                    <span className="capitalize">{entry.new_status.replace(/_/g, ' ')}</span>
+                                    <span>{titleCase(entry.new_status)}</span>
                                   )}
                                 </p>
                                 <p className="text-sm text-muted-foreground">

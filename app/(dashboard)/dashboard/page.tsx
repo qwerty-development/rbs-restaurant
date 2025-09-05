@@ -893,13 +893,13 @@ export default function DashboardPage() {
               <div className="flex items-center gap-1">
                 <div className="h-1.5 w-1.5 bg-emerald-400 rounded-full animate-pulse" />
                 <span className="text-xs font-bold text-emerald-400">{stats.currentGuests}</span>
-                <span className="text-xs text-slate-400">dining</span>
+                <span className="text-xs text-slate-400">Dining</span>
               </div>
               <div className="w-px h-3.5 bg-slate-600" />
               <div className="flex items-center gap-1">
                 <Table2 className="h-3 w-3 text-blue-400" />
                 <span className="text-xs font-bold text-blue-400">{stats.availableTables}</span>
-                <span className="text-xs text-slate-400">free</span>
+                <span className="text-xs text-slate-400">Free</span>
               </div>
               {stats.waitlistActive > 0 && (
                 <>
@@ -917,7 +917,7 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-1">
                     <Users className="h-3 w-3 text-purple-400" />
                     <span className="text-xs font-bold text-purple-400">{stats.sharedTablesOccupancy}/{stats.sharedTablesCapacity}</span>
-                    <span className="text-xs text-slate-400">shared</span>
+                    <span className="text-xs text-slate-400">Shared</span>
                   </div>
                 </>
               )}
@@ -931,7 +931,7 @@ export default function DashboardPage() {
                   "text-xs font-bold",
                   stats.occupancyRate > 80 ? "text-red-400" : stats.occupancyRate > 60 ? "text-yellow-400" : "text-green-400"
                 )}>{stats.occupancyRate}%</span>
-                <span className="text-xs text-slate-400">full</span>
+                <span className="text-xs text-slate-400">Full</span>
               </div>
             </div>
           </div>

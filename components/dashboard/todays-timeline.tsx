@@ -33,7 +33,7 @@ import {
   Cake
 } from "lucide-react"
 import { format, differenceInMinutes, isAfter, isBefore, addMinutes } from "date-fns"
-import { cn } from "@/lib/utils"
+import { cn, titleCase } from "@/lib/utils"
 
 interface TodaysTimelineProps {
   bookings: any[]
@@ -211,7 +211,7 @@ export function TodaysTimeline({
           iconColor: 'text-gray-600',
           bgColor: 'bg-gray-50 border-gray-200 hover:bg-gray-100',
           badge: 'bg-gray-100 text-gray-800',
-          badgeText: booking.status.replace(/_/g, ' '),
+          badgeText: titleCase(booking.status),
           urgent: false
         }
     }

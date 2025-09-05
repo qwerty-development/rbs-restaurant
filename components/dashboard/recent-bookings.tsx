@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table"
 import { Users, Calendar, Clock } from "lucide-react"
 import { LowRatingFlag } from "@/components/ui/low-rating-flag"
+import { titleCase } from "@/lib/utils"
 
 interface Booking {
   id: string
@@ -153,7 +154,7 @@ export function RecentBookings({ bookings, customersData = {} }: RecentBookingsP
                   </TableCell>
                   <TableCell>
                     <Badge className={getStatusColor(booking.status)}>
-                      {booking.status.replace(/_/g, ' ')}
+                      {titleCase(booking.status)}
                     </Badge>
                   </TableCell>
                 </TableRow>

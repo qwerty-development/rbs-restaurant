@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { cn, titleCase } from "@/lib/utils"
 import { Card } from "@/components/ui/card"
 import {
   Select,
@@ -747,7 +747,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               role="button"
               tabIndex={0}
               data-table-id={table.id}
-              aria-label={`Table ${table.table_number}, capacity ${table.min_capacity}-${table.max_capacity}${current ? `, occupied by ${current.guest_name || current.user?.full_name || 'Guest'}, status: ${current.status.replace(/_/g, ' ')}` : ', available'}`}
+              aria-label={`Table ${table.table_number}, capacity ${table.min_capacity}-${table.max_capacity}${current ? `, occupied by ${current.guest_name || current.user?.full_name || 'Guest'}, status: ${current.status ? titleCase(current.status) : ''}` : ', available'}`}
               className={cn(
                 "relative rounded-2xl border-3 cursor-pointer transition-all duration-300 ease-out focus:outline-none focus:ring-4 focus:ring-primary focus:ring-offset-2",
                 TABLE_TYPE_COLORS[table.table_type] || "bg-gradient-to-br from-background to-card border-border shadow-lg",
@@ -1061,7 +1061,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                     <p className="text-purple-600">Shared table booking ({current.seats_requested} seats)</p>
                   )}
                   <p>Arrived: {format(bookingTime!, 'h:mm a')}</p>
-                  <p>Status: {current.status.replace(/_/g, ' ')}</p>
+                  <p>Status: {titleCase(current.status)}</p>
                   {current.special_requests && (
                     <p className="italic text-secondary-foreground">Note: {current.special_requests}</p>
                   )}
@@ -1404,7 +1404,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
             {selectedTable && (() => {
               const selectedTableData = filteredTables.find(t => t.id === selectedTable)
               const { current } = selectedTableData ? getTableBookingInfo(selectedTableData) : { current: null }
-              return `Table ${selectedTableData?.table_number} selected. ${current ? `Occupied by ${current.guest_name || current.user?.full_name || 'Guest'}, status: ${current.status.replace(/_/g, ' ')}.` : 'Available for booking.'}`
+              return `Table ${selectedTableData?.table_number} selected. ${current ? `Occupied by ${current.guest_name || current.user?.full_name || 'Guest'}, status: ${titleCase(current.status)}.` : 'Available for booking.'}`
             })()}
           </div>
         </div>

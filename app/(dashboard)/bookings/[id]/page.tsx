@@ -51,7 +51,7 @@ import {
 import type { Booking } from "@/types"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
-import { cn } from "@/lib/utils"
+import { cn, titleCase } from "@/lib/utils"
 
 // Enhanced statistics card component with dining status support
 function StatCard({ 
@@ -618,7 +618,7 @@ export default function BookingsPage() {
                           {booking.user?.full_name || booking.guest_name}
                         </span>
                         <Badge variant="secondary" className="text-xs">
-                          {booking.status.replace(/_/g, ' ')}
+                          {titleCase(booking.status)}
                         </Badge>
                         {booking.tables && booking.tables.length > 0 && (
                           <span className="text-sm text-muted-foreground">
@@ -878,7 +878,7 @@ export default function BookingsPage() {
                                   currentBooking.status === 'payment' && "bg-yellow-500"
                                 )}
                               >
-                                {currentBooking.status.replace(/_/g, ' ')}
+                                {titleCase(currentBooking.status)}
                               </Badge>
                               <Progress 
                                 value={TableStatusService.getDiningProgress(currentBooking.status as DiningStatus)} 
