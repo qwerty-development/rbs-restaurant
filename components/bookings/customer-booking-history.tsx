@@ -203,13 +203,10 @@ export function CustomerBookingHistory({ customerId, currentBookingId, restauran
           <Badge className={getFrequencyBadgeColor(data.bookingFrequency)}>
             {getFrequencyText(data.bookingFrequency)}
           </Badge>
-          {data.daysSinceLastVisit !== undefined && (
+          {data.lastVisit && (
             <Badge variant="outline">
               <Clock className="h-3 w-3 mr-1" />
-              {data.daysSinceLastVisit === 0 
-                ? 'Today' 
-                : `${data.daysSinceLastVisit} days ago`
-              }
+              Last: {format(new Date(data.lastVisit), 'MMM d, yyyy')}
             </Badge>
           )}
         </div>

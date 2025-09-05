@@ -127,12 +127,17 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
           .order('booking_time', { ascending: false })
           .limit(5)
 
+        // Calculate actual last visit from completed bookings
+        const lastCompletedBooking = bookingHistory?.find(b => b.status === 'completed')
+        const actualLastVisit = lastCompletedBooking?.booking_time
+
         // Transform data
         const transformedCustomer = {
           ...customerResult,
           tags: customerResult.tags?.map((t: any) => t.tag) || [],
           relationships: relationshipsData || [],
-          bookings: bookingHistory || []
+          bookings: bookingHistory || [],
+          last_visit: actualLastVisit || customerResult.last_visit // Use calculated last visit or fallback to DB value
         }
 
         setCustomerData(transformedCustomer)
