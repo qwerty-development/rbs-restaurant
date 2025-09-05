@@ -316,7 +316,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
             <TabsList className="grid w-full grid-cols-4 flex-shrink-0 mb-4">
               <TabsTrigger value="details">Details</TabsTrigger>
               <TabsTrigger value="customer">Customer</TabsTrigger>
-              <TabsTrigger value="status">Status & Progress</TabsTrigger>
+              <TabsTrigger value="status">Status</TabsTrigger>
               <TabsTrigger value="history">History</TabsTrigger>
             </TabsList>
 
@@ -345,9 +345,11 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                     </div>
                     <div className="space-y-1">
                       <Label className="text-sm text-muted-foreground">Confirmation Code</Label>
-                      <code className="font-mono text-sm bg-muted px-2 py-1 rounded">
-                        {booking.confirmation_code}
-                      </code>
+                      <div>
+                        <code className="font-mono text-sm bg-muted px-2 py-1 rounded">
+                          {booking.confirmation_code}
+                        </code>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -413,9 +415,11 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                     </div>
                     <div className="space-y-1">
                       <Label className="text-sm text-muted-foreground">Status</Label>
-                      <Badge className={cn("text-sm", statusConfig?.bg, statusConfig?.color)}>
-                        {booking.status.replace(/_/g, ' ')}
-                      </Badge>
+                      <div>
+                        <Badge className={cn("text-sm", statusConfig?.bg, statusConfig?.color)}>
+                          {booking.status.replace(/_/g, ' ')}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
 

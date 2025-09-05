@@ -370,31 +370,33 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
       {customerData.notes && customerData.notes.length > 0 && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg flex items-center gap-2">
+            <div className="flex items-start justify-between gap-4">
+              <CardTitle className="text-lg flex items-center gap-2 flex-shrink-0">
                 <StickyNote className="h-5 w-5" />
                 Customer Notes
               </CardTitle>
               {currentUserId && (
-                <QuickCustomerNote 
-                  customerId={customerData.id}
-                  currentUserId={currentUserId}
-                  onNoteAdded={loadCustomerData}
-                />
+                <div className="flex-shrink-0">
+                  <QuickCustomerNote 
+                    customerId={customerData.id}
+                    currentUserId={currentUserId}
+                    onNoteAdded={loadCustomerData}
+                  />
+                </div>
               )}
             </div>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-32">
-              <div className="space-y-3">
+              <div className="space-y-3 pr-2">
                 {customerData.notes
                   .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                   .map((note) => (
                     <div key={note.id} className="border-l-2 border-gray-200 pl-3">
                       <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className="text-sm">{note.note}</p>
-                          <div className="flex items-center gap-2 mt-1">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm break-words">{note.note}</p>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <Badge 
                               variant="outline" 
                               className="text-xs"
