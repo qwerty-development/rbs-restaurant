@@ -1,7 +1,7 @@
 // components/dashboard/pending-requests-panel.tsx
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -15,7 +15,6 @@ import {
   Timer,
   CheckCircle,
   XCircle,
-  AlertCircle,
   Phone,
   MessageSquare,
   Table2,
@@ -26,10 +25,10 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { BookingRequestService } from "@/lib/booking-request-service"
-import { TableAvailabilityService } from "@/lib/table-availability"
 import { toast } from "react-hot-toast"
 import { useQuery } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
+import { TableSelectionModal } from "./table-selection-modal"
 
 interface PendingRequestsPanelProps {
   bookings: any[]
@@ -45,10 +44,10 @@ export function PendingRequestsPanel({
   onUpdate 
 }: PendingRequestsPanelProps) {
   const [processingId, setProcessingId] = useState<string | null>(null)
-  const [selectedTables, setSelectedTables] = useState<Record<string, string[]>>({})
+  const [modalOpen, setModalOpen] = useState(false)
+  const [selectedBooking, setSelectedBooking] = useState<any>(null)
   
   const requestService = new BookingRequestService()
-  const tableService = new TableAvailabilityService()
   const supabase = createClient()
 
   // Filter pending requests
@@ -187,19 +186,28 @@ export function PendingRequestsPanel({
     return availability
   }, [pendingRequests, tableStatusForRequests])
 
-  const handleAccept = async (bookingId: string) => {
-    setProcessingId(bookingId)
+  const handleAcceptClick = (booking: any) => {
+    setSelectedBooking(booking)
+    setModalOpen(true)
+  }
+
+  const handleConfirmTableSelection = async (tableIds: string[]) => {
+    if (!selectedBooking) return
+    
+    setProcessingId(selectedBooking.id)
     
     try {
       const result = await requestService.acceptRequest(
-        bookingId, 
+        selectedBooking.id, 
         userId, 
-        selectedTables[bookingId] || [],
+        tableIds,
         { suggestAlternatives: true }
       )
       
       if (result.success) {
         toast.success("Booking request accepted")
+        setModalOpen(false)
+        setSelectedBooking(null)
         onUpdate()
       } else {
         toast.error(result.error || "Failed to accept request")
@@ -270,7 +278,7 @@ export function PendingRequestsPanel({
 
   return (
     <Card className={cn(
-      "w-full border-2 shadow-xl",
+      "w-full border-2 h-40 shadow-xl",
       urgentCount > 0 
         ? "border-red-400 bg-gradient-to-br from-red-100 to-red-50 animate-pulse" 
         : "border-orange-300 bg-gradient-to-br from-orange-100 to-orange-50"
@@ -315,7 +323,7 @@ export function PendingRequestsPanel({
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <ScrollArea className="h-[450px]">
+        <ScrollArea className="h-[220px]">
           <div className="space-y-4 pr-4">
             {pendingRequests.map((booking) => {
               const bookingTime = new Date(booking.booking_time)
@@ -325,14 +333,13 @@ export function PendingRequestsPanel({
               const expiry = getTimeUntilExpiry(booking)
               const isUrgent = expiry && !expiry.expired && expiry.hoursLeft < 2
               const customerData = customersData[booking.user?.id]
-              const tableStatus = tableStatusForRequests[booking.id] || []
               
               return (
                 <div
                   key={booking.id}
                   className={cn(
-                    "p-5 rounded-xl border-2 bg-white shadow-lg",
-                    "transition-all hover:shadow-xl",
+                    "p-3 rounded-lg border-2 bg-white shadow-md min-h-[140px]",
+                    "transition-all hover:shadow-lg flex flex-col",
                     isProcessing && "opacity-50",
                     !hasAvailableTables && "border-red-300 bg-gradient-to-br from-red-50 to-white",
                     isUrgent && "ring-2 ring-red-400 ring-offset-1"
@@ -409,23 +416,23 @@ export function PendingRequestsPanel({
                     </div>
                   </div>
 
-                  {/* Booking details */}
-                  <div className="grid grid-cols-3 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
-                    <div className="text-center">
-                      <Clock className="h-6 w-6 text-gray-500 mx-auto mb-2" />
-                      <p className="text-base font-semibold">{format(bookingTime, 'h:mm a')}</p>
-                      <p className="text-sm text-gray-600">{format(bookingTime, 'MMM d, yyyy')}</p>
+                  {/* Compact booking details */}
+                  <div className="flex items-center justify-between mb-3 p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="flex items-center gap-1 font-medium">
+                        <Clock className="h-4 w-4 text-gray-500" />
+                        {format(bookingTime, 'h:mm a')}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Users className="h-4 w-4 text-gray-500" />
+                        {booking.party_size}
+                      </span>
+                      <span className="flex items-center gap-1 text-gray-600">
+                        <Timer className="h-4 w-4" />
+                        {booking.turn_time_minutes || 120}m
+                      </span>
                     </div>
-                    <div className="text-center">
-                      <Users className="h-6 w-6 text-gray-500 mx-auto mb-2" />
-                      <p className="text-base font-semibold">{booking.party_size} guests</p>
-                      <p className="text-sm text-gray-600">Party size</p>
-                    </div>
-                    <div className="text-center">
-                      <Timer className="h-6 w-6 text-gray-500 mx-auto mb-2" />
-                      <p className="text-base font-semibold">{booking.turn_time_minutes || 120}m</p>
-                      <p className="text-sm text-gray-600">Duration</p>
-                    </div>
+                    <p className="text-xs text-gray-500">{format(bookingTime, 'MMM d')}</p>
                   </div>
 
                   {/* Special requests */}
@@ -438,91 +445,26 @@ export function PendingRequestsPanel({
                     </div>
                   )}
 
-                  {/* Enhanced table selection with status */}
+                  {/* Table availability summary - compact */}
                   {hasAvailableTables && (
-                    <div className="mb-3">
-                      <p className="text-xs font-medium text-gray-700 mb-2">
-                        Quick table assignment ({availability.singleTables.length} suitable):
+                    <div className="mb-3 p-2 bg-green-50 rounded border border-green-200">
+                      <p className="text-xs text-green-800 font-medium flex items-center gap-1">
+                        <Table2 className="h-3 w-3" />
+                        {availability.singleTables.length} suitable tables available
                       </p>
-                      <div className="grid grid-cols-4 gap-1.5 max-h-20 overflow-y-auto">
-                        {availability.singleTables.slice(0, 12).map((table: any) => {
-                          const isSelected = (selectedTables[booking.id] || []).includes(table.id)
-                          const tableStatusInfo = tableStatus.find(t => t.id === table.id)
-                          
-                          return (
-                            <Button
-                              key={table.id}
-                              size="sm"
-                              variant={isSelected ? "default" : "outline"}
-                              className={cn(
-                                "h-8 text-xs px-2 relative",
-                                isSelected && "bg-blue-600 hover:bg-blue-700 border-blue-600",
-                                !tableStatusInfo?.canBeSelected && "opacity-50 cursor-not-allowed",
-                                tableStatusInfo?.currentlyOccupied && "bg-red-100 border-red-300 text-red-700",
-                                tableStatusInfo?.conflictingBooking && "bg-orange-100 border-orange-300 text-orange-700"
-                              )}
-                              onClick={() => {
-                                if (!tableStatusInfo?.canBeSelected) return
-                                
-                                setSelectedTables(prev => ({
-                                  ...prev,
-                                  [booking.id]: isSelected
-                                    ? prev[booking.id].filter(id => id !== table.id)
-                                    : [...(prev[booking.id] || []), table.id]
-                                }))
-                              }}
-                              disabled={isProcessing || !tableStatusInfo?.canBeSelected}
-                              title={
-                                tableStatusInfo?.currentlyOccupied ? "Currently occupied" :
-                                tableStatusInfo?.conflictingBooking ? "Booked during this time" :
-                                `Table ${table.table_number} (${table.capacity} seats)`
-                              }
-                            >
-                              T{table.table_number}
-                              <span className="ml-1 text-xs opacity-70">({table.capacity})</span>
-                              {!tableStatusInfo?.canBeSelected && (
-                                <div className="absolute inset-0 bg-gray-200 opacity-50 rounded" />
-                              )}
-                            </Button>
-                          )
-                        })}
-                        {availability.singleTables.length > 12 && (
-                          <span className="text-xs text-gray-500 flex items-center col-span-2">
-                            +{availability.singleTables.length - 12} more
-                          </span>
-                        )}
-                      </div>
-                      
-                      {/* Show table status legend */}
-                      <div className="flex items-center gap-3 text-xs text-gray-600 mt-2">
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-white border border-gray-300 rounded"></div>
-                          Available
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-red-100 border border-red-300 rounded"></div>
-                          Occupied
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-orange-100 border border-orange-300 rounded"></div>
-                          Booked
-                        </div>
-                      </div>
                     </div>
                   )}
 
                   {/* Action buttons */}
-                  <div className="flex gap-3">
+                  <div className="flex gap-3 mt-auto pt-3">
                     <Button
                       size="default"
                       className={cn(
                         "flex-1 h-10 font-medium shadow-md",
-                        hasAvailableTables || selectedTables[booking.id]?.length
-                          ? "bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white"
-                          : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                        "bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white"
                       )}
-                      onClick={() => handleAccept(booking.id)}
-                      disabled={isProcessing || (!hasAvailableTables && !selectedTables[booking.id]?.length)}
+                      onClick={() => handleAcceptClick(booking)}
+                      disabled={isProcessing}
                     >
                       <CheckCircle className="h-4 w-4 mr-2" />
                       Accept Request
@@ -544,6 +486,20 @@ export function PendingRequestsPanel({
           </div>
         </ScrollArea>
       </CardContent>
+      
+      {/* Table Selection Modal */}
+      <TableSelectionModal
+        isOpen={modalOpen}
+        onClose={() => {
+          setModalOpen(false)
+          setSelectedBooking(null)
+        }}
+        booking={selectedBooking}
+        allTables={allTables}
+        allBookings={bookings}
+        onConfirmSelection={handleConfirmTableSelection}
+        isProcessing={processingId !== null}
+      />
     </Card>
   )
 }
