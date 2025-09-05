@@ -1191,45 +1191,45 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
         </div>
       </div>
 
-      {/* Edit Mode Toggle - Fixed positioning to avoid section header overlap */}
-      {onTableUpdate && (
-        <div className="fixed top-20 left-4 z-30">
-          <Button
-            size="icon"
-            aria-label={editMode ? "Exit Edit Layout" : "Edit Layout"}
-            variant={editMode ? "destructive" : "secondary"}
-            onClick={() => {
-              setEditMode(!editMode)
-              // Reset drag state when exiting edit mode
-              dragStateRef.current = {
-                tableId: null,
-                element: null,
-                startX: 0,
-                startY: 0,
-                offsetX: 0,
-                offsetY: 0,
-                initialLeft: 0,
-                initialTop: 0,
-                animationId: null,
-                touchId: null,
-                isDragConfirmed: false,
-                startTime: 0
-              }
-            }}
-            className={cn(
-              "shadow-lg transition-all duration-200",
-              editMode 
-                ? "bg-red-600 hover:bg-red-700 text-white" 
-                : "bg-background/90 hover:bg-background text-foreground border border-border"
-            )}
-          >
-            {editMode ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
-          </Button>
-        </div>
-      )}
-
-      Floor Plan Area
+      {/* Floor Plan Area */}
       <div className="flex-1 relative bg-gradient-to-br from-card to-muted overflow-auto px-3 md:px-6" ref={floorPlanRef}>
+        
+        {/* Edit Mode Toggle - Positioned within floor plan area */}
+        {onTableUpdate && (
+          <div className="absolute top-4 left-4 z-30">
+            <Button
+              size="icon"
+              aria-label={editMode ? "Exit Edit Layout" : "Edit Layout"}
+              variant={editMode ? "destructive" : "secondary"}
+              onClick={() => {
+                setEditMode(!editMode)
+                // Reset drag state when exiting edit mode
+                dragStateRef.current = {
+                  tableId: null,
+                  element: null,
+                  startX: 0,
+                  startY: 0,
+                  offsetX: 0,
+                  offsetY: 0,
+                  initialLeft: 0,
+                  initialTop: 0,
+                  animationId: null,
+                  touchId: null,
+                  isDragConfirmed: false,
+                  startTime: 0
+                }
+              }}
+              className={cn(
+                "shadow-lg transition-all duration-200",
+                editMode 
+                  ? "bg-red-600 hover:bg-red-700 text-white" 
+                  : "bg-background/90 hover:bg-background text-foreground border border-border"
+              )}
+            >
+              {editMode ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+            </Button>
+          </div>
+        )}
         
         {/* Floating control buttons - top right */}
         {/* 
