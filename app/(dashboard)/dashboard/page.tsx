@@ -765,12 +765,8 @@ export default function DashboardPage() {
         return
       }
 
-      // Note: Real availability check is handled by the UI before reaching this point
-      // This is just a safety check
-      if (guestData.party_size > sharedTable.capacity) {
-        toast.error(`Party size (${guestData.party_size}) exceeds table capacity (${sharedTable.capacity})`)
-        return
-      }
+      // Note: Capacity checking is now handled by the UI with user confirmation
+      // This allows exceeding capacity when explicitly confirmed by staff
     }
 
     const bookingData = {

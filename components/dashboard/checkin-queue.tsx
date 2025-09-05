@@ -153,6 +153,16 @@ export function CheckInQueue({
   // Shared tables state
   const [selectedSharedTableId, setSelectedSharedTableId] = useState<string>("")
   const [isSharedBookingMode, setIsSharedBookingMode] = useState(false)
+  
+  // Capacity warning state
+  const [showCapacityWarning, setShowCapacityWarning] = useState(false)
+  const [capacityWarningData, setCapacityWarningData] = useState<{
+    table: any
+    partySize: number
+    currentOccupancy: number
+    capacity: number
+    willExceed: number
+  } | null>(null)
 
   // Advanced settings
   const [advancedMode, setAdvancedMode] = useState(false)
@@ -857,6 +867,43 @@ export function CheckInQueue({
     }
   }
 
+  // Helper function to proceed with shared table booking
+  const proceedWithSharedTableBooking = async (partySize: number) => {
+    const sharedBookingData = {
+      customer_id: selectedCustomer?.id || null,
+      user_id: selectedCustomer?.user_id || null,
+      guest_name: selectedCustomer
+        ? (selectedCustomer.profile?.full_name || selectedCustomer.guest_name)
+        : (walkInData.guestName.trim() || `Walk-in ${format(currentTime, 'HH:mm')}`),
+      guest_phone: selectedCustomer
+        ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
+        : (walkInData.guestPhone?.trim() || null),
+      guest_email: selectedCustomer?.guest_email || null,
+      party_size: partySize,
+      booking_time: currentTime.toISOString(),
+      turn_time_minutes: walkInData.estimatedDuration,
+      status: 'arrived',
+      is_shared_booking: true
+    }
+
+    onQuickSeat(sharedBookingData, [selectedSharedTableId])
+    
+    // Reset form
+    setWalkInData({ guestName: "", guestPhone: "", partySize: 2, estimatedDuration: 120, preferences: [] })
+    setSelectedSharedTableId("")
+    setSelectedCustomer(null)
+    setCustomerSearch("")
+    
+    const sharedTable = sharedTablesSummary.find(t => t.table_id === selectedSharedTableId)
+    toast.success(
+      <div>
+        <p className="font-medium">Shared Table Walk-in Seated</p>
+        <p className="text-sm mt-1">{sharedBookingData.guest_name} → Table {sharedTable?.table_number} ({partySize} seats)</p>
+      </div>,
+      { duration: 3000 }
+    )
+  }
+
   const handleWalkIn = async () => {
     // For shared table bookings, check shared table selection
     if (isSharedBookingMode) {
@@ -866,41 +913,32 @@ export function CheckInQueue({
       }
 
       const partySize = typeof walkInData.partySize === 'number' ? walkInData.partySize : (parseInt(walkInData.partySize as string) || 1)
-
-      // Create shared table booking
-      const sharedBookingData = {
-        customer_id: selectedCustomer?.id || null,
-        user_id: selectedCustomer?.user_id || null,
-        guest_name: selectedCustomer
-          ? (selectedCustomer.profile?.full_name || selectedCustomer.guest_name)
-          : (walkInData.guestName.trim() || `Walk-in ${format(currentTime, 'HH:mm')}`),
-        guest_phone: selectedCustomer
-          ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
-          : (walkInData.guestPhone?.trim() || null),
-        guest_email: selectedCustomer?.guest_email || null,
-        party_size: partySize,
-        booking_time: currentTime.toISOString(),
-        turn_time_minutes: walkInData.estimatedDuration,
-        status: 'arrived',
-        is_shared_booking: true
+      const selectedTable = sharedTablesSummary.find(t => t.table_id === selectedSharedTableId)
+      
+      if (!selectedTable) {
+        toast.error("Selected table not found")
+        return
       }
 
-      onQuickSeat(sharedBookingData, [selectedSharedTableId])
+      // Check if adding this party would exceed capacity
+      const newOccupancy = selectedTable.current_occupancy + partySize
+      const willExceedCapacity = newOccupancy > selectedTable.capacity
       
-      // Reset form
-      setWalkInData({ guestName: "", guestPhone: "", partySize: 2, estimatedDuration: 120, preferences: [] })
-      setSelectedSharedTableId("")
-      setSelectedCustomer(null)
-      setCustomerSearch("")
-      
-      const sharedTable = sharedTablesSummary.find(t => t.table_id === selectedSharedTableId)
-      toast.success(
-        <div>
-          <p className="font-medium">Shared Table Walk-in Seated</p>
-          <p className="text-sm mt-1">{sharedBookingData.guest_name} → Table {sharedTable?.table_number} ({partySize} seats)</p>
-        </div>,
-        { duration: 3000 }
-      )
+      if (willExceedCapacity) {
+        // Show capacity warning dialog
+        setCapacityWarningData({
+          table: selectedTable,
+          partySize,
+          currentOccupancy: selectedTable.current_occupancy,
+          capacity: selectedTable.capacity,
+          willExceed: newOccupancy - selectedTable.capacity
+        })
+        setShowCapacityWarning(true)
+        return
+      }
+
+      // Proceed with booking if capacity is not exceeded
+      await proceedWithSharedTableBooking(partySize)
       return
     }
 
@@ -2008,23 +2046,41 @@ export function CheckInQueue({
                       Select Shared Table
                     </Label>
                     <div className="grid grid-cols-2 gap-1">
-                      {sharedTablesSummary.map((table) => (
-                        <Button
-                          key={table.table_id}
-                          variant={selectedSharedTableId === table.table_id ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setSelectedSharedTableId(table.table_id)}
-                          className="h-8 text-xs justify-start"
-                        >
-                          <div className="flex items-center gap-1">
-                            <Users className="h-3 w-3" />
-                            <span>T{table.table_number}</span>
-                            <span className="text-muted-foreground">
-                              ({table.current_occupancy}/{table.capacity})
-                            </span>
-                          </div>
-                        </Button>
-                      ))}
+                      {sharedTablesSummary.map((table) => {
+                        const partySize = typeof walkInData.partySize === 'number' ? walkInData.partySize : (parseInt(walkInData.partySize as string) || 1)
+                        const wouldExceedCapacity = (table.current_occupancy + partySize) > table.capacity
+                        const availableSeats = table.capacity - table.current_occupancy
+                        
+                        return (
+                          <Button
+                            key={table.table_id}
+                            variant={selectedSharedTableId === table.table_id ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setSelectedSharedTableId(table.table_id)}
+                            className={cn(
+                              "h-8 text-xs justify-start",
+                              wouldExceedCapacity && selectedSharedTableId !== table.table_id && "border-orange-300 bg-orange-50 hover:bg-orange-100"
+                            )}
+                          >
+                            <div className="flex items-center gap-1">
+                              <Users className="h-3 w-3" />
+                              <span>T{table.table_number}</span>
+                              <span className={cn(
+                                "text-muted-foreground",
+                                wouldExceedCapacity && "text-orange-600"
+                              )}>
+                                ({table.current_occupancy}/{table.capacity})
+                              </span>
+                              {wouldExceedCapacity && (
+                                <AlertTriangle className="h-3 w-3 text-orange-500 ml-1" />
+                              )}
+                              {availableSeats < partySize && !wouldExceedCapacity && (
+                                <span className="text-red-500 text-xs ml-1">Full</span>
+                              )}
+                            </div>
+                          </Button>
+                        )
+                      })}
                     </div>
                   </div>
                 ) : (
@@ -2255,6 +2311,76 @@ export function CheckInQueue({
               disabled={!tableSwitchModal.selectedOption && tableSwitchModal.selectedNewTableIds.length === 0}
             >
               Assign Tables
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Capacity Warning Dialog */}
+      <Dialog open={showCapacityWarning} onOpenChange={setShowCapacityWarning}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-600">
+              <AlertTriangle className="h-5 w-5" />
+              Capacity Warning
+            </DialogTitle>
+            <DialogDescription>
+              This shared table booking will exceed the table's normal capacity.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {capacityWarningData && (
+            <div className="space-y-4">
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Users className="h-4 w-4 text-orange-600" />
+                  <span className="font-medium">Table {capacityWarningData.table.table_number}</span>
+                </div>
+                <div className="text-sm space-y-1">
+                  <p>Current occupancy: <span className="font-semibold">{capacityWarningData.currentOccupancy} seats</span></p>
+                  <p>Normal capacity: <span className="font-semibold">{capacityWarningData.capacity} seats</span></p>
+                  <p>Requested party size: <span className="font-semibold">{capacityWarningData.partySize} seats</span></p>
+                  <div className="border-t border-orange-200 pt-2 mt-2">
+                    <p className="text-orange-700">
+                      New total: <span className="font-semibold">{capacityWarningData.currentOccupancy + capacityWarningData.partySize} seats</span>
+                    </p>
+                    <p className="text-orange-700">
+                      Exceeding by: <span className="font-semibold">{capacityWarningData.willExceed} seats</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-sm text-amber-800">
+                  ⚠️ This may result in overcrowding and affect the dining experience. 
+                  Consider suggesting an alternative table if available.
+                </p>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCapacityWarning(false)
+                setCapacityWarningData(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={async () => {
+                setShowCapacityWarning(false)
+                if (capacityWarningData) {
+                  await proceedWithSharedTableBooking(capacityWarningData.partySize)
+                }
+                setCapacityWarningData(null)
+              }}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              Proceed Anyway
             </Button>
           </DialogFooter>
         </DialogContent>
