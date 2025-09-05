@@ -59,7 +59,7 @@ import {
 import { cn, titleCase } from "@/lib/utils"
 import type { Booking } from "@/types"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "../ui/card"
-import { BookingCustomerDetails } from "./booking-customer-details"
+import BookingCustomerDetails from "./booking-customer-details"
 
 interface BookingDetailsProps {
   booking: Booking
@@ -521,6 +521,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
 
               <TabsContent value="customer" className="space-y-6 m-0">
                 <BookingCustomerDetails 
+                  key={`customer-details-${booking.id}`}
                   booking={booking} 
                   restaurantId={booking.restaurant_id}
                   currentUserId={userId}

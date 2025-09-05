@@ -1,7 +1,7 @@
 // components/bookings/booking-customer-details.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, memo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { format } from "date-fns"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -46,14 +46,29 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
   const [loading, setLoading] = useState(true)
   
   const supabase = createClient()
+  
+  // Create a unique instance ID to ensure component isolation
+  const instanceId = `${booking.id}-${Date.now()}`
 
   useEffect(() => {
+    // Clear previous customer data when booking changes to prevent showing wrong data
+    setCustomerData(null)
+    setLoading(true)
+    
     if (booking.user_id || booking.guest_email) {
       loadCustomerData()
     } else {
       setLoading(false)
     }
-  }, [booking.user_id, booking.guest_email, restaurantId])
+  }, [booking.id, booking.user_id, booking.guest_email, restaurantId])
+
+  // Clean up function to ensure no state bleeding between instances
+  useEffect(() => {
+    return () => {
+      setCustomerData(null)
+      setLoading(false)
+    }
+  }, [])
 
   const loadCustomerData = async () => {
     try {
@@ -74,13 +89,6 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
           ),
           tags:customer_tag_assignments(
             tag:customer_tags(*)
-          ),
-          notes:customer_notes(
-            *,
-            created_by_profile:profiles!customer_notes_created_by_fkey(
-              full_name,
-              avatar_url
-            )
           )
         `)
         .eq('restaurant_id', restaurantId)
@@ -93,6 +101,34 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
       }
 
       const { data: customerResult, error } = await query.single()
+
+      if (error) {
+        console.error('Error loading customer data:', error)
+        return
+      }
+
+      let customerNotes: any[] = []
+      
+      // Load customer notes separately to ensure proper filtering
+      if (customerResult) {
+        const { data: notesData, error: notesError } = await supabase
+          .from('customer_notes')
+          .select(`
+            *,
+            created_by_profile:profiles!customer_notes_created_by_fkey(
+              full_name,
+              avatar_url
+            )
+          `)
+          .eq('customer_id', customerResult.id)
+          .order('created_at', { ascending: false })
+
+        if (notesError) {
+          console.error('Error loading customer notes:', notesError)
+        } else {
+          customerNotes = notesData || []
+        }
+      }
 
       if (error) {
         console.error('Error loading customer data:', error)
@@ -135,6 +171,7 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
         const transformedCustomer = {
           ...customerResult,
           tags: customerResult.tags?.map((t: any) => t.tag) || [],
+          notes: customerNotes, // Use separately loaded notes
           relationships: relationshipsData || [],
           bookings: bookingHistory || [],
           last_visit: actualLastVisit || customerResult.last_visit // Use calculated last visit or fallback to DB value
@@ -384,9 +421,13 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
               {currentUserId && (
                 <div className="flex-shrink-0">
                   <QuickCustomerNote 
+                    key={`note-add-${customerData.id}-${instanceId}`}
                     customerId={customerData.id}
                     currentUserId={currentUserId}
-                    onNoteAdded={loadCustomerData}
+                    onNoteAdded={() => {
+                      // Force reload customer data after adding a note
+                      loadCustomerData()
+                    }}
                   />
                 </div>
               )}
@@ -444,9 +485,13 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
             <div className="text-center py-4">
               <p className="text-muted-foreground mb-4">No notes for this customer yet.</p>
               <QuickCustomerNote 
+                key={`note-add-empty-${customerData.id}-${instanceId}`}
                 customerId={customerData.id}
                 currentUserId={currentUserId}
-                onNoteAdded={loadCustomerData}
+                onNoteAdded={() => {
+                  // Force reload customer data after adding a note
+                  loadCustomerData()
+                }}
               />
             </div>
           </CardContent>
@@ -578,3 +623,6 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
     </div>
   )
 }
+
+// Memoize the component to prevent unnecessary re-renders
+export default memo(BookingCustomerDetails)
