@@ -135,7 +135,7 @@ export function TableSelectionModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleCancel}>
-      <DialogContent className="max-w-5xl w-[95vw] max-h-[95vh] h-auto p-0 overflow-hidden flex flex-col">
+      <DialogContent className="max-w-5xl w-[95vw] max-h-[95vh] h-auto p-0 overflow-auto flex flex-col">
         <DialogHeader className="p-6 pb-4">
           <DialogTitle className="text-xl font-bold flex items-center gap-2">
             <Table2 className="h-5 w-5" />
@@ -169,7 +169,7 @@ export function TableSelectionModal({
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                <span>{suitableTablesCount} suitable size</span>
+                <span>{suitableTablesCount} suitable</span>
               </div>
               <div className="flex items-center gap-1">
                 <Users className="h-4 w-4 text-gray-600" />
@@ -280,7 +280,7 @@ export function TableSelectionModal({
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                <span>Suitable size</span>
+                <span>Suitable</span>
               </div>
             </div>
             
@@ -291,7 +291,7 @@ export function TableSelectionModal({
                 disabled={isProcessing}
               >
                 <X className="h-4 w-4 mr-2" />
-                Cancel
+               
               </Button>
               <Button
                 onClick={handleConfirm}
@@ -299,7 +299,7 @@ export function TableSelectionModal({
                 className="bg-green-600 hover:bg-green-700"
               >
                 <CheckCircle className="h-4 w-4 mr-2" />
-                Confirm Selection ({selectedTableIds.length} tables)
+            
               </Button>
             </div>
           </div>
