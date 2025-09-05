@@ -35,7 +35,8 @@ import {
   Activity,
   TrendingUp,
   Users,
-  Info
+  Info,
+  Search
 } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -163,6 +164,9 @@ export function CheckInQueue({
     capacity: number
     willExceed: number
   } | null>(null)
+  
+  // Table search state
+  const [tableSearchQuery, setTableSearchQuery] = useState("")
 
   // Advanced settings
   const [advancedMode, setAdvancedMode] = useState(false)
@@ -590,6 +594,23 @@ export function CheckInQueue({
   }, [tables, bookings, currentTime])
 
   const availableTables = tableStatus.filter(t => t.is_active && !t.isOccupied)
+
+  // Filter tables based on search query
+  const filteredAvailableTables = useMemo(() => {
+    if (!tableSearchQuery.trim()) return availableTables
+    return availableTables.filter(table => 
+      table.table_number.toLowerCase().includes(tableSearchQuery.toLowerCase()) ||
+      table.section?.name?.toLowerCase().includes(tableSearchQuery.toLowerCase())
+    )
+  }, [availableTables, tableSearchQuery])
+  
+  const filteredSharedTables = useMemo(() => {
+    if (!tableSearchQuery.trim()) return sharedTablesSummary
+    return sharedTablesSummary.filter(table => 
+      table.table_number.toLowerCase().includes(tableSearchQuery.toLowerCase()) ||
+      table.section_name?.toLowerCase().includes(tableSearchQuery.toLowerCase())
+    )
+  }, [sharedTablesSummary, tableSearchQuery])
 
   // Enhanced handlers
   const handleCustomerSelect = (customer: any) => {
@@ -2006,6 +2027,20 @@ export function CheckInQueue({
                   </div>
                 </div>
 
+                {/* Table Search */}
+                <div className="space-y-1">
+                  <Label className="text-xs text-foreground">Search Tables</Label>
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by table number or section..."
+                      value={tableSearchQuery}
+                      onChange={(e) => setTableSearchQuery(e.target.value)}
+                      className="pl-7 h-7 text-xs"
+                    />
+                  </div>
+                </div>
+
                 {/* Booking Mode Toggle */}
                 <div className="space-y-2">
                   <Label className="text-xs text-foreground mb-1 block">
@@ -2046,41 +2081,47 @@ export function CheckInQueue({
                       Select Shared Table
                     </Label>
                     <div className="grid grid-cols-2 gap-1">
-                      {sharedTablesSummary.map((table) => {
-                        const partySize = typeof walkInData.partySize === 'number' ? walkInData.partySize : (parseInt(walkInData.partySize as string) || 1)
-                        const wouldExceedCapacity = (table.current_occupancy + partySize) > table.capacity
-                        const availableSeats = table.capacity - table.current_occupancy
-                        
-                        return (
-                          <Button
-                            key={table.table_id}
-                            variant={selectedSharedTableId === table.table_id ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setSelectedSharedTableId(table.table_id)}
-                            className={cn(
-                              "h-8 text-xs justify-start",
-                              wouldExceedCapacity && selectedSharedTableId !== table.table_id && "border-orange-300 bg-orange-50 hover:bg-orange-100"
-                            )}
-                          >
-                            <div className="flex items-center gap-1">
-                              <Users className="h-3 w-3" />
-                              <span>T{table.table_number}</span>
-                              <span className={cn(
-                                "text-muted-foreground",
-                                wouldExceedCapacity && "text-orange-600"
-                              )}>
-                                ({table.current_occupancy}/{table.capacity})
-                              </span>
-                              {wouldExceedCapacity && (
-                                <AlertTriangle className="h-3 w-3 text-orange-500 ml-1" />
+                      {filteredSharedTables.length > 0 ? (
+                        filteredSharedTables.map((table) => {
+                          const partySize = typeof walkInData.partySize === 'number' ? walkInData.partySize : (parseInt(walkInData.partySize as string) || 1)
+                          const wouldExceedCapacity = (table.current_occupancy + partySize) > table.capacity
+                          const availableSeats = table.capacity - table.current_occupancy
+                          
+                          return (
+                            <Button
+                              key={table.table_id}
+                              variant={selectedSharedTableId === table.table_id ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setSelectedSharedTableId(table.table_id)}
+                              className={cn(
+                                "h-8 text-xs justify-start",
+                                wouldExceedCapacity && selectedSharedTableId !== table.table_id && "border-orange-300 bg-orange-50 hover:bg-orange-100"
                               )}
-                              {availableSeats < partySize && !wouldExceedCapacity && (
-                                <span className="text-red-500 text-xs ml-1">Full</span>
-                              )}
-                            </div>
-                          </Button>
-                        )
-                      })}
+                            >
+                              <div className="flex items-center gap-1">
+                                <Users className="h-3 w-3" />
+                                <span>T{table.table_number}</span>
+                                <span className={cn(
+                                  "text-muted-foreground",
+                                  wouldExceedCapacity && "text-orange-600"
+                                )}>
+                                  ({table.current_occupancy}/{table.capacity})
+                                </span>
+                                {wouldExceedCapacity && (
+                                  <AlertTriangle className="h-3 w-3 text-orange-500 ml-1" />
+                                )}
+                                {availableSeats < partySize && !wouldExceedCapacity && (
+                                  <span className="text-red-500 text-xs ml-1">Full</span>
+                                )}
+                              </div>
+                            </Button>
+                          )
+                        })
+                      ) : (
+                        <div className="col-span-2 text-center text-xs text-muted-foreground py-2">
+                          {tableSearchQuery ? "No shared tables match your search" : "No shared tables available"}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -2089,29 +2130,35 @@ export function CheckInQueue({
                       Select Tables
                     </Label>
                     <div className="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto">
-                      {availableTables.map((table) => (
-                        <Button
-                          key={table.id}
-                          variant={selectedTableIds.includes(table.id) ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => {
-                            setSelectedTableIds(prev => 
-                              prev.includes(table.id) 
-                                ? prev.filter(id => id !== table.id)
-                                : [...prev, table.id]
-                            )
-                          }}
-                          className="h-8 text-xs justify-start"
-                        >
-                          <div className="flex items-center gap-1">
-                            <Table2 className="h-3 w-3" />
-                            <span>T{table.table_number}</span>
-                            <span className="text-muted-foreground">
-                              ({table.min_capacity}-{table.max_capacity})
-                            </span>
-                          </div>
-                        </Button>
-                      ))}
+                      {filteredAvailableTables.length > 0 ? (
+                        filteredAvailableTables.map((table) => (
+                          <Button
+                            key={table.id}
+                            variant={selectedTableIds.includes(table.id) ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => {
+                              setSelectedTableIds(prev => 
+                                prev.includes(table.id) 
+                                  ? prev.filter(id => id !== table.id)
+                                  : [...prev, table.id]
+                              )
+                            }}
+                            className="h-8 text-xs justify-start"
+                          >
+                            <div className="flex items-center gap-1">
+                              <Table2 className="h-3 w-3" />
+                              <span>T{table.table_number}</span>
+                              <span className="text-muted-foreground">
+                                ({table.min_capacity}-{table.max_capacity})
+                              </span>
+                            </div>
+                          </Button>
+                        ))
+                      ) : (
+                        <div className="col-span-2 text-center text-xs text-muted-foreground py-2">
+                          {tableSearchQuery ? "No tables match your search" : "No tables available"}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
