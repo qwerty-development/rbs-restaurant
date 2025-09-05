@@ -278,7 +278,7 @@ export function PendingRequestsPanel({
 
   return (
     <Card className={cn(
-      "w-full border-2 h-40 shadow-xl",
+      "w-full border-2 max-h-[400px] shadow-xl flex flex-col",
       urgentCount > 0 
         ? "border-red-400 bg-gradient-to-br from-red-100 to-red-50 animate-pulse" 
         : "border-orange-300 bg-gradient-to-br from-orange-100 to-orange-50"
@@ -322,8 +322,8 @@ export function PendingRequestsPanel({
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="pt-0">
-        <ScrollArea className="h-[220px]">
+      <CardContent className="pt-0 flex-1 overflow-hidden">
+        <ScrollArea className="h-[280px]">
           <div className="space-y-4 pr-4">
             {pendingRequests.map((booking) => {
               const bookingTime = new Date(booking.booking_time)
