@@ -619,55 +619,77 @@ export default function BookingsPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [soundEnabled, showAnalytics, handleRefresh])
 
-  // Table assignment functions
-  const openTableAssignment = useCallback(async (bookingId: string) => {
-    setAssignmentBookingId(bookingId)
-    setIsCheckingAvailability(true)
-    
+  // Table assignment functions - Optimized for fast modal opening
+  const openTableAssignment = useCallback((bookingId: string) => {
     const booking = allBookings?.find(b => b.id === bookingId)
     if (!booking) return
     
-    try {
-      // Get all available tables for the booking time
-      const { data: allTables } = await supabase
-        .from("restaurant_tables")
-        .select("*")
-        .eq("restaurant_id", restaurantId)
-        .eq("is_active", true)
-        .order("table_number")
+    // Open modal immediately for better UX
+    setAssignmentBookingId(bookingId)
+    setShowTableAssignment(true)
+    
+    // Pre-select currently assigned tables immediately
+    const currentTableIds = booking.tables?.map(t => t.id) || []
+    setSelectedTablesForAssignment(currentTableIds)
+    
+    // Clear previous data and start loading
+    setAvailableTablesForAssignment([])
+    setIsCheckingAvailability(true)
+  }, [allBookings])
+
+  // Load table availability data (runs after modal opens)
+  const { data: tableAvailabilityData } = useQuery({
+    queryKey: ["table-availability", restaurantId, assignmentBookingId, showTableAssignment],
+    queryFn: async () => {
+      if (!showTableAssignment || !assignmentBookingId) return null
       
-      if (!allTables) return
+      const booking = allBookings?.find(b => b.id === assignmentBookingId)
+      if (!booking) return null
       
-      // Check availability for each table
-      const availabilityPromises = allTables.map(async (table) => {
-        const availability = await tableService.checkTableAvailability(
-          restaurantId,
-          [table.id],
-          new Date(booking.booking_time),
-          booking.turn_time_minutes || 120
-        )
-        return {
-          ...table,
-          isAvailable: availability.available,
-          conflictReason: availability.conflicts?.[0]?.reason || (availability.available ? null : "Table unavailable")
-        }
-      })
-      
-      const tablesWithAvailability = await Promise.all(availabilityPromises)
-      setAvailableTablesForAssignment(tablesWithAvailability)
-      
-      // Pre-select currently assigned tables
-      const currentTableIds = booking.tables?.map(t => t.id) || []
-      setSelectedTablesForAssignment(currentTableIds)
-      
-      setShowTableAssignment(true)
-    } catch (error) {
-      console.error("Error checking table availability:", error)
-      toast.error("Failed to check table availability")
-    } finally {
+      try {
+        // Get all tables
+        const { data: allTables } = await supabase
+          .from("restaurant_tables")
+          .select("*")
+          .eq("restaurant_id", restaurantId)
+          .eq("is_active", true)
+          .order("table_number")
+        
+        if (!allTables) return null
+        
+        // Check availability for each table
+        const availabilityPromises = allTables.map(async (table) => {
+          const availability = await tableService.checkTableAvailability(
+            restaurantId,
+            [table.id],
+            new Date(booking.booking_time),
+            booking.turn_time_minutes || 120
+          )
+          return {
+            ...table,
+            isAvailable: availability.available,
+            conflictReason: availability.conflicts?.[0]?.reason || (availability.available ? null : "Table unavailable")
+          }
+        })
+        
+        return await Promise.all(availabilityPromises)
+      } catch (error) {
+        console.error("Error checking table availability:", error)
+        toast.error("Failed to check table availability")
+        return null
+      }
+    },
+    enabled: showTableAssignment && !!assignmentBookingId && !!restaurantId,
+    staleTime: 30000, // Cache for 30 seconds
+  })
+
+  // Update availability data when loaded
+  useEffect(() => {
+    if (tableAvailabilityData) {
+      setAvailableTablesForAssignment(tableAvailabilityData)
       setIsCheckingAvailability(false)
     }
-  }, [allBookings, restaurantId, supabase, tableService])
+  }, [tableAvailabilityData])
 
   // Assign tables to booking
   const assignTablesMutation = useMutation({
@@ -922,6 +944,14 @@ export default function BookingsPage() {
       }).length
     }
   }, [allBookings, now])
+
+  // Auto-reset request filter when no pending bookings exist
+  useEffect(() => {
+    // Only reset if we're filtering by pending but there are no pending bookings
+    if (requestFilter === "pending" && bookingStats.pending === 0) {
+      setRequestFilter("all")
+    }
+  }, [requestFilter, bookingStats.pending])
 
   return (
     <div className="space-y-6 tablet:space-y-8 animate-in fade-in-0 duration-500">
@@ -1310,17 +1340,7 @@ export default function BookingsPage() {
                           Guests may arrive without tables ready!
                         </div>
                       </div>
-                      <Button 
-                        size="default" 
-                        onClick={() => {
-                          setViewMode("tables")
-                          setStatusFilter("confirmed")
-                          toast.success('Switching to table assignment mode! 🏓')
-                        }}
-                        className="min-h-touch-lg font-bold bg-red-600 hover:bg-red-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 animate-pulse"
-                      >
-                        ⚡ Assign Tables Now
-                      </Button>
+                      
                     </AlertDescription>
                   </Alert>
                 )}
