@@ -454,37 +454,38 @@ export function TodaysTimeline({
   return (
     <Card className="w-full max-w-6xl mx-auto">
       <CardHeader className="pb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-3 text-2xl">
-              <TrendingUp className="h-6 w-6" />
-              Today's Timeline
-            </CardTitle>
-            <CardDescription className="text-base mt-1">
-              <span suppressHydrationWarning>
-                {clientTime ? format(clientTime, "EEEE, MMMM d, yyyy • h:mm a") : "Loading..."}
-              </span>
-            </CardDescription>
+        <div className="flex items-start justify-between w-full">
+          <div className="flex items-center gap-3">
+            <TrendingUp className="h-6 w-6" />
+            <div>
+              <CardTitle className="flex items-center gap-2 text-2xl">Today's Timeline</CardTitle>
+              <CardDescription className="mt-0 text-sm">
+                <span suppressHydrationWarning>
+                  {clientTime ? format(clientTime, "EEEE, MMMM d, yyyy • h:mm a") : "Loading..."}
+                </span>
+              </CardDescription>
+            </div>
           </div>
-          
-          <div className="flex items-center gap-4">
-            <div className="grid grid-cols-4 gap-4 text-sm">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-amber-600">{stats.needsAttention}</div>
-                <div className="text-muted-foreground">Attention</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-purple-600">{stats.currentlyDining}</div>
-                <div className="text-muted-foreground">Currently Dining</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
-                <div className="text-muted-foreground">Completed</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
-                <div className="text-muted-foreground">Total Today</div>
-              </div>
+        </div>
+
+        {/* Stats row moved below the title and date/time */}
+        <div className="w-full mt-4">
+          <div className="grid grid-cols-4 gap-4 text-sm">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-amber-600">{stats.needsAttention}</div>
+              <div className="text-muted-foreground">Attention</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">{stats.currentlyDining}</div>
+              <div className="text-muted-foreground">Currently Dining</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
+              <div className="text-muted-foreground">Completed</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
+              <div className="text-muted-foreground">Total Today</div>
             </div>
           </div>
         </div>
@@ -492,22 +493,23 @@ export function TodaysTimeline({
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="h-auto p-1 bg-muted rounded-lg">
             <div className="flex flex-wrap gap-1 w-full">
-              <TabsTrigger value="overview" className="flex-1 min-w-0 text-xs sm:text-sm">
+              <TabsTrigger value="overview" className="flex-1 min-w-0 text-xs sm:text-sm truncate whitespace-nowrap">
                 Overview
               </TabsTrigger>
-              <TabsTrigger value="attention" className="flex-1 min-w-0 text-xs sm:text-sm">
-                <span className="hidden sm:inline">Needs </span>Attention
+              <TabsTrigger value="attention" className="flex-1 min-w-0 text-xs sm:text-sm truncate whitespace-nowrap">
+               
+              Critical
                 <span className="ml-1 px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-xs">
                   {stats.needsAttention}
                 </span>
               </TabsTrigger>
-              <TabsTrigger value="dining" className="flex-1 min-w-0 text-xs sm:text-sm">
+              <TabsTrigger value="dining" className="flex-1 min-w-0 text-xs sm:text-sm truncate whitespace-nowrap">
                 Dining
                 <span className="ml-1 px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-xs">
                   {stats.currentlyDining}
                 </span>
               </TabsTrigger>
-              <TabsTrigger value="schedule" className="flex-1 min-w-0 text-xs sm:text-sm">
+              <TabsTrigger value="schedule" className="flex-1 min-w-0 text-xs sm:text-sm truncate whitespace-nowrap">
                 Schedule
               </TabsTrigger>
             </div>

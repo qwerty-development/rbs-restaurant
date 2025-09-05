@@ -24,7 +24,6 @@ import {
   UserCheck,
   Hand,
   Eye,
-  Move,
   Layers,
   Grid3X3,
   Home,
@@ -876,80 +875,77 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                 }
               }}
             >
-              {/* Edit mode drag handle */}
-              {editMode && !isOccupied && (
-                <div className="absolute -top-2 -right-2 p-1.5 bg-primary text-primary-foreground rounded-full shadow-lg z-10">
-                  <Move className="h-3 w-3" />
-                </div>
-              )}
+           
 
-              {/* Table header - Ultra compact */}
-              <div className="flex flex-col items-center mb-0.5">
-                <div className="flex items-center gap-0.5">
+              {/* Table header - Improved visibility */}
+              <div className="flex flex-col items-center mb-1">
+                <div className="flex items-center gap-1">
                   <StatusIcon className={cn(
-                    "h-2.5 w-2.5 text-current",
+                    "h-4 w-4 text-current",
                     isSharedTable && "text-purple-500"
                   )} />
-                  <span className="font-bold text-[10px] text-foreground">T{table.table_number}</span>
+                  <span className="font-bold text-sm text-foreground">T{table.table_number}</span>
                   {isSharedTable && (
-                    <div className="bg-purple-500 text-white text-[6px] px-1 rounded-full">
+                    <div className="bg-purple-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-semibold">
                       SHARED
                     </div>
                   )}
                 </div>
-                <span className="text-[8px] text-muted-foreground font-medium">
-                  <UserCheck className="h-2.5 w-2.5 inline-block mr-0.5" />
-                  {isSharedTable ? (
-                    <span className="text-purple-600">
-                      {sharedTableInfo?.current_occupancy || 0}/{sharedTableInfo?.capacity || table.max_capacity}
-                    </span>
-                  ) : (
-                    table.max_capacity
-                  )}
-                </span>
+                <div className="flex items-center justify-center mt-1">
+                  <UserCheck className="h-3 w-3 inline-block mr-1" />
+                  <span className="text-xs text-muted-foreground font-semibold">
+                    {isSharedTable ? (
+                      <span className="text-purple-600">
+                        {sharedTableInfo?.current_occupancy || 0}/{sharedTableInfo?.capacity || table.max_capacity}
+                      </span>
+                    ) : (
+                      table.max_capacity
+                    )}
+                  </span>
+                </div>
               </div>
 
               {/* Current booking info */}
               {isOccupied && current ? (
-                <div className="space-y-1">
-                  {/* Guest info - Simplified with icons */}
-                  <div>
-                    <p className="font-bold text-[9px] truncate text-foreground mb-0.5 leading-tight">
+                <div className="space-y-2">
+                  {/* Guest info - Enhanced readability */}
+                  <div className="text-center">
+                    <p className="font-bold text-xs truncate text-foreground mb-1 leading-tight">
                       {(current.guest_name || current.user?.full_name || 'Guest').split(' ')[0]}
                       {current.is_shared_booking && (
-                        <span className="ml-1 text-purple-500">({current.seats_requested} seats)</span>
+                        <span className="ml-1 text-purple-500 text-[10px]">({current.seats_requested} seats)</span>
                       )}
                     </p>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {/* Party size with visual indicators */}
-                        <div className={cn(
-                          "flex items-center px-1 py-0.5 rounded text-[8px] font-bold",
-                          current.party_size > table.max_capacity 
-                            ? "bg-red-500 text-white" 
-                            : "bg-blue-500 text-white"
-                        )}>
-                          <UserCheck className="h-2.5 w-2.5 inline-block mr-0.5" />{current.party_size}{current.party_size > table.max_capacity && '⚠️'}
-                        </div>
-                        
-                        {/* Time indicator with urgency colors */}
-                        <div className={cn(
-                          "flex items-center px-1 py-0.5 rounded text-[8px] font-bold",
-                          minutesSinceArrival > (current.turn_time_minutes || 120) 
-                            ? "bg-red-500 text-white" :
-                          minutesSinceArrival > (current.turn_time_minutes || 120) * 0.8 
-                            ? "bg-orange-500 text-white" :
-                          "bg-green-500 text-white"
-                        )}>
-                          ⏱️{minutesSinceArrival}m{minutesSinceArrival > (current.turn_time_minutes || 120) && '⚠️'}
-                        </div>
+                    <div className="flex items-center justify-center gap-2">
+                      {/* Party size with visual indicators */}
+                      <div className={cn(
+                        "flex items-center px-2 py-1 rounded text-xs font-bold",
+                        current.party_size > table.max_capacity 
+                          ? "bg-red-500 text-white" 
+                          : "bg-blue-500 text-white"
+                      )}>
+                        <UserCheck className="h-3 w-3 inline-block mr-1" />{current.party_size}{current.party_size > table.max_capacity && '⚠️'}
                       </div>
                       
-                      {/* Compact call button */}
-                      {(current.user?.phone_number || current.guest_phone) && (
+                      {/* Time indicator with urgency colors */}
+                      <div className={cn(
+                        "flex items-center px-2 py-1 rounded text-xs font-bold",
+                        minutesSinceArrival > (current.turn_time_minutes || 120) 
+                          ? "bg-red-500 text-white" :
+                        minutesSinceArrival > (current.turn_time_minutes || 120) * 0.8 
+                          ? "bg-orange-500 text-white" :
+                        "bg-green-500 text-white"
+                      )}>
+                        ⏱️{minutesSinceArrival}m{minutesSinceArrival > (current.turn_time_minutes || 120) && '⚠️'}
+                      </div>
+                    </div>
+                    
+                    {/* Call button - centered */}
+                    {(current.user?.phone_number || current.guest_phone) && (
+                      <div className="flex justify-center mt-1">
                         <button
                           aria-label={`Call guest`}
-                          className="text-xs hover:scale-125 transition-transform"
+                          className="text-sm hover:scale-125 transition-transform"
                           onClick={(e) => {
                             e.stopPropagation()
                             const phone = current.user?.phone_number || current.guest_phone
@@ -958,13 +954,13 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                         >
                           📞
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Minimal status indicator */}
-                  <div className="flex items-center justify-center mt-0.5">
-                    <div className="text-sm">
+                  {/* Status indicator - centered and larger */}
+                  <div className="flex items-center justify-center mt-1">
+                    <div className="text-lg">
                       {current.status === 'arrived' && '👋'}
                       {current.status === 'seated' && '🪑'}
                       {current.status === 'ordered' && '📝'}
@@ -975,58 +971,58 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
 
                 </div>
               ) : (
-                <div className="text-center py-1">
-                  <div className="mb-1">
+                <div className="text-center py-2">
+                  <div className="mb-2 flex justify-center">
                     {isSharedTable ? (
-                      <div className="w-4 h-4 mx-auto bg-purple-500 rounded-full flex items-center justify-center">
-                        <Users className="text-white text-[8px]" />
+                      <div className="w-6 h-6 mx-auto bg-purple-500 rounded-full flex items-center justify-center">
+                        <Users className="text-white text-xs" />
                       </div>
                     ) : (
-                      <div className="w-4 h-4 mx-auto bg-green-500 rounded-full flex items-center justify-center">
-                        <span className="text-white text-[8px] font-bold">✓</span>
+                      <div className="w-6 h-6 mx-auto bg-green-500 rounded-full flex items-center justify-center">
+                        <span className="text-white text-xs font-bold">✓</span>
                       </div>
                     )}
                   </div>
                   
                   {/* Shared table availability info */}
                   {isSharedTable && sharedTableInfo && (
-                    <div className="text-center p-1 bg-purple-50 border border-purple-200 rounded text-[8px] mb-1">
+                    <div className="text-center p-2 bg-purple-50 border border-purple-200 rounded text-xs mb-2">
                       <div className="font-bold text-purple-800">
                         {(sharedTableInfo.capacity - sharedTableInfo.current_occupancy)} seats available
                       </div>
                       {activeSharedBookings.length > 0 && (
-                        <div className="text-purple-700 text-[7px]">
+                        <div className="text-purple-700 text-[10px] mt-1">
                           {activeSharedBookings.length} active booking{activeSharedBookings.length > 1 ? 's' : ''}
                         </div>
                       )}
                     </div>
                   )}
                   
-                  {/* Compact upcoming booking */}
+                  {/* Enhanced upcoming booking display */}
                   {upcoming && (
-                    <div className="text-center p-1 bg-blue-50 border border-blue-200 rounded text-[8px]">
-                      <div className="font-bold text-blue-800">
+                    <div className="text-center p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+                      <div className="font-bold text-blue-800 mb-1">
                         🕒{format(new Date(upcoming.booking_time), 'H:mm')}
                       </div>
                       <div className="text-blue-700 truncate">
                         {(upcoming.guest_name || upcoming.user?.full_name || '').split(' ')[0]} ({upcoming.party_size})
                         {upcoming.is_shared_booking && (
-                          <span className="text-purple-600"> - {upcoming.seats_requested} seats</span>
+                          <div className="text-purple-600 text-[10px]">{upcoming.seats_requested} seats</div>
                         )}
                       </div>
                     </div>
                   )}
                   
-                  {/* Minimal activity indicators */}
+                  {/* Enhanced activity indicators */}
                   {!upcoming && (allUpcoming.length > 0 || recentHistory.length > 0) && (
-                    <div className="flex justify-center gap-1 mt-1">
+                    <div className="flex justify-center gap-2 mt-2">
                       {allUpcoming.length > 0 && (
-                        <div className="text-[7px] text-blue-600 bg-blue-100 px-1 py-0.5 rounded">
+                        <div className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded font-medium">
                           📅{allUpcoming.length}
                         </div>
                       )}
                       {recentHistory.length > 0 && (
-                        <div className="text-[7px] text-gray-600 bg-gray-100 px-1 py-0.5 rounded">
+                        <div className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded font-medium">
                           ✅{recentHistory.length}
                         </div>
                       )}
@@ -1070,7 +1066,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                     <p className="italic text-secondary-foreground">Note: {current.special_requests}</p>
                   )}
                   {(current.user?.phone_number || current.guest_phone) && (
-                    <p className="font-mono text-accent-foreground">📞 {current.user?.phone_number || current.guest_phone}</p>
+                    <p className="font-mono text-white">📞 {current.user?.phone_number || current.guest_phone}</p>
                   )}
                 </div>
               </div>
@@ -1105,38 +1101,49 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
 
   return (
     <div className="h-full w-full flex flex-col bg-gradient-to-br from-background to-card ">
-      {/* Ultra-compact section navigation */}
+      {/* Enhanced section navigation with improved visibility */}
       <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 relative z-10">
-        <div className="px-3 py-1.5">
+        <div className="px-4 py-3">
           {sectionViewMode === "tabs" ? (
-            /* Horizontal inline layout - minimal height */
-            <div className="flex items-center gap-1 flex-wrap">
+            /* Horizontal inline layout - improved spacing and size */
+            <div className="flex items-center gap-2 flex-wrap">
               {sectionStats.map(stat => {
                 const Icon = SECTION_ICONS[stat.icon as keyof typeof SECTION_ICONS] || Grid3X3
                 const isActive = stat.id === selectedSection
                 
                 return (
-                  <button
-                    key={stat.id}
-                    onClick={() => setSelectedSection(stat.id)}
-                    className={cn(
-                      "inline-flex items-center gap-1 px-2 py-1 rounded text-xs transition-all touch-manipulation relative",
-                      isActive 
-                        ? "bg-primary/15 text-primary border border-primary/40" 
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted/20 border border-transparent"
-                    )}
-                  >
-                    <div className="relative">
-                      <Icon className="h-3 w-3" style={{ color: stat.color }} />
-                      {stat.occupiedCount > 0 && (
-                        <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full"></div>
-                      )}
-                    </div>
-                    <span className="font-medium truncate max-w-16">{stat.name}</span>
-                    <span className="text-[9px] text-muted-foreground bg-muted/50 px-1 rounded">
-                      {stat.tableCount}{stat.occupiedCount > 0 && <span className="text-red-600">/{stat.occupiedCount}</span>}
-                    </span>
-                  </button>
+                  <Tooltip key={stat.id}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => setSelectedSection(stat.id)}
+                        className={cn(
+                          "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all touch-manipulation relative shadow-sm",
+                          isActive 
+                            ? "bg-primary/15 text-primary border-2 border-primary/40 shadow-md" 
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/20 border-2 border-transparent hover:border-border"
+                        )}
+                      >
+                        <div className="relative">
+                          <Icon className="h-4 w-4" style={{ color: stat.color }} />
+                          {stat.occupiedCount > 0 && (
+                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></div>
+                          )}
+                        </div>
+                        <span className="font-semibold truncate max-w-24">{stat.name}</span>
+                        <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-full font-medium">
+                          {stat.tableCount}{stat.occupiedCount > 0 && <span className="text-red-600 font-bold">/{stat.occupiedCount}</span>}
+                        </span>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="text-sm">
+                        <p className="font-semibold">{stat.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {stat.tableCount} tables • {stat.occupiedCount} occupied • {stat.availableCount} available • {stat.occupancyRate}% occupancy
+                        </p>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
                 )
               })}
             </div>

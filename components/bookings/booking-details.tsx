@@ -273,6 +273,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                 variant="outline"
                 size="sm"
                 onClick={() => setIsEditing(true)}
+                className="mr-5"
               >
                 <Edit className="h-4 w-4 mr-2" />
                 Edit
