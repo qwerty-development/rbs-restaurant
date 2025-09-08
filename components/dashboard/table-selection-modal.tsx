@@ -290,7 +290,7 @@ export function TableSelectionModal({
                 onClick={handleCancel}
                 disabled={isProcessing}
               >
-                <X className="h-4 w-4 mr-2" />
+                <X className="h-4 w-4" />
                
               </Button>
               <Button
