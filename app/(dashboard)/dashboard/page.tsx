@@ -209,7 +209,7 @@ export default function DashboardPage() {
         .from("bookings")
         .select(`
           *,
-          profiles!bookings_user_id_fkey(
+          user:profiles!bookings_user_id_fkey(
             id,
             full_name,
             phone_number
@@ -235,7 +235,7 @@ export default function DashboardPage() {
 
       const transformedData = data?.map((booking: any) => ({
         ...booking,
-        user: booking.profiles || null,
+        // user is already correctly mapped from the query
         tables: booking.booking_tables?.map((bt: { table: any }) => bt.table).filter(Boolean) || []
       })) || []
 
@@ -847,7 +847,7 @@ export default function DashboardPage() {
     if (!searchQuery) return true
     
     const query = searchQuery.toLowerCase()
-    const guestName = (booking.user?.full_name || booking.guest_name || '').toLowerCase()
+    const guestName = (booking.guest_name || booking.user?.full_name || '').toLowerCase()
     const phone = (booking.user?.phone_number || booking.guest_phone || '').toLowerCase()
     const tableNumbers = booking.tables?.map((t: any) => `t${t.table_number}`).join(' ').toLowerCase() || ''
     const confirmationCode = (booking.confirmation_code || '').toLowerCase()

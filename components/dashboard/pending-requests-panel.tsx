@@ -385,7 +385,7 @@ export function PendingRequestsPanel({
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-lg text-gray-900">
-                            {booking.user?.full_name || booking.guest_name || 'Guest'}
+                            {booking.guest_name || booking.user?.full_name || 'Anonymous'}
                           </p>
                           {customerData?.vip_status && (
                             <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 border-yellow-300">
@@ -400,10 +400,10 @@ export function PendingRequestsPanel({
                             </Badge>
                           )}
                         </div>
-                        {(booking.user?.phone_number || booking.guest_phone) && (
+                        {(booking.guest_phone || booking.user?.phone_number) && (
                           <p className="text-sm text-gray-600 flex items-center gap-1.5 mt-1">
                             <Phone className="h-3.5 w-3.5" />
-                            {booking.user?.phone_number || booking.guest_phone}
+                            {booking.guest_phone || booking.user?.phone_number}
                           </p>
                         )}
                         {customerData && (

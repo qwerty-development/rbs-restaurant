@@ -155,7 +155,7 @@ export function TableSelectionModal({
             </span>
           </div>
           <div className="text-xs text-gray-600 mt-2">
-            Guest: <span className="font-medium">{booking.user?.full_name || booking.guest_name || 'Guest'}</span>
+            Guest: <span className="font-medium">{booking.guest_name || booking.user?.full_name || 'Anonymous'}</span>
           </div>
         </DialogHeader>
 
