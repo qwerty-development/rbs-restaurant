@@ -1218,6 +1218,10 @@ export default function DashboardPage() {
           booking={selectedBooking}
           onClose={() => setSelectedBooking(null)}
           onUpdate={(updates) => {
+            // Update the selectedBooking state immediately for instant UI feedback
+            setSelectedBooking((prev: any) => prev ? { ...prev, ...updates } : null)
+            
+            // Also trigger the mutation for database updates and cache invalidation
             updateBookingMutation.mutate({ 
               bookingId: selectedBooking.id, 
               updates 

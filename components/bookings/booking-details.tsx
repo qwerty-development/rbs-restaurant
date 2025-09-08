@@ -137,6 +137,18 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
     })
   }, [])
 
+  // Update local state when booking prop changes
+  useEffect(() => {
+    setEditedData({
+      party_size: booking.party_size,
+      turn_time_minutes: booking.turn_time_minutes,
+      special_requests: booking.special_requests || "",
+      status: booking.status,
+    })
+    setSelectedTableIds(booking.tables?.map(t => t.id) || [])
+    setCurrentBookingStatus(booking.status)
+  }, [booking.id, booking.party_size, booking.turn_time_minutes, booking.special_requests, booking.status, booking.tables])
+
   // Fetch status history
   const { data: statusHistory } = useQuery({
     queryKey: ["booking-status-history", booking.id],
@@ -238,7 +250,10 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
       toast.success("Booking updated successfully")
       onUpdate(data)
       setIsEditing(false)
+      // Invalidate multiple query keys to ensure dashboard refreshes
       queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["booking-status-history"] })
     },
     onError: (error) => {
       console.error("Update error:", error)
@@ -268,6 +283,8 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
         // Delay the query invalidation to prevent immediate refetches
         setTimeout(() => {
           queryClient.invalidateQueries({ queryKey: ["booking-status-history"] })
+          queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+          queryClient.invalidateQueries({ queryKey: ["bookings"] })
         }, 200)
         
         toast.success(`Status updated to ${formatStatusLabel(newStatus)}`)
@@ -292,7 +309,11 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
       await statusService.switchTables(booking.id, newTableIds, userId, "Table switch from booking details")
       toast.success("Tables switched successfully")
       setSelectedTableIds(newTableIds)
+      // Invalidate multiple query keys to ensure dashboard refreshes
       queryClient.invalidateQueries({ queryKey: ["bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+      queryClient.invalidateQueries({ queryKey: ["shared-tables-summary"] })
+      queryClient.invalidateQueries({ queryKey: ["shared-table-availability"] })
     } catch (error) {
       toast.error("Failed to switch tables")
     }
@@ -445,7 +466,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                       ) : (
                         <div className="flex items-center gap-2">
                           <Users className="h-4 w-4 text-muted-foreground" />
-                          <p className="font-medium">{booking.party_size} guests</p>
+                          <p className="font-medium">{editedData.party_size} guests</p>
                         </div>
                       )}
                     </div>
@@ -470,7 +491,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                           </SelectContent>
                         </Select>
                       ) : (
-                        <p className="font-medium">{booking.turn_time_minutes / 60} hours</p>
+                        <p className="font-medium">{editedData.turn_time_minutes / 60} hours</p>
                       )}
                     </div>
                     <div className="space-y-1">
@@ -571,7 +592,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                     />
                   ) : (
                     <p className="mt-2 text-sm">
-                      {booking.special_requests || "No special requests"}
+                      {editedData.special_requests || "No special requests"}
                     </p>
                   )}
                 </div>
