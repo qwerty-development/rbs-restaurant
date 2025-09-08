@@ -1061,42 +1061,45 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               )}
             </div>
           </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-xs">
+          <TooltipContent side="top" className="max-w-sm">
             {current ? (
               <div className="space-y-2">
-                <p className="font-semibold">{current.guest_name || current.user?.full_name}</p>
-                <div className="space-y-1 text-sm">
+                <p className="font-semibold text-primary-foreground">{current.guest_name || current.user?.full_name}</p>
+                <div className="space-y-1 text-sm text-primary-foreground">
                   <p>Party of {current.party_size}</p>
                   {current.is_shared_booking && (
-                    <p className="text-purple-600">Shared table booking ({current.seats_requested} seats)</p>
+                    <p className="text-purple-200">Shared table booking ({current.seats_requested} seats)</p>
                   )}
                   <p>Arrived: {format(bookingTime!, 'h:mm a')}</p>
                   <p>Status: {titleCase(current.status)}</p>
                   {current.special_requests && (
-                    <p className="italic text-secondary-foreground">Note: {current.special_requests}</p>
+                    <div className="mt-2 p-2 bg-primary-foreground/10 rounded border border-primary-foreground/20">
+                      <p className="text-xs font-medium text-primary-foreground/90 mb-1">Special Requests:</p>
+                      <p className="text-xs text-primary-foreground/80 leading-relaxed break-words whitespace-pre-wrap">{current.special_requests}</p>
+                    </div>
                   )}
                   {(current.user?.phone_number || current.guest_phone) && (
-                    <p className="font-mono text-white">📞 {current.user?.phone_number || current.guest_phone}</p>
+                    <p className="font-mono text-primary-foreground">📞 {current.user?.phone_number || current.guest_phone}</p>
                   )}
                 </div>
               </div>
             ) : (
               <div>
-                <p className="font-semibold">Table {table.table_number}</p>
-                <p className="text-sm">Capacity: {table.min_capacity}-{table.max_capacity}</p>
-                <p className="text-sm">Type: {table.table_type}</p>
+                <p className="font-semibold text-primary-foreground">Table {table.table_number}</p>
+                <p className="text-sm text-primary-foreground">Capacity: {table.min_capacity}-{table.max_capacity}</p>
+                <p className="text-sm text-primary-foreground">Type: {table.table_type}</p>
                 {isSharedTable && sharedTableInfo && (
                   <div className="text-sm mt-2">
-                    <p className="text-purple-600 font-medium">🤝 Shared Table</p>
-                    <p>Occupancy: {sharedTableInfo.current_occupancy}/{sharedTableInfo.capacity}</p>
-                    <p>Available: {sharedTableInfo.capacity - sharedTableInfo.current_occupancy} seats</p>
+                    <p className="text-purple-200 font-medium">🤝 Shared Table</p>
+                    <p className="text-primary-foreground">Occupancy: {sharedTableInfo.current_occupancy}/{sharedTableInfo.capacity}</p>
+                    <p className="text-primary-foreground">Available: {sharedTableInfo.capacity - sharedTableInfo.current_occupancy} seats</p>
                   </div>
                 )}
                 {upcoming && (
-                  <p className="text-sm mt-2">
+                  <p className="text-sm mt-2 text-primary-foreground">
                     Next: {format(new Date(upcoming.booking_time), 'h:mm a')}
                     {upcoming.is_shared_booking && (
-                      <span className="text-purple-600"> ({upcoming.seats_requested} seats)</span>
+                      <span className="text-purple-200"> ({upcoming.seats_requested} seats)</span>
                     )}
                   </p>
                 )}
