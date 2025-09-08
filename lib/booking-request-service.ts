@@ -1,6 +1,6 @@
 // lib/booking-request-service.ts
 import { createClient } from "@/lib/supabase/client"
-import { addHours, addMinutes, format, isWithinInterval, parseISO } from "date-fns"
+import { addHours, format } from "date-fns"
 import { TableAvailabilityService } from "./table-availability"
 import { RestaurantAvailability } from "./restaurant-availability"
 
@@ -74,9 +74,9 @@ export class BookingRequestService {
         throw new Error("Restaurant is currently not accepting bookings")
       }
 
-      // Validate party size
-      const minSize = restaurant.min_party_size || 1
-      const maxSize = restaurant.max_party_size || 20
+      // Validate party size (will be used in future validation)
+      // const minSize = restaurant.min_party_size || 1
+      // const maxSize = restaurant.max_party_size || 20
       
 
 
@@ -694,7 +694,7 @@ export class BookingRequestService {
         .from("bookings")
         .select(`
           *,
-          user:profiles(*),
+          user:profiles!bookings_user_id_fkey(*),
           restaurant:restaurants(*)
         `)
         .eq("restaurant_id", restaurantId)
@@ -777,7 +777,7 @@ export class BookingRequestService {
           party_size,
           request_expires_at,
           created_at,
-          user:profiles(full_name)
+          user:profiles!bookings_user_id_fkey(full_name)
         `)
         .eq("restaurant_id", restaurantId)
         .eq("status", "pending")
