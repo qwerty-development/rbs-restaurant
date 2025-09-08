@@ -269,7 +269,7 @@ export function CheckInQueue({
     
     // Helper function to check if booking is physically present
     const isPhysicallyPresent = (b: any) => {
-      const presentStatuses = ['arrived', 'seated', 'ordered', 'payment']
+      const presentStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
       return presentStatuses.includes(b.status)
     }
     
@@ -340,7 +340,7 @@ export function CheckInQueue({
       }
       
       // Also offer option to bump the target booking if they're not seated yet
-      if (!['seated', 'ordered', 'payment'].includes(targetBooking.status)) {
+      if (!['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(targetBooking.status)) {
         options.push({
           type: 'empty',
           tables: targetTables,
@@ -420,7 +420,7 @@ export function CheckInQueue({
       const availableTables = tables.filter(table => {
         if (!table.is_active) return false
         const isOccupied = bookings.some(b => {
-          const occupiedStatuses = ['arrived', 'seated', 'ordered', 'payment']
+          const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
           return occupiedStatuses.includes(b.status) && 
                  b.tables?.some((t: any) => t.id === table.id)
         })
@@ -520,10 +520,10 @@ export function CheckInQueue({
 
     // Active dining guests
     const activeDining = bookings.filter(b =>
-      ['seated', 'ordered', 'payment'].includes(b.status)
+      ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(b.status)
     ).sort((a, b) => {
       // Sort by status progression, then by booking time
-      const statusOrder = { seated: 1, ordered: 2, payment: 3 }
+      const statusOrder = { seated: 1, ordered: 2, appetizers: 3, main_course: 4, dessert: 5, payment: 6 }
       const aOrder = statusOrder[b.status as keyof typeof statusOrder] || 0
       const bOrder = statusOrder[b.status as keyof typeof statusOrder] || 0
       if (aOrder !== bOrder) return aOrder - bOrder
@@ -1567,6 +1567,9 @@ export function CheckInQueue({
   const STATUS_ICONS = {
     seated: Users,
     ordered: ChefHat,
+    appetizers: Coffee,
+    main_course: Utensils,
+    dessert: Coffee,
     payment: CreditCard,
     completed: CheckCircle
   }
@@ -1575,6 +1578,9 @@ export function CheckInQueue({
   const STATUS_COLORS = {
     seated: "text-primary bg-primary/10 border-primary/30",
     ordered: "text-accent-foreground bg-accent/20 border-accent/40",
+    appetizers: "text-secondary-foreground bg-secondary/20 border-secondary/40",
+    main_course: "text-primary bg-primary/15 border-primary/35",
+    dessert: "text-accent-foreground bg-accent/15 border-accent/35",
     payment: "text-primary bg-primary/20 border-primary/40",
     completed: "text-muted-foreground bg-muted/50 border-border"
   }
@@ -1679,11 +1685,17 @@ export function CheckInQueue({
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation()
-                  // Simplified status flow: seated -> ordered -> payment -> completed
+                  // Extended status flow: seated -> ordered -> appetizers -> main_course -> dessert -> payment -> completed
                   let nextStatus = nextTransition.to
                   if (booking.status === 'seated') {
                     nextStatus = 'ordered'
                   } else if (booking.status === 'ordered') {
+                    nextStatus = 'appetizers'
+                  } else if (booking.status === 'appetizers') {
+                    nextStatus = 'main_course'
+                  } else if (booking.status === 'main_course') {
+                    nextStatus = 'dessert'
+                  } else if (booking.status === 'dessert') {
                     nextStatus = 'payment'
                   } else if (booking.status === 'payment') {
                     nextStatus = 'completed'

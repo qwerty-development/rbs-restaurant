@@ -33,6 +33,7 @@ import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
 import { MinimumCapacityWarningDialog } from "@/components/bookings/minimum-capacity-warning-dialog"
 import { SharedTablesOverview } from "@/components/shared-tables"
 import { TableAvailabilityService } from "@/lib/table-availability"
+import { BookingRequestService } from "@/lib/booking-request-service"
 import { toast } from "react-hot-toast"
 import { cn } from "@/lib/utils"
 import { 
@@ -197,12 +198,52 @@ export default function BookingsPage() {
   const supabase = createClient()
   const queryClient = useQueryClient()
   const tableService = useMemo(() => new TableAvailabilityService(), [])
+  const requestService = useMemo(() => new BookingRequestService(), [])
 
-  // Enhanced Auto-refresh with Smart Performance
+  // Get restaurant ID and user ID
+  const [restaurantId, setRestaurantId] = useState<string>("")
+  const [userId, setUserId] = useState<string>("")
+  const [lastExpiredCheck, setLastExpiredCheck] = useState<Date>(new Date())
+
+  // Auto-decline expired requests
+  const handleExpiredRequests = useCallback(async () => {
+    if (!restaurantId || !userId) return
+
+    try {
+      const result = await requestService.autoDeclineExpiredRequests(restaurantId, userId)
+      
+      if (result.declinedCount > 0) {
+        toast.success(`${result.declinedCount} expired requests automatically declined`, {
+          duration: 3000,
+          icon: '⏰'
+        })
+        setLastExpiredCheck(new Date())
+        // Refresh bookings after auto-declining
+        queryClient.invalidateQueries({ queryKey: ["all-bookings"] })
+        queryClient.invalidateQueries({ queryKey: ["displayed-bookings"] })
+      }
+      
+      if (result.errors.length > 0) {
+        console.warn("Some expired requests couldn't be auto-declined:", result.errors)
+      }
+    } catch (error) {
+      console.error("Failed to auto-decline expired requests:", error)
+    }
+  }, [restaurantId, userId, requestService, queryClient])
+
+  // Enhanced Auto-refresh with Smart Performance and Expired Request Cleanup
   useEffect(() => {
     if (!autoRefresh) return
     
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
+      // Check for expired requests every few intervals (every minute)
+      const now = new Date()
+      const timeSinceLastExpiredCheck = now.getTime() - lastExpiredCheck.getTime()
+      
+      if (timeSinceLastExpiredCheck > 60000) { // 1 minute
+        await handleExpiredRequests()
+      }
+      
       queryClient.invalidateQueries({ queryKey: ["all-bookings"] })
       queryClient.invalidateQueries({ queryKey: ["displayed-bookings"] })
       queryClient.invalidateQueries({ queryKey: ["table-stats"] })
@@ -210,16 +251,20 @@ export default function BookingsPage() {
     }, 15000) // 15 seconds for more responsive updates
 
     return () => clearInterval(interval)
-  }, [autoRefresh, queryClient])
-  
+  }, [autoRefresh, queryClient, handleExpiredRequests, lastExpiredCheck])
 
-  // Get restaurant ID
-  const [restaurantId, setRestaurantId] = useState<string>("")
+  // Initial expired request check when component mounts
+  useEffect(() => {
+    if (restaurantId && userId) {
+      handleExpiredRequests()
+    }
+  }, [restaurantId, userId, handleExpiredRequests])
   
   useEffect(() => {
     async function getRestaurantId() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
+        setUserId(user.id)
         const { data: staffData } = await supabase
           .from("restaurant_staff")
           .select("restaurant_id")

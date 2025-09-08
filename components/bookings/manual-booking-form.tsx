@@ -1400,16 +1400,7 @@ export function ManualBookingForm({
             </Alert>
           )}
           
-          {/* Debug Information */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-xs">
-              <strong>Debug Info:</strong><br/>
-              Total Tables: {allTables?.length || 0} | 
-              Regular Tables: {regularTables?.length || 0} | 
-              Available Data: {availableTablesData ? `${availableTablesData.singleTables?.length || 0} single, ${availableTablesData.combinations?.length || 0} combos` : 'Loading...'} | 
-              Date/Time: {bookingDate ? format(bookingDate, 'MMM d') : 'None'} {bookingTime || 'None'}
-            </div>
-          )}
+
 
           {!isSharedBooking ? (
             // Regular table selection

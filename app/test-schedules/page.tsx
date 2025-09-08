@@ -296,28 +296,7 @@ export default function TestSchedulesPage() {
         />
       </div>
 
-      {/* Debug Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Debug Info</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <strong>Restaurant ID:</strong> {restaurantId}
-            </div>
-            <div>
-              <strong>Staff Members:</strong> {staffMembers.length}
-            </div>
-            <div>
-              <strong>Shifts:</strong> {shifts.length}
-            </div>
-            <div>
-              <strong>Time Clock Entries:</strong> {timeClockEntries.length}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+ 
 
       {/* Main Content */}
       <Tabs value={selectedTab} onValueChange={setSelectedTab}>

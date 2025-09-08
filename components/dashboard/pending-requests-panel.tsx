@@ -1,7 +1,7 @@
 // components/dashboard/pending-requests-panel.tsx
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -46,9 +46,57 @@ export function PendingRequestsPanel({
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedBooking, setSelectedBooking] = useState<any>(null)
+  const [lastExpiredCheck, setLastExpiredCheck] = useState<Date>(new Date())
   
-  const requestService = new BookingRequestService()
+  const requestService = useMemo(() => new BookingRequestService(), [])
   const supabase = createClient()
+
+  // Auto-decline expired requests
+  const handleExpiredRequests = useCallback(async () => {
+    if (!restaurantId || !userId) return
+
+    try {
+      const result = await requestService.autoDeclineExpiredRequests(restaurantId, userId)
+      
+      if (result.declinedCount > 0) {
+        toast.success(`${result.declinedCount} expired requests automatically declined`)
+        setLastExpiredCheck(new Date())
+        onUpdate() // Refresh the bookings list
+      }
+      
+      if (result.errors.length > 0) {
+        console.warn("Some expired requests couldn't be auto-declined:", result.errors)
+      }
+    } catch (error) {
+      console.error("Failed to auto-decline expired requests:", error)
+    }
+  }, [restaurantId, userId, onUpdate, requestService])
+
+  // Check for expired requests every 30 seconds
+  useEffect(() => {
+    if (!restaurantId || !userId) return
+
+    // Initial check
+    handleExpiredRequests()
+
+    // Set up interval for checking expired requests
+    const expiredCheckInterval = setInterval(handleExpiredRequests, 30000) // 30 seconds
+
+    return () => {
+      clearInterval(expiredCheckInterval)
+    }
+  }, [handleExpiredRequests, restaurantId, userId])
+
+  // Also check when the component mounts or when bookings change
+  useEffect(() => {
+    const now = new Date()
+    const timeSinceLastCheck = now.getTime() - lastExpiredCheck.getTime()
+    
+    // Only check if it's been more than 15 seconds since last check
+    if (timeSinceLastCheck > 15000) {
+      handleExpiredRequests()
+    }
+  }, [bookings.length, handleExpiredRequests, lastExpiredCheck])
 
   // Filter pending requests
   const pendingRequests = bookings
@@ -255,16 +303,30 @@ export function PendingRequestsPanel({
     if (!booking.request_expires_at) return null
     
     const expiresAt = new Date(booking.request_expires_at)
+    const createdAt = new Date(booking.created_at || booking.request_expires_at)
     const now = new Date()
-    const hoursLeft = differenceInMinutes(expiresAt, now) / 60
-    const minutesLeft = differenceInMinutes(expiresAt, now) % 60
-    const expired = expiresAt <= now
     
-    const totalMinutes = booking.request_response_time || 1440
-    const elapsedMinutes = totalMinutes - differenceInMinutes(expiresAt, now)
-    const percentage = Math.max(0, Math.min(100, (elapsedMinutes / totalMinutes) * 100))
+    const totalMs = expiresAt.getTime() - createdAt.getTime()
+    const remainingMs = expiresAt.getTime() - now.getTime()
     
-    return { hoursLeft: Math.floor(hoursLeft), minutesLeft, expired, percentage }
+    const expired = remainingMs <= 0
+    
+    if (expired) {
+      const expiredMinutes = Math.abs(Math.floor(remainingMs / (1000 * 60)))
+      return { 
+        hoursLeft: 0, 
+        minutesLeft: 0, 
+        expired: true, 
+        percentage: 0,
+        expiredForMinutes: expiredMinutes
+      }
+    }
+    
+    const hoursLeft = Math.floor(remainingMs / (1000 * 60 * 60))
+    const minutesLeft = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60))
+    const percentage = Math.max(0, Math.min(100, Math.round((remainingMs / totalMs) * 100)))
+    
+    return { hoursLeft, minutesLeft, expired, percentage }
   }
 
   const urgentCount = pendingRequests.filter(r => {
@@ -350,12 +412,15 @@ export function PendingRequestsPanel({
                     <div className="mb-3">
                       <div className={cn(
                         "flex items-center gap-2 text-xs font-bold mb-1",
-                        expiry.expired ? "text-red-700" : 
+                        expiry.expired ? "text-red-700 animate-pulse" : 
                         expiry.hoursLeft < 2 ? "text-orange-700" : 
                         "text-gray-700"
                       )}>
                         <Timer className="h-4 w-4" />
-                        {expiry.expired ? "EXPIRED" : `${expiry.hoursLeft}h ${expiry.minutesLeft}m remaining`}
+                        {expiry.expired 
+                          ? `EXPIRED ${(expiry as any).expiredForMinutes ? `${(expiry as any).expiredForMinutes}m ago` : ''}`
+                          : `${expiry.hoursLeft}h ${expiry.minutesLeft}m remaining`
+                        }
                       </div>
                       <Progress 
                         value={expiry.percentage} 

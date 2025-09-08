@@ -36,7 +36,8 @@ import {
   Maximize2,
   Pencil,
   X,
-  Users
+  Users,
+  Utensils
 } from "lucide-react"
 import { format, addMinutes, differenceInMinutes } from "date-fns"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
@@ -100,6 +101,9 @@ const STATUS_ICONS: any = {
   'arrived': UserCheck,
   'seated': ChefHat,
   'ordered': Coffee,
+  'appetizers': Coffee,
+  'main_course': Utensils,
+  'dessert': Coffee,
   'payment': CreditCard,
   'completed': CheckCircle,
   'no_show': AlertCircle,
@@ -112,6 +116,9 @@ const STATUS_COLORS: any = {
   'arrived': 'bg-accent/30 border-accent text-accent-foreground',
   'seated': 'bg-primary/30 border-primary text-primary',
   'ordered': 'bg-secondary/70 border-secondary text-secondary-foreground',
+  'appetizers': 'bg-secondary/60 border-secondary text-secondary-foreground',
+  'main_course': 'bg-primary/35 border-primary text-primary',
+  'dessert': 'bg-accent/40 border-accent text-accent-foreground',
   'payment': 'bg-primary/40 border-primary text-primary',
   'completed': 'bg-muted border-border text-muted-foreground',
   'no_show': 'bg-destructive/20 border-destructive text-destructive',
@@ -227,7 +234,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
       const occupiedTables = sectionTables.filter(table => {
         const hasActiveBooking = bookings.some(booking => 
           booking.tables?.some((t: any) => t.id === table.id) &&
-          ['arrived', 'seated', 'ordered', 'payment'].includes(booking.status)
+          ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status)
         )
         return hasActiveBooking
       })
@@ -645,11 +652,11 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
 
     // Current active bookings
     const activeBookings = allTableBookings.filter(booking =>
-      ['confirmed', 'arrived', 'seated', 'ordered', 'payment'].includes(booking.status)
+      ['confirmed', 'arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status)
     )
 
     const currentBooking = activeBookings.find(booking => {
-      const physicallyPresent = ['arrived', 'seated', 'ordered', 'payment'].includes(booking.status)
+      const physicallyPresent = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status)
       if (physicallyPresent) return true
       
       const bookingStart = new Date(booking.booking_time)
@@ -964,6 +971,9 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                       {current.status === 'arrived' && '👋'}
                       {current.status === 'seated' && '🪑'}
                       {current.status === 'ordered' && '📝'}
+                      {current.status === 'appetizers' && '🥗'}
+                      {current.status === 'main_course' && '🍽️'}
+                      {current.status === 'dessert' && '🍰'}
                       {current.status === 'payment' && '💳'}
                       {current.status === 'completed' && '✅'}
                     </div>
@@ -1325,6 +1335,39 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                     <Button 
                       size="sm"
                       className="h-8 text-xs px-3 shadow-lg bg-gradient-to-r from-accent to-accent/90 hover:from-accent/90 hover:to-accent text-accent-foreground rounded-lg font-semibold border border-accent/40 hover:scale-105 transition-all duration-200"
+                      onClick={() => handleStatusTransition(current.id, 'appetizers')}
+                      disabled={loadingTransition === current.id}
+                    >
+                      <Coffee className="h-3 w-3" />
+                    </Button>
+                  )}
+                  
+                  {current.status === 'appetizers' && (
+                    <Button 
+                      size="sm"
+                      className="h-8 text-xs px-3 shadow-lg bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground rounded-lg font-semibold border border-primary/40 hover:scale-105 transition-all duration-200"
+                      onClick={() => handleStatusTransition(current.id, 'main_course')}
+                      disabled={loadingTransition === current.id}
+                    >
+                      <Utensils className="h-3 w-3" />
+                    </Button>
+                  )}
+                  
+                  {current.status === 'main_course' && (
+                    <Button 
+                      size="sm"
+                      className="h-8 text-xs px-3 shadow-lg bg-gradient-to-r from-accent to-accent/90 hover:from-accent/90 hover:to-accent text-accent-foreground rounded-lg font-semibold border border-accent/40 hover:scale-105 transition-all duration-200"
+                      onClick={() => handleStatusTransition(current.id, 'dessert')}
+                      disabled={loadingTransition === current.id}
+                    >
+                      <Coffee className="h-3 w-3" />
+                    </Button>
+                  )}
+                  
+                  {current.status === 'dessert' && (
+                    <Button 
+                      size="sm"
+                      className="h-8 text-xs px-3 shadow-lg bg-gradient-to-r from-accent to-accent/90 hover:from-accent/90 hover:to-accent text-accent-foreground rounded-lg font-semibold border border-accent/40 hover:scale-105 transition-all duration-200"
                       onClick={() => handleStatusTransition(current.id, 'payment')}
                       disabled={loadingTransition === current.id}
                     >
@@ -1344,7 +1387,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                   )}
 
                   {/* Quick complete button for any status except completed */}
-                  {current.status !== 'completed' && current.status !== 'payment' && (
+                  {current.status !== 'completed' && current.status !== 'payment' && current.status !== 'dessert' && (
                     <Button 
                       size="sm"
                       className="h-8 text-xs px-3 shadow-lg bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-lg font-semibold border border-emerald-400 hover:scale-105 transition-all duration-200"
