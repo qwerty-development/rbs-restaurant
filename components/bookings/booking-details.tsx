@@ -246,21 +246,43 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
     },
   })
 
-  // Handle status transitions
+  // Handle status transitions with debouncing
   const handleStatusTransition = async (newStatus: any) => {
     if (isUpdatingStatus) return // Prevent multiple clicks
+    if (currentBookingStatus === newStatus) return // Prevent duplicate status updates
     
     setIsUpdatingStatus(true)
     try {
-      await statusService.updateBookingStatus(booking.id, newStatus, userId)
-      setCurrentBookingStatus(newStatus) // Update local state immediately
-      onUpdate({ status: newStatus })
-      queryClient.invalidateQueries({ queryKey: ["booking-status-history"] })
-      toast.success(`Status updated to ${formatStatusLabel(newStatus)}`)
+      console.log(`Attempting to change status from ${currentBookingStatus} to ${newStatus}`)
+      const result = await statusService.updateBookingStatus(booking.id, newStatus, userId)
+      
+      // Only update UI if status actually changed
+      if (!result.noChange) {
+        setCurrentBookingStatus(newStatus) // Update local state immediately
+        
+        // Only call onUpdate after a brief delay to prevent cascading updates
+        setTimeout(() => {
+          onUpdate({ status: newStatus })
+        }, 100)
+        
+        // Delay the query invalidation to prevent immediate refetches
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ["booking-status-history"] })
+        }, 200)
+        
+        toast.success(`Status updated to ${formatStatusLabel(newStatus)}`)
+      } else {
+        console.log(`Status was already ${newStatus}, skipping UI update`)
+        console.log(`Status is already ${formatStatusLabel(newStatus)}`)
+      }
     } catch (error) {
+      console.error("Status transition error:", error)
       toast.error("Failed to update status")
     } finally {
-      setIsUpdatingStatus(false)
+      // Add a small delay before re-enabling to prevent rapid successive clicks
+      setTimeout(() => {
+        setIsUpdatingStatus(false)
+      }, 300)
     }
   }
 

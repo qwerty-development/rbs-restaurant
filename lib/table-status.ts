@@ -91,6 +91,9 @@ export class TableStatusService {
     return progressMap[status] || 0
   }
 
+  // Static map to track in-flight status updates to prevent race conditions
+  private static statusUpdateLocks = new Map<string, Promise<any>>()
+
   // Update booking status with history tracking
   async updateBookingStatus(
     bookingId: string,
@@ -98,7 +101,47 @@ export class TableStatusService {
     userId: string,
     metadata?: Record<string, any>
   ) {
-    // Get current booking status
+    // Check if there's already an update in progress for this booking
+    if (TableStatusService.statusUpdateLocks.has(bookingId)) {
+      console.log(`Status update already in progress for booking ${bookingId}, waiting...`)
+      await TableStatusService.statusUpdateLocks.get(bookingId)
+      
+      // After waiting, check if the status is now what we wanted
+      const { data: currentBooking } = await this.supabase
+        .from('bookings')
+        .select('status')
+        .eq('id', bookingId)
+        .single()
+      
+      if (currentBooking?.status === newStatus) {
+        console.log(`Status already updated to ${newStatus} by concurrent call`)
+        return { success: true, noChange: true }
+      }
+    }
+
+    // Create a promise for this update operation
+    const updatePromise = this.performStatusUpdate(bookingId, newStatus, userId, metadata)
+    
+    // Store the promise to prevent concurrent updates
+    TableStatusService.statusUpdateLocks.set(bookingId, updatePromise)
+    
+    try {
+      const result = await updatePromise
+      return result
+    } finally {
+      // Always clean up the lock
+      TableStatusService.statusUpdateLocks.delete(bookingId)
+    }
+  }
+
+  // Separated method to perform the actual status update
+  private async performStatusUpdate(
+    bookingId: string,
+    newStatus: DiningStatus,
+    userId: string,
+    metadata?: Record<string, any>
+  ) {
+    // Use a transaction-like approach: read and update atomically
     const { data: booking, error: fetchError } = await this.supabase
       .from('bookings')
       .select('status')
@@ -107,7 +150,15 @@ export class TableStatusService {
 
     if (fetchError) throw fetchError
 
-    // Update booking
+    // Check if status is actually changing
+    if (booking.status === newStatus) {
+      console.log(`Status is already ${newStatus}, skipping update`)
+      return { success: true, noChange: true }
+    }
+
+    const oldStatus = booking.status
+
+    // Update booking with conditional update to prevent race conditions
     const updates: any = { 
       status: newStatus,
       updated_at: new Date().toISOString()
@@ -123,25 +174,37 @@ export class TableStatusService {
       metadata.seated_at = new Date().toISOString()
     }
 
-    const { error: updateError } = await this.supabase
+    // Update only if the status hasn't changed since we read it
+    const { data: updateResult, error: updateError } = await this.supabase
       .from('bookings')
       .update(updates)
       .eq('id', bookingId)
+      .eq('status', oldStatus) // This ensures atomic update
+      .select('status')
 
     if (updateError) throw updateError
 
-    // Log status change in history
+    // If no rows were updated, it means the status changed between read and write
+    if (!updateResult || updateResult.length === 0) {
+      console.log(`Concurrent update detected for booking ${bookingId}, status changed during update`)
+      return { success: true, noChange: true }
+    }
+
+    // Only log status change in history if we successfully updated
     const { error: historyError } = await this.supabase
       .from('booking_status_history')
       .insert({
         booking_id: bookingId,
-        old_status: booking.status,
+        old_status: oldStatus,
         new_status: newStatus,
         changed_by: userId,
         metadata: metadata || {}
       })
 
-    if (historyError) throw historyError
+    if (historyError) {
+      console.error('Failed to insert status history:', historyError)
+      // Don't throw here as the booking was updated successfully
+    }
 
     return { success: true }
   }
