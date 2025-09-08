@@ -56,7 +56,15 @@ import {
   Timer,
   Activity
 } from "lucide-react"
-import { cn, titleCase } from "@/lib/utils"
+import { cn } from "@/lib/utils"
+
+// Helper function to format status names for display
+const formatStatusLabel = (status: string): string => {
+  return status
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
 import type { Booking } from "@/types"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "../ui/card"
 import BookingCustomerDetails from "./booking-customer-details"
@@ -97,6 +105,8 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
   )
   const [checkingAvailability, setCheckingAvailability] = useState(false)
   const [activeTab, setActiveTab] = useState("details")
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
+  const [currentBookingStatus, setCurrentBookingStatus] = useState(booking.status)
   
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -222,13 +232,19 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
 
   // Handle status transitions
   const handleStatusTransition = async (newStatus: any) => {
+    if (isUpdatingStatus) return // Prevent multiple clicks
+    
+    setIsUpdatingStatus(true)
     try {
       await statusService.updateBookingStatus(booking.id, newStatus, userId)
+      setCurrentBookingStatus(newStatus) // Update local state immediately
       onUpdate({ status: newStatus })
       queryClient.invalidateQueries({ queryKey: ["booking-status-history"] })
-      toast.success(`Status updated to ${titleCase(newStatus)}`)
+      toast.success(`Status updated to ${formatStatusLabel(newStatus)}`)
     } catch (error) {
       toast.error("Failed to update status")
+    } finally {
+      setIsUpdatingStatus(false)
     }
   }
 
@@ -244,11 +260,11 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
     }
   }
 
-  // Get valid status transitions
-  const validTransitions = statusService.getValidTransitions(booking.status as DiningStatus)
-  const allAvailableStatuses = statusService.getAllAvailableStatuses(booking.status as DiningStatus)
-  const currentProgress = TableStatusService.getDiningProgress(booking.status as DiningStatus)
-  const statusConfig = STATUS_CONFIGS[booking.status as keyof typeof STATUS_CONFIGS]
+  // Get valid status transitions - use current booking status instead of original booking.status
+  const validTransitions = statusService.getValidTransitions(currentBookingStatus as DiningStatus)
+  const allAvailableStatuses = statusService.getAllAvailableStatuses(currentBookingStatus as DiningStatus)
+  const currentProgress = TableStatusService.getDiningProgress(currentBookingStatus as DiningStatus)
+  const statusConfig = STATUS_CONFIGS[currentBookingStatus as keyof typeof STATUS_CONFIGS]
   const StatusIcon = statusConfig?.icon || Timer
 
   // Calculate dining time
@@ -258,7 +274,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
   // Use checked_in_at for elapsed time if guest has checked in, otherwise use booking_time
   const timeReference = booking.checked_in_at ? new Date(booking.checked_in_at) : bookingTime
   const elapsedMinutes = differenceInMinutes(now, timeReference)
-  const isCurrentlyDining = ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status)
+  const isCurrentlyDining = ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(currentBookingStatus)
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
@@ -419,7 +435,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                       <Label className="text-sm text-muted-foreground">Status</Label>
                       <div>
                         <Badge className={cn("text-sm", statusConfig?.bg, statusConfig?.color)}>
-                          {titleCase(booking.status)}
+                          {formatStatusLabel(currentBookingStatus)}
                         </Badge>
                       </div>
                     </div>
@@ -537,7 +553,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                   </CardHeader>
                   <CardContent>
                     <Select 
-                      value={booking.status} 
+                      value={currentBookingStatus} 
                       onValueChange={(newStatus) => {
                         const statusOption = allAvailableStatuses.find(s => s.to === newStatus)
                         if (statusOption?.requiresConfirmation) {
@@ -548,13 +564,14 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                           handleStatusTransition(newStatus)
                         }
                       }}
+                      disabled={isUpdatingStatus}
                     >
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Change status..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={booking.status} disabled>
-                          {titleCase(booking.status)} (Current)
+                        <SelectItem value={currentBookingStatus} disabled>
+                          {formatStatusLabel(currentBookingStatus)} (Current)
                         </SelectItem>
                         {allAvailableStatuses.map(status => (
                           <SelectItem 
@@ -562,7 +579,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                             value={status.to}
                             className={status.requiresConfirmation ? "text-red-600" : ""}
                           >
-                            {titleCase(status.to)}
+                            {formatStatusLabel(status.to)}
                             {status.requiresConfirmation && " ⚠️"}
                           </SelectItem>
                         ))}
@@ -582,7 +599,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                         <StatusIcon className={cn("h-8 w-8", statusConfig?.color)} />
                         <div>
                           <p className="font-semibold text-lg">
-                            {titleCase(booking.status)}
+                            {formatStatusLabel(currentBookingStatus)}
                           </p>
                           {isCurrentlyDining && (
                             <p className="text-sm text-muted-foreground">
@@ -603,7 +620,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                         <Activity className="h-4 w-4" />
                         <AlertDescription>
                           Guest has been dining for {elapsedMinutes} minutes.
-                          Estimated {statusService.estimateRemainingTime(booking.status as DiningStatus, booking.turn_time_minutes)} minutes remaining.
+                          Estimated {statusService.estimateRemainingTime(currentBookingStatus as DiningStatus, booking.turn_time_minutes)} minutes remaining.
                         </AlertDescription>
                       </Alert>
                     )}
@@ -639,6 +656,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                                   "justify-start",
                                   transition.requiresConfirmation && "bg-red-500 hover:bg-red-600"
                                 )}
+                                disabled={isUpdatingStatus}
                                 onClick={() => {
                                   if (transition.requiresConfirmation) {
                                     if (confirm(`Are you sure you want to ${transition.label.toLowerCase()}?`)) {
@@ -663,7 +681,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                       <Label className="text-sm font-medium text-muted-foreground mb-2 block">
                         Jump to Any Status
                       </Label>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-2 gap-2">
                         {allAvailableStatuses.map(status => {
                           const ToIcon = STATUS_CONFIGS[status.to as keyof typeof STATUS_CONFIGS]?.icon || ArrowRight
                           const toConfig = STATUS_CONFIGS[status.to as keyof typeof STATUS_CONFIGS]
@@ -674,12 +692,13 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                               variant="outline"
                               size="sm"
                               className={cn(
-                                "justify-start text-xs",
+                                "justify-start text-xs h-auto py-2 px-3",
                                 status.requiresConfirmation && "border-red-200 text-red-600 hover:bg-red-50"
                               )}
+                              disabled={isUpdatingStatus}
                               onClick={() => {
                                 if (status.requiresConfirmation) {
-                                  if (confirm(`Are you sure you want to ${status.label.toLowerCase()}?`)) {
+                                  if (confirm(`Are you sure you want to ${formatStatusLabel(status.to).toLowerCase()}?`)) {
                                     handleStatusTransition(status.to)
                                   }
                                 } else {
@@ -687,11 +706,8 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                                 }
                               }}
                             >
-                              <ToIcon className={cn("h-3 w-3 mr-1", toConfig?.color)} />
-                              {status.to === 'appetizers' || status.to === 'main_course' ? 
-                                status.to.replace('_', ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') :
-                                status.to.charAt(0).toUpperCase() + status.to.slice(1)
-                              }
+                              <ToIcon className={cn("h-3 w-3 mr-1 flex-shrink-0", toConfig?.color)} />
+                              <span className="truncate">{formatStatusLabel(status.to)}</span>
                             </Button>
                           )
                         })}
@@ -719,20 +735,22 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                         <Table2 className="h-4 w-4 mr-2" />
                         Switch Tables
                       </Button>
-                      {booking.status === 'confirmed' && (
+                      {currentBookingStatus === 'confirmed' && (
                         <Button
                           variant="outline"
                           className="w-full justify-start"
+                          disabled={isUpdatingStatus}
                           onClick={() => handleStatusTransition('arrived')}
                         >
                           <UserCheck className="h-4 w-4 mr-2" />
                           Check In Guest
                         </Button>
                       )}
-                      {['main_course', 'dessert'].includes(booking.status) && (
+                      {['main_course', 'dessert'].includes(currentBookingStatus) && (
                         <Button
                           variant="outline"
                           className="w-full justify-start"
+                          disabled={isUpdatingStatus}
                           onClick={() => handleStatusTransition('payment')}
                         >
                           <CreditCard className="h-4 w-4 mr-2" />
@@ -752,7 +770,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                   <CardContent>
                     {statusHistory && statusHistory.length > 0 ? (
                       <div className="space-y-3">
-                        {statusHistory.map((entry, index) => {
+                        {statusHistory.map((entry) => {
                           const entryConfig = STATUS_CONFIGS[entry.new_status as keyof typeof STATUS_CONFIGS]
                           const EntryIcon = entryConfig?.icon || History
                           
@@ -768,10 +786,10 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                                 <p className="font-medium">
                                   {entry.old_status ? (
                                     <>
-                                      {titleCase(entry.old_status)} → {titleCase(entry.new_status)}
+                                      {formatStatusLabel(entry.old_status)} → {formatStatusLabel(entry.new_status)}
                                     </>
                                   ) : (
-                                    <span>{titleCase(entry.new_status)}</span>
+                                    <span>{formatStatusLabel(entry.new_status)}</span>
                                   )}
                                 </p>
                                 <p className="text-sm text-muted-foreground">
