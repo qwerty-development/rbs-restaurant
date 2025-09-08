@@ -914,7 +914,7 @@ export function WaitlistPanel({
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="h-6 w-20 text-xs">
+          <SelectTrigger className="h-6 w-fit min-w-16 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
