@@ -1084,7 +1084,7 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               <div>
                 <p className="font-semibold">Table {table.table_number}</p>
                 <p className="text-sm">Capacity: {table.min_capacity}-{table.max_capacity}</p>
-                <p className="text-sm">Type: {table.table_type}</p>
+                <p className="text-sm">Type: {titleCase(table.table_type)}</p>
                 {isSharedTable && sharedTableInfo && (
                   <div className="text-sm mt-2">
                     <p className="text-purple-600 font-medium">🤝 Shared Table</p>
