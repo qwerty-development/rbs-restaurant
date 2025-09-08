@@ -89,6 +89,7 @@ export function CustomerDetailsDialog({
   const [notes, setNotes] = useState<CustomerNote[]>(customer.notes || [])
   const [relationships, setRelationships] = useState<CustomerRelationship[]>([])
   const [bookingHistory, setBookingHistory] = useState<any[]>([])
+  const [totalBookingCount, setTotalBookingCount] = useState<number>(customer.total_bookings)
   const [availableTags, setAvailableTags] = useState<CustomerTag[]>([])
   const [customerTags, setCustomerTags] = useState<CustomerTag[]>(customer.tags || [])
   const [availableCustomers, setAvailableCustomers] = useState<CustomerForSelection[]>([])
@@ -142,6 +143,14 @@ export function CustomerDetailsDialog({
         .order('booking_time', { ascending: false })
         .limit(10)
 
+      // Get total booking count for this restaurant
+      const totalBookingQuery = customer.user_id
+        ? supabase.from('bookings').select('id', { count: 'exact' }).eq('user_id', customer.user_id)
+        : supabase.from('bookings').select('id', { count: 'exact' }).eq('guest_email', customer.guest_email)
+
+      const { count: totalBookingCount } = await totalBookingQuery
+        .eq('restaurant_id', restaurantId)
+
       // Load available tags
       const { data: tagsData } = await supabase
         .from('customer_tags')
@@ -167,6 +176,7 @@ export function CustomerDetailsDialog({
 
       setRelationships(relationshipsData || [])
       setBookingHistory(bookingsData || [])
+      setTotalBookingCount(totalBookingCount || 0)
       setAvailableTags(tagsData || [])
       // Transform customers data to fix profile array issue
       const transformedCustomers = (customersData || []).map((c: any) => ({
@@ -441,7 +451,7 @@ export function CustomerDetailsDialog({
                 <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
               </CardHeader>
               <CardContent className="p-4 pt-0">
-                <div className="text-2xl font-bold">{customer.total_bookings}</div>
+                <div className="text-2xl font-bold">{totalBookingCount}</div>
                 {customer.profile?.completed_bookings !== undefined && (
                   <p className="text-xs text-green-600 mt-1">
                     {customer.profile.completed_bookings} completed
@@ -681,12 +691,12 @@ export function CustomerDetailsDialog({
                             </span>
                           </div>
                         )}
-                        {customer.profile?.total_bookings !== undefined && (
+                        {totalBookingCount > 0 && (
                           <div className="flex justify-between">
                             <span className="text-gray-600">Success Rate</span>
                             <span className="font-medium">
-                              {customer.profile.total_bookings > 0 ? 
-                                ((((customer.profile.completed_bookings || 0) / customer.profile.total_bookings) * 100).toFixed(1) + '%') : 
+                              {totalBookingCount > 0 ? 
+                                ((((customer.profile?.completed_bookings || 0) / totalBookingCount) * 100).toFixed(1) + '%') : 
                                 'N/A'
                               }
                             </span>
@@ -1102,7 +1112,7 @@ export function CustomerDetailsDialog({
                 <CardHeader>
                   <CardTitle>Recent Bookings</CardTitle>
                   <CardDescription>
-                    Last 10 bookings for this customer
+                    Showing last 10 of {totalBookingCount} total bookings for this restaurant
                   </CardDescription>
                 </CardHeader>
                 <CardContent>

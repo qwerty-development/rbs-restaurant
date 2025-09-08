@@ -43,6 +43,7 @@ interface BookingCustomerDetailsProps {
 
 export function BookingCustomerDetails({ booking, restaurantId, currentUserId }: BookingCustomerDetailsProps) {
   const [customerData, setCustomerData] = useState<RestaurantCustomer | null>(null)
+  const [totalBookingCount, setTotalBookingCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   
   const supabase = createClient()
@@ -163,6 +164,14 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
           .order('booking_time', { ascending: false })
           .limit(5)
 
+        // Get total booking count for this restaurant
+        const totalBookingQuery = booking.user_id
+          ? supabase.from('bookings').select('id', { count: 'exact' }).eq('user_id', booking.user_id)
+          : supabase.from('bookings').select('id', { count: 'exact' }).eq('guest_email', booking.guest_email)
+
+        const { count: restaurantBookingCount } = await totalBookingQuery
+          .eq('restaurant_id', restaurantId)
+
         // Calculate actual last visit from completed bookings
         const lastCompletedBooking = bookingHistory?.find(b => b.status === 'completed')
         const actualLastVisit = lastCompletedBooking?.booking_time
@@ -178,6 +187,7 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
         }
 
         setCustomerData(transformedCustomer)
+        setTotalBookingCount(restaurantBookingCount || 0)
       }
     } catch (error) {
       console.error('Error loading customer data:', error)
@@ -304,7 +314,7 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm">
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                <span>Total Bookings: {customerData.total_bookings}</span>
+                <span>Total Bookings: {totalBookingCount}</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
@@ -602,8 +612,8 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
             <div>
               <div className="text-muted-foreground">Success Rate</div>
               <div className="font-medium">
-                {customerData.total_bookings > 0 
-                  ? `${(((customerData.total_bookings - customerData.no_show_count - customerData.cancelled_count) / customerData.total_bookings) * 100).toFixed(1)}%`
+                {totalBookingCount > 0 
+                  ? `${(((totalBookingCount - customerData.no_show_count - customerData.cancelled_count) / totalBookingCount) * 100).toFixed(1)}%`
                   : 'N/A'
                 }
               </div>
@@ -611,8 +621,8 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
             <div>
               <div className="text-muted-foreground">Avg Spend</div>
               <div className="font-medium">
-                ${customerData.total_bookings > 0 
-                  ? (customerData.total_spent / customerData.total_bookings).toFixed(2)
+                ${totalBookingCount > 0 
+                  ? (customerData.total_spent / totalBookingCount).toFixed(2)
                   : '0.00'
                 }
               </div>
