@@ -36,7 +36,8 @@ import {
   TrendingUp,
   Users,
   Info,
-  Search
+  Search,
+  X
 } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -988,14 +989,40 @@ export function CheckInQueue({
       }
     })
 
-    // Check if this is a large party requiring multiple tables or has capacity issues
+    // Check capacity first - if insufficient, show error immediately
     const totalCapacity = selectedTableIds.reduce((sum, id) => {
       const table = tableStatus.find(t => t.id === id)
       return sum + (table?.max_capacity || 0)
     }, 0)
     const partySize = typeof walkInData.partySize === 'number' ? walkInData.partySize : (parseInt(walkInData.partySize as string) || 1)
     const hasCapacityIssue = totalCapacity < partySize
-    const isLargeParty = partySize > 6 || selectedTableIds.length > 1 || hasCapacityIssue
+    
+    // Show error immediately if party size exceeds table capacity
+    if (hasCapacityIssue) {
+      const selectedTableNumbers = selectedTableIds
+        .map(id => tableStatus.find(t => t.id === id)?.table_number)
+        .filter(Boolean)
+        .join(', ')
+      
+      toast.error(
+        <div className="flex items-center gap-2">
+          <div className="bg-red-100 rounded-full p-1">
+            <X className="h-4 w-4 text-red-600" />
+          </div>
+          <div>
+            <p className="font-medium">Insufficient Table Capacity</p>
+            <p className="text-sm mt-1">
+              Party size: {partySize} | Available seats: {totalCapacity} (Table {selectedTableNumbers})
+            </p>
+            <p className="text-xs mt-1 opacity-80">Please select additional tables or adjust party size</p>
+          </div>
+        </div>,
+        { duration: 5000 }
+      )
+      return
+    }
+    
+    const isLargeParty = partySize > 6 || selectedTableIds.length > 1
 
     // Show confirmation dialog if there are conflicts or large party
     if (conflictingReservations.length > 0) {
