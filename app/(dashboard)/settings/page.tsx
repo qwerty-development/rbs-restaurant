@@ -55,6 +55,7 @@ import { PushNotificationManager } from "@/components/pwa/push-notification-mana
 import { InstallPrompt } from "@/components/pwa/install-prompt"
 import { LocationManager } from "@/components/location/location-manager"
 import { MigrationWidget } from "@/components/migration/migration-widget"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 
 // Type definitions
 type Restaurant = {
@@ -112,6 +113,7 @@ type OperationalSettingsData = z.infer<typeof operationalSettingsSchema>
 type PricingSettingsData = z.infer<typeof pricingSettingsSchema>
 
 export default function SettingsPage() {
+  const { tier } = useRestaurantContext()
   const supabase = createClient()
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState("general")
@@ -252,7 +254,12 @@ export default function SettingsPage() {
   }
 
   const handleOperationalSubmit = (data: OperationalSettingsData) => {
-    updateRestaurantMutation.mutate(data)
+    // Force instant booking policy for Basic tier
+    const submitData = tier === 'basic' 
+      ? { ...data, booking_policy: 'instant' as const }
+      : data
+    
+    updateRestaurantMutation.mutate(submitData)
   }
 
   const handlePricingSubmit = (data: PricingSettingsData) => {
@@ -519,36 +526,56 @@ export default function SettingsPage() {
                     name="booking_policy"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Booking Policy</FormLabel>
-                        <Select
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          disabled={updateRestaurantMutation.isPending}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="instant">
-                              <div>
-                                <div className="font-medium">Instant Confirmation</div>
-                                <div className="text-sm text-muted-foreground">
-                                  Bookings are automatically confirmed
+                        <FormLabel className="flex items-center gap-2">
+                          Booking Policy
+                          {tier === 'basic' && (
+                            <Badge variant="outline" className="text-xs">
+                              Basic Tier - Instant Only
+                            </Badge>
+                          )}
+                        </FormLabel>
+                        {tier === 'basic' ? (
+                          <div className="p-3 bg-muted rounded-md">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="font-medium">Instant Confirmation</div>
+                              <Badge variant="default" className="text-xs">Active</Badge>
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              Basic tier restaurants use instant booking confirmation only. 
+                              Upgrade to Pro tier to enable request-based bookings.
+                            </div>
+                          </div>
+                        ) : (
+                          <Select
+                            value={field.value}
+                            onValueChange={field.onChange}
+                            disabled={updateRestaurantMutation.isPending}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="instant">
+                                <div>
+                                  <div className="font-medium">Instant Confirmation</div>
+                                  <div className="text-sm text-muted-foreground">
+                                    Bookings are automatically confirmed
+                                  </div>
                                 </div>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="request">
-                              <div>
-                                <div className="font-medium">Request Based</div>
-                                <div className="text-sm text-muted-foreground">
-                                  You manually approve each booking
+                              </SelectItem>
+                              <SelectItem value="request">
+                                <div>
+                                  <div className="font-medium">Request Based</div>
+                                  <div className="text-sm text-muted-foreground">
+                                    You manually approve each booking
+                                  </div>
                                 </div>
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}

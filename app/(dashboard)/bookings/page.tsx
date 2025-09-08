@@ -2,9 +2,11 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { format, startOfDay, endOfDay, addDays, isToday, isTomorrow, addMinutes, differenceInMinutes } from "date-fns"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -161,6 +163,8 @@ function StatCard({
 }
 
 export default function BookingsPage() {
+  const router = useRouter()
+  const { currentRestaurant, tier, isLoading: contextLoading } = useRestaurantContext()
   const now = useMemo(() => new Date(), [])
   const [selectedDate, setSelectedDate] = useState<Date>(now)
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
@@ -233,6 +237,50 @@ export default function BookingsPage() {
     }
     getRestaurantId()
   }, [supabase])
+
+  // Redirect Basic tier users - they don't have access to this page
+  useEffect(() => {
+    if (tier === 'basic') {
+      // Redirect to Basic dashboard immediately
+      router.replace('/basic-dashboard')
+    }
+  }, [tier, router])
+
+  if (tier === 'basic') {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center max-w-md">
+          <h1 className="text-2xl font-bold mb-4">Page Not Available</h1>
+          <p className="text-muted-foreground mb-6">
+            This page is not available for your current plan. All booking management is handled through your dashboard.
+          </p>
+          <p className="text-sm text-muted-foreground mb-6">
+            Redirecting you to your dashboard...
+          </p>
+          <div className="space-y-2">
+            <a 
+              href="/basic-dashboard" 
+              className="inline-flex items-center justify-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+            >
+              Go to Dashboard
+            </a>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Loading state for Basic tier and initial loading
+  if (contextLoading || tier === null || !restaurantId) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-border mx-auto mb-4" />
+          <p className="text-lg font-medium">Loading bookings...</p>
+        </div>
+      </div>
+    )
+  }
 
   // Fetch all bookings (for accurate statistics)
   const { data: allBookings, isLoading: allBookingsLoading } = useQuery({

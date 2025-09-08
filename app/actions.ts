@@ -2,12 +2,14 @@
 
 import webpush from 'web-push'
 
-// Configure VAPID details
-webpush.setVapidDetails(
-  'mailto:your-restaurant@example.com',
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-)
+// Configure VAPID details only if keys are available
+if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    'mailto:your-restaurant@example.com',
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  )
+}
 
 // In-memory storage for demo purposes
 // In production, you would store subscriptions in your database
@@ -78,6 +80,12 @@ export async function unsubscribeUser(endpoint?: string) {
 
 export async function sendNotification(payload: NotificationPayload) {
   try {
+    // Check if VAPID keys are configured
+    if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+      console.warn('Push notifications disabled: VAPID keys not configured')
+      return { success: false, error: 'Push notifications not configured' }
+    }
+
     if (subscriptions.length === 0) {
       return { success: false, error: 'No subscriptions available' }
     }
@@ -134,6 +142,11 @@ export async function sendBookingNotification(
     tableNumber?: string
   }
 ) {
+  // Check if VAPID keys are configured
+  if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+    console.warn('Push notifications disabled: VAPID keys not configured')
+    return { success: false, error: 'Push notifications not configured' }
+  }
   let title: string
   let body: string
   let url = '/bookings'
