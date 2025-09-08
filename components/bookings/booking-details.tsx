@@ -65,6 +65,22 @@ const formatStatusLabel = (status: string): string => {
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 }
+
+// Helper function to get confirmation message for status changes
+const getStatusConfirmationMessage = (status: string, guestName?: string): string => {
+  const guest = guestName || 'this guest'
+  
+  switch (status) {
+    case 'no_show':
+      return `Mark ${guest} as a no-show?\n\nThis will:\n• Record that the guest didn't arrive\n• Free up the table for other guests\n• This action cannot be easily undone`
+    case 'cancelled_by_restaurant':
+      return `Cancel this booking for ${guest}?\n\nThis will:\n• Cancel the reservation\n• Free up the table\n• Guest should be notified separately`
+    case 'cancelled_by_user':
+      return `Mark this booking as cancelled by ${guest}?\n\nThis confirms the guest cancelled their own reservation.`
+    default:
+      return `Change status to "${formatStatusLabel(status)}" for ${guest}?`
+  }
+}
 import type { Booking } from "@/types"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "../ui/card"
 import BookingCustomerDetails from "./booking-customer-details"
@@ -259,6 +275,9 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
       toast.error("Failed to switch tables")
     }
   }
+
+  // Get guest name for confirmations
+  const guestName = booking.guest_name || booking.user?.full_name || 'Guest'
 
   // Get valid status transitions - use current booking status instead of original booking.status
   const validTransitions = statusService.getValidTransitions(currentBookingStatus as DiningStatus)
@@ -557,7 +576,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                       onValueChange={(newStatus) => {
                         const statusOption = allAvailableStatuses.find(s => s.to === newStatus)
                         if (statusOption?.requiresConfirmation) {
-                          if (confirm(`Are you sure you want to ${statusOption.label.toLowerCase()}?`)) {
+                          if (confirm(getStatusConfirmationMessage(newStatus, guestName))) {
                             handleStatusTransition(newStatus)
                           }
                         } else {
@@ -659,7 +678,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                                 disabled={isUpdatingStatus}
                                 onClick={() => {
                                   if (transition.requiresConfirmation) {
-                                    if (confirm(`Are you sure you want to ${transition.label.toLowerCase()}?`)) {
+                                    if (confirm(getStatusConfirmationMessage(transition.to, guestName))) {
                                       handleStatusTransition(transition.to)
                                     }
                                   } else {
@@ -698,7 +717,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                               disabled={isUpdatingStatus}
                               onClick={() => {
                                 if (status.requiresConfirmation) {
-                                  if (confirm(`Are you sure you want to ${formatStatusLabel(status.to).toLowerCase()}?`)) {
+                                  if (confirm(getStatusConfirmationMessage(status.to, guestName))) {
                                     handleStatusTransition(status.to)
                                   }
                                 } else {
