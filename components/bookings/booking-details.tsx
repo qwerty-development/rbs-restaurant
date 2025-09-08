@@ -319,7 +319,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl w-full max-h-[90vh] flex flex-col p-0 overflow-hidden">
+      <DialogContent className="max-w-4xl w-full max-h-[90vh] flex flex-col p-0 overflow-hidden" showCloseButton={false}>
         <div className="flex-shrink-0 px-6 py-4 border-b">
           <DialogHeader>
             <div className="flex items-center justify-between">
@@ -327,45 +327,54 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                 <StatusIcon className={cn("h-6 w-6", statusConfig?.color)} />
                 Booking Details
               </DialogTitle>
-            {!isEditing ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditing(true)}
-                className="mr-5"
-              >
-                <Edit className="h-4 w-4 mr-2" />
-                Edit
-              </Button>
-            ) : (
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
+                {!isEditing ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsEditing(true)}
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setIsEditing(false)
+                        setEditedData({
+                          party_size: booking.party_size,
+                          turn_time_minutes: booking.turn_time_minutes,
+                          special_requests: booking.special_requests || "",
+                          status: booking.status,
+                        })
+                        setSelectedTableIds(booking.tables?.map(t => t.id) || [])
+                      }}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => updateBookingMutation.mutate()}
+                      disabled={updateBookingMutation.isPending}
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      Save
+                    </Button>
+                  </>
+                )}
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  onClick={() => {
-                    setIsEditing(false)
-                    setEditedData({
-                      party_size: booking.party_size,
-                      turn_time_minutes: booking.turn_time_minutes,
-                      special_requests: booking.special_requests || "",
-                      status: booking.status,
-                    })
-                    setSelectedTableIds(booking.tables?.map(t => t.id) || [])
-                  }}
+                  onClick={onClose}
+                  className="h-6 w-6 p-0"
                 >
-                  <X className="h-4 w-4 mr-2" />
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => updateBookingMutation.mutate()}
-                  disabled={updateBookingMutation.isPending}
-                >
-                  <Save className="h-4 w-4 mr-2" />
-                  Save
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
-            )}
             </div>
           </DialogHeader>
         </div>
