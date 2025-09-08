@@ -1302,15 +1302,7 @@ export function CheckInQueue({
       return
     }
 
-    // FIXED: Don't create customers if we only have empty values or null values
-    // This prevents the unique constraint violation on (restaurant_id, '', '')
-    if (!cleanEmail && !cleanPhone) {
-      // If we only have a name but no contact info, skip creating a customer
-      // since the unique constraint is on email+phone combination
-      toast("Skipping customer creation - contact information is required")
-      await handleSkipAddingCustomer()
-      return
-    }
+    // Allow customer creation with just a name - contact information is optional
 
     setIsAddingCustomer(true)
     try {
@@ -1335,6 +1327,9 @@ export function CheckInQueue({
         existingQuery = existingQuery.eq("guest_email", cleanEmail).is("guest_phone", null)
       } else if (cleanPhone) {
         existingQuery = existingQuery.eq("guest_phone", cleanPhone).is("guest_email", null)
+      } else if (cleanName) {
+        // For name-only customers, check for exact name match with no contact info
+        existingQuery = existingQuery.eq("guest_name", cleanName).is("guest_email", null).is("guest_phone", null)
       }
 
       const { data: existing } = await existingQuery.single()

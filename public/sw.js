@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rbs-restaurant-v7'
+const CACHE_NAME = 'rbs-restaurant-v9'
 const urlsToCache = [
   '/',
   '/app',

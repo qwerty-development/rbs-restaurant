@@ -740,15 +740,7 @@ export function ManualBookingForm({
       return
     }
 
-    // FIXED: Don't create customers if we only have empty values or null values
-    // This prevents the unique constraint violation on (restaurant_id, '', '')
-    if (!cleanEmail && !cleanPhone) {
-      // If we only have a name but no contact info, skip creating a customer
-      // since the unique constraint is on email+phone combination
-      toast("Skipping customer creation - contact information is required")
-      handleSkipAddingCustomer()
-      return
-    }
+    // Allow customer creation with just a name - contact information is optional
 
     setIsAddingCustomer(true)
     try {
@@ -773,6 +765,9 @@ export function ManualBookingForm({
         existingQuery = existingQuery.eq("guest_email", cleanEmail).is("guest_phone", null)
       } else if (cleanPhone) {
         existingQuery = existingQuery.eq("guest_phone", cleanPhone).is("guest_email", null)
+      } else if (cleanName) {
+        // For name-only customers, check for exact name match with no contact info
+        existingQuery = existingQuery.eq("guest_name", cleanName).is("guest_email", null).is("guest_phone", null)
       }
 
       const { data: existing } = await existingQuery.single()
@@ -1405,6 +1400,17 @@ export function ManualBookingForm({
             </Alert>
           )}
           
+          {/* Debug Information */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-xs">
+              <strong>Debug Info:</strong><br/>
+              Total Tables: {allTables?.length || 0} | 
+              Regular Tables: {regularTables?.length || 0} | 
+              Available Data: {availableTablesData ? `${availableTablesData.singleTables?.length || 0} single, ${availableTablesData.combinations?.length || 0} combos` : 'Loading...'} | 
+              Date/Time: {bookingDate ? format(bookingDate, 'MMM d') : 'None'} {bookingTime || 'None'}
+            </div>
+          )}
+
           {!isSharedBooking ? (
             // Regular table selection
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
