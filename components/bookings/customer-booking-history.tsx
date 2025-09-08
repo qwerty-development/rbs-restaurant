@@ -266,7 +266,9 @@ export function CustomerBookingHistory({ customerId, currentBookingId, restauran
                         booking.status === 'no_show' || booking.status.includes('cancelled') ? 'destructive' :
                         'secondary'
                       }
-                      className="text-xs px-1 py-0"
+                      className={`text-xs px-1 py-0 ${
+                        booking.status === 'no_show' || booking.status.includes('cancelled') ? 'text-white' : ''
+                      }`}
                     >
                       {booking.status}
                     </Badge>

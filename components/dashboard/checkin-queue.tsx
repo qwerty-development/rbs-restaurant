@@ -2168,7 +2168,7 @@ export function CheckInQueue({
                             <div className="flex items-center gap-1">
                               <Table2 className="h-3 w-3" />
                               <span>T{table.table_number}</span>
-                              <span className="text-muted-foreground">
+                              <span className={selectedTableIds.includes(table.id) ? "text-white" : "text-muted-foreground"}>
                                 ({table.min_capacity}-{table.max_capacity})
                               </span>
                             </div>

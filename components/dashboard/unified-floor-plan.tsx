@@ -1074,8 +1074,8 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                   <p>Status: {titleCase(current.status)}</p>
                   {current.special_requests && (
                     <div className="mt-2 p-2 bg-primary-foreground/10 rounded border border-primary-foreground/20">
-                      <p className="text-xs font-medium text-primary-foreground/90 mb-1">Special Requests:</p>
-                      <p className="text-xs text-primary-foreground/80 leading-relaxed break-words whitespace-pre-wrap">{current.special_requests}</p>
+                      <p className="text-xs font-medium text-primary-foreground/90 mb-1 not-italic">Special Requests:</p>
+                      <p className="text-xs text-primary-foreground/80 leading-relaxed break-words whitespace-pre-wrap not-italic">{current.special_requests}</p>
                     </div>
                   )}
                   {(current.user?.phone_number || current.guest_phone) && (
@@ -1085,9 +1085,9 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
               </div>
             ) : (
               <div>
-                <p className="font-semibold">Table {table.table_number}</p>
-                <p className="text-sm">Capacity: {table.min_capacity}-{table.max_capacity}</p>
-                <p className="text-sm">Type: {titleCase(table.table_type)}</p>
+                <p className="font-semibold text-primary-foreground">Table {table.table_number}</p>
+                <p className="text-sm text-primary-foreground">Capacity: {table.min_capacity}-{table.max_capacity}</p>
+                <p className="text-sm text-primary-foreground">Type: {titleCase(table.table_type)}</p>
                 {isSharedTable && sharedTableInfo && (
                   <div className="text-sm mt-2">
                     <p className="text-purple-200 font-medium">🤝 Shared Table</p>
@@ -1150,8 +1150,8 @@ export const UnifiedFloorPlan = React.memo(function UnifiedFloorPlan({
                     </TooltipTrigger>
                     <TooltipContent>
                       <div className="text-sm">
-                        <p className="font-semibold">{stat.name}</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="font-semibold text-primary-foreground">{stat.name}</p>
+                        <p className="text-xs text-primary-foreground">
                           {stat.tableCount} tables • {stat.occupiedCount} occupied • {stat.availableCount} available • {stat.occupancyRate}% occupancy
                         </p>
                       </div>
