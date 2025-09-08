@@ -214,10 +214,11 @@ export function TableSelectionModal({
                   </Badge>
                 </div>
                 
-                <div className="grid grid-cols-6 gap-3">
+                <div className="flex flex-wrap gap-3">
                   {tables.map(table => {
                     const isSelected = selectedTableIds.includes(table.id)
                     const isSuitable = table.capacity >= booking.party_size
+                    const tableText = `T${table.table_number}`
                     
                     return (
                       <Button
@@ -225,13 +226,16 @@ export function TableSelectionModal({
                         variant={isSelected ? "default" : "outline"}
                         size="sm"
                         className={cn(
-                          "h-16 flex flex-col items-center justify-center p-2 relative",
+                          "h-16 flex flex-col items-center justify-center p-3 relative min-w-fit",
                           isSelected && "bg-blue-600 hover:bg-blue-700 border-blue-600",
                           !table.canBeSelected && "opacity-50 cursor-not-allowed bg-gray-100",
                           table.currentlyOccupied && "bg-red-100 border-red-300 text-red-700",
                           table.conflictingBooking && "bg-orange-100 border-orange-300 text-orange-700",
                           isSuitable && table.canBeSelected && !isSelected && "border-green-300 bg-green-50"
                         )}
+                        style={{
+                          minWidth: `${Math.max(4, tableText.length * 0.7 + 2)}rem`
+                        }}
                         onClick={() => table.canBeSelected && handleTableToggle(table.id)}
                         disabled={!table.canBeSelected}
                         title={
@@ -240,8 +244,8 @@ export function TableSelectionModal({
                           `Table ${table.table_number} (${table.capacity} seats)`
                         }
                       >
-                        <span className="font-semibold text-sm">T{table.table_number}</span>
-                        <span className="text-xs opacity-70 flex items-center gap-1">
+                        <span className="font-semibold text-sm whitespace-nowrap">{tableText}</span>
+                        <span className="text-xs opacity-70 flex items-center gap-1 whitespace-nowrap">
                           <Users className="h-3 w-3" />
                           {table.capacity}
                         </span>
