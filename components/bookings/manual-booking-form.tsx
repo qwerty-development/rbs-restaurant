@@ -33,6 +33,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { MinimumCapacityWarningDialog } from "./minimum-capacity-warning-dialog"
 import {
   Dialog,
   DialogContent,
@@ -120,6 +121,13 @@ export function ManualBookingForm({
   const [pendingProcessedData, setPendingProcessedData] = useState<any | null>(null)
   const [pendingGuestDetails, setPendingGuestDetails] = useState<{ name?: string | null; email?: string | null; phone?: string | null } | null>(null)
   const [isAddingCustomer, setIsAddingCustomer] = useState(false)
+
+  // Minimum capacity warning dialog state
+  const [showMinimumCapacityWarning, setShowMinimumCapacityWarning] = useState(false)
+  const [pendingSubmission, setPendingSubmission] = useState<{
+    data: any
+    violatingTables: any[]
+  } | null>(null)
 
   // Debounce customer search
   useEffect(() => {
@@ -571,6 +579,22 @@ export function ManualBookingForm({
     const capacityCheck = tableService.validateCapacity(selectedTableObjects, data.party_size)
     
     if (!capacityCheck.valid) {
+      // Check if this is a minimum capacity violation (party size too small)
+      const violatingTables = selectedTableObjects.filter(table => 
+        (table.min_capacity || 1) > data.party_size
+      )
+      
+      if (violatingTables.length > 0) {
+        // Show warning dialog for minimum capacity override
+        setPendingSubmission({
+          data,
+          violatingTables
+        })
+        setShowMinimumCapacityWarning(true)
+        return
+      }
+      
+      // For other capacity issues (party size too large), show error
       toast.error(capacityCheck.message || "Invalid table selection")
       return
     }
@@ -900,6 +924,63 @@ export function ManualBookingForm({
     )
     
     return isInSingleTables || isInCombinations
+  }
+
+  // Helper functions for minimum capacity override
+  const confirmMinimumCapacityOverride = () => {
+    if (!pendingSubmission) return
+
+    // Proceed with the booking submission despite the violation
+    const [hours, minutes] = pendingSubmission.data.booking_time.split(":")
+    const bookingDateTime = new Date(pendingSubmission.data.booking_date)
+    bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+
+    // FIXED: Convert empty strings to null to avoid unique constraint violations
+    const processedData = {
+      ...pendingSubmission.data,
+      customer_id: selectedCustomer?.id || null,
+      user_id: selectedCustomer?.user_id || null,
+      guest_name: selectedCustomer 
+        ? (selectedCustomer.profile?.full_name || selectedCustomer.guest_name)
+        : (pendingSubmission.data.guest_name?.trim() || `Anonymous Guest ${format(new Date(), 'HH:mm')}`),
+      guest_phone: selectedCustomer 
+        ? (selectedCustomer.profile?.phone_number || selectedCustomer.guest_phone)
+        : (pendingSubmission.data.guest_phone?.trim() || null),
+      guest_email: selectedCustomer 
+        ? (selectedCustomer.profile?.email || selectedCustomer.guest_email)
+        : (pendingSubmission.data.guest_email?.trim() || null),
+      special_requests: pendingSubmission.data.special_requests?.trim() || null,
+      occasion: pendingSubmission.data.occasion?.trim() || null,
+      table_ids: selectedTables,
+      shared_table_id: selectedSharedTable,
+      booking_time: bookingDateTime.toISOString(),
+      restaurant_id: restaurantId
+    }
+
+    // Check if we need to add the customer to the restaurant's customer list
+    if (!selectedCustomer && !pendingSubmission.data.is_shared_booking) {
+      const name = pendingSubmission.data.guest_name?.trim()
+      const email = pendingSubmission.data.guest_email?.trim()
+      const phone = pendingSubmission.data.guest_phone?.trim()
+
+      if (name || email || phone) {
+        setPendingProcessedData(processedData)
+        setPendingGuestDetails({ name, email, phone })
+        setShowAddCustomerPrompt(true)
+        setShowMinimumCapacityWarning(false)
+        setPendingSubmission(null)
+        return
+      }
+    }
+
+    setShowMinimumCapacityWarning(false)
+    setPendingSubmission(null)
+    onSubmit(processedData)
+  }
+
+  const cancelMinimumCapacityOverride = () => {
+    setPendingSubmission(null)
+    setShowMinimumCapacityWarning(false)
   }
 
   return (
@@ -1771,6 +1852,18 @@ export function ManualBookingForm({
         </div>,
         document.body
       )}
+
+      {/* Minimum Capacity Warning Dialog */}
+      <MinimumCapacityWarningDialog
+        open={showMinimumCapacityWarning}
+        onOpenChange={setShowMinimumCapacityWarning}
+        onConfirm={confirmMinimumCapacityOverride}
+        onCancel={cancelMinimumCapacityOverride}
+        partySize={pendingSubmission?.data?.party_size || 0}
+        violatingTables={pendingSubmission?.violatingTables || []}
+        guestName={selectedCustomer?.profile?.full_name || selectedCustomer?.guest_name || pendingSubmission?.data?.guest_name}
+        isLoading={isLoading}
+      />
     </div>
   )
 }

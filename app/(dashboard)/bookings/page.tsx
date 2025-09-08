@@ -30,6 +30,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { BookingList } from "@/components/bookings/booking-list"
 import { BookingDetails } from "@/components/bookings/booking-details"
 import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
+import { MinimumCapacityWarningDialog } from "@/components/bookings/minimum-capacity-warning-dialog"
 import { SharedTablesOverview } from "@/components/shared-tables"
 import { TableAvailabilityService } from "@/lib/table-availability"
 import { toast } from "react-hot-toast"
@@ -183,6 +184,15 @@ export default function BookingsPage() {
   const [availableTablesForAssignment, setAvailableTablesForAssignment] = useState<any[]>([])
   const [selectedTablesForAssignment, setSelectedTablesForAssignment] = useState<string[]>([])
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false)
+  
+  // Minimum capacity warning dialog state
+  const [showMinimumCapacityWarning, setShowMinimumCapacityWarning] = useState(false)
+  const [pendingAssignment, setPendingAssignment] = useState<{
+    bookingId: string
+    tableIds: string[]
+    booking: any
+    violatingTables: any[]
+  } | null>(null)
   
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -657,18 +667,27 @@ export default function BookingsPage() {
         
         if (!allTables) return null
         
-        // Check availability for each table
+        // Check availability for each table - ONLY check for booking conflicts, not capacity
         const availabilityPromises = allTables.map(async (table) => {
-          const availability = await tableService.checkTableAvailability(
-            restaurantId,
-            [table.id],
-            new Date(booking.booking_time),
-            booking.turn_time_minutes || 120
-          )
+          // Use the RPC function directly to check for booking conflicts only
+          const { data: conflictingBookingId } = await supabase
+            .rpc("check_booking_overlap", {
+              p_table_ids: [table.id],
+              p_start_time: new Date(booking.booking_time).toISOString(),
+              p_end_time: new Date(new Date(booking.booking_time).getTime() + (booking.turn_time_minutes || 120) * 60000).toISOString(),
+              p_exclude_booking_id: booking.id,
+              p_exclude_user_id: null
+            })
+          
+          const isAvailable = conflictingBookingId === null
+          const hasMinCapacityIssue = (table.min_capacity || 1) > booking.party_size
+          
           return {
             ...table,
-            isAvailable: availability.available,
-            conflictReason: availability.conflicts?.[0]?.reason || (availability.available ? null : "Table unavailable")
+            isAvailable,
+            hasMinCapacityIssue,
+            conflictReason: isAvailable ? null : "Table has conflicting booking",
+            minCapacityViolation: hasMinCapacityIssue ? `Minimum ${table.min_capacity || 1} guests required` : null
           }
         })
         
@@ -728,6 +747,67 @@ export default function BookingsPage() {
       toast.error("Failed to update table assignment")
     }
   })
+
+  // Handle table assignment with minimum capacity validation
+  const handleTableAssignment = useCallback(async (bookingId: string, tableIds: string[]) => {
+    const booking = allBookings?.find(b => b.id === bookingId)
+    if (!booking) {
+      toast.error("Booking not found")
+      return
+    }
+
+    // Check if no tables selected (removing assignment)
+    if (tableIds.length === 0) {
+      assignTablesMutation.mutate({ bookingId, tableIds })
+      return
+    }
+
+    // Get selected table details for validation
+    const selectedTables = availableTablesForAssignment.filter(table => 
+      tableIds.includes(table.id)
+    )
+
+    // Check for minimum capacity violations
+    const violatingTables = selectedTables.filter(table => 
+      table.hasMinCapacityIssue || (table.min_capacity || 1) > booking.party_size
+    )
+
+    // If there are violations, show warning dialog
+    if (violatingTables.length > 0) {
+      setPendingAssignment({
+        bookingId,
+        tableIds,
+        booking,
+        violatingTables
+      })
+      setShowMinimumCapacityWarning(true)
+      return
+    }
+
+    // No violations, proceed with assignment
+    assignTablesMutation.mutate({ bookingId, tableIds })
+  }, [allBookings, availableTablesForAssignment, assignTablesMutation])
+
+  // Confirm minimum capacity override
+  const confirmMinimumCapacityOverride = useCallback(() => {
+    if (!pendingAssignment) return
+
+    // Proceed with the assignment despite the violation
+    assignTablesMutation.mutate({
+      bookingId: pendingAssignment.bookingId,
+      tableIds: pendingAssignment.tableIds
+    })
+
+    // Clear pending state
+    setPendingAssignment(null)
+    setShowMinimumCapacityWarning(false)
+  }, [pendingAssignment, assignTablesMutation])
+
+  // Cancel minimum capacity override
+  const cancelMinimumCapacityOverride = useCallback(() => {
+    setPendingAssignment(null)
+    setShowMinimumCapacityWarning(false)
+  }, [])
 
   // Switch table for booking (move from one table to another)
   const switchTableMutation = useMutation({
@@ -1744,10 +1824,7 @@ export default function BookingsPage() {
                               })
                             } else {
                               // Assign table if no current assignment
-                              assignTablesMutation.mutate({
-                                bookingId: draggedBooking,
-                                tableIds: [table.id]
-                              })
+                              handleTableAssignment(draggedBooking, [table.id])
                             }
                             setDraggedBooking(null)
                           }
@@ -2125,6 +2202,10 @@ export default function BookingsPage() {
                         <span>Available</span>
                       </div>
                       <div className="flex items-center gap-2">
+                        <div className="h-3 w-3 bg-orange-500 rounded-full" />
+                        <span>Requires Override</span>
+                      </div>
+                      <div className="flex items-center gap-2">
                         <div className="h-3 w-3 bg-red-500 rounded-full" />
                         <span>Unavailable</span>
                       </div>
@@ -2141,6 +2222,9 @@ export default function BookingsPage() {
                       const isCurrentlyAssigned = assignmentBookingId && 
                         allBookings?.find(b => b.id === assignmentBookingId)?.tables?.some(t => t.id === table.id)
                       
+                      // Table can be selected if it's available OR has min capacity issue (for override)
+                      const canSelect = table.isAvailable || table.hasMinCapacityIssue
+                      
                       return (
                         <Card 
                           key={table.id} 
@@ -2148,12 +2232,14 @@ export default function BookingsPage() {
                             "cursor-pointer transition-all duration-200 hover:shadow-lg",
                             isSelected 
                               ? "border-primary bg-primary/5 shadow-md" 
-                              : table.isAvailable 
+                              : table.isAvailable && !table.hasMinCapacityIssue
                                 ? "border-green-200 bg-green-50 hover:bg-green-100" 
-                                : "border-red-200 bg-red-50 opacity-60 cursor-not-allowed"
+                                : table.hasMinCapacityIssue && table.isAvailable
+                                  ? "border-orange-200 bg-orange-50 hover:bg-orange-100"
+                                  : "border-red-200 bg-red-50 opacity-60 cursor-not-allowed"
                           )}
                           onClick={() => {
-                            if (!table.isAvailable) return
+                            if (!canSelect) return
                             
                             setSelectedTablesForAssignment(prev => 
                               prev.includes(table.id)
@@ -2170,9 +2256,11 @@ export default function BookingsPage() {
                                   "h-3 w-3 rounded-full",
                                   isCurrentlyAssigned 
                                     ? "bg-blue-500" 
-                                    : table.isAvailable 
+                                    : table.isAvailable && !table.hasMinCapacityIssue
                                       ? "bg-green-500" 
-                                      : "bg-red-500"
+                                      : table.hasMinCapacityIssue && table.isAvailable
+                                        ? "bg-orange-500"
+                                        : "bg-red-500"
                                 )} />
                                 {isSelected && <CheckCircle2 className="h-5 w-5 text-primary" />}
                               </div>
@@ -2184,6 +2272,11 @@ export default function BookingsPage() {
                                 </div>
                                 <div className="text-sm text-muted-foreground">
                                   {table.capacity} seats • {table.table_type}
+                                  {table.min_capacity && table.min_capacity > 1 && (
+                                    <span className="block text-xs">
+                                      Min: {table.min_capacity} guests
+                                    </span>
+                                  )}
                                 </div>
                               </div>
 
@@ -2193,9 +2286,13 @@ export default function BookingsPage() {
                                   <Badge variant="default" className="text-xs">
                                     Currently Assigned
                                   </Badge>
-                                ) : table.isAvailable ? (
+                                ) : table.isAvailable && !table.hasMinCapacityIssue ? (
                                   <Badge variant="outline" className="text-xs border-green-500 text-green-600">
                                     Available
+                                  </Badge>
+                                ) : table.hasMinCapacityIssue && table.isAvailable ? (
+                                  <Badge variant="outline" className="text-xs border-orange-500 text-orange-600">
+                                    Requires Override
                                   </Badge>
                                 ) : (
                                   <Badge variant="destructive" className="text-xs">
@@ -2204,7 +2301,12 @@ export default function BookingsPage() {
                                 )}
                               </div>
 
-                              {/* Conflict Reason */}
+                              {/* Warning Messages */}
+                              {table.hasMinCapacityIssue && table.isAvailable && (
+                                <div className="text-xs text-orange-600 mt-2">
+                                  {table.minCapacityViolation}
+                                </div>
+                              )}
                               {!table.isAvailable && table.conflictReason && (
                                 <div className="text-xs text-red-600 mt-2">
                                   {table.conflictReason}
@@ -2273,10 +2375,7 @@ export default function BookingsPage() {
                 <Button
                   onClick={() => {
                     if (assignmentBookingId) {
-                      assignTablesMutation.mutate({ 
-                        bookingId: assignmentBookingId, 
-                        tableIds: selectedTablesForAssignment 
-                      })
+                      handleTableAssignment(assignmentBookingId, selectedTablesForAssignment)
                     }
                   }}
                   disabled={assignTablesMutation.isPending || !assignmentBookingId}
@@ -2294,6 +2393,18 @@ export default function BookingsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Minimum Capacity Warning Dialog */}
+      <MinimumCapacityWarningDialog
+        open={showMinimumCapacityWarning}
+        onOpenChange={setShowMinimumCapacityWarning}
+        onConfirm={confirmMinimumCapacityOverride}
+        onCancel={cancelMinimumCapacityOverride}
+        partySize={pendingAssignment?.booking?.party_size || 0}
+        violatingTables={pendingAssignment?.violatingTables || []}
+        guestName={pendingAssignment?.booking?.guest_name || pendingAssignment?.booking?.user?.full_name}
+        isLoading={assignTablesMutation.isPending}
+      />
     </div>
   )
 }
