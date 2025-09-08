@@ -184,18 +184,19 @@ export class BookingRequestService {
     }
   ): Promise<AcceptRequestResult> {
     try {
-      // Lock booking for update
-      const { data: lockResult, error: lockError } = await this.supabase
-        .rpc('lock_booking_for_update', { p_booking_id: bookingId })
+      // Fetch booking directly instead of using missing RPC
+      const { data: booking, error: fetchError } = await this.supabase
+        .from('bookings')
+        .select('*')
+        .eq('id', bookingId)
+        .single()
 
-      if (lockError || !lockResult || lockResult.error) {
+      if (fetchError || !booking) {
         return { 
           success: false, 
-          error: lockResult?.error || "Booking not found or being processed" 
+          error: "Booking not found or being processed" 
         }
       }
-
-      const booking = lockResult
 
       // Validate booking status
       if (booking.status !== 'pending') {
@@ -295,6 +296,17 @@ export class BookingRequestService {
 
       // Assign tables if provided
       if (tableIds && tableIds.length > 0 && !options?.skipTableAssignment) {
+        // First, clear any existing table assignments for this booking
+        const { error: deleteError } = await this.supabase
+          .from("booking_tables")
+          .delete()
+          .eq("booking_id", bookingId)
+
+        if (deleteError) {
+          console.warn("Warning: Failed to clear existing table assignments:", deleteError)
+        }
+
+        // Then insert new table assignments
         const tableAssignments = tableIds.map(tableId => ({
           booking_id: bookingId,
           table_id: tableId
@@ -305,13 +317,15 @@ export class BookingRequestService {
           .insert(tableAssignments)
 
         if (tableError) {
+          console.error("Table assignment error:", tableError)
+          
           // Rollback on table assignment failure
           await this.supabase
             .from("bookings")
             .update({ status: "pending" })
             .eq("id", bookingId)
             
-          throw new Error("Failed to assign tables")
+          throw new Error(`Failed to assign tables: ${tableError.message || 'Unknown error'}`)
         }
       }
 
@@ -427,24 +441,71 @@ export class BookingRequestService {
     tableIds: string[]
   ): Promise<AcceptanceValidation> {
     try {
-      // Server-side validation using RPC
-      const { data: validation, error } = await this.supabase
-        .rpc('validate_booking_acceptance', {
-          p_booking_id: booking.id,
-          p_table_ids: tableIds
-        })
-
-      if (error) {
-        console.error("Database validation error:", error)
-        return { 
-          valid: false, 
-          reason: "Validation failed" 
+      // Direct validation instead of missing RPC function
+      // 1. Check that booking is pending
+      if (booking.status !== 'pending') {
+        return {
+          valid: false,
+          reason: `Booking is already ${booking.status}`
         }
       }
 
-      // If database validation failed, return early
-      if (!validation.valid) {
-        return validation
+      // 2. Check that all tables belong to the restaurant and are active
+      const { data: tables, error: tablesError } = await this.supabase
+        .from('restaurant_tables')
+        .select('id, is_active, restaurant_id')
+        .in('id', tableIds)
+
+      if (tablesError || !tables || tables.length !== tableIds.length) {
+        return {
+          valid: false,
+          reason: "One or more tables not found"
+        }
+      }
+
+      // Check all tables belong to the same restaurant as the booking
+      const invalidTables = tables.filter(table => 
+        table.restaurant_id !== booking.restaurant_id || !table.is_active
+      )
+
+      if (invalidTables.length > 0) {
+        return {
+          valid: false,
+          reason: "One or more tables are not available or don't belong to this restaurant"
+        }
+      }
+
+      // 3. Check for time conflicts with other confirmed bookings
+      const bookingStart = new Date(booking.booking_time)
+      const bookingEnd = new Date(bookingStart.getTime() + (booking.turn_time_minutes || 120) * 60000)
+
+      const { data: conflicts } = await this.supabase
+        .from('bookings')
+        .select(`
+          id,
+          booking_time,
+          turn_time_minutes,
+          booking_tables!inner(table_id)
+        `)
+        .in('booking_tables.table_id', tableIds)
+        .in('status', ['confirmed', 'seated', 'ordering', 'appetizers', 'main_course', 'dessert'])
+        .neq('id', booking.id)
+
+      if (conflicts && conflicts.length > 0) {
+        // Check each conflict for actual time overlap
+        const hasConflict = conflicts.some(conflict => {
+          const conflictStart = new Date(conflict.booking_time)
+          const conflictEnd = new Date(conflictStart.getTime() + (conflict.turn_time_minutes || 120) * 60000)
+          
+          return (bookingStart < conflictEnd && bookingEnd > conflictStart)
+        })
+
+        if (hasConflict) {
+          return {
+            valid: false,
+            reason: "Time conflict with existing bookings on selected tables"
+          }
+        }
       }
 
       // Additional client-side validation
@@ -465,19 +526,19 @@ export class BookingRequestService {
       }
 
       // Validate total capacity
-      const { data: tables } = await this.supabase
+      const { data: capacityTables } = await this.supabase
         .from("restaurant_tables")
         .select("id, capacity, table_number")
         .in("id", tableIds)
 
-      if (!tables || tables.length !== tableIds.length) {
+      if (!capacityTables || capacityTables.length !== tableIds.length) {
         return {
           valid: false,
           reason: "One or more selected tables not found"
         }
       }
 
-      const totalCapacity = tables.reduce((sum, t) => sum + t.capacity, 0)
+      const totalCapacity = capacityTables.reduce((sum, t) => sum + t.capacity, 0)
       
       if (totalCapacity < booking.party_size) {
         return {
@@ -614,5 +675,125 @@ export class BookingRequestService {
     const percentage = Math.max(0, Math.min(100, Math.round((remainingMs / totalMs) * 100)))
 
     return { hours, minutes, expired: false, percentage }
+  }
+
+  async autoDeclineExpiredRequests(restaurantId: string, userId: string): Promise<{
+    declinedCount: number
+    declinedBookings: any[]
+    errors: any[]
+  }> {
+    const result = {
+      declinedCount: 0,
+      declinedBookings: [] as any[],
+      errors: [] as any[]
+    }
+
+    try {
+      // Find expired pending requests for this restaurant
+      const { data: expiredRequests, error: fetchError } = await this.supabase
+        .from("bookings")
+        .select(`
+          *,
+          user:profiles(*),
+          restaurant:restaurants(*)
+        `)
+        .eq("restaurant_id", restaurantId)
+        .eq("status", "pending")
+        .not("request_expires_at", "is", null)
+        .lt("request_expires_at", new Date().toISOString())
+
+      if (fetchError) {
+        console.error("Error fetching expired requests:", fetchError)
+        result.errors.push({ type: "fetch", error: fetchError })
+        return result
+      }
+
+      if (!expiredRequests || expiredRequests.length === 0) {
+        return result // No expired requests found
+      }
+
+      // Process each expired request
+      for (const booking of expiredRequests) {
+        try {
+          // Update booking status to auto_declined
+          const { error: updateError } = await this.supabase
+            .from("bookings")
+            .update({
+              status: "auto_declined",
+              updated_at: new Date().toISOString(),
+              decline_reason: "Request expired automatically"
+            })
+            .eq("id", booking.id)
+
+          if (updateError) {
+            console.error(`Failed to auto-decline booking ${booking.id}:`, updateError)
+            result.errors.push({ bookingId: booking.id, error: updateError })
+            continue
+          }
+
+          // Log status change in history
+          await this.supabase
+            .from("booking_status_history")
+            .insert({
+              booking_id: booking.id,
+              old_status: "pending",
+              new_status: "auto_declined",
+              changed_by: userId || "system",
+              changed_at: new Date().toISOString(),
+              reason: "Request expired automatically",
+              metadata: { 
+                action: "auto_decline_expired",
+                expired_at: booking.request_expires_at,
+                auto_processed: true
+              }
+            })
+
+          result.declinedCount++
+          result.declinedBookings.push(booking)
+          
+          console.log(`Auto-declined expired booking request: ${booking.id}`)
+        } catch (error) {
+          console.error(`Error processing expired booking ${booking.id}:`, error)
+          result.errors.push({ bookingId: booking.id, error })
+        }
+      }
+
+      return result
+    } catch (error) {
+      console.error("Error in autoDeclineExpiredRequests:", error)
+      result.errors.push({ type: "general", error })
+      return result
+    }
+  }
+
+  async findExpiredRequests(restaurantId: string): Promise<any[]> {
+    try {
+      const { data: expiredRequests, error } = await this.supabase
+        .from("bookings")
+        .select(`
+          id,
+          guest_name,
+          booking_time,
+          party_size,
+          request_expires_at,
+          created_at,
+          user:profiles(full_name)
+        `)
+        .eq("restaurant_id", restaurantId)
+        .eq("status", "pending")
+        .not("request_expires_at", "is", null)
+        .lt("request_expires_at", new Date().toISOString())
+        .order("request_expires_at", { ascending: true })
+
+      if (error) {
+        console.error("Error finding expired requests:", error)
+        return []
+      }
+
+      return expiredRequests || []
+    } catch (error) {
+      console.error("Error in findExpiredRequests:", error)
+      return []
+    }
   }
 }
