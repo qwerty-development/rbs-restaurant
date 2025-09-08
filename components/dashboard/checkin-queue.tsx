@@ -871,7 +871,7 @@ export function CheckInQueue({
           .filter(Boolean)
           .join(', ')
         
-        toast.success(`Tables ${tableNumbers} assigned to ${booking.user?.full_name || booking.guest_name}`)
+        toast.success(`Tables ${tableNumbers} assigned to ${booking.guest_name || booking.user?.full_name || 'Guest'}`)
       }
       
       // Close modal
