@@ -1025,6 +1025,7 @@ export default function DashboardPage() {
         <InstallPrompt />
       </div>
 
+
       {/* Main Content Area */}
       <main className="flex-1 flex overflow-hidden">
         {/* Floor Plan */}
