@@ -154,8 +154,11 @@ export function EditCustomerDialog({
         }
       }
 
-      // Always allow updating these fields
+      // Only allow VIP status updates for registered users (not guest customers)
       if (data.vip_status !== customer.vip_status) {
+        if (!customer.user_id && data.vip_status) {
+          throw new Error('Guest customers cannot be assigned VIP status. Customer must have a registered account.')
+        }
         updateData.vip_status = data.vip_status
       }
       if (data.blacklisted !== customer.blacklisted) {
@@ -343,14 +346,24 @@ export function EditCustomerDialog({
                 <Checkbox
                   id="vip_status"
                   checked={watchedVipStatus}
+                  disabled={!customer.user_id}
                   onCheckedChange={(checked) => setValue('vip_status', !!checked)}
                 />
-                <Label htmlFor="vip_status" className="flex items-center gap-2">
+                <Label 
+                  htmlFor="vip_status" 
+                  className={`flex items-center gap-2 ${!customer.user_id ? 'text-muted-foreground cursor-not-allowed' : ''}`}
+                >
                   <Star className="h-4 w-4 text-yellow-500" />
                   VIP Customer
                 </Label>
               </div>
-              {watchedVipStatus && (
+              {!customer.user_id && (
+                <p className="text-xs text-orange-600 bg-orange-50 p-2 rounded-md">
+                  <AlertCircle className="h-3 w-3 inline mr-1" />
+                  Guest customers cannot be assigned VIP status. Customer must have a registered account.
+                </p>
+              )}
+              {watchedVipStatus && customer.user_id && (
                 <p className="text-xs text-muted-foreground">
                   VIP customers get priority booking and extended booking windows.
                 </p>

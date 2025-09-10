@@ -30,6 +30,21 @@ import {
 import { toast } from "sonner"
 import type { Booking } from "@/types"
 import type { RestaurantCustomer, CustomerNote, CustomerRelationship, CustomerTag } from "@/types/customer"
+
+// Function to determine if a color is light and needs dark text
+const isLightColor = (hexColor: string): boolean => {
+  // Convert hex to RGB
+  const hex = hexColor.replace('#', '')
+  const r = parseInt(hex.substr(0, 2), 16)
+  const g = parseInt(hex.substr(2, 2), 16)
+  const b = parseInt(hex.substr(4, 2), 16)
+  
+  // Calculate relative luminance
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  
+  // Return true if light (needs dark text)
+  return luminance > 0.6
+}
 import { QuickCustomerNote } from "./quick-customer-note"
 import { CustomerBookingHistory } from "./customer-booking-history"
 import { LowRatingFlag, CustomerRatingDisplay } from "@/components/ui/low-rating-flag"
@@ -349,7 +364,10 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
                     <Badge
                       key={tag.id}
                       variant="outline"
-                      style={{ borderColor: tag.color, color: tag.color }}
+                      style={{ 
+                        borderColor: tag.color, 
+                        color: isLightColor(tag.color) ? '#000000' : tag.color 
+                      }}
                     >
                       {tag.name}
                     </Badge>

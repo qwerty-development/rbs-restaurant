@@ -53,7 +53,23 @@ const TAG_COLORS = [
   { name: 'Warm Orange', value: '#F97316' },
   { name: 'Golden Yellow', value: '#F59E0B' },
   { name: 'Deep Purple', value: '#8B5CF6' },
+  { name: 'Pure White', value: '#FFFFFF' },
 ]
+
+// Function to determine if a color is light and needs dark text
+const isLightColor = (hexColor: string): boolean => {
+  // Convert hex to RGB
+  const hex = hexColor.replace('#', '')
+  const r = parseInt(hex.substr(0, 2), 16)
+  const g = parseInt(hex.substr(2, 2), 16)
+  const b = parseInt(hex.substr(4, 2), 16)
+  
+  // Calculate relative luminance
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  
+  // Return true if light (needs dark text)
+  return luminance > 0.6
+}
 
 export function TagManagementDialog({
   open,
@@ -314,7 +330,7 @@ export function TagManagementDialog({
                               variant="outline"
                               style={{ 
                                 borderColor: tag.color, 
-                                color: tag.color,
+                                color: isLightColor(tag.color) ? '#000000' : tag.color,
                                 backgroundColor: `${tag.color}20`
                               }}
                             >

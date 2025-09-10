@@ -58,6 +58,21 @@ import { MigrationButton } from '@/components/migration/migration-button'
 import { restaurantAuth } from '@/lib/restaurant-auth'
 import type { RestaurantCustomer, CustomerTag, CustomerFilters } from '@/types/customer'
 
+// Function to determine if a color is light and needs dark text
+const isLightColor = (hexColor: string): boolean => {
+  // Convert hex to RGB
+  const hex = hexColor.replace('#', '')
+  const r = parseInt(hex.substr(0, 2), 16)
+  const g = parseInt(hex.substr(2, 2), 16)
+  const b = parseInt(hex.substr(4, 2), 16)
+  
+  // Calculate relative luminance
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  
+  // Return true if light (needs dark text)
+  return luminance > 0.6
+}
+
 export default function CustomersPage() {
   const router = useRouter()
   const supabase = createClient()
@@ -753,7 +768,8 @@ export default function CustomersPage() {
                       }}
                       style={{
                         backgroundColor: selectedTags.includes(tag.id) ? tag.color : undefined,
-                        borderColor: tag.color
+                        borderColor: tag.color,
+                        color: selectedTags.includes(tag.id) && isLightColor(tag.color) ? '#000000' : undefined
                       }}
                     >
                       {tag.name}
@@ -875,7 +891,10 @@ export default function CustomersPage() {
                               key={tag.id}
                               variant="outline"
                               className="text-xs"
-                              style={{ borderColor: tag.color, color: tag.color }}
+                              style={{ 
+                                borderColor: tag.color, 
+                                color: isLightColor(tag.color) ? '#000000' : tag.color 
+                              }}
                             >
                               {tag.name}
                             </Badge>
@@ -891,13 +910,13 @@ export default function CustomersPage() {
                         {/* Booking breakdown */}
                         <div className="flex items-center gap-2 text-xs">
                           {(customer.profile?.completed_bookings || 0) > 0 && (
-                            <span className="text-green-600">{customer.profile?.completed_bookings} completed</span>
+                            <span className="text-green-600">{customer.profile?.completed_bookings} Completed</span>
                           )}
                           {(customer.profile?.cancelled_bookings || 0) > 0 && (
-                            <span className="text-orange-600">{customer.profile?.cancelled_bookings} cancelled</span>
+                            <span className="text-orange-600">{customer.profile?.cancelled_bookings} Cancelled</span>
                           )}
                           {(customer.profile?.no_show_bookings || 0) > 0 && (
-                            <span className="text-red-600">{customer.profile?.no_show_bookings} no-shows</span>
+                            <span className="text-red-600">{customer.profile?.no_show_bookings} No-Show</span>
                           )}
                         </div>
                         

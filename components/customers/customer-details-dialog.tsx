@@ -51,6 +51,21 @@ import {
 import { toast } from 'sonner'
 import type { RestaurantCustomer, CustomerNote, CustomerRelationship, CustomerTag } from '@/types/customer'
 
+// Function to determine if a color is light and needs dark text
+const isLightColor = (hexColor: string): boolean => {
+  // Convert hex to RGB
+  const hex = hexColor.replace('#', '')
+  const r = parseInt(hex.substr(0, 2), 16)
+  const g = parseInt(hex.substr(2, 2), 16)
+  const b = parseInt(hex.substr(4, 2), 16)
+  
+  // Calculate relative luminance
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  
+  // Return true if light (needs dark text)
+  return luminance > 0.6
+}
+
 type CustomerForSelection = {
   id: string
   guest_name?: string | null
@@ -425,7 +440,10 @@ export function CustomerDetailsDialog({
                   <Badge
                     key={tag.id}
                     variant="outline"
-                    style={{ borderColor: tag.color, color: tag.color }}
+                    style={{ 
+                      borderColor: tag.color, 
+                      color: isLightColor(tag.color) ? '#000000' : tag.color 
+                    }}
                   >
                     {tag.name}
                   </Badge>
@@ -824,7 +842,10 @@ export function CustomerDetailsDialog({
                                 key={tag.id}
                                 variant="outline"
                                 className="cursor-pointer hover:bg-muted"
-                                style={{ borderColor: tag.color, color: tag.color }}
+                                style={{ 
+                      borderColor: tag.color, 
+                      color: isLightColor(tag.color) ? '#000000' : tag.color 
+                    }}
                                 onClick={() => handleToggleTag(tag)}
                               >
                                 <Plus className="h-3 w-3 mr-1" />
