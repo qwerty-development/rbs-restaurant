@@ -2,7 +2,6 @@
 "use client"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import { 
   AlertTriangle,
   Timer,
@@ -10,7 +9,6 @@ import {
   XCircle
 } from "lucide-react"
 import { differenceInMinutes } from "date-fns"
-import { cn } from "@/lib/utils"
 
 interface CriticalAlertsProps {
   pendingCount: number

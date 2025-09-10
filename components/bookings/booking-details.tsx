@@ -120,6 +120,8 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
     booking.tables?.map(t => t.id) || []
   )
   const [checkingAvailability, setCheckingAvailability] = useState(false)
+  const [showCapacityWarning, setShowCapacityWarning] = useState(false)
+  const [capacityWarningMessage, setCapacityWarningMessage] = useState("")
   const [activeTab, setActiveTab] = useState("details")
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const [currentBookingStatus, setCurrentBookingStatus] = useState(booking.status)
@@ -205,9 +207,38 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
     enabled: isEditing && selectedTableIds.length > 0,
   })
 
+  // Validate table capacity vs party size
+  const validateTableCapacity = () => {
+    if (!allTables || selectedTableIds.length === 0) return { isValid: true, message: "" }
+    
+    const selectedTables = allTables.filter(table => selectedTableIds.includes(table.id))
+    const totalCapacity = selectedTables.reduce((sum, table) => sum + table.capacity, 0)
+    const partySize = editedData.party_size
+    
+    if (totalCapacity < partySize) {
+      const deficit = partySize - totalCapacity
+      return {
+        isValid: false,
+        message: `Warning: Party size (${partySize}) exceeds table capacity (${totalCapacity}) by ${deficit} ${deficit === 1 ? 'guest' : 'guests'}.\n\nSelected tables: ${selectedTables.map(t => `T${t.table_number} (${t.capacity})`).join(', ')}\n\nDo you want to proceed with this assignment?`
+      }
+    }
+    
+    return { isValid: true, message: "" }
+  }
+
   // Update booking with table assignments
   const updateBookingMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (forceUpdate?: boolean) => {
+      // Validate capacity unless forcing the update
+      if (!forceUpdate) {
+        const validation = validateTableCapacity()
+        if (!validation.isValid) {
+          setCapacityWarningMessage(validation.message)
+          setShowCapacityWarning(true)
+          throw new Error("Capacity validation failed") // This will trigger onError but won't show a toast
+        }
+      }
+
       const { error: bookingError } = await supabase
         .from("bookings")
         .update({
@@ -257,7 +288,10 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
     },
     onError: (error) => {
       console.error("Update error:", error)
-      toast.error("Failed to update booking")
+      // Don't show toast for validation errors as we handle them with dialog
+      if (error.message !== "Capacity validation failed") {
+        toast.error("Failed to update booking")
+      }
     },
   })
 
@@ -339,6 +373,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
   const isCurrentlyDining = ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(currentBookingStatus)
 
   return (
+    <>
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl w-full max-h-[90vh] flex flex-col p-0 overflow-hidden">
         <div className="flex-shrink-0 px-6 py-4 border-b">
@@ -379,7 +414,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                     </Button>
                     <Button
                       size="sm"
-                      onClick={() => updateBookingMutation.mutate()}
+                      onClick={() => updateBookingMutation.mutate(false)}
                       disabled={updateBookingMutation.isPending}
                     >
                       <Save className="h-4 w-4 mr-2" />
@@ -884,5 +919,40 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* Capacity Warning Dialog */}
+    <Dialog open={showCapacityWarning} onOpenChange={setShowCapacityWarning}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-orange-500" />
+            Table Capacity Warning
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <p className="text-sm whitespace-pre-line">{capacityWarningMessage}</p>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCapacityWarning(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => {
+                setShowCapacityWarning(false)
+                updateBookingMutation.mutate(true) // Force update with forceUpdate=true
+              }}
+            >
+              Proceed Anyway
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
