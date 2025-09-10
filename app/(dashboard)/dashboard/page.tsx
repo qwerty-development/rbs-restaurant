@@ -70,6 +70,7 @@ export default function DashboardPage() {
     warnings: string[]
     onConfirm: () => void
   }>({ show: false, warnings: [], onConfirm: () => {} })
+  const [showPendingModal, setShowPendingModal] = useState(false)
   
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -1018,6 +1019,7 @@ export default function DashboardPage() {
         awaitingCheckIn={stats.awaitingCheckIn}
         bookings={todaysBookings}
         currentTime={currentTime}
+        onViewAll={() => setShowPendingModal(true)}
       />
 
       {/* PWA Install Prompt */}
@@ -1058,19 +1060,7 @@ export default function DashboardPage() {
 
         {/* Right Sidebar with Tabs for Queue and Waitlist */}
         <div className="w-[380px] border-l border-border bg-card flex flex-col flex-shrink-0 overflow-hidden">
-          {/* Pending Requests Section */}
-          {stats.pendingCount > 0 && (
-            <div className="border-b border-border flex-shrink-0">
-              <div className="p-3">
-                <PendingRequestsPanel
-                  bookings={todaysBookings}
-                  restaurantId={restaurantId}
-                  userId={userId}
-                  onUpdate={() => queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })}
-                />
-              </div>
-            </div>
-          )}
+
 
           {/* Booking Conflict Alerts */}
           <div className="px-2 py-1 flex-shrink-0">
@@ -1206,6 +1196,32 @@ export default function DashboardPage() {
                 updateBookingMutation.mutate({ bookingId, updates: { status } })
               }
               customersData={customersData}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pending Requests Modal */}
+      <Dialog open={showPendingModal} onOpenChange={setShowPendingModal}>
+        <DialogContent className="max-w-3xl w-full max-h-[90vh] overflow-hidden p-0">
+          <div className="flex-shrink-0 px-6 py-4 border-b bg-white">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-lg">
+                Pending Requests
+              </DialogTitle>
+              <DialogDescription>
+                Fast accept or decline new booking requests
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-4">
+            <PendingRequestsPanel
+              bookings={todaysBookings}
+              restaurantId={restaurantId}
+              userId={userId}
+              onUpdate={() => {
+                queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+              }}
             />
           </div>
         </DialogContent>

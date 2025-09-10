@@ -90,7 +90,7 @@ export function useGlobalLayoutNotifications() {
           const newBooking = payload.new as Booking
           if (!newBooking || newBooking.restaurant_id !== restaurantId) return
           
-          // Update query cache
+          // Update query cache for global bookings
           queryClient.setQueryData(
             ['bookings', restaurantId],
             (oldData: { bookings: Booking[] } | undefined) => {
@@ -101,6 +101,35 @@ export function useGlobalLayoutNotifications() {
               }
             }
           )
+
+          // Also update main dashboard queries
+          queryClient.setQueryData(
+            ['all-bookings', restaurantId],
+            (oldData: Booking[] | undefined) => {
+              if (!oldData) return [newBooking]
+              const exists = oldData.some(b => b.id === newBooking.id)
+              if (exists) return oldData
+              return [...oldData, newBooking].sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+            }
+          )
+
+          // Update displayed bookings for current date (if it matches)
+          const today = new Date()
+          const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+          const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
+          
+          queryClient.setQueryData(
+            ['displayed-bookings', restaurantId, today, 'all', 'all', 'today', 'upcoming'],
+            (oldData: Booking[] | undefined) => {
+              if (!oldData) return [newBooking]
+              const exists = oldData.some(b => b.id === newBooking.id)
+              if (exists) return oldData
+              return [...oldData, newBooking].sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+            }
+          )
+
+          // Invalidate/refresh dashboard today's bookings to sync red banner immediately
+          queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
           
           // Add global notification with sound
           const guestName = await resolveGuestName(newBooking)
@@ -124,7 +153,7 @@ export function useGlobalLayoutNotifications() {
           const updatedBooking = payload.new as Booking
           const previousBooking = payload.old as Booking
           
-          // Update query cache
+          // Update query cache for global bookings
           queryClient.setQueryData(
             ['bookings', restaurantId],
             (oldData: { bookings: Booking[] } | undefined) => {
@@ -137,6 +166,42 @@ export function useGlobalLayoutNotifications() {
               }
             }
           )
+
+          // Also update main dashboard queries
+          queryClient.setQueryData(
+            ['all-bookings', restaurantId],
+            (oldData: Booking[] | undefined) => {
+              if (!oldData) return [updatedBooking]
+              return oldData.map(booking =>
+                booking.id === updatedBooking.id ? updatedBooking : booking
+              ).sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+            }
+          )
+
+          // Update displayed bookings for all possible filter combinations
+          const today = new Date()
+          const commonFilters = [
+            [restaurantId, today, 'all', 'all', 'today', 'upcoming'],
+            [restaurantId, today, 'pending', 'all', 'today', 'upcoming'],
+            [restaurantId, today, 'confirmed', 'all', 'today', 'upcoming'],
+            [restaurantId, today, 'cancelled_by_user', 'all', 'today', 'upcoming'],
+            [restaurantId, today, 'declined_by_restaurant', 'all', 'today', 'upcoming']
+          ]
+
+          commonFilters.forEach(filterKey => {
+            queryClient.setQueryData(
+              ['displayed-bookings', ...filterKey],
+              (oldData: Booking[] | undefined) => {
+                if (!oldData) return [updatedBooking]
+                return oldData.map(booking =>
+                  booking.id === updatedBooking.id ? updatedBooking : booking
+                ).sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+              }
+            )
+          })
+
+          // Invalidate/refresh dashboard today's bookings to sync red banner immediately
+          queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
           
           // Add global notification for status changes
           if (previousBooking.status !== updatedBooking.status) {
