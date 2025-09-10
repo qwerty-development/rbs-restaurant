@@ -732,65 +732,71 @@ export default function CustomersPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                    <Input
-                      placeholder="Search by name, email, or phone..."
-                      value={filters.search}
-                      onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                      className="pl-10"
-                    />
+              <div className="space-y-4">
+                {/* Search and Sort Row */}
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                      <Input
+                        placeholder="Search by name, email, or phone..."
+                        value={filters.search}
+                        onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                        className="pl-10"
+                      />
+                    </div>
                   </div>
+                  
+                  <Select
+                    value={filters.sort_by}
+                    onValueChange={(value: any) => setFilters({ ...filters, sort_by: value })}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name">Name</SelectItem>
+                      <SelectItem value="last_visit">Last Visit</SelectItem>
+                      <SelectItem value="total_bookings">Total Bookings</SelectItem>
+                      <SelectItem value="total_spent">Total Spent</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                
-                <Select
-                  value={filters.sort_by}
-                  onValueChange={(value: any) => setFilters({ ...filters, sort_by: value })}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Sort by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="name">Name</SelectItem>
-                    <SelectItem value="last_visit">Last Visit</SelectItem>
-                    <SelectItem value="total_bookings">Total Bookings</SelectItem>
-                    <SelectItem value="total_spent">Total Spent</SelectItem>
-                  </SelectContent>
-                </Select>
 
-                <div className="flex gap-2">
-                  {tags.map(tag => (
-                    <Tooltip key={tag.id}>
-                      <TooltipTrigger asChild>
-                        <Badge
-                          variant={selectedTags.includes(tag.id) ? "default" : "outline"}
-                          className="cursor-pointer"
-                          onClick={() => {
-                            setSelectedTags(prev =>
-                              prev.includes(tag.id)
-                                ? prev.filter(id => id !== tag.id)
-                                : [...prev, tag.id]
-                            )
-                          }}
-                          style={{
-                            backgroundColor: selectedTags.includes(tag.id) ? tag.color : undefined,
-                            borderColor: tag.color,
-                            color: selectedTags.includes(tag.id) && isLightColor(tag.color) ? '#000000' : undefined
-                          }}
-                        >
-                          {tag.name}
-                        </Badge>
-                      </TooltipTrigger>
-                      {tag.description && (
-                        <TooltipContent>
-                          <p className="max-w-xs">{tag.description}</p>
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  ))}
-                </div>
+                {/* Tags Row */}
+                {tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {tags.map(tag => (
+                      <Tooltip key={tag.id}>
+                        <TooltipTrigger asChild>
+                          <Badge
+                            variant={selectedTags.includes(tag.id) ? "default" : "outline"}
+                            className="cursor-pointer"
+                            onClick={() => {
+                              setSelectedTags(prev =>
+                                prev.includes(tag.id)
+                                  ? prev.filter(id => id !== tag.id)
+                                  : [...prev, tag.id]
+                              )
+                            }}
+                            style={{
+                              backgroundColor: selectedTags.includes(tag.id) ? tag.color : undefined,
+                              borderColor: tag.color,
+                              color: selectedTags.includes(tag.id) && isLightColor(tag.color) ? '#000000' : undefined
+                            }}
+                          >
+                            {tag.name}
+                          </Badge>
+                        </TooltipTrigger>
+                        {tag.description && (
+                          <TooltipContent>
+                            <p className="max-w-xs">{tag.description}</p>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    ))}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
