@@ -328,17 +328,17 @@ export function TodaysTimeline({
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 flex-shrink-0">
+            <div className="flex flex-col gap-2 flex-shrink-0 min-w-[80px]">
               {booking.status === 'pending' && (
                 <Button
                   size="sm"
-                  className="h-8 px-3 bg-green-600 hover:bg-green-700"
+                  className="h-8 px-2 bg-green-600 hover:bg-green-700 text-xs whitespace-nowrap"
                   onClick={(e) => {
                     e.stopPropagation()
                     onUpdateStatus(booking.id, 'confirmed')
                   }}
                 >
-                  <CheckCircle className="h-3 w-3 mr-1" />
+                  <CheckCircle className="h-3 w-3 mr-1 flex-shrink-0" />
                   Confirm
                 </Button>
               )}
@@ -346,13 +346,13 @@ export function TodaysTimeline({
               {booking.status === 'arrived' && (
                 <Button
                   size="sm"
-                  className="h-8 px-3 bg-blue-600 hover:bg-blue-700"
+                  className="h-8 px-2 bg-blue-600 hover:bg-blue-700 text-xs whitespace-nowrap"
                   onClick={(e) => {
                     e.stopPropagation()
                     onSelectBooking(booking)
                   }}
                 >
-                  <Utensils className="h-3 w-3 mr-1" />
+                  <Utensils className="h-3 w-3 mr-1 flex-shrink-0" />
                   Seat
                 </Button>
               )}
@@ -360,7 +360,7 @@ export function TodaysTimeline({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 px-3"
+                className="h-8 w-8 p-0 flex items-center justify-center"
                 onClick={(e) => {
                   e.stopPropagation()
                   onSelectBooking(booking)
