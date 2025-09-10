@@ -118,6 +118,15 @@ export function CustomerDetailsDialog({
     relationship_details: ''
   })
 
+  // Reset customer data when customer changes
+  useEffect(() => {
+    setCustomerTags(customer.tags || [])
+    setCustomerWithEmail(customer)
+    setNotes(customer.notes || [])
+    // Reset active tab to overview when customer changes
+    setActiveTab('overview')
+  }, [customer])
+
   // Load additional data when dialog opens
   useEffect(() => {
     if (open) {
