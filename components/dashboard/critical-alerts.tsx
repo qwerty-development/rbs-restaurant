@@ -68,7 +68,7 @@ export function CriticalAlerts({
                   <UserCheck className="h-4 w-4 text-orange-100" />
                 </div>
                 <span className="font-semibold text-orange-100">
-                  {awaitingCheckIn} awaiting check-in
+                  {awaitingCheckIn} awaiting seating
                 </span>
               </div>
             )}
@@ -97,17 +97,7 @@ export function CriticalAlerts({
           </div>
         </div>
         
-        <Button 
-          variant="secondary" 
-          size="sm"
-          className="bg-white/20 hover:bg-white/30 text-white border-0 font-medium"
-          onClick={() => {
-            // Scroll to the pending requests section
-            document.querySelector('.pending-requests')?.scrollIntoView({ behavior: 'smooth' })
-          }}
-        >
-          View All
-        </Button>
+       
       </div>
     </div>
   )

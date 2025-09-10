@@ -339,12 +339,14 @@ export function PendingRequestsPanel({
   }
 
   return (
-    <Card className={cn(
-      "w-full border-2 max-h-[400px] shadow-xl flex flex-col",
-      urgentCount > 0 
-        ? "border-red-400 bg-gradient-to-br from-red-100 to-red-50 animate-pulse" 
-        : "border-orange-300 bg-gradient-to-br from-orange-100 to-orange-50"
-    )}>
+    <Card 
+      id="pending-requests-panel"
+      className={cn(
+        "w-full border-2 max-h-[400px] shadow-xl flex flex-col",
+        urgentCount > 0 
+          ? "border-red-400 bg-gradient-to-br from-red-100 to-red-50 animate-pulse" 
+          : "border-orange-300 bg-gradient-to-br from-orange-100 to-orange-50"
+      )}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
