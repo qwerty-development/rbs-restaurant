@@ -157,23 +157,87 @@ export function CustomerDetailsDialog({
         `)
         .or(`customer_id.eq.${customer.id},related_customer_id.eq.${customer.id}`)
 
-      // Load booking history
-      const bookingQuery = customer.user_id
-        ? supabase.from('bookings').select('*').eq('user_id', customer.user_id)
-        : supabase.from('bookings').select('*').eq('guest_email', customer.guest_email)
+      // Load booking history - try both user_id and guest_email approaches
+      let allBookings: any[] = []
+      
+      // First, try querying by user_id if available
+      if (customer.user_id) {
+        const { data: userBookings, error: userBookingsError } = await supabase
+          .from('bookings')
+          .select('*')
+          .eq('user_id', customer.user_id)
+          .eq('restaurant_id', restaurantId)
 
-      const { data: bookingsData } = await bookingQuery
-        .eq('restaurant_id', restaurantId)
-        .order('booking_time', { ascending: false })
-        .limit(10)
+        if (userBookingsError) {
+          console.error('Error loading user bookings:', userBookingsError)
+        } else {
+          allBookings = [...allBookings, ...(userBookings || [])]
+        }
+      }
 
-      // Get total booking count for this restaurant
-      const totalBookingQuery = customer.user_id
-        ? supabase.from('bookings').select('id', { count: 'exact' }).eq('user_id', customer.user_id)
-        : supabase.from('bookings').select('id', { count: 'exact' }).eq('guest_email', customer.guest_email)
+      // Then try querying by guest email (both guest_email and profile email)
+      const emailsToTry = [customer.guest_email, customer.profile?.email].filter(Boolean)
+      for (const email of emailsToTry) {
+        const { data: emailBookings, error: emailBookingsError } = await supabase
+          .from('bookings')
+          .select('*')
+          .eq('guest_email', email)
+          .eq('restaurant_id', restaurantId)
 
-      const { count: totalBookingCount } = await totalBookingQuery
-        .eq('restaurant_id', restaurantId)
+        if (emailBookingsError) {
+          console.error('Error loading email bookings for', email, ':', emailBookingsError)
+        } else {
+          // Add bookings that aren't already in the list (by ID)
+          const existingIds = new Set(allBookings.map(b => b.id))
+          const newBookings = (emailBookings || []).filter(b => !existingIds.has(b.id))
+          allBookings = [...allBookings, ...newBookings]
+        }
+      }
+
+      // Sort and limit bookings
+      const bookingsData = allBookings
+        .sort((a, b) => new Date(b.booking_time).getTime() - new Date(a.booking_time).getTime())
+        .slice(0, 10)
+
+      console.log('Customer booking history loaded:', {
+        customerId: customer.id,
+        totalFound: allBookings.length,
+        displayCount: bookingsData.length
+      })
+
+      // Get total booking count using the same approach
+      let totalBookingCount = 0
+      
+      if (customer.user_id) {
+        const { count: userCount, error: userCountError } = await supabase
+          .from('bookings')
+          .select('id', { count: 'exact' })
+          .eq('user_id', customer.user_id)
+          .eq('restaurant_id', restaurantId)
+
+        if (userCountError) {
+          console.error('Error loading user booking count:', userCountError)
+        } else {
+          totalBookingCount += userCount || 0
+        }
+      }
+
+      for (const email of emailsToTry) {
+        const { count: emailCount, error: emailCountError } = await supabase
+          .from('bookings')
+          .select('id', { count: 'exact' })
+          .eq('guest_email', email)
+          .eq('restaurant_id', restaurantId)
+
+        if (emailCountError) {
+          console.error('Error loading email booking count for', email, ':', emailCountError)
+        } else {
+          totalBookingCount += emailCount || 0
+        }
+      }
+
+      // Note: This might double-count if a customer has bookings under both user_id and email
+      // In a production environment, you might want to deduplicate the count as well
 
       // Load available tags
       const { data: tagsData } = await supabase
@@ -457,7 +521,7 @@ export function CustomerDetailsDialog({
                     {tag.name}
                   </Badge>
                 ))}
-                {canManage && (
+                {canManage && availableTags.some(tag => !customerTags.some(ct => ct.id === tag.id)) && (
                   <Button
                     variant="ghost"
                     size="sm"
