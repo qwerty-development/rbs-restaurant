@@ -187,77 +187,56 @@ export default function CustomersPage() {
         return processedCustomer
       }) || []
 
-      // Calculate actual booking counts for all customers efficiently
+      // Calculate actual booking counts for all customers efficiently with deduplication
       try {
-        // Prepare data for bulk queries
-        const userIdsToQuery = transformedData
-          .map(c => c.user_id)
-          .filter(Boolean) as string[]
-        
-        const emailsToQuery = transformedData
-          .flatMap(c => [c.guest_email, c.profile?.email])
-          .filter(Boolean) as string[]
+        // For each customer, we need to get actual bookings and deduplicate them
+        // This is more expensive but ensures accuracy matching the dialog
+        const customersWithCorrectCounts = await Promise.all(
+          transformedData.map(async (customer) => {
+            let allBookings: any[] = []
+            
+            try {
+              // Query by user_id if available
+              if (customer.user_id) {
+                const { data: userBookings, error: userBookingsError } = await supabase
+                  .from('bookings')
+                  .select('id, booking_time') // Only select minimal fields for counting
+                  .eq('user_id', customer.user_id)
+                  .eq('restaurant_id', restaurantId)
 
-        // Query booking counts by user_id
-        let userBookingCounts: Record<string, number> = {}
-        if (userIdsToQuery.length > 0) {
-          const { data: userBookings, error: userBookingsError } = await supabase
-            .from('bookings')
-            .select('user_id')
-            .in('user_id', userIdsToQuery)
-            .eq('restaurant_id', restaurantId)
-
-          if (!userBookingsError && userBookings) {
-            // Count bookings per user
-            userBookings.forEach(booking => {
-              if (booking.user_id) {
-                userBookingCounts[booking.user_id] = (userBookingCounts[booking.user_id] || 0) + 1
+                if (!userBookingsError && userBookings) {
+                  allBookings = [...allBookings, ...userBookings]
+                }
               }
-            })
-          }
-        }
 
-        // Query booking counts by guest_email
-        let emailBookingCounts: Record<string, number> = {}
-        if (emailsToQuery.length > 0) {
-          const { data: emailBookings, error: emailBookingsError } = await supabase
-            .from('bookings')
-            .select('guest_email')
-            .in('guest_email', emailsToQuery)
-            .eq('restaurant_id', restaurantId)
+              // Query by guest emails (both guest_email and profile email)
+              const emailsToTry = [customer.guest_email, customer.profile?.email].filter(Boolean)
+              for (const email of emailsToTry) {
+                const { data: emailBookings, error: emailBookingsError } = await supabase
+                  .from('bookings')
+                  .select('id, booking_time')
+                  .eq('guest_email', email)
+                  .eq('restaurant_id', restaurantId)
 
-          if (!emailBookingsError && emailBookings) {
-            // Count bookings per email
-            emailBookings.forEach(booking => {
-              if (booking.guest_email) {
-                emailBookingCounts[booking.guest_email] = (emailBookingCounts[booking.guest_email] || 0) + 1
+                if (!emailBookingsError && emailBookings) {
+                  // Add bookings that aren't already in the list (by ID) - same deduplication as dialog
+                  const existingIds = new Set(allBookings.map(b => b.id))
+                  const newBookings = emailBookings.filter(b => !existingIds.has(b.id))
+                  allBookings = [...allBookings, ...newBookings]
+                }
               }
-            })
-          }
-        }
 
-        // Apply calculated counts to customers
-        const customersWithCorrectCounts = transformedData.map(customer => {
-          let actualBookingCount = 0
-          
-          // Add count from user_id bookings
-          if (customer.user_id && userBookingCounts[customer.user_id]) {
-            actualBookingCount += userBookingCounts[customer.user_id]
-          }
-          
-          // Add counts from email bookings (both guest_email and profile email)
-          const emailsToCheck = [customer.guest_email, customer.profile?.email].filter(Boolean)
-          for (const email of emailsToCheck) {
-            if (emailBookingCounts[email!]) {
-              actualBookingCount += emailBookingCounts[email!]
+              return {
+                ...customer,
+                total_bookings: allBookings.length
+              }
+            } catch (error) {
+              console.error('Error calculating booking count for customer:', customer.id, error)
+              // Fall back to original database value if calculation fails
+              return customer
             }
-          }
-          
-          return {
-            ...customer,
-            total_bookings: actualBookingCount
-          }
-        })
+          })
+        )
 
         setCustomers(customersWithCorrectCounts)
       } catch (error) {

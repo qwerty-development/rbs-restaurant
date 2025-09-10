@@ -205,39 +205,9 @@ export function CustomerDetailsDialog({
         displayCount: bookingsData.length
       })
 
-      // Get total booking count using the same approach
-      let totalBookingCount = 0
-      
-      if (customer.user_id) {
-        const { count: userCount, error: userCountError } = await supabase
-          .from('bookings')
-          .select('id', { count: 'exact' })
-          .eq('user_id', customer.user_id)
-          .eq('restaurant_id', restaurantId)
-
-        if (userCountError) {
-          console.error('Error loading user booking count:', userCountError)
-        } else {
-          totalBookingCount += userCount || 0
-        }
-      }
-
-      for (const email of emailsToTry) {
-        const { count: emailCount, error: emailCountError } = await supabase
-          .from('bookings')
-          .select('id', { count: 'exact' })
-          .eq('guest_email', email)
-          .eq('restaurant_id', restaurantId)
-
-        if (emailCountError) {
-          console.error('Error loading email booking count for', email, ':', emailCountError)
-        } else {
-          totalBookingCount += emailCount || 0
-        }
-      }
-
-      // Note: This might double-count if a customer has bookings under both user_id and email
-      // In a production environment, you might want to deduplicate the count as well
+      // Use the deduplicated count from allBookings.length instead of double-counting
+      // This ensures accuracy by avoiding double-counting bookings that exist under both user_id and email
+      const actualTotalBookings = allBookings.length
 
       // Load available tags
       const { data: tagsData } = await supabase
@@ -264,7 +234,7 @@ export function CustomerDetailsDialog({
 
       setRelationships(relationshipsData || [])
       setBookingHistory(bookingsData || [])
-      setTotalBookingCount(totalBookingCount || 0)
+      setTotalBookingCount(actualTotalBookings)
       setAvailableTags(tagsData || [])
       // Transform customers data to fix profile array issue
       const transformedCustomers = (customersData || []).map((c: any) => ({
