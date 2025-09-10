@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { format, differenceInDays } from "date-fns"
+import { titleCase } from "@/lib/utils"
 import { 
   Calendar, 
   TrendingUp, 
@@ -254,12 +255,12 @@ export function CustomerBookingHistory({ customerId, currentBookingId, restauran
             <h4 className="text-sm font-medium mb-2">Recent Visits</h4>
             <div className="space-y-2">
               {data.recentBookings.map((booking) => (
-                <div key={booking.id} className="flex items-center justify-between text-xs">
-                  <span>
+                <div key={booking.id} className="grid grid-cols-3 gap-2 items-center text-xs text-center">
+                  <span className="text-left">
                     {format(new Date(booking.booking_time), 'MMM d, yyyy')}
                   </span>
-                  <div className="flex items-center gap-2">
-                    <span>Party of {booking.party_size}</span>
+                  <span>Party of {booking.party_size}</span>
+                  <div className="text-right">
                     <Badge 
                       variant={
                         booking.status === 'completed' ? 'default' :
@@ -270,7 +271,7 @@ export function CustomerBookingHistory({ customerId, currentBookingId, restauran
                         booking.status === 'no_show' || booking.status.includes('cancelled') ? 'text-white' : ''
                       }`}
                     >
-                      {booking.status}
+                      {titleCase(booking.status.replace(/_/g, ' '))}
                     </Badge>
                   </div>
                 </div>

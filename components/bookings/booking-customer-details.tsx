@@ -172,6 +172,20 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
         const { count: restaurantBookingCount } = await totalBookingQuery
           .eq('restaurant_id', restaurantId)
 
+        // Get all bookings for statistics calculation
+        const allBookingsQuery = booking.user_id
+          ? supabase.from('bookings').select('status').eq('user_id', booking.user_id)
+          : supabase.from('bookings').select('status').eq('guest_email', booking.guest_email)
+
+        const { data: allBookings } = await allBookingsQuery
+          .eq('restaurant_id', restaurantId)
+
+        // Calculate statistics from all bookings
+        const noShowCount = allBookings?.filter(b => b.status === 'no_show').length || 0
+        const cancelledCount = allBookings?.filter(b => 
+          b.status === 'cancelled_by_user' || b.status === 'cancelled_by_restaurant'
+        ).length || 0
+
         // Calculate actual last visit from completed bookings
         const lastCompletedBooking = bookingHistory?.find(b => b.status === 'completed')
         const actualLastVisit = lastCompletedBooking?.booking_time
@@ -183,7 +197,9 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
           notes: customerNotes, // Use separately loaded notes
           relationships: relationshipsData || [],
           bookings: bookingHistory || [],
-          last_visit: actualLastVisit || customerResult.last_visit // Use calculated last visit or fallback to DB value
+          last_visit: actualLastVisit || customerResult.last_visit, // Use calculated last visit or fallback to DB value
+          no_show_count: noShowCount,
+          cancelled_count: cancelledCount
         }
 
         setCustomerData(transformedCustomer)
@@ -233,11 +249,6 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
     )
   }
 
-  const getStatusBadgeVariant = (status: boolean, isBlacklisted?: boolean) => {
-    if (isBlacklisted) return "destructive"
-    if (status) return "default"
-    return "secondary"
-  }
 
   return (
     <div className="space-y-4">
