@@ -47,6 +47,12 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { CustomerDetailsDialog } from '@/components/customers/customer-details-dialog'
 import { TagManagementDialog } from '@/components/customers/tag-management-dialog'
 import { AddCustomerDialog } from '@/components/customers/add-customer-dialog'
@@ -604,6 +610,7 @@ export default function CustomersPage() {
   }
 
   return (
+    <TooltipProvider>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -755,25 +762,33 @@ export default function CustomersPage() {
 
                 <div className="flex gap-2">
                   {tags.map(tag => (
-                    <Badge
-                      key={tag.id}
-                      variant={selectedTags.includes(tag.id) ? "default" : "outline"}
-                      className="cursor-pointer"
-                      onClick={() => {
-                        setSelectedTags(prev =>
-                          prev.includes(tag.id)
-                            ? prev.filter(id => id !== tag.id)
-                            : [...prev, tag.id]
-                        )
-                      }}
-                      style={{
-                        backgroundColor: selectedTags.includes(tag.id) ? tag.color : undefined,
-                        borderColor: tag.color,
-                        color: selectedTags.includes(tag.id) && isLightColor(tag.color) ? '#000000' : undefined
-                      }}
-                    >
-                      {tag.name}
-                    </Badge>
+                    <Tooltip key={tag.id}>
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant={selectedTags.includes(tag.id) ? "default" : "outline"}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            setSelectedTags(prev =>
+                              prev.includes(tag.id)
+                                ? prev.filter(id => id !== tag.id)
+                                : [...prev, tag.id]
+                            )
+                          }}
+                          style={{
+                            backgroundColor: selectedTags.includes(tag.id) ? tag.color : undefined,
+                            borderColor: tag.color,
+                            color: selectedTags.includes(tag.id) && isLightColor(tag.color) ? '#000000' : undefined
+                          }}
+                        >
+                          {tag.name}
+                        </Badge>
+                      </TooltipTrigger>
+                      {tag.description && (
+                        <TooltipContent>
+                          <p className="max-w-xs">{tag.description}</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
                   ))}
                 </div>
               </div>
@@ -1076,5 +1091,6 @@ export default function CustomersPage() {
         />
       )}
     </div>
+    </TooltipProvider>
   )
 }
