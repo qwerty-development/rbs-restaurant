@@ -637,7 +637,7 @@ export function CustomerDetailsDialog({
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="tags">Tags</TabsTrigger>
               <TabsTrigger value="notes">Notes</TabsTrigger>
-              <TabsTrigger value="relationships">Relationships</TabsTrigger>
+              <TabsTrigger value="relationships">Relations</TabsTrigger>
               <TabsTrigger value="bookings">Bookings</TabsTrigger>
             </TabsList>
 

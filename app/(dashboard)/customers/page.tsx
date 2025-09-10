@@ -187,7 +187,84 @@ export default function CustomersPage() {
         return processedCustomer
       }) || []
 
-      setCustomers(transformedData)
+      // Calculate actual booking counts for all customers efficiently
+      try {
+        // Prepare data for bulk queries
+        const userIdsToQuery = transformedData
+          .map(c => c.user_id)
+          .filter(Boolean) as string[]
+        
+        const emailsToQuery = transformedData
+          .flatMap(c => [c.guest_email, c.profile?.email])
+          .filter(Boolean) as string[]
+
+        // Query booking counts by user_id
+        let userBookingCounts: Record<string, number> = {}
+        if (userIdsToQuery.length > 0) {
+          const { data: userBookings, error: userBookingsError } = await supabase
+            .from('bookings')
+            .select('user_id')
+            .in('user_id', userIdsToQuery)
+            .eq('restaurant_id', restaurantId)
+
+          if (!userBookingsError && userBookings) {
+            // Count bookings per user
+            userBookings.forEach(booking => {
+              if (booking.user_id) {
+                userBookingCounts[booking.user_id] = (userBookingCounts[booking.user_id] || 0) + 1
+              }
+            })
+          }
+        }
+
+        // Query booking counts by guest_email
+        let emailBookingCounts: Record<string, number> = {}
+        if (emailsToQuery.length > 0) {
+          const { data: emailBookings, error: emailBookingsError } = await supabase
+            .from('bookings')
+            .select('guest_email')
+            .in('guest_email', emailsToQuery)
+            .eq('restaurant_id', restaurantId)
+
+          if (!emailBookingsError && emailBookings) {
+            // Count bookings per email
+            emailBookings.forEach(booking => {
+              if (booking.guest_email) {
+                emailBookingCounts[booking.guest_email] = (emailBookingCounts[booking.guest_email] || 0) + 1
+              }
+            })
+          }
+        }
+
+        // Apply calculated counts to customers
+        const customersWithCorrectCounts = transformedData.map(customer => {
+          let actualBookingCount = 0
+          
+          // Add count from user_id bookings
+          if (customer.user_id && userBookingCounts[customer.user_id]) {
+            actualBookingCount += userBookingCounts[customer.user_id]
+          }
+          
+          // Add counts from email bookings (both guest_email and profile email)
+          const emailsToCheck = [customer.guest_email, customer.profile?.email].filter(Boolean)
+          for (const email of emailsToCheck) {
+            if (emailBookingCounts[email!]) {
+              actualBookingCount += emailBookingCounts[email!]
+            }
+          }
+          
+          return {
+            ...customer,
+            total_bookings: actualBookingCount
+          }
+        })
+
+        setCustomers(customersWithCorrectCounts)
+      } catch (error) {
+        console.error('Error calculating booking counts:', error)
+        // Fall back to original data if calculation fails
+        setCustomers(transformedData)
+      }
     } catch (error) {
       console.error('Error loading customers:', error)
       toast.error('Failed to load customers')
