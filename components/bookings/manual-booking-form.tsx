@@ -255,11 +255,23 @@ export function ManualBookingForm({
     if (!bookingDate || !bookingTime) return null
     
     try {
-      const { data } = await supabase.rpc('get_shared_table_availability', {
-        p_table_id: tableId,
-        p_booking_time: `${bookingDate.toISOString().split('T')[0]}T${bookingTime}:00`
+      // Use the existing get_shared_table_available_seats function instead
+      const [hours, minutes] = bookingTime.split(":")
+      const bookingDateTime = new Date(bookingDate)
+      bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+      
+      const { data: availableSeats, error } = await supabase.rpc('get_shared_table_available_seats', {
+        table_id_param: tableId,
+        booking_time_param: bookingDateTime.toISOString(),
+        turn_time_minutes_param: turnTime || 120
       })
-      return data
+      
+      if (error) {
+        console.error('Error checking shared table availability:', error)
+        return null
+      }
+      
+      return { available_seats: availableSeats }
     } catch (error) {
       console.error('Error checking shared table availability:', error)
       return null
@@ -574,29 +586,31 @@ export function ManualBookingForm({
       return
     }
 
-    // Validate capacity
-    const selectedTableObjects = allTables?.filter(t => selectedTables.includes(t.id)) || []
-    const capacityCheck = tableService.validateCapacity(selectedTableObjects, data.party_size)
-    
-    if (!capacityCheck.valid) {
-      // Check if this is a minimum capacity violation (party size too small)
-      const violatingTables = selectedTableObjects.filter(table => 
-        (table.min_capacity || 1) > data.party_size
-      )
+    // Validate capacity - only for regular tables (shared tables have their own validation)
+    if (!data.is_shared_booking) {
+      const selectedTableObjects = allTables?.filter(t => selectedTables.includes(t.id)) || []
+      const capacityCheck = tableService.validateCapacity(selectedTableObjects, data.party_size)
       
-      if (violatingTables.length > 0) {
-        // Show warning dialog for minimum capacity override
-        setPendingSubmission({
-          data,
-          violatingTables
-        })
-        setShowMinimumCapacityWarning(true)
+      if (!capacityCheck.valid) {
+        // Check if this is a minimum capacity violation (party size too small)
+        const violatingTables = selectedTableObjects.filter(table => 
+          (table.min_capacity || 1) > data.party_size
+        )
+        
+        if (violatingTables.length > 0) {
+          // Show warning dialog for minimum capacity override
+          setPendingSubmission({
+            data,
+            violatingTables
+          })
+          setShowMinimumCapacityWarning(true)
+          return
+        }
+        
+        // For other capacity issues (party size too large), show error
+        toast.error(capacityCheck.message || "Invalid table selection")
         return
       }
-      
-      // For other capacity issues (party size too large), show error
-      toast.error(capacityCheck.message || "Invalid table selection")
-      return
     }
 
     const [hours, minutes] = data.booking_time.split(":")
@@ -1271,7 +1285,7 @@ export function ManualBookingForm({
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">
-                  Your party of {partySize} will be seated at this shared table
+                  Your party of {partySize} will book {partySize} seat(s) at this shared table
                 </p>
               </div>
             </div>
@@ -1288,7 +1302,7 @@ export function ManualBookingForm({
               </h3>
               <p className="text-sm text-slate-600 dark:text-slate-300">
                 {isSharedBooking 
-                  ? `Shared table selected for ${partySize} guests`
+                  ? `Book individual seats at selected shared table for ${partySize} guests`
                   : `Select tables for ${partySize} guests (Selected capacity: ${selectedTablesCapacity})`
                 }
               </p>
@@ -1389,8 +1403,8 @@ export function ManualBookingForm({
             </Alert>
           )}
 
-          {/* Capacity warning */}
-          {selectedTablesCapacity > 0 && selectedTablesCapacity < partySize && (
+          {/* Capacity warning - only for regular tables */}
+          {!isSharedBooking && selectedTablesCapacity > 0 && selectedTablesCapacity < partySize && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
@@ -1638,7 +1652,7 @@ export function ManualBookingForm({
             disabled={
               isLoading ||
               (isSharedBooking ? !selectedSharedTable : selectedTables.length === 0) ||
-              (availability && !availability.available) ||
+              (!isSharedBooking && availability && !availability.available) ||
               (!isSharedBooking && selectedTablesCapacity > 0 && selectedTablesCapacity < partySize) ||
               // Check if any selected tables will conflict with the booking time (only for regular tables)
               (!!bookingDate && !!bookingTime && !isSharedBooking && selectedTables.some(tableId => {

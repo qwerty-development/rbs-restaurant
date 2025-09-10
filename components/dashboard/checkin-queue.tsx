@@ -640,25 +640,77 @@ export function CheckInQueue({
     }
   }
 
-  const handleQuickCheckIn = (booking: any) => {
+  const handleQuickCheckIn = async (booking: any) => {
     const hasTable = booking.tables && booking.tables.length > 0
     
     if (hasTable) {
-      // Check if tables are still available
-      const tablesAvailable = booking.tables.every((table: any) => {
-        const status = tableStatus.find(t => t.id === table.id)
-        return status && !status.isOccupied
-      })
+      // Check if tables are still available - different logic for shared vs regular tables
+      let tablesAvailable = true
+      
+      if (booking.is_shared_booking) {
+        // For shared tables, check if there's enough capacity
+        for (const table of booking.tables) {
+          const sharedTableData = sharedTablesSummary.find(st => st.table_id === table.id)
+          if (sharedTableData) {
+            // Calculate available seats considering the booking's required seats
+            const requiredSeats = table.seats_occupied || booking.party_size
+            
+            // FIXED: current_occupancy only includes physically seated guests (arrived+ status)
+            // For 'confirmed' bookings, we need to check if we can add them
+            // For 'arrived'+ bookings, they should already be included in current_occupancy
+            const currentOccupancy = sharedTableData.current_occupancy
+            
+            if (['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert'].includes(booking.status)) {
+              // This booking should already be counted in current_occupancy
+              // Just verify table isn't over capacity (shouldn't happen but handle gracefully)
+              if (currentOccupancy > sharedTableData.capacity) {
+                console.warn(`Shared table ${table.id} is over capacity: ${currentOccupancy}/${sharedTableData.capacity}`)
+                tablesAvailable = false
+                break
+              }
+              // If already arrived/seated, allow check-in (status progression)
+            } else {
+              // This booking is 'confirmed' and not yet included in current_occupancy
+              // Check if adding it would exceed capacity
+              const availableSeats = sharedTableData.capacity - currentOccupancy
+              if (availableSeats < requiredSeats) {
+                tablesAvailable = false
+                break
+              }
+            }
+          } else {
+            // Fallback: check if it's a shared table type
+            const tableInfo = tables.find(t => t.id === table.id)
+            if (tableInfo?.table_type === 'shared') {
+              tablesAvailable = false // Can't determine capacity, err on side of caution
+              break
+            } else {
+              // Regular table logic
+              const status = tableStatus.find(t => t.id === table.id)
+              if (!status || status.isOccupied) {
+                tablesAvailable = false
+                break
+              }
+            }
+          }
+        }
+      } else {
+        // Regular table logic: table must be completely unoccupied
+        tablesAvailable = booking.tables.every((table: any) => {
+          const status = tableStatus.find(t => t.id === table.id)
+          return status && !status.isOccupied
+        })
+      }
       
       if (tablesAvailable) {
         onCheckIn(booking.id, booking.tables.map((t: any) => t.id))
       } else {
-        // Tables occupied - suggest alternatives
+        // Tables occupied or insufficient capacity - suggest alternatives
         const suggestions = generateSmartSuggestions(booking)
         if (suggestions.length > 0) {
           toast.error(
             <div>
-              <p className="font-medium">Tables occupied</p>
+              <p className="font-medium">{booking.is_shared_booking ? 'Insufficient seats available' : 'Tables occupied'}</p>
               <p className="text-sm mt-1">{suggestions[0].description}</p>
               <Button 
                 size="sm" 
@@ -691,20 +743,77 @@ export function CheckInQueue({
       return
     }
     
-    // Check if tables are occupied by other bookings (excluding this booking)
-    const tablesAvailable = booking.tables.every((table: any) => {
-      // Find any booking that is physically occupying this table (excluding current booking)
-      const occupyingBooking = bookings.find(b => {
-        if (b.id === booking.id) return false // Exclude the current booking
-        const physicallyPresent = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(b.status)
-        return physicallyPresent && b.tables?.some((t: any) => t.id === table.id)
+    // Check if tables are available - different logic for shared vs regular tables
+    let tablesAvailable = true
+    
+    if (booking.is_shared_booking) {
+      // For shared tables, check if there's enough capacity
+      for (const table of booking.tables) {
+        const sharedTableData = sharedTablesSummary.find(st => st.table_id === table.id)
+        if (sharedTableData) {
+          // Calculate available seats considering the booking's required seats
+          const requiredSeats = table.seats_occupied || booking.party_size
+          
+          // FIXED: current_occupancy only includes physically seated guests (arrived+ status)
+          // For 'confirmed' bookings, we need to check if we can add them
+          // For 'arrived'+ bookings, they should already be included in current_occupancy
+          const currentOccupancy = sharedTableData.current_occupancy
+          
+          if (['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert'].includes(booking.status)) {
+            // This booking should already be counted in current_occupancy
+            // Just verify table isn't over capacity (shouldn't happen but handle gracefully)
+            if (currentOccupancy > sharedTableData.capacity) {
+              console.warn(`Shared table ${table.id} is over capacity: ${currentOccupancy}/${sharedTableData.capacity}`)
+              tablesAvailable = false
+              break
+            }
+            // If already arrived/seated, allow seating (status progression)
+          } else {
+            // This booking is 'confirmed' and not yet included in current_occupancy
+            // Check if adding it would exceed capacity
+            const availableSeats = sharedTableData.capacity - currentOccupancy
+            if (availableSeats < requiredSeats) {
+              tablesAvailable = false
+              break
+            }
+          }
+        } else {
+          // Fallback: check if it's a shared table type
+          const tableInfo = tables.find(t => t.id === table.id)
+          if (tableInfo?.table_type === 'shared') {
+            tablesAvailable = false // Can't determine capacity, err on side of caution
+            break
+          } else {
+            // Regular table logic
+            const occupyingBooking = bookings.find(b => {
+              if (b.id === booking.id) return false // Exclude the current booking
+              const physicallyPresent = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(b.status)
+              return physicallyPresent && b.tables?.some((t: any) => t.id === table.id)
+            })
+            
+            if (occupyingBooking) {
+              tablesAvailable = false
+              break
+            }
+          }
+        }
+      }
+    } else {
+      // Regular table logic: check if tables are occupied by other bookings (excluding this booking)
+      tablesAvailable = booking.tables.every((table: any) => {
+        // Find any booking that is physically occupying this table (excluding current booking)
+        const occupyingBooking = bookings.find(b => {
+          if (b.id === booking.id) return false // Exclude the current booking
+          const physicallyPresent = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(b.status)
+          return physicallyPresent && b.tables?.some((t: any) => t.id === table.id)
+        })
+        
+        return !occupyingBooking // Table is available if no one else is physically there
       })
-      
-      return !occupyingBooking // Table is available if no one else is physically there
-    })
+    }
     
     if (!tablesAvailable) {
-      toast.error("Tables are no longer available. Please reassign tables first.")
+      toast.error(booking.is_shared_booking ? "Insufficient seats available at assigned table." : "Tables are no longer available. Please reassign tables first.")
       handleOpenEnhancedTableSwitch(booking)
       return
     }
@@ -1490,8 +1599,34 @@ export function CheckInQueue({
     const customerData = booking.user?.id ? customersData[booking.user.id] : null
     
     const canCheckInDirectly = hasTable && booking.tables.every((table: any) => {
-      const tableInfo = tableStatus.find(t => t.id === table.id)
-      return tableInfo && !tableInfo.isOccupied
+      if (booking.is_shared_booking) {
+        // For shared tables, check if there's enough capacity
+        const sharedTableData = sharedTablesSummary.find(st => st.table_id === table.id)
+        if (sharedTableData) {
+          const requiredSeats = table.seats_occupied || booking.party_size
+          
+          // Calculate current occupancy excluding this booking if it's already counted
+          let currentOccupancy = sharedTableData.current_occupancy
+          
+          // If this booking is already in 'arrived' status or later, it might already be counted in current_occupancy
+          if (['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert'].includes(booking.status)) {
+            // This booking is already counted in current_occupancy, check if table isn't over capacity
+            return (sharedTableData.capacity - currentOccupancy) >= 0
+          } else {
+            // This booking is not yet seated (status: 'confirmed'), so check if we can add it
+            const availableSeats = sharedTableData.capacity - currentOccupancy
+            return availableSeats >= requiredSeats
+          }
+        } else {
+          // Fallback: check if it's a shared table type
+          const tableInfo = tables.find(t => t.id === table.id)
+          return tableInfo?.table_type !== 'shared' // Only allow if not a shared table (can't determine capacity)
+        }
+      } else {
+        // Regular table logic: table must be completely unoccupied
+        const tableInfo = tableStatus.find(t => t.id === table.id)
+        return tableInfo && !tableInfo.isOccupied
+      }
     })
 
     return (

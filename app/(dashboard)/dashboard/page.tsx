@@ -73,7 +73,7 @@ export default function DashboardPage() {
   const statusService = new TableStatusService()
   const requestService = new BookingRequestService()
 
-  // Comprehensive table availability validation
+  // Comprehensive table availability validation with shared table support
   const validateTableAvailability = (tableIds: string[], bookingId: string, partySize: number): { valid: boolean; errors: string[]; warnings: string[] } => {
     const errors: string[] = []
     const warnings: string[] = []
@@ -95,47 +95,94 @@ export default function DashboardPage() {
         continue
       }
 
-      const isOccupied = todaysBookings.some(booking => {
-        if (booking.id === bookingId) return false
-        const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
-        return occupiedStatuses.includes(booking.status) && 
-               booking.tables?.some((t: any) => t.id === tableId)
-      })
+      // Handle shared tables differently
+      if (table.table_type === 'shared') {
+        // For shared tables, check capacity via shared table summary
+        const sharedTableInfo = sharedTablesSummary?.find(st => st.table_id === tableId)
+        if (sharedTableInfo) {
+          let availableSeats = sharedTableInfo.capacity - sharedTableInfo.current_occupancy
+          
+          // If we're validating for a specific booking that might already be counted in current_occupancy
+          if (bookingId) {
+            const targetBooking = todaysBookings.find(b => b.id === bookingId)
+            if (targetBooking && ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert'].includes(targetBooking.status)) {
+              // This booking might already be counted in current_occupancy
+              // When seating an already arrived guest, they shouldn't count against available seats
+              const bookingSeatsAtThisTable = targetBooking.tables?.find((t: any) => t.id === tableId)?.seats_occupied || targetBooking.party_size
+              availableSeats += bookingSeatsAtThisTable // Add back the seats this booking is using
+            }
+          }
+          
+          if (availableSeats < partySize) {
+            errors.push(`Shared table ${table.table_number} only has ${availableSeats} seats available (need ${partySize})`)
+            continue
+          }
+          
+          // Check for upcoming reservations at this shared table
+          const upcomingSharedBooking = todaysBookings.find(booking => {
+            if (booking.id === bookingId) return false
+            const bookingTime = new Date(booking.booking_time)
+            const timeDiff = differenceInMinutes(bookingTime, currentTime)
+            return booking.status === 'confirmed' && 
+                   booking.is_shared_booking &&
+                   timeDiff > 0 && timeDiff <= 60 &&
+                   booking.tables?.some((t: any) => t.id === tableId)
+          })
+          
+          if (upcomingSharedBooking) {
+            const bookingTime = format(new Date(upcomingSharedBooking.booking_time), 'h:mm a')
+            const guestName = upcomingSharedBooking.user?.full_name || upcomingSharedBooking.guest_name || 'Unknown'
+            warnings.push(`Shared table ${table.table_number} has upcoming reservation at ${bookingTime} for ${guestName}`)
+          }
+        }
+      } else {
+        // For regular tables, check if completely occupied
+        const isOccupied = todaysBookings.some(booking => {
+          if (booking.id === bookingId) return false
+          const occupiedStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+          return occupiedStatuses.includes(booking.status) && 
+                 booking.tables?.some((t: any) => t.id === tableId)
+        })
 
-      if (isOccupied) {
-        const occupyingBooking = todaysBookings.find(booking => 
-          booking.id !== bookingId &&
-          ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status) && 
-          booking.tables?.some((t: any) => t.id === tableId)
-        )
-        const guestName = occupyingBooking?.user?.full_name || occupyingBooking?.guest_name || 'Unknown'
-        errors.push(`Table ${table.table_number} is occupied by ${guestName}`)
-        continue
-      }
+        if (isOccupied) {
+          const occupyingBooking = todaysBookings.find(booking => 
+            booking.id !== bookingId &&
+            ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status) && 
+            booking.tables?.some((t: any) => t.id === tableId)
+          )
+          const guestName = occupyingBooking?.user?.full_name || occupyingBooking?.guest_name || 'Unknown'
+          errors.push(`Table ${table.table_number} is occupied by ${guestName}`)
+          continue
+        }
 
-      const upcomingBooking = todaysBookings.find(booking => {
-        if (booking.id === bookingId) return false
-        const bookingTime = new Date(booking.booking_time)
-        const timeDiff = differenceInMinutes(bookingTime, currentTime)
-        return booking.status === 'confirmed' && 
-               timeDiff > 0 && timeDiff <= 120 &&
-               booking.tables?.some((t: any) => t.id === tableId)
-      })
+        // Check for upcoming reservations on regular tables
+        const upcomingBooking = todaysBookings.find(booking => {
+          if (booking.id === bookingId) return false
+          const bookingTime = new Date(booking.booking_time)
+          const timeDiff = differenceInMinutes(bookingTime, currentTime)
+          return booking.status === 'confirmed' && 
+                 timeDiff > 0 && timeDiff <= 120 &&
+                 booking.tables?.some((t: any) => t.id === tableId)
+        })
 
-      if (upcomingBooking) {
-        const bookingTime = format(new Date(upcomingBooking.booking_time), 'h:mm a')
-        const guestName = upcomingBooking.user?.full_name || upcomingBooking.guest_name || 'Unknown'
-        warnings.push(`Table ${table.table_number} has reservation at ${bookingTime} for ${guestName}`)
+        if (upcomingBooking) {
+          const bookingTime = format(new Date(upcomingBooking.booking_time), 'h:mm a')
+          const guestName = upcomingBooking.user?.full_name || upcomingBooking.guest_name || 'Unknown'
+          warnings.push(`Table ${table.table_number} has reservation at ${bookingTime} for ${guestName}`)
+        }
       }
     }
 
-    const totalCapacity = tableIds
+    // Validate total capacity for regular tables only
+    const regularTables = tableIds
       .map(id => tables.find(t => t.id === id))
-      .filter(Boolean)
-      .reduce((sum, table) => sum + (table?.max_capacity || 0), 0)
-
-    if (totalCapacity < partySize) {
-      errors.push(`Selected tables can seat ${totalCapacity} but party size is ${partySize}`)
+      .filter(table => table && table.table_type !== 'shared')
+    
+    if (regularTables.length > 0) {
+      const totalCapacity = regularTables.reduce((sum, table) => sum + (table?.max_capacity || 0), 0)
+      if (totalCapacity < partySize) {
+        errors.push(`Selected regular tables can seat ${totalCapacity} but party size is ${partySize}`)
+      }
     }
 
     return { valid: errors.length === 0, errors, warnings }

@@ -404,7 +404,8 @@ export default function BookingsPage() {
         .from("bookings")
         .insert({
           restaurant_id: restaurantId,
-          user_id: user.id,
+          user_id: bookingData.user_id || user.id,
+          customer_id: bookingData.customer_id || null,
           guest_name: bookingData.guest_name,
           guest_email: bookingData.guest_email,
           guest_phone: bookingData.guest_phone,
@@ -415,7 +416,8 @@ export default function BookingsPage() {
           special_requests: bookingData.special_requests,
           occasion: bookingData.occasion,
           confirmation_code: confirmationCode,
-          source:'manual'
+          source:'manual',
+          is_shared_booking: bookingData.is_shared_booking || false,
         })
         .select()
         .single()
@@ -427,6 +429,9 @@ export default function BookingsPage() {
         const tableAssignments = bookingData.table_ids.map((tableId: string) => ({
           booking_id: booking.id,
           table_id: tableId,
+          // For shared table bookings, set seats_occupied to party_size
+          // For regular bookings, it defaults to 1 which is correct
+          seats_occupied: bookingData.is_shared_booking ? bookingData.party_size : 1,
         }))
 
         const { error: tableError } = await supabase
