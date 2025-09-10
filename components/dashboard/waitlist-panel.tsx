@@ -1324,28 +1324,57 @@ export function WaitlistPanel({
                   {allTables?.map((table) => {
                     const isSelected = selectedTables.includes(table.id)
                     
+                    // Check if table is currently occupied
+                    const isOccupied = bookings.some(booking => {
+                      const diningStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+                      return diningStatuses.includes(booking.status) && 
+                             booking.tables?.some((t: any) => t.id === table.id)
+                    })
+                    
+                    // Check if table has sufficient capacity
+                    const hasCapacity = table.capacity >= (convertingEntry?.party_size || 0)
+                    
+                    const isAvailable = !isOccupied && hasCapacity && table.is_active
+                    
                     return (
                       <label
                         key={table.id}
                         className={cn(
-                          "flex items-center p-2 border rounded cursor-pointer transition-all",
-                          isSelected && "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700"
+                          "flex items-center p-2 border rounded transition-all",
+                          isSelected && "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700",
+                          isOccupied && "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800",
+                          !hasCapacity && "bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-700",
+                          isAvailable ? "cursor-pointer hover:bg-gray-50" : "cursor-not-allowed opacity-60"
                         )}
                       >
                         <input
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => {
+                            if (!isAvailable) return
                             setSelectedTables(prev => 
                               prev.includes(table.id) 
                                 ? prev.filter(id => id !== table.id)
                                 : [...prev, table.id]
                             )
                           }}
+                          disabled={!isAvailable}
                           className="mr-2"
                         />
-                        <div className="text-sm">
-                          <div className="font-medium">Table {table.table_number}</div>
+                        <div className="text-sm flex-1">
+                          <div className="font-medium flex items-center gap-2">
+                            Table {table.table_number}
+                            {isOccupied && (
+                              <Badge variant="destructive" className="text-xs px-1 py-0">
+                                Occupied
+                              </Badge>
+                            )}
+                            {!hasCapacity && (
+                              <Badge variant="secondary" className="text-xs px-1 py-0">
+                                Too Small
+                              </Badge>
+                            )}
+                          </div>
                           <div className="text-xs text-muted-foreground">
                             {table.capacity} seats • {table.table_type}
                           </div>
@@ -1355,12 +1384,56 @@ export function WaitlistPanel({
                   })}
                 </div>
                 
-                {selectedTables.length > 0 && (
-                  <div className="text-sm text-muted-foreground">
-                    Selected capacity: {
-                      allTables?.filter(t => selectedTables.includes(t.id))
-                        .reduce((sum, t) => sum + t.capacity, 0) || 0
-                    } seats
+                {/* Table availability summary */}
+                {convertingEntry && (
+                  <div className="space-y-2">
+                    {(() => {
+                      const availableTables = allTables?.filter(table => {
+                        const isOccupied = bookings.some(booking => {
+                          const diningStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+                          return diningStatuses.includes(booking.status) && 
+                                 booking.tables?.some((t: any) => t.id === table.id)
+                        })
+                        const hasCapacity = table.capacity >= convertingEntry.party_size
+                        return !isOccupied && hasCapacity && table.is_active
+                      }) || []
+                      
+                      const occupiedTables = allTables?.filter(table => {
+                        return bookings.some(booking => {
+                          const diningStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+                          return diningStatuses.includes(booking.status) && 
+                                 booking.tables?.some((t: any) => t.id === table.id)
+                        })
+                      }) || []
+
+                      return (
+                        <>
+                          {availableTables.length === 0 && (
+                            <Alert className="border-red-200 bg-red-50">
+                              <AlertCircle className="h-4 w-4 text-red-600" />
+                              <AlertDescription className="text-xs">
+                                No available tables for party of {convertingEntry.party_size}. All suitable tables are currently occupied.
+                              </AlertDescription>
+                            </Alert>
+                          )}
+                          
+                          {occupiedTables.length > 0 && availableTables.length > 0 && (
+                            <div className="text-xs text-muted-foreground">
+                              {occupiedTables.length} table{occupiedTables.length !== 1 ? 's' : ''} currently occupied by other customers
+                            </div>
+                          )}
+                          
+                          {selectedTables.length > 0 && (
+                            <div className="text-sm text-muted-foreground">
+                              Selected capacity: {
+                                allTables?.filter(t => selectedTables.includes(t.id))
+                                  .reduce((sum, t) => sum + t.capacity, 0) || 0
+                              } seats
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
                   </div>
                 )}
               </div>
@@ -1378,7 +1451,25 @@ export function WaitlistPanel({
             </Button>
             <Button
               onClick={handleConvertToBooking}
-              disabled={!selectedTime || selectedTables.length === 0 || isConverting}
+              disabled={(() => {
+                if (!selectedTime || selectedTables.length === 0 || isConverting) return true
+                
+                // Check if any selected tables are unavailable
+                const selectedTablesValid = selectedTables.every(tableId => {
+                  const table = allTables?.find(t => t.id === tableId)
+                  if (!table) return false
+                  
+                  const isOccupied = bookings.some(booking => {
+                    const diningStatuses = ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment']
+                    return diningStatuses.includes(booking.status) && 
+                           booking.tables?.some((t: any) => t.id === table.id)
+                  })
+                  
+                  return !isOccupied && table.capacity >= (convertingEntry?.party_size || 0) && table.is_active
+                })
+                
+                return !selectedTablesValid
+              })()}
             >
               {isConverting ? "Converting..." : "Convert to Booking"}
             </Button>
