@@ -275,15 +275,17 @@ export function TodaysTimeline({
                 <div className="grid grid-cols-2 gap-3 text-sm text-gray-600">
                   <div className="space-y-1">
                     {showTime && (
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4" />
-                        <span className="font-medium">
-                          {format(bookingTime, 'h:mm a')}
-                        </span>
-                        <span className="text-muted-foreground">
-                          ({getTimeDisplay()})
-                        </span>
-                      </div>
+                      <>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          <span className="font-medium">
+                            {format(bookingTime, 'h:mm a')}
+                          </span>
+                        </div>
+                        <div className="text-xs text-muted-foreground pl-6">
+                          {getTimeDisplay()}
+                        </div>
+                      </>
                     )}
                     <div className="flex items-center gap-2">
                       <Users className="h-4 w-4" />
