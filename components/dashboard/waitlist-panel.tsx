@@ -850,7 +850,7 @@ export function WaitlistPanel({
   }
 
   return (
-    <div className={cn("flex flex-col h-full", className)}>
+    <div className={cn("flex flex-col h-full min-h-0", className)}>
       {/* Header */}
       <div className="px-2 py-1.5 border-b border-border flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -927,8 +927,9 @@ export function WaitlistPanel({
       </div>
       
       {/* Entries list */}
-      <ScrollArea className="flex-1">
-        <div className="p-2 space-y-1.5">
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          <div className="p-2 space-y-1.5">
           {loading ? (
             <div className="text-center py-4">
               <Clock className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
@@ -944,19 +945,21 @@ export function WaitlistPanel({
           ) : (
             filteredEntries.map(renderEntry)
           )}
-        </div>
-      </ScrollArea>
+          </div>
+        </ScrollArea>
+      </div>
       
       {/* Add Entry Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-md max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Add Waitlist Entry</DialogTitle>
             <DialogDescription>
               Add a new customer to the waitlist
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <ScrollArea className="max-h-[60vh] px-1">
+            <div className="space-y-4">
             {/* Customer Search */}
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-popover-foreground flex items-center gap-2">
@@ -1147,7 +1150,8 @@ export function WaitlistPanel({
                 onChange={(e) => setManualEntry({ ...manualEntry, special_requests: e.target.value })}
               />
             </div>
-          </div>
+            </div>
+          </ScrollArea>
           
           <DialogFooter>
             <Button variant="outline" onClick={() => {
@@ -1279,7 +1283,7 @@ export function WaitlistPanel({
           setSelectedTables([])
         }
       }}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Convert to Booking</DialogTitle>
             <DialogDescription>
@@ -1291,8 +1295,9 @@ export function WaitlistPanel({
             </DialogDescription>
           </DialogHeader>
           
-          {convertingEntry && (
-            <div className="space-y-6">
+          <ScrollArea className="max-h-[70vh] px-1">
+            {convertingEntry && (
+              <div className="space-y-6">
               {/* Time Selection */}
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-popover-foreground flex items-center gap-2">
@@ -1437,8 +1442,9 @@ export function WaitlistPanel({
                   </div>
                 )}
               </div>
-            </div>
-          )}
+              </div>
+            )}
+          </ScrollArea>
           
           <DialogFooter>
             <Button variant="outline" onClick={() => {
