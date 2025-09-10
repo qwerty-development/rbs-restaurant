@@ -744,12 +744,12 @@ export function WaitlistPanel({
             <div className="flex-1 min-w-0">
               {/* Customer info */}
               <div className="flex items-center gap-1 mb-1">
-                <p className="font-medium text-sm truncate">
+                <p className="font-medium text-sm truncate flex-1 min-w-0">
                   {entry.user?.full_name || entry.guest_name || 'Guest'}
                 </p>
                 <Badge 
                   className={cn(
-                    "text-xs px-1 py-0 h-4",
+                    "text-xs px-1 py-0 h-4 flex-shrink-0",
                     entry.status === 'active' && "bg-green-100 text-green-800",
                     entry.status === 'notified' && "bg-blue-100 text-blue-800",
                     entry.status === 'booked' && "bg-purple-100 text-purple-800",
