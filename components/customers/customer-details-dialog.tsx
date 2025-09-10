@@ -761,76 +761,76 @@ export function CustomerDetailsDialog({
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-6 md:grid-cols-2">
                     {/* Visit Information */}
-                    <div className="space-y-3">
-                      <h4 className="font-medium text-sm">Visit History</h4>
-                      <div className="space-y-2 text-sm">
+                    <div className="space-y-4">
+                      <h4 className="font-medium text-sm text-gray-900">Visit History</h4>
+                      <div className="space-y-3 text-sm">
                         {customer.last_visit && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Last Visit</span>
-                            <span className="font-medium">
+                          <div className="space-y-1">
+                            <span className="text-gray-600 font-medium">Last Visit</span>
+                            <div className="text-gray-900 font-semibold">
                               {format(new Date(customer.last_visit), 'MMM d, yyyy')}
-                            </span>
+                            </div>
                           </div>
                         )}
                         {customer.first_visit && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">First Visit</span>
-                            <span className="font-medium">
+                          <div className="space-y-1">
+                            <span className="text-gray-600 font-medium">First Visit</span>
+                            <div className="text-gray-900 font-semibold">
                               {format(new Date(customer.first_visit), 'MMM d, yyyy')}
-                            </span>
+                            </div>
                           </div>
                         )}
                         {totalBookingCount > 0 && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Success Rate</span>
-                            <span className="font-medium">
+                          <div className="space-y-1">
+                            <span className="text-gray-600 font-medium">Success Rate</span>
+                            <div className="text-gray-900 font-semibold">
                               {totalBookingCount > 0 ? 
                                 ((((customer.profile?.completed_bookings || 0) / totalBookingCount) * 100).toFixed(1) + '%') : 
                                 'N/A'
                               }
-                            </span>
+                            </div>
                           </div>
                         )}
                       </div>
                     </div>
                     
                     {/* Preferences */}
-                    <div className="space-y-3">
-                      <h4 className="font-medium text-sm">Preferences</h4>
-                      <div className="space-y-2 text-sm">
+                    <div className="space-y-4">
+                      <h4 className="font-medium text-sm text-gray-900">Preferences</h4>
+                      <div className="space-y-3 text-sm">
                         {customer.preferred_table_types && customer.preferred_table_types.length > 0 && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Preferred Tables</span>
-                            <span className="font-medium">
+                          <div className="space-y-1">
+                            <span className="text-gray-600 font-medium">Preferred Tables</span>
+                            <div className="text-gray-900 font-semibold">
                               {customer.preferred_table_types.join(', ')}
-                            </span>
+                            </div>
                           </div>
                         )}
                         {customer.preferred_time_slots && customer.preferred_time_slots.length > 0 && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Preferred Times</span>
-                            <span className="font-medium">
+                          <div className="space-y-1">
+                            <span className="text-gray-600 font-medium">Preferred Times</span>
+                            <div className="text-gray-900 font-semibold">
                               {customer.preferred_time_slots.join(', ')}
-                            </span>
+                            </div>
                           </div>
                         )}
                         {customer.profile?.preferred_party_size && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Preferred Party Size</span>
-                            <span className="font-medium">
+                          <div className="space-y-1">
+                            <span className="text-gray-600 font-medium">Preferred Party Size</span>
+                            <div className="text-gray-900 font-semibold">
                               {customer.profile.preferred_party_size} people
-                            </span>
+                            </div>
                           </div>
                         )}
                         {customer.average_party_size > 0 && customer.profile?.preferred_party_size && 
                          customer.average_party_size !== customer.profile.preferred_party_size && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Actual Avg Party Size</span>
-                            <span className="font-medium">
+                          <div className="space-y-1">
+                            <span className="text-gray-600 font-medium">Actual Average Party Size</span>
+                            <div className="text-gray-900 font-semibold">
                               {customer.average_party_size.toFixed(1)} people
-                            </span>
+                            </div>
                           </div>
                         )}
                       </div>
