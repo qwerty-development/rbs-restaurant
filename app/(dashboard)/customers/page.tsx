@@ -143,6 +143,9 @@ export default function CustomersPage() {
             rating_last_updated,
             created_at,
             updated_at
+          ),
+          tags:customer_tag_assignments(
+            tag:customer_tags(*)
           )
         `)
         .eq('restaurant_id', restaurantId)
@@ -161,22 +164,27 @@ export default function CustomersPage() {
 
       if (profilesError) throw profilesError
 
-      // Transform data to merge customer and profile information
+      // Transform data to merge customer and profile information, and flatten tag structure
       const transformedData = customersData?.map(customer => {
-        // If profile is already included from the join, use it
-        if (customer.profile) {
-          return {
-            ...customer,
-            profile: customer.profile
-          }
+        // Transform tags from nested structure to flat array
+        const flattenedTags = customer.tags?.map((tagAssignment: any) => tagAssignment.tag) || []
+        
+        // Handle profile data
+        let processedCustomer = {
+          ...customer,
+          tags: flattenedTags
         }
         
-        // Otherwise, find the profile in the separate query
-        const profile = profilesData?.find(p => p.id === customer.user_id)
-        return {
-          ...customer,
-          profile: profile || null
+        // If profile is already included from the join, use it
+        if (customer.profile) {
+          processedCustomer.profile = customer.profile
+        } else {
+          // Otherwise, find the profile in the separate query
+          const profile = profilesData?.find(p => p.id === customer.user_id)
+          processedCustomer.profile = profile || null
         }
+        
+        return processedCustomer
       }) || []
 
       setCustomers(transformedData)
