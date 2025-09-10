@@ -1293,8 +1293,10 @@ export function CheckInQueue({
       ...pendingWalkInBooking,
       customer_id: customer?.id || null,
       user_id: customer?.user_id || null,
-      guest_name: customer?.profile?.full_name || customer?.guest_name || pendingWalkInBooking.guest_name,
-      guest_phone: customer?.profile?.phone_number || customer?.guest_phone || pendingWalkInBooking.guest_phone,
+      // For walk-in customers, prioritize guest information from the customer record over linked profile
+      // This prevents showing "Restaurant Admin" when the customer has no actual profile
+      guest_name: customer?.guest_name || customer?.profile?.full_name || pendingWalkInBooking.guest_name,
+      guest_phone: customer?.guest_phone || customer?.profile?.phone_number || pendingWalkInBooking.guest_phone,
       guest_email: customer?.guest_email || pendingWalkInBooking.guest_email,
     }
     setShowAddCustomerPrompt(false)
