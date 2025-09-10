@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { cn } from "@/lib/utils"
+import { cn, titleCase } from "@/lib/utils"
 import { format, parseISO, differenceInMinutes, isToday, isTomorrow } from "date-fns"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "react-hot-toast"
@@ -297,7 +297,7 @@ export function WaitlistPanel({
 
       if (error) throw error
 
-      toast.success(`Status updated to ${newStatus}`)
+      toast.success(`Status updated to ${titleCase(newStatus.replace(/_/g, ' '))}`)
       loadWaitlist()
     } catch (error) {
       console.error('Error updating status:', error)
@@ -756,7 +756,7 @@ export function WaitlistPanel({
                     entry.status === 'expired' && "bg-gray-100 text-gray-800"
                   )}
                 >
-                  {entry.status}
+                  {titleCase(entry.status.replace(/_/g, ' '))}
                 </Badge>
               </div>
               
