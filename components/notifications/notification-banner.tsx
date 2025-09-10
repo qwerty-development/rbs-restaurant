@@ -17,6 +17,8 @@ export function NotificationBanner({ notification, onDismiss }: NotificationBann
   const getIcon = () => {
     switch (notification.type) {
       case 'booking':
+        if (notification.variant === 'success') return <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+        if (notification.variant === 'error') return <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
         return <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
       case 'order':
         return <Bell className="h-5 w-5 text-orange-600 dark:text-orange-400" />
@@ -27,17 +29,13 @@ export function NotificationBanner({ notification, onDismiss }: NotificationBann
     }
   }
 
-  const getTypeColor = () => {
-    switch (notification.type) {
-      case 'booking':
-        return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
-      case 'order':
-        return 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800'
-      case 'general':
-        return 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
-      default:
-        return 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
-    }
+  const getBannerColor = () => {
+    if (notification.variant === 'success') return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+    if (notification.variant === 'error') return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+    if (notification.variant === 'warning') return 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+    if (notification.type === 'booking') return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+    if (notification.type === 'order') return 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800'
+    return 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
   }
 
   const formatTime = (timestamp: Date) => {
@@ -55,7 +53,7 @@ export function NotificationBanner({ notification, onDismiss }: NotificationBann
       className={cn(
         "w-full rounded-xl border shadow-xl backdrop-blur bg-white/90 dark:bg-slate-900/80",
         "ring-1 ring-black/5 dark:ring-white/5",
-        getTypeColor()
+        getBannerColor()
       )}
     >
       <div className="p-4">

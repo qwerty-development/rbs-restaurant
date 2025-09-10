@@ -18,7 +18,9 @@ export function NotificationContainer() {
           style={{
             animationDelay: `${index * 100}ms`,
             transform: `translateY(${index * 8}px)`,
-            animation: 'slideInFromRight 0.3s ease-out'
+            animationName: 'slideInFromRight',
+            animationDuration: '0.3s',
+            animationTimingFunction: 'ease-out'
           }}
         >
           <NotificationBanner

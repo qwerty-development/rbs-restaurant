@@ -13,7 +13,7 @@ The notification system provides app-wide notifications with sound alerts for bo
 ## Features
 
 - **App-wide notifications**: Works on any page in the app
-- **Sound alerts**: Plays `booking-notification.wav` for new bookings
+- **Sound alerts**: Plays `booking-notification.mp3` for new bookings
 - **Banner notifications**: Slide-in notifications from the right side
 - **Auto-dismiss**: Notifications automatically disappear after 10 seconds
 - **Real-time updates**: Uses Supabase real-time subscriptions
@@ -67,7 +67,7 @@ The system automatically creates notifications for:
 ## Sound Files
 
 The system uses the following sound files in `/public/sounds/`:
-- `booking-notification.wav` - For new bookings and booking updates
+- `booking-notification.mp3` - For new bookings and booking updates
 - `notification-new.mp3` - For general new notifications
 - `notification-update.mp3` - For general updates
 
@@ -83,7 +83,7 @@ useGlobalBookingNotifications({
 ```
 
 ### Notification Types
-- `booking` - Booking-related notifications (plays booking-notification.wav)
+- `booking` - Booking-related notifications (plays booking-notification.mp3)
 - `order` - Order-related notifications
 - `general` - General notifications
 

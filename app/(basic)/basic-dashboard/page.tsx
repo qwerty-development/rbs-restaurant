@@ -159,8 +159,147 @@ export default function BasicDashboardPage() {
       return uniqueBookings
     },
     enabled: !!restaurantId,
-    refetchInterval: 30000, // Refetch every 30 seconds to catch new requests
   })
+
+  // Real-time subscription for immediate updates
+  useEffect(() => {
+    if (!restaurantId) return
+
+    console.log('🔗 Setting up real-time subscription for basic dashboard')
+    
+    const channel = supabase
+      .channel(`basic-dashboard-bookings:${restaurantId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'bookings',
+          filter: `restaurant_id=eq.${restaurantId}`
+        },
+        async (payload) => {
+          console.log('📥 New booking INSERT received in basic dashboard:', payload)
+          const newBooking = payload.new
+          if (!newBooking) return
+          
+          // Fetch the complete booking data with profiles
+          try {
+            const { data: completeBooking, error } = await supabase
+              .from('bookings')
+              .select(`
+                id,
+                booking_time,
+                party_size,
+                status,
+                special_requests,
+                created_at,
+                user_id,
+                profiles!bookings_user_id_fkey (
+                  id,
+                  full_name,
+                  phone_number,
+                  email
+                )
+              `)
+              .eq('id', newBooking.id)
+              .single()
+            
+            if (error) {
+              console.error('Error fetching complete booking data:', error)
+              return
+            }
+            
+            // Update query cache with complete data
+            queryClient.setQueryData(
+              ['basic-bookings', restaurantId, selectedDate],
+              (oldData: any[] | undefined) => {
+                if (!oldData) return [completeBooking]
+                
+                // Check if booking already exists (avoid duplicates)
+                const exists = oldData.some(b => b.id === completeBooking.id)
+                if (exists) return oldData
+                
+                // Add new booking at the beginning and sort
+                const updated = [completeBooking, ...oldData]
+                return updated.sort((a, b) => {
+                  if (a.status === 'pending' && b.status !== 'pending') return -1
+                  if (a.status !== 'pending' && b.status === 'pending') return 1
+                  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                })
+              }
+            )
+          } catch (error) {
+            console.error('Error processing new booking:', error)
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'bookings',
+          filter: `restaurant_id=eq.${restaurantId}`
+        },
+        async (payload) => {
+          console.log('📝 Booking UPDATE received in basic dashboard:', payload)
+          const updatedBooking = payload.new
+          if (!updatedBooking) return
+          
+          // Fetch the complete booking data with profiles
+          try {
+            const { data: completeBooking, error } = await supabase
+              .from('bookings')
+              .select(`
+                id,
+                booking_time,
+                party_size,
+                status,
+                special_requests,
+                created_at,
+                user_id,
+                profiles!bookings_user_id_fkey (
+                  id,
+                  full_name,
+                  phone_number,
+                  email
+                )
+              `)
+              .eq('id', updatedBooking.id)
+              .single()
+            
+            if (error) {
+              console.error('Error fetching complete booking data for update:', error)
+              return
+            }
+            
+            // Update query cache with complete data
+            queryClient.setQueryData(
+              ['basic-bookings', restaurantId, selectedDate],
+              (oldData: any[] | undefined) => {
+                if (!oldData) return [completeBooking]
+                
+                return oldData.map(booking =>
+                  booking.id === completeBooking.id ? completeBooking : booking
+                ).sort((a, b) => {
+                  if (a.status === 'pending' && b.status !== 'pending') return -1
+                  if (a.status !== 'pending' && b.status === 'pending') return 1
+                  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                })
+              }
+            )
+          } catch (error) {
+            console.error('Error processing booking update:', error)
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      console.log('🔌 Cleaning up basic dashboard subscription')
+      supabase.removeChannel(channel)
+    }
+  }, [restaurantId, selectedDate, queryClient, supabase])
 
   // Analytics query - today's data
   const { data: analytics } = useQuery({

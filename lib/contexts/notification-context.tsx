@@ -9,6 +9,7 @@ export interface Notification {
   message: string
   timestamp: Date
   data?: any
+  variant?: 'success' | 'error' | 'info' | 'warning'
 }
 
 interface NotificationContextType {
@@ -16,7 +17,7 @@ interface NotificationContextType {
   addNotification: (notification: Omit<Notification, 'id' | 'timestamp'>) => void
   removeNotification: (id: string) => void
   clearAllNotifications: () => void
-  playNotificationSound: (type: 'booking' | 'order' | 'general') => void
+  playNotificationSound: (type: 'booking' | 'order' | 'general', variant?: 'success' | 'error' | 'info' | 'warning') => void
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined)
@@ -24,20 +25,32 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([])
 
-  const playNotificationSound = useCallback((type: 'booking' | 'order' | 'general') => {
+  const playNotificationSound = useCallback((type: 'booking' | 'order' | 'general', variant?: 'success' | 'error' | 'info' | 'warning') => {
     try {
       const audio = new Audio()
       let soundPath = ''
-      switch (type) {
-        case 'booking':
-          soundPath = '/sounds/booking-notification.wav'
-          break
-        case 'order':
-          soundPath = '/sounds/notification-update.mp3'
-          break
-        case 'general':
-          soundPath = '/sounds/notification-new.mp3'
-          break
+      
+      // Use different sounds based on type and variant
+      if (type === 'booking') {
+        if (variant === 'error') {
+          // Cancelled/declined bookings
+          soundPath = '/sounds/cancel-notification.mp3'
+        } else if (variant === 'success') {
+          // Confirmed/accepted bookings
+          soundPath = '/sounds/accept-notification.mp3'
+        } else {
+          // New bookings (no variant) and other booking notifications
+          soundPath = '/sounds/booking-notification.mp3'
+        }
+      } else {
+        switch (type) {
+          case 'order':
+            soundPath = '/sounds/notification-update.mp3'
+            break
+          case 'general':
+            soundPath = '/sounds/notification-new.mp3'
+            break
+        }
       }
       
       audio.src = soundPath
@@ -59,7 +72,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     
     // Play sound for booking notifications
     if (notification.type === 'booking') {
-      playNotificationSound('booking')
+      playNotificationSound('booking', notification.variant)
     }
   }, [playNotificationSound])
 

@@ -135,7 +135,7 @@ export async function sendNotification(payload: NotificationPayload) {
 export async function sendBookingNotification(
   type: 'new_booking' | 'booking_reminder' | 'booking_cancelled',
   bookingDetails: {
-    customerName: string
+    customerName?: string
     date: string
     time: string
     partySize: number
@@ -151,14 +151,18 @@ export async function sendBookingNotification(
   let body: string
   let url = '/bookings'
 
+  const safeName = (bookingDetails.customerName && bookingDetails.customerName.trim().length > 0)
+    ? bookingDetails.customerName
+    : 'Guest'
+
   switch (type) {
     case 'new_booking':
       title = '🍽️ New Booking Received'
-      body = `${bookingDetails.customerName} - ${bookingDetails.partySize} guests on ${bookingDetails.date} at ${bookingDetails.time}`
+      body = `${safeName} - ${bookingDetails.partySize} guests on ${bookingDetails.date} at ${bookingDetails.time}`
       break
     case 'booking_reminder':
       title = '⏰ Booking Reminder'
-      body = `${bookingDetails.customerName} - ${bookingDetails.partySize} guests arriving soon${bookingDetails.tableNumber ? ` at Table ${bookingDetails.tableNumber}` : ''}`
+      body = `${safeName} - ${bookingDetails.partySize} guests arriving soon${bookingDetails.tableNumber ? ` at Table ${bookingDetails.tableNumber}` : ''}`
       url = '/dashboard'
       break
     case 'booking_cancelled':

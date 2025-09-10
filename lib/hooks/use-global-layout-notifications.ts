@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useNotifications } from '@/lib/contexts/notification-context'
 import { RealtimeChannel } from '@supabase/supabase-js'
 import { Booking } from '@/types'
+import { getBookingDisplayName } from '@/lib/utils'
 import { usePathname, useSearchParams } from 'next/navigation'
 
 export function useGlobalLayoutNotifications() {
@@ -47,9 +48,27 @@ export function useGlobalLayoutNotifications() {
     return null
   }
 
-  const getDisplayGuestName = (booking: Booking): string => {
-    const candidate = (booking as any)?.guest_name || (booking as any)?.profiles?.full_name || (booking as any)?.guest_phone
-    return candidate && String(candidate).trim().length > 0 ? String(candidate) : 'Guest'
+  const getDisplayGuestName = (booking: Booking): string => getBookingDisplayName(booking)
+
+  // Prefer guest_name, else fetch profile full_name by user_id as needed
+  const resolveGuestName = async (booking: Booking): Promise<string> => {
+    const local = getDisplayGuestName(booking)
+    if (local && local !== 'Guest') return local
+    const userId = (booking as any)?.user_id
+    if (userId) {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('full_name, phone_number')
+          .eq('id', userId)
+          .single()
+        const name = getBookingDisplayName({ user: data })
+        return name || 'Guest'
+      } catch {
+        return 'Guest'
+      }
+    }
+    return 'Guest'
   }
 
   useEffect(() => {
@@ -67,7 +86,7 @@ export function useGlobalLayoutNotifications() {
           schema: 'public',
           table: 'bookings'
         },
-        (payload) => {
+        async (payload) => {
           const newBooking = payload.new as Booking
           if (!newBooking || newBooking.restaurant_id !== restaurantId) return
           
@@ -84,10 +103,11 @@ export function useGlobalLayoutNotifications() {
           )
           
           // Add global notification with sound
+          const guestName = await resolveGuestName(newBooking)
           addNotification({
             type: 'booking',
             title: 'New Booking',
-            message: `New booking request from ${getDisplayGuestName(newBooking)} for ${newBooking.party_size} guests`,
+            message: `New booking request from ${guestName} for ${newBooking.party_size} guests`,
             data: newBooking
           })
         }
@@ -100,7 +120,7 @@ export function useGlobalLayoutNotifications() {
           table: 'bookings',
           filter: `restaurant_id=eq.${restaurantId}`
         },
-        (payload) => {
+        async (payload) => {
           const updatedBooking = payload.new as Booking
           const previousBooking = payload.old as Booking
           
@@ -120,7 +140,7 @@ export function useGlobalLayoutNotifications() {
           
           // Add global notification for status changes
           if (previousBooking.status !== updatedBooking.status) {
-            const guestName = getDisplayGuestName(updatedBooking)
+            const guestName = await resolveGuestName(updatedBooking)
             const statusMap: Record<string, { title: string; message: string }> = {
               confirmed: { title: 'Booking Confirmed', message: `Booking for ${guestName} confirmed` },
               declined_by_restaurant: { title: 'Booking Declined', message: `Booking for ${guestName} declined by restaurant` },
@@ -138,7 +158,12 @@ export function useGlobalLayoutNotifications() {
                 type: 'booking',
                 title: statusInfo.title,
                 message: statusInfo.message,
-                data: updatedBooking
+                data: updatedBooking,
+                variant: ['cancelled_by_user', 'cancelled_by_restaurant', 'declined_by_restaurant'].includes(updatedBooking.status as string)
+                  ? 'error'
+                  : updatedBooking.status === 'confirmed'
+                  ? 'success'
+                  : undefined
               })
             }
           }
