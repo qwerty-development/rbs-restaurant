@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'RBS Restaurant',
+    title: 'Plate Management',
   },
   icons: {
     icon: [
@@ -48,9 +48,9 @@ export default function RootLayout({
         <meta name="theme-color" content="#7A2E4A" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="RBS Restaurant" />
+        <meta name="apple-mobile-web-app-title" content="Plate Management" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="application-name" content="RBS Restaurant" />
+        <meta name="application-name" content="Plate Management" />
         <meta name="msapplication-TileColor" content="#7A2E4A" />
         <meta name="msapplication-config" content="none" />
         <meta name="screen-orientation" content="landscape" />

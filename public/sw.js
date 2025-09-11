@@ -131,7 +131,7 @@ self.addEventListener('push', function (event) {
       ]
     }
     event.waitUntil(
-      self.registration.showNotification(data.title || 'RBS Restaurant', options)
+      self.registration.showNotification(data.title || 'Plate Management', options)
     )
   }
 })

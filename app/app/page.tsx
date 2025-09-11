@@ -28,7 +28,7 @@ export default function PWAEntryPage() {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="text-center space-y-4">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-        <h2 className="text-xl font-semibold">RBS Restaurant</h2>
+        <h2 className="text-xl font-semibold">Plate Management</h2>
         <p className="text-muted-foreground">Loading your restaurant management system...</p>
       </div>
     </div>

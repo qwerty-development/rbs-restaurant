@@ -118,7 +118,7 @@ export function PushNotificationManager() {
     setIsLoading(true)
     try {
       const result = await sendNotification({
-        title: 'RBS Restaurant Test',
+        title: 'Plate Management Test',
         body: testMessage,
         url: '/dashboard'
       })

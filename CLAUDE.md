@@ -1,4 +1,4 @@
-# RBS Restaurant Management System - Claude Code Developer Guide
+# Plate Management Management System - Claude Code Developer Guide
 
 ## Project Overview
 Enterprise-grade Next.js 15 restaurant management system with Supabase backend, featuring multi-tenant operations, advanced bookings, kitchen workflows, PWA capabilities, analytics, and mobile optimization for 8-inch tablets.

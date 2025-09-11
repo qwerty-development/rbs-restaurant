@@ -3,7 +3,7 @@ import type { MetadataRoute } from 'next'
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Plate Management',
-    short_name: 'RBS Restaurant',
+    short_name: 'Plate Management',
     description: 'Complete restaurant management system for bookings, tables, customers, and operations',
     start_url: '/dashboard',
     scope: '/',
