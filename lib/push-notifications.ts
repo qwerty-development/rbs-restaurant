@@ -64,7 +64,8 @@ class PushNotificationManager {
       return permission
     } catch (error) {
       console.error('Failed to request notification permission:', error)
-      alert('Failed to request notification permission: ' + error.message)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      alert('Failed to request notification permission: ' + errorMessage)
       return 'denied'
     }
   }
