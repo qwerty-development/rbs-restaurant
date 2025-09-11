@@ -1210,7 +1210,7 @@ export function CustomerDetailsDialog({
                                 {relatedCustomer?.profile?.full_name || relatedCustomer?.guest_name}
                               </p>
                               <p className="text-sm text-gray-600">
-                                {rel.relationship_type}
+                                {rel.relationship_type.charAt(0).toUpperCase() + rel.relationship_type.slice(1)}
                                 {rel.relationship_details && ` - ${rel.relationship_details}`}
                               </p>
                             </div>

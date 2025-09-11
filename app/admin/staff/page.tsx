@@ -133,7 +133,15 @@ export default function StaffManagement() {
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
   const [showPermissionsDialog, setShowPermissionsDialog] = useState(false)
   const [showTransferDialog, setShowTransferDialog] = useState(false)
+  const [showAddStaffDialog, setShowAddStaffDialog] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('overview')
+  const [inviteFormData, setInviteFormData] = useState({
+    email: '',
+    restaurant_id: '',
+    role: 'staff',
+    permissions: [] as string[]
+  })
 
   const supabase = createClient()
 
@@ -327,6 +335,141 @@ export default function StaffManagement() {
     }
   }
 
+  const handleInviteStaff = async () => {
+    if (saving) return
+    
+    setSaving(true)
+    
+    try {
+      if (!inviteFormData.email.trim() || !inviteFormData.restaurant_id) {
+        toast.error('Please fill in all required fields')
+        return
+      }
+
+      const email = inviteFormData.email.trim().toLowerCase()
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(email)) {
+        toast.error('Please enter a valid email address')
+        return
+      }
+
+      // First, check if user exists in profiles
+      const { data: existingProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, email, full_name')
+        .eq('email', email)
+        .single()
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error('Profile lookup error:', profileError)
+        throw profileError
+      }
+
+      if (!existingProfile) {
+        toast.error(
+          `No user account found with email ${email}. Please ask the user to register first at the platform, then try adding them as staff.`,
+          { duration: 6000 }
+        )
+        return
+      }
+
+      const userId = existingProfile.id
+
+      // Check if user is already staff at this restaurant
+      const { data: existingStaff, error: staffCheckError } = await supabase
+        .from('restaurant_staff')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('restaurant_id', inviteFormData.restaurant_id)
+        .single()
+
+      if (staffCheckError && staffCheckError.code !== 'PGRST116') {
+        console.error('Staff check error:', staffCheckError)
+        throw staffCheckError
+      }
+
+      if (existingStaff) {
+        toast.error('User is already staff at this restaurant')
+        return
+      }
+
+      // Create staff record
+      const { error: insertError } = await supabase
+        .from('restaurant_staff')
+        .insert([{
+          user_id: userId,
+          restaurant_id: inviteFormData.restaurant_id,
+          role: inviteFormData.role,
+          permissions: inviteFormData.permissions,
+          is_active: true,
+          hired_at: new Date().toISOString()
+        }])
+
+      if (insertError) {
+        console.error('Error inserting staff:', insertError)
+        throw insertError
+      }
+
+      await fetchStaff()
+      setShowAddStaffDialog(false)
+      resetInviteForm()
+      
+      const userName = existingProfile.full_name || email.split('@')[0]
+      toast.success(`Successfully added ${userName} as staff member!`)
+    } catch (error) {
+      console.error('Error inviting staff:', error)
+      toast.error('Failed to add staff member: ' + (error as any)?.message || 'Unknown error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const resetInviteForm = () => {
+    setInviteFormData({
+      email: '',
+      restaurant_id: '',
+      role: 'staff',
+      permissions: []
+    })
+  }
+
+  const handleExportStaff = async () => {
+    try {
+      const csv = [
+        'Name,Email,Phone,Restaurant,Role,Status,Hired Date,Last Login,Performance Score,Shifts This Month',
+        ...filteredStaff.map(member => [
+          `"${member.profile?.full_name || ''}"`,
+          member.profile?.email || '',
+          member.profile?.phone_number || '',
+          `"${member.restaurant?.name || ''}"`,
+          member.role,
+          member.is_active ? 'Active' : 'Inactive',
+          new Date(member.hired_at).toLocaleDateString(),
+          member.last_login_at ? new Date(member.last_login_at).toLocaleDateString() : '',
+          member.performance_score?.toFixed(1) || '',
+          member.shifts_this_month || 0
+        ].join(','))
+      ].join('\n')
+
+      const blob = new Blob([csv], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `staff_${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      toast.success('Staff data exported successfully')
+    } catch (error) {
+      console.error('Error exporting data:', error)
+      toast.error('Failed to export staff data')
+    }
+  }
+
   const filteredStaff = staff.filter(member => {
     const matchesSearch = member.profile?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          member.profile?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -381,7 +524,14 @@ export default function StaffManagement() {
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Button>
+          <Button variant="outline" onClick={handleExportStaff}>
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+          <Button onClick={() => {
+            resetInviteForm()
+            setShowAddStaffDialog(true)
+          }}>
             <Plus className="w-4 h-4 mr-2" />
             Add Staff
           </Button>
@@ -884,6 +1034,110 @@ export default function StaffManagement() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Staff Dialog */}
+      <Dialog open={showAddStaffDialog} onOpenChange={setShowAddStaffDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add New Staff Member</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="staff-email">Email Address *</Label>
+                <Input
+                  id="staff-email"
+                  type="email"
+                  value={inviteFormData.email}
+                  onChange={(e) => setInviteFormData({...inviteFormData, email: e.target.value})}
+                  placeholder="staff@example.com"
+                />
+                <p className="text-xs text-gray-500 mt-1">User must already be registered on the platform</p>
+              </div>
+              
+              <div>
+                <Label htmlFor="staff-restaurant">Restaurant *</Label>
+                <Select value={inviteFormData.restaurant_id} onValueChange={(value) => setInviteFormData({...inviteFormData, restaurant_id: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select restaurant" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {restaurants.length === 0 ? (
+                      <SelectItem value="" disabled>
+                        No restaurants found
+                      </SelectItem>
+                    ) : (
+                      restaurants.map(restaurant => (
+                        <SelectItem key={restaurant.id} value={restaurant.id}>
+                          {restaurant.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="staff-role">Role</Label>
+              <Select value={inviteFormData.role} onValueChange={(value) => setInviteFormData({...inviteFormData, role: value})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="staff">Staff</SelectItem>
+                  <SelectItem value="manager">Manager</SelectItem>
+                  <SelectItem value="owner">Owner</SelectItem>
+                  <SelectItem value="viewer">Viewer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-4">
+              <Label>Permissions</Label>
+              <div className="space-y-4">
+                {PERMISSION_GROUPS.map(group => (
+                  <div key={group.id} className="space-y-3">
+                    <Label className="text-sm font-medium text-gray-900">{group.label}</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {group.permissions.map(permission => (
+                        <div key={permission} className="flex items-center space-x-2">
+                          <Checkbox 
+                            id={`invite-${permission}`}
+                            checked={inviteFormData.permissions.includes(permission)}
+                            onCheckedChange={(checked) => {
+                              const updatedPermissions = checked
+                                ? [...inviteFormData.permissions, permission]
+                                : inviteFormData.permissions.filter(p => p !== permission)
+                              setInviteFormData({
+                                ...inviteFormData,
+                                permissions: updatedPermissions
+                              })
+                            }}
+                          />
+                          <Label htmlFor={`invite-${permission}`} className="text-sm text-gray-700 capitalize">
+                            {permission.replace('_', ' ')}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowAddStaffDialog(false)} disabled={saving}>
+                Cancel
+              </Button>
+              <Button onClick={handleInviteStaff} disabled={saving}>
+                {saving ? 'Adding Staff...' : 'Add Staff Member'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

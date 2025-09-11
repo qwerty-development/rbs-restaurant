@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { format, startOfDay, endOfDay, addMinutes, differenceInMinutes, addDays } from "date-fns"
 import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
+import { useNotifications } from "@/lib/contexts/notification-context"
+import { PushNotificationPermission } from "@/components/notifications/push-notification-permission"
 import { UnifiedFloorPlan } from "@/components/dashboard/unified-floor-plan"
 import { CheckInQueue } from "@/components/dashboard/checkin-queue"
 import { WaitlistPanel } from "@/components/dashboard/waitlist-panel"
@@ -44,7 +46,8 @@ import {
   AlertTriangle,
   List,
   Badge,
-  Users
+  Users,
+  Bell
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -52,6 +55,12 @@ import { Input } from "@/components/ui/input"
 export default function DashboardPage() {
   const router = useRouter()
   const { currentRestaurant, tier, isLoading: contextLoading } = useRestaurantContext()
+  const notificationContext = useNotifications()
+  const { addNotification, requestPushPermission, isPushEnabled } = notificationContext || {}
+  
+  // Debug logging
+  console.log('🔔 Dashboard: Available notification methods:', Object.keys(notificationContext || {}))
+  console.log('🔔 Dashboard: requestPushPermission type:', typeof requestPushPermission)
   const [currentTime, setCurrentTime] = useState(new Date())
   const [showManualBooking, setShowManualBooking] = useState(false)
   const [selectedBooking, setSelectedBooking] = useState<any>(null)
@@ -1056,6 +1065,9 @@ export default function DashboardPage() {
               <UserPlus className="h-3 w-3 mr-1" />
               <span className="hidden sm:inline">New</span>
             </Button>
+            
+
+
           </div>
         </div>
       </header>
@@ -1069,10 +1081,17 @@ export default function DashboardPage() {
         onViewAll={() => setShowPendingModal(true)}
       />
 
+      {/* Push Notification Permission */}
+      <div className="px-4">
+        <PushNotificationPermission />
+      </div>
+
       {/* PWA Install Prompt */}
       <div className="px-4">
         <InstallPrompt />
       </div>
+
+
 
 
       {/* Main Content Area */}
