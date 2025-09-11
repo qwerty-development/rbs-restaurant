@@ -1,10 +1,14 @@
-// app/basic-dashboard/layout.tsx
-export const dynamic = 'force-dynamic'
 
+// app/(basic)/layout.tsx
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { Sidebar } from "@/components/layout/sidebar"
+import { MobileNav } from "@/components/layout/mobile-nav"
+import { SidebarProvider } from "@/lib/contexts/sidebar-context"
+import { RestaurantProvider } from "@/lib/contexts/restaurant-context"
+import { DashboardLayoutInner } from "@/components/layout/dashboard-layout-inner"
 
-export default async function BasicDashboardLayout({
+export default async function BasicLayout({
   children,
 }: {
   children: React.ReactNode
@@ -16,7 +20,7 @@ export default async function BasicDashboardLayout({
     redirect("/login")
   }
 
-  // Get restaurant staff data
+  // Get all restaurants where user is staff
   const { data: staffData } = await supabase
     .from("restaurant_staff")
     .select(`
@@ -33,7 +37,7 @@ export default async function BasicDashboardLayout({
     redirect("/login")
   }
 
-  // Get the restaurant data
+  // Handle both array and object formats from Supabase
   const firstStaff = staffData[0]
   const restaurant = Array.isArray(firstStaff.restaurant) 
     ? firstStaff.restaurant[0] 
@@ -45,57 +49,12 @@ export default async function BasicDashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Simple header for basic tier */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900">
-                {restaurant?.name}
-              </h1>
-              <p className="text-sm text-gray-500">Basic Plan</p>
-            </div>
-            <nav className="flex items-center space-x-6">
-              <a 
-                href="/basic-dashboard" 
-                className="text-gray-700 hover:text-gray-900 font-medium"
-              >
-                Dashboard
-              </a>
-              <a 
-                href="/menu" 
-                className="text-gray-700 hover:text-gray-900"
-              >
-                Menu
-              </a>
-              <a 
-                href="/reviews" 
-                className="text-gray-700 hover:text-gray-900"
-              >
-                Reviews
-              </a>
-              <a 
-                href="/profile" 
-                className="text-gray-700 hover:text-gray-900"
-              >
-                Profile
-              </a>
-              <a 
-                href="/settings" 
-                className="text-gray-700 hover:text-gray-900"
-              >
-                Settings
-              </a>
-            </nav>
-          </div>
-        </div>
-      </header>
-      
-      {/* Main content */}
-      <main>
-        {children}
-      </main>
-    </div>
+    <RestaurantProvider>
+      <SidebarProvider>
+        <DashboardLayoutInner staffData={staffData}>
+          {children}
+        </DashboardLayoutInner>
+      </SidebarProvider>
+    </RestaurantProvider>
   )
 }
