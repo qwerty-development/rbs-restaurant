@@ -196,11 +196,13 @@ export default function CustomersPage() {
             let allBookings: any[] = []
             
             try {
-              // Query by user_id if available
-              if (customer.user_id) {
+              // Enhanced logic matching the customer details dialog
+              
+              // For registered users with profiles, prioritize user_id matching
+              if (customer.user_id && customer.profile) {
                 const { data: userBookings, error: userBookingsError } = await supabase
                   .from('bookings')
-                  .select('id, booking_time') // Only select minimal fields for counting
+                  .select('id, booking_time')
                   .eq('user_id', customer.user_id)
                   .eq('restaurant_id', restaurantId)
 
@@ -209,20 +211,62 @@ export default function CustomersPage() {
                 }
               }
 
-              // Query by guest emails (both guest_email and profile email)
-              const emailsToTry = [customer.guest_email, customer.profile?.email].filter(Boolean)
-              for (const email of emailsToTry) {
-                const { data: emailBookings, error: emailBookingsError } = await supabase
-                  .from('bookings')
-                  .select('id, booking_time')
-                  .eq('guest_email', email)
-                  .eq('restaurant_id', restaurantId)
+              // For guest customers or when user_id matching fails, try multiple approaches
+              if (!customer.profile || allBookings.length === 0) {
+                // Method 1: Query by guest_email (most reliable for guest customers)
+                if (customer.guest_email) {
+                  const { data: emailBookings, error: emailBookingsError } = await supabase
+                    .from('bookings')
+                    .select('id, booking_time')
+                    .eq('guest_email', customer.guest_email)
+                    .eq('restaurant_id', restaurantId)
 
-                if (!emailBookingsError && emailBookings) {
-                  // Add bookings that aren't already in the list (by ID) - same deduplication as dialog
-                  const existingIds = new Set(allBookings.map(b => b.id))
-                  const newBookings = emailBookings.filter(b => !existingIds.has(b.id))
-                  allBookings = [...allBookings, ...newBookings]
+                  if (!emailBookingsError && emailBookings) {
+                    // Add bookings that aren't already in the list (by ID)
+                    const existingIds = new Set(allBookings.map(b => b.id))
+                    const newBookings = emailBookings.filter(b => !existingIds.has(b.id))
+                    allBookings = [...allBookings, ...newBookings]
+                  }
+                }
+
+                // Method 2: Query by guest_name and guest_email combination (high confidence match)
+                if (customer.guest_name && customer.guest_email) {
+                  const { data: nameEmailBookings, error: nameEmailError } = await supabase
+                    .from('bookings')
+                    .select('id, booking_time')
+                    .eq('guest_name', customer.guest_name)
+                    .eq('guest_email', customer.guest_email)
+                    .eq('restaurant_id', restaurantId)
+
+                  if (!nameEmailError && nameEmailBookings) {
+                    // Add bookings that aren't already in the list (by ID)
+                    const existingIds = new Set(allBookings.map(b => b.id))
+                    const newBookings = nameEmailBookings.filter(b => !existingIds.has(b.id))
+                    allBookings = [...allBookings, ...newBookings]
+                  }
+                }
+
+                // Method 3: Query by guest_name only (lower confidence, use carefully)
+                if (customer.guest_name && allBookings.length === 0) {
+                  const { data: nameBookings, error: nameBookingsError } = await supabase
+                    .from('bookings')
+                    .select('id, booking_time, guest_email')
+                    .eq('guest_name', customer.guest_name)
+                    .eq('restaurant_id', restaurantId)
+
+                  if (!nameBookingsError && nameBookings) {
+                    // For name-only matches, be more selective to avoid false positives
+                    // Only include if guest_email matches or is null in both records
+                    const filteredBookings = nameBookings.filter(booking => {
+                      if (!customer.guest_email && !booking.guest_email) return true
+                      if (customer.guest_email && booking.guest_email === customer.guest_email) return true
+                      return false
+                    })
+
+                    const existingIds = new Set(allBookings.map(b => b.id))
+                    const newBookings = filteredBookings.filter(b => !existingIds.has(b.id))
+                    allBookings = [...allBookings, ...newBookings]
+                  }
                 }
               }
 

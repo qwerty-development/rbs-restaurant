@@ -157,11 +157,11 @@ export function CustomerDetailsDialog({
         `)
         .or(`customer_id.eq.${customer.id},related_customer_id.eq.${customer.id}`)
 
-      // Load booking history - try both user_id and guest_email approaches
+      // Load booking history - comprehensive approach for all customer types
       let allBookings: any[] = []
       
-      // First, try querying by user_id if available
-      if (customer.user_id) {
+      // For registered users with profiles, prioritize user_id matching
+      if (customer.user_id && customer.profile) {
         const { data: userBookings, error: userBookingsError } = await supabase
           .from('bookings')
           .select('*')
@@ -175,22 +175,68 @@ export function CustomerDetailsDialog({
         }
       }
 
-      // Then try querying by guest email (both guest_email and profile email)
-      const emailsToTry = [customer.guest_email, customer.profile?.email].filter(Boolean)
-      for (const email of emailsToTry) {
-        const { data: emailBookings, error: emailBookingsError } = await supabase
-          .from('bookings')
-          .select('*')
-          .eq('guest_email', email)
-          .eq('restaurant_id', restaurantId)
+      // For guest customers or when user_id matching fails, try multiple approaches
+      if (!customer.profile || allBookings.length === 0) {
+        // Method 1: Query by guest_email (most reliable for guest customers)
+        if (customer.guest_email) {
+          const { data: emailBookings, error: emailBookingsError } = await supabase
+            .from('bookings')
+            .select('*')
+            .eq('guest_email', customer.guest_email)
+            .eq('restaurant_id', restaurantId)
 
-        if (emailBookingsError) {
-          console.error('Error loading email bookings for', email, ':', emailBookingsError)
-        } else {
-          // Add bookings that aren't already in the list (by ID)
-          const existingIds = new Set(allBookings.map(b => b.id))
-          const newBookings = (emailBookings || []).filter(b => !existingIds.has(b.id))
-          allBookings = [...allBookings, ...newBookings]
+          if (emailBookingsError) {
+            console.error('Error loading email bookings:', emailBookingsError)
+          } else {
+            // Add bookings that aren't already in the list (by ID)
+            const existingIds = new Set(allBookings.map(b => b.id))
+            const newBookings = (emailBookings || []).filter(b => !existingIds.has(b.id))
+            allBookings = [...allBookings, ...newBookings]
+          }
+        }
+
+        // Method 2: Query by guest_name and guest_email combination (high confidence match)
+        if (customer.guest_name && customer.guest_email) {
+          const { data: nameEmailBookings, error: nameEmailError } = await supabase
+            .from('bookings')
+            .select('*')
+            .eq('guest_name', customer.guest_name)
+            .eq('guest_email', customer.guest_email)
+            .eq('restaurant_id', restaurantId)
+
+          if (nameEmailError) {
+            console.error('Error loading name+email bookings:', nameEmailError)
+          } else {
+            // Add bookings that aren't already in the list (by ID)
+            const existingIds = new Set(allBookings.map(b => b.id))
+            const newBookings = (nameEmailBookings || []).filter(b => !existingIds.has(b.id))
+            allBookings = [...allBookings, ...newBookings]
+          }
+        }
+
+        // Method 3: Query by guest_name only (lower confidence, use carefully)
+        if (customer.guest_name && allBookings.length === 0) {
+          const { data: nameBookings, error: nameBookingsError } = await supabase
+            .from('bookings')
+            .select('*')
+            .eq('guest_name', customer.guest_name)
+            .eq('restaurant_id', restaurantId)
+
+          if (nameBookingsError) {
+            console.error('Error loading name bookings:', nameBookingsError)
+          } else {
+            // For name-only matches, be more selective to avoid false positives
+            // Only include if guest_email matches or is null in both records
+            const filteredBookings = (nameBookings || []).filter(booking => {
+              if (!customer.guest_email && !booking.guest_email) return true
+              if (customer.guest_email && booking.guest_email === customer.guest_email) return true
+              return false
+            })
+
+            const existingIds = new Set(allBookings.map(b => b.id))
+            const newBookings = filteredBookings.filter(b => !existingIds.has(b.id))
+            allBookings = [...allBookings, ...newBookings]
+          }
         }
       }
 
@@ -1232,7 +1278,7 @@ export function CustomerDetailsDialog({
                               'outline'
                             }
                           >
-                            {booking.status.replace('_', ' ')}
+                            {booking.status.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
                           </Badge>
                           {booking.confirmation_code && (
                             <span className="text-xs text-muted-foreground">
