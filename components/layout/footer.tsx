@@ -40,26 +40,32 @@ export function Footer({ variant = "public", className = "" }: FooterProps) {
   if (variant === "auth") {
     // Footer for authentication pages
     return (
-      <footer className={`mt-8 py-6 border-t border-border/40 ${className}`}>
+      <footer className={`mt-8 py-8 ${className}`}>
         <div className="container mx-auto px-4">
-          <div className="flex flex-col items-center gap-4 text-sm text-muted-foreground">
-            <div className="flex items-center gap-6">
-              <Link href="/terms" target="_blank" className="hover:text-foreground transition-colors flex items-center gap-1">
+          <div className="flex flex-col items-center gap-6 text-sm">
+            {/* Main links */}
+            <div className="flex items-center gap-8">
+              <Link href="/terms" target="_blank" className="text-white/80 hover:text-white transition-colors flex items-center gap-2 hover:underline">
                 <FileText className="h-4 w-4" />
                 Terms & Conditions
               </Link>
-              <Link href="/privacy" target="_blank" className="hover:text-foreground transition-colors flex items-center gap-1">
+              <Link href="/privacy" target="_blank" className="text-white/80 hover:text-white transition-colors flex items-center gap-2 hover:underline">
                 <Shield className="h-4 w-4" />
                 Privacy Policy
               </Link>
-              <Link href="mailto:support@plate.app" className="hover:text-foreground transition-colors flex items-center gap-1">
+              <Link href="mailto:support@plate.app" className="text-white/80 hover:text-white transition-colors flex items-center gap-2 hover:underline">
                 <Mail className="h-4 w-4" />
                 Support
               </Link>
             </div>
-            <div className="text-center">
-              <p>© {currentYear} Plate by Qwerty App. All rights reserved.</p>
-              <p className="text-xs mt-1">Secure, compliant, and built for restaurants</p>
+            
+            {/* Divider */}
+            <div className="w-24 h-px bg-white/20"></div>
+            
+            {/* Copyright and tagline */}
+            <div className="text-center space-y-2">
+              <p className="text-white/90 font-medium">© {currentYear} Plate by Qwerty App</p>
+              <p className="text-white/60 text-xs">Secure, compliant, and built for restaurants</p>
             </div>
           </div>
         </div>

@@ -117,12 +117,12 @@ export default function LoginPage() {
   }
 
   return (
-    <Card className="border-2 shadow-xl">
+    <Card className="border-2 shadow-xl backdrop-blur-md bg-white/20 border-white/30">
       <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold text-center">
+        <CardTitle className="text-2xl font-bold text-center text-white">
           Restaurant Login
         </CardTitle>
-        <CardDescription className="text-center">
+        <CardDescription className="text-center text-white/80">
           Enter your credentials to access your restaurant dashboard
         </CardDescription>
       </CardHeader>
@@ -194,14 +194,14 @@ export default function LoginPage() {
         </Form>
       </CardContent>
       <CardFooter className="flex flex-col space-y-2">
-        <div className="text-sm text-muted-foreground text-center">
-          <Link href="/forgot-password" className="text-primary hover:underline">
+        <div className="text-sm text-white/80 text-center">
+          <Link href="/forgot-password" className="text-white hover:underline">
             Forgot password?
           </Link>
         </div>
-        <div className="text-sm text-muted-foreground text-center">
+        <div className="text-sm text-white/80 text-center">
           Don't have an account?{" "}
-          <Link href="/signup" className="text-primary hover:underline">
+          <Link href="/signup" className="text-white hover:underline">
             Sign up
           </Link>
         </div>

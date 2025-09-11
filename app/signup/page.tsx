@@ -169,15 +169,12 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-primary/10 via-background to-secondary/10">
-      <div className="flex-1 flex items-center justify-center">
-        <div className="w-full max-w-md p-8">
-          <Card className="w-full border-2 shadow-xl">
+    <Card className="w-full border-2 shadow-xl backdrop-blur-md bg-white/20 border-white/30">
             <CardHeader className="space-y-1">
               <CardTitle className="text-2xl font-bold text-center">
                 Create Account
               </CardTitle>
-              <CardDescription className="text-center">
+              <CardDescription className="text-center text-secondary-foreground">
                 Sign up to join a restaurant team
               </CardDescription>
             </CardHeader>
@@ -320,7 +317,7 @@ export default function SignUpPage() {
               </Form>
             </CardContent>
             <CardFooter className="flex flex-col space-y-2">
-              <div className="text-sm text-muted-foreground text-center">
+              <div className="text-sm text-secondary-foreground text-center">
                 Already have an account?{" "}
                 <Link href="/login" className="text-primary hover:underline">
                   Sign in
@@ -328,8 +325,5 @@ export default function SignUpPage() {
               </div>
             </CardFooter>
           </Card>
-        </div>
-      </div>
-    </div>
   )
 }

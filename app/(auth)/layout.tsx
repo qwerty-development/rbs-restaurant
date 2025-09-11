@@ -17,13 +17,26 @@ export default async function AuthLayout({
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-primary/10 via-background to-secondary/10">
-      <div className="flex-1 flex items-center justify-center">
-        <div className="w-full max-w-md p-8">
+    <div className="min-h-screen flex flex-col relative">
+      {/* Background Image with Overlay */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: "url('/auth-background.jpg')",
+        }}
+      />
+      {/* Mulberry overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-900/40 via-purple-800/30 to-purple-900/40" />
+      
+      {/* Content */}
+      <div className="relative z-10 flex-1 flex items-center justify-center">
+        <div className="w-full max-w-lg p-8">
           {children}
         </div>
       </div>
-      <Footer variant="auth" />
+      <div className="relative z-10">
+        <Footer variant="auth" />
+      </div>
     </div>
   )
 }
