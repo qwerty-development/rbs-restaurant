@@ -116,7 +116,7 @@ export default function CustomersPage() {
 
   const loadCustomers = useCallback(async (restaurantId: string) => {
     try {
-      // First, get all customers
+      // Get all customers excluding admin and restaurant staff accounts
       const { data: customersData, error: customersError } = await supabase
         .from('restaurant_customers')
         .select(`
@@ -153,8 +153,46 @@ export default function CustomersPage() {
 
       if (customersError) throw customersError
 
+      // Filter out admin and restaurant staff accounts
+      let filteredCustomersData = customersData || []
+      
+      if (filteredCustomersData.length > 0) {
+        // Get all user IDs that have profiles (registered users)
+        const customerUserIds = filteredCustomersData
+          .map(c => c.user_id)
+          .filter(id => id !== null)
+        
+        if (customerUserIds.length > 0) {
+          // Check for admin accounts
+          const { data: adminData } = await supabase
+            .from('rbs_admins')
+            .select('user_id')
+            .in('user_id', customerUserIds)
+          
+          const adminUserIds = new Set(adminData?.map(admin => admin.user_id) || [])
+          
+          // Check for restaurant staff accounts
+          const { data: staffData } = await supabase
+            .from('restaurant_staff')
+            .select('user_id')
+            .in('user_id', customerUserIds)
+            .eq('is_active', true)
+          
+          const staffUserIds = new Set(staffData?.map(staff => staff.user_id) || [])
+          
+          // Filter out customers who are admins or staff
+          filteredCustomersData = filteredCustomersData.filter(customer => {
+            // Keep guest customers (no user_id)
+            if (!customer.user_id) return true
+            
+            // Exclude admin and staff accounts
+            return !adminUserIds.has(customer.user_id) && !staffUserIds.has(customer.user_id)
+          })
+        }
+      }
+
       // Get all profiles for customers who don't have profile data
-      const customerUserIds = customersData?.map(c => c.user_id).filter(id => id !== null) || []
+      const customerUserIds = filteredCustomersData?.map(c => c.user_id).filter(id => id !== null) || []
       const { data: profilesData, error: profilesError } = customerUserIds.length > 0 
         ? await supabase
             .from('profiles')
@@ -165,7 +203,7 @@ export default function CustomersPage() {
       if (profilesError) throw profilesError
 
       // Transform data to merge customer and profile information, and flatten tag structure
-      const transformedData = customersData?.map(customer => {
+      const transformedData = filteredCustomersData?.map(customer => {
         // Transform tags from nested structure to flat array
         const flattenedTags = customer.tags?.map((tagAssignment: any) => tagAssignment.tag) || []
         
