@@ -2278,24 +2278,24 @@ export function CheckInQueue({
                               size="sm"
                               onClick={() => setSelectedSharedTableId(table.table_id)}
                               className={cn(
-                                "h-8 text-xs justify-start",
+                                "h-8 text-xs justify-start overflow-hidden",
                                 wouldExceedCapacity && selectedSharedTableId !== table.table_id && "border-orange-300 bg-orange-50 hover:bg-orange-100"
                               )}
                             >
-                              <div className="flex items-center gap-1">
-                                <Users className="h-3 w-3" />
-                                <span>T{table.table_number}</span>
+                              <div className="flex items-center gap-1 min-w-0 flex-1">
+                                <Users className="h-3 w-3 flex-shrink-0" />
+                                <span className="flex-shrink-0">T{table.table_number}</span>
                                 <span className={cn(
-                                  "text-muted-foreground",
+                                  "text-muted-foreground flex-shrink-0",
                                   wouldExceedCapacity && "text-orange-600"
                                 )}>
                                   ({table.current_occupancy}/{table.capacity})
                                 </span>
                                 {wouldExceedCapacity && (
-                                  <AlertTriangle className="h-3 w-3 text-orange-500 ml-1" />
+                                  <AlertTriangle className="h-3 w-3 text-orange-500 ml-1 flex-shrink-0" />
                                 )}
                                 {availableSeats < partySize && !wouldExceedCapacity && (
-                                  <span className="text-red-500 text-xs ml-1">Full</span>
+                                  <span className="text-red-500 text-xs ml-1 flex-shrink-0">Full</span>
                                 )}
                               </div>
                             </Button>
