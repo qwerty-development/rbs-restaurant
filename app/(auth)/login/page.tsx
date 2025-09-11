@@ -71,6 +71,28 @@ export default function LoginPage() {
         throw new Error("Login failed")
       }
   
+      // First check if user is an admin
+      const { data: adminData, error: adminError } = await supabase
+        .from("rbs_admins")
+        .select("id, user_id")
+        .eq("user_id", authData.user.id)
+        .single()
+  
+      // If user is an admin, redirect to admin page
+      if (adminData && !adminError) {
+        await supabase.auth.updateUser({
+          data: {
+            role: 'admin',
+            is_admin: true,
+          }
+        })
+        toast.success("Welcome back, Admin!")
+        // IMPORTANT: Use window.location.href instead of router.push
+        // This forces a full page reload which ensures the session is properly set
+        window.location.href = "/admin"
+        return
+      }
+  
       // Check if user has restaurant access
       const { data: staffData, error: staffError } = await supabase
         .from("restaurant_staff")
@@ -132,6 +154,14 @@ export default function LoginPage() {
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
               You don't have access to any restaurant. Please contact your restaurant owner.
+            </AlertDescription>
+          </Alert>
+        )}
+        {error === 'admin_access_required' && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Admin access required to view this page. Please log in with an admin account.
             </AlertDescription>
           </Alert>
         )}

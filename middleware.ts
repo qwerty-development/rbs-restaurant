@@ -7,6 +7,11 @@ export async function middleware(request: NextRequest) {
 
   const { data: { session } } = await supabase.auth.getSession()
 
+  // Admin routes are handled by their own layout - skip middleware checks
+  if (request.nextUrl.pathname.startsWith('/admin')) {
+    return response
+  }
+
   // Protect dashboard routes
   if (request.nextUrl.pathname.startsWith('/dashboard')) {
     if (!session) {
@@ -58,8 +63,17 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Redirect authenticated users away from auth pages
+  // Redirect authenticated users away from auth pages, but allow if they have specific redirectTo or error params
   if ((request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/register') && session) {
+    const redirectTo = request.nextUrl.searchParams.get('redirectTo')
+    const error = request.nextUrl.searchParams.get('error')
+    
+    // Allow login page if there's a redirectTo (like /admin) or error
+    if (redirectTo || error) {
+      return response
+    }
+    
+    // Default redirect for authenticated users
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

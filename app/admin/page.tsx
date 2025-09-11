@@ -139,7 +139,7 @@ export default function AdminPage() {
 
     getCurrentUser()
     fetchExistingRestaurants()
-  }, [supabase])
+  }, [supabase, router])
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -482,16 +482,70 @@ export default function AdminPage() {
   const selectedCount = selectedRestaurants.filter(Boolean).length
 
   return (
-    <div className="container mx-auto p-6 max-w-6xl">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <AlertTriangle className="w-8 h-8 text-amber-500" />
-          Temporary Admin Setup
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Quick setup tool for creating restaurants and adding staff. This page should be removed in production.
-        </p>
+    <>
+      {/* Admin Dashboard Header */}
+      <div className="mb-8">
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg p-6 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
+              <p className="text-blue-100">
+                Welcome to the RBS Restaurant Management System Admin Panel
+              </p>
+              <p className="text-blue-200 text-sm mt-1">
+                Manage restaurants, users, and system-wide settings
+              </p>
+            </div>
+            <div className="hidden md:block">
+              <div className="bg-white/10 rounded-lg p-4">
+                <Building className="w-12 h-12 text-blue-100" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Restaurants</CardTitle>
+            <Building className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{existingRestaurants.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Available Templates</CardTitle>
+            <Plus className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{restaurants.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">System Status</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">Active</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="container mx-auto p-6 max-w-6xl">
+        <div className="mb-6">
+          <h2 className="text-3xl font-bold flex items-center gap-2">
+            <AlertTriangle className="w-8 h-8 text-amber-500" />
+            Setup Tools
+          </h2>
+          <p className="text-muted-foreground mt-2">
+            Quick setup tool for creating restaurants and adding staff. This page should be removed in production.
+          </p>
+        </div>
 
       <Tabs defaultValue="restaurants" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
@@ -871,6 +925,7 @@ export default function AdminPage() {
           )}
         </TabsContent>
       </Tabs>
-    </div>
+      </div>
+    </>
   )
 }
