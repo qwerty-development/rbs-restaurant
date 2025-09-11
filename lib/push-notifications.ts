@@ -98,7 +98,6 @@ class PushNotificationManager {
         body: data.body,
         icon: data.icon || '/icon-192x192.png',
         badge: data.badge || '/icon-192x192.png',
-        vibrate: [100, 50, 100],
         data: {
           dateOfArrival: Date.now(),
           primaryKey: data.data?.id || '1',
@@ -117,7 +116,7 @@ class PushNotificationManager {
             icon: '/icon-192x192.png'
           }
         ]
-      })
+      } as NotificationOptions)
     } catch (error) {
       console.error('Failed to send push notification:', error)
     }
