@@ -134,6 +134,7 @@ export default function StaffManagement() {
   const [showPermissionsDialog, setShowPermissionsDialog] = useState(false)
   const [showTransferDialog, setShowTransferDialog] = useState(false)
   const [showAddStaffDialog, setShowAddStaffDialog] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('overview')
   const [inviteFormData, setInviteFormData] = useState({
     email: '',
@@ -335,33 +336,46 @@ export default function StaffManagement() {
   }
 
   const handleInviteStaff = async () => {
+    if (saving) return
+    
+    setSaving(true)
+    
     try {
       if (!inviteFormData.email.trim() || !inviteFormData.restaurant_id) {
         toast.error('Please fill in all required fields')
         return
       }
 
+      const email = inviteFormData.email.trim().toLowerCase()
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(email)) {
+        toast.error('Please enter a valid email address')
+        return
+      }
+
       // First, check if user exists in profiles
       const { data: existingProfile, error: profileError } = await supabase
         .from('profiles')
-        .select('id')
-        .eq('email', inviteFormData.email.trim().toLowerCase())
+        .select('id, email, full_name')
+        .eq('email', email)
         .single()
 
       if (profileError && profileError.code !== 'PGRST116') {
+        console.error('Profile lookup error:', profileError)
         throw profileError
       }
 
-      let userId: string
-
-      if (existingProfile) {
-        userId = existingProfile.id
-      } else {
-        // Create a new user account (this would typically be done through an invitation system)
-        // For now, we'll show a message that the user needs to register first
-        toast.error('User must register on the platform first before being added as staff')
+      if (!existingProfile) {
+        toast.error(
+          `No user account found with email ${email}. Please ask the user to register first at the platform, then try adding them as staff.`,
+          { duration: 6000 }
+        )
         return
       }
+
+      const userId = existingProfile.id
 
       // Check if user is already staff at this restaurant
       const { data: existingStaff, error: staffCheckError } = await supabase
@@ -372,6 +386,7 @@ export default function StaffManagement() {
         .single()
 
       if (staffCheckError && staffCheckError.code !== 'PGRST116') {
+        console.error('Staff check error:', staffCheckError)
         throw staffCheckError
       }
 
@@ -392,15 +407,22 @@ export default function StaffManagement() {
           hired_at: new Date().toISOString()
         }])
 
-      if (insertError) throw insertError
+      if (insertError) {
+        console.error('Error inserting staff:', insertError)
+        throw insertError
+      }
 
       await fetchStaff()
       setShowAddStaffDialog(false)
       resetInviteForm()
-      toast.success('Staff member added successfully')
+      
+      const userName = existingProfile.full_name || email.split('@')[0]
+      toast.success(`Successfully added ${userName} as staff member!`)
     } catch (error) {
       console.error('Error inviting staff:', error)
-      toast.error('Failed to add staff member')
+      toast.error('Failed to add staff member: ' + (error as any)?.message || 'Unknown error')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -1043,11 +1065,17 @@ export default function StaffManagement() {
                     <SelectValue placeholder="Select restaurant" />
                   </SelectTrigger>
                   <SelectContent>
-                    {restaurants.map(restaurant => (
-                      <SelectItem key={restaurant.id} value={restaurant.id}>
-                        {restaurant.name}
+                    {restaurants.length === 0 ? (
+                      <SelectItem value="" disabled>
+                        No restaurants found
                       </SelectItem>
-                    ))}
+                    ) : (
+                      restaurants.map(restaurant => (
+                        <SelectItem key={restaurant.id} value={restaurant.id}>
+                          {restaurant.name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -1102,11 +1130,11 @@ export default function StaffManagement() {
             </div>
 
             <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setShowAddStaffDialog(false)}>
+              <Button variant="outline" onClick={() => setShowAddStaffDialog(false)} disabled={saving}>
                 Cancel
               </Button>
-              <Button onClick={handleInviteStaff}>
-                Add Staff Member
+              <Button onClick={handleInviteStaff} disabled={saving}>
+                {saving ? 'Adding Staff...' : 'Add Staff Member'}
               </Button>
             </div>
           </div>
