@@ -189,6 +189,8 @@ export default function BookingsPage() {
   const [availableTablesForAssignment, setAvailableTablesForAssignment] = useState<any[]>([])
   const [selectedTablesForAssignment, setSelectedTablesForAssignment] = useState<string[]>([])
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false)
+  const [simpleMode, setSimpleMode] = useState(true)
+  const [showDatePicker, setShowDatePicker] = useState(false)
   
   // Minimum capacity warning dialog state
   const [showMinimumCapacityWarning, setShowMinimumCapacityWarning] = useState(false)
@@ -497,6 +499,9 @@ export default function BookingsPage() {
         } else if (dateRange === "week") {
           startDate = today
           endDate = endOfDay(addDays(now, 7))
+        } else if (dateRange === "custom" && selectedDate) {
+          startDate = startOfDay(selectedDate)
+          endDate = endOfDay(selectedDate)
         }
 
         // Only apply date filters if not "all"
@@ -1614,9 +1619,16 @@ export default function BookingsPage() {
       )}
 
       {/* Enhanced View Toggle with Live Indicator */}
+      {/* Simple/Advanced mode toggle */}
+      <div className="flex items-center justify-between gap-4 mb-2">
+        <div className="flex items-center gap-3">
+          <Badge variant={simpleMode ? "default" : "outline"} className="px-3 py-1">{simpleMode ? "Simple mode" : "Advanced mode"}</Badge>
+          <Button variant="outline" size="sm" onClick={() => setSimpleMode(!simpleMode)} className="min-h-touch">{simpleMode ? "Show advanced" : "Show simple"}</Button>
+        </div>
+      </div>
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)}>
         <div className="flex flex-col tablet:flex-row items-start tablet:items-center justify-between gap-4">
-          <TabsList className="grid w-full tablet:w-[600px] grid-cols-2 tablet:grid-cols-5 h-auto">
+          <TabsList className={cn("grid w-full h-auto", simpleMode ? "tablet:w-[360px] grid-cols-2" : "tablet:w-[600px] grid-cols-2 tablet:grid-cols-5")}>
             <TabsTrigger value="upcoming" className="relative min-h-touch-lg px-4 py-3">
               <span className="flex items-center gap-2">
                 <span>Upcoming</span>
@@ -1635,7 +1647,10 @@ export default function BookingsPage() {
                 )}
               </span>
             </TabsTrigger>
-            <TabsTrigger value="calendar" className="min-h-touch-lg px-4 py-3">Calendar</TabsTrigger>
+            {!simpleMode && (
+              <TabsTrigger value="calendar" className="min-h-touch-lg px-4 py-3">Calendar</TabsTrigger>
+            )}
+            {!simpleMode && (
             <TabsTrigger value="tables" className="relative min-h-touch-lg px-4 py-3">
               <span className="flex items-center gap-2">
                 <span>Tables</span>
@@ -1644,12 +1659,15 @@ export default function BookingsPage() {
                 )}
               </span>
             </TabsTrigger>
+            )}
+            {!simpleMode && (
             <TabsTrigger value="shared" className="min-h-touch-lg px-4 py-3">
               <span className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
                 <span>Shared</span>
               </span>
             </TabsTrigger>
+            )}
           </TabsList>
           
           {/* Enhanced Live Status & Performance Metrics */}
@@ -1685,7 +1703,7 @@ export default function BookingsPage() {
           {/* Quick Date Filters */}
           <Card>
             <CardHeader>
-              <CardTitle>Quick Filters</CardTitle>
+              <CardTitle>{simpleMode ? "Filters" : "Quick Filters"}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-6">
@@ -1714,6 +1732,23 @@ export default function BookingsPage() {
                     className="min-h-touch-lg font-medium"
                   >
                     This Week
+                  </Button>
+                  {dateRange === "custom" && (
+                    <Badge variant="secondary" className="px-3 py-2 text-sm">
+                      {format(selectedDate, "EEE, MMM d")} 
+                      <Button variant="ghost" size="sm" className="h-6 ml-2 px-2" onClick={() => setDateRange("today")}>
+                        Clear
+                      </Button>
+                    </Badge>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="default"
+                    onClick={() => setShowDatePicker(true)}
+                    className="min-h-touch-lg font-medium"
+                  >
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    Pick a date
                   </Button>
                 </div>
 
@@ -1747,12 +1782,12 @@ export default function BookingsPage() {
                   </Button>
                 </div>
 
-                {/* Search and Filters - Tablet optimized */}
+                {/* Search and Filters - simplified in Simple mode */}
                 <div className="flex flex-col tablet:flex-row gap-4">
                   <div className="relative flex-1">
                     <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                     <Input
-                      placeholder="Search by name, code, phone, email, or table..."
+                      placeholder={simpleMode ? "Search bookings..." : "Search by name, code, phone, email, or table..."}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-12 h-12 text-base"
@@ -1907,12 +1942,12 @@ export default function BookingsPage() {
           {/* Enhanced Filters */}
           <Card>
             <CardHeader>
-              <CardTitle>Advanced Filters</CardTitle>
+              <CardTitle>{simpleMode ? "Filters" : "Advanced Filters"}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-4">
                 {/* Status Quick Filters - Optimized for tablet */}
-                <div className="grid grid-cols-2 tablet:grid-cols-4 lg:grid-cols-7 gap-3">
+                <div className={cn("grid gap-3", simpleMode ? "grid-cols-2 tablet:grid-cols-3" : "grid-cols-2 tablet:grid-cols-4 lg:grid-cols-7")}>
                   <Button
                     variant={statusFilter === "all" ? "default" : "outline"}
                     size="default"
@@ -1929,14 +1964,16 @@ export default function BookingsPage() {
                   >
                     Upcoming ({bookingStats.upcoming})
                   </Button>
-                  <Button
-                    variant={statusFilter === "pending" ? "default" : "outline"}
-                    size="default"
-                    onClick={() => setStatusFilter("pending")}
-                    className="min-h-touch-lg font-medium"
-                  >
-                    Pending ({bookingStats.pending})
-                  </Button>
+                  {!simpleMode && (
+                    <Button
+                      variant={statusFilter === "pending" ? "default" : "outline"}
+                      size="default"
+                      onClick={() => setStatusFilter("pending")}
+                      className="min-h-touch-lg font-medium"
+                    >
+                      Pending ({bookingStats.pending})
+                    </Button>
+                  )}
                   <Button
                     variant={statusFilter === "confirmed" ? "default" : "outline"}
                     size="default"
@@ -1945,22 +1982,26 @@ export default function BookingsPage() {
                   >
                     Confirmed ({bookingStats.confirmed})
                   </Button>
-                  <Button
-                    variant={statusFilter === "no_show" ? "destructive" : "outline"}
-                    size="default"
-                    onClick={() => setStatusFilter("no_show")}
-                    className="min-h-touch-lg font-medium"
-                  >
-                    No Shows ({bookingStats.no_show})
-                  </Button>
-                  <Button
-                    variant={statusFilter === "cancelled_by_user" ? "destructive" : "outline"}
-                    size="default"
-                    onClick={() => setStatusFilter("cancelled_by_user")}
-                    className="min-h-touch-lg font-medium"
-                  >
-                    Cancelled ({bookingStats.cancelled})
-                  </Button>
+                  {!simpleMode && (
+                    <>
+                      <Button
+                        variant={statusFilter === "no_show" ? "destructive" : "outline"}
+                        size="default"
+                        onClick={() => setStatusFilter("no_show")}
+                        className="min-h-touch-lg font-medium"
+                      >
+                        No Shows ({bookingStats.no_show})
+                      </Button>
+                      <Button
+                        variant={statusFilter === "cancelled_by_user" ? "destructive" : "outline"}
+                        size="default"
+                        onClick={() => setStatusFilter("cancelled_by_user")}
+                        className="min-h-touch-lg font-medium"
+                      >
+                        Cancelled ({bookingStats.cancelled})
+                      </Button>
+                    </>
+                  )}
                   <Button
                     variant={statusFilter === "completed" ? "default" : "outline"}
                     size="default"
@@ -1971,38 +2012,42 @@ export default function BookingsPage() {
                   </Button>
                 </div>
 
-                {/* Search and Detailed Filters - Tablet optimized */}
+                {/* Search and Detailed Filters - simplified in Simple mode */}
                 <div className="flex flex-col tablet:flex-row gap-4">
                   <div className="relative flex-1">
                     <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                     <Input
-                      placeholder="Search by name, code, phone, email, or table..."
+                      placeholder={simpleMode ? "Search bookings..." : "Search by name, code, phone, email, or table..."}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-12 h-12 text-base"
                     />
                   </div>
-                  <Select value={timeFilter} onValueChange={setTimeFilter}>
-                    <SelectTrigger className="w-full tablet:w-[160px] h-12 text-base">
-                      <SelectValue placeholder="Time" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all" className="py-3">All Times</SelectItem>
-                      <SelectItem value="lunch" className="py-3">Lunch (11-3)</SelectItem>
-                      <SelectItem value="dinner" className="py-3">Dinner (5-11)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={dateRange} onValueChange={setDateRange}>
-                    <SelectTrigger className="w-full tablet:w-[160px] h-12 text-base">
-                      <SelectValue placeholder="Date Range" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="today" className="py-3">Today</SelectItem>
-                      <SelectItem value="tomorrow" className="py-3">Tomorrow</SelectItem>
-                      <SelectItem value="week" className="py-3">This Week</SelectItem>
-                      <SelectItem value="all" className="py-3">All Dates</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {!simpleMode && (
+                    <>
+                      <Select value={timeFilter} onValueChange={setTimeFilter}>
+                        <SelectTrigger className="w-full tablet:w-[160px] h-12 text-base">
+                          <SelectValue placeholder="Time" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all" className="py-3">All Times</SelectItem>
+                          <SelectItem value="lunch" className="py-3">Lunch (11-3)</SelectItem>
+                          <SelectItem value="dinner" className="py-3">Dinner (5-11)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={dateRange} onValueChange={setDateRange}>
+                        <SelectTrigger className="w-full tablet:w-[160px] h-12 text-base">
+                          <SelectValue placeholder="Date Range" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="today" className="py-3">Today</SelectItem>
+                          <SelectItem value="tomorrow" className="py-3">Tomorrow</SelectItem>
+                          <SelectItem value="week" className="py-3">This Week</SelectItem>
+                          <SelectItem value="all" className="py-3">All Dates</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -2027,7 +2072,8 @@ export default function BookingsPage() {
           />
         </TabsContent>
 
-        {/* Calendar View - Optimized for tablet */}
+        {/* Calendar View - hidden in Simple mode */}
+        {!simpleMode && (
         <TabsContent value="calendar" className="space-y-4">
           <div className="grid gap-4 tablet:grid-cols-[320px_1fr] lg:grid-cols-[360px_1fr]">
             {/* Calendar */}
@@ -2077,8 +2123,10 @@ export default function BookingsPage() {
             </Card>
           </div>
         </TabsContent>
+        )}
 
-        {/* Table View */}
+        {/* Table View - hidden in Simple mode */}
+        {!simpleMode && (
         <TabsContent value="tables" className="space-y-4">
           {/* Table View Filters - Optimized for tablet */}
           <Card>
@@ -2371,12 +2419,39 @@ export default function BookingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
 
-        {/* Shared Tables View */}
+        {/* Shared Tables View - hidden in Simple mode */}
+        {!simpleMode && (
         <TabsContent value="shared" className="space-y-4">
           <SharedTablesOverview restaurantId={restaurantId} />
         </TabsContent>
+        )}
       </Tabs>
+
+      {/* Date picker dialog (reuses the same Calendar component) */}
+      <Dialog open={showDatePicker} onOpenChange={setShowDatePicker}>
+        <DialogContent className="max-w-md w-[95vw]">
+          <DialogHeader>
+            <DialogTitle className="text-lg">Select a date</DialogTitle>
+            <DialogDescription>Choose a date to view bookings on the calendar.</DialogDescription>
+          </DialogHeader>
+          <div className="p-2">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={(date) => {
+                if (!date) return
+                setSelectedDate(date)
+                setShowDatePicker(false)
+                setDateRange("custom")
+                // Keep Upcoming tab open; do not change viewMode
+              }}
+              className="rounded-md"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Booking Details Modal */}
       {selectedBooking && (

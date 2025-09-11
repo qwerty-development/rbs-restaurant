@@ -55,6 +55,9 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
 
+  // Build optimization
+  pageExtensions: ['js', 'jsx', 'mdx', 'ts', 'tsx'],
+
   async headers() {
     return [
       {
