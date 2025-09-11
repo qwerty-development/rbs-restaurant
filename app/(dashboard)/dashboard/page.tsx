@@ -1066,41 +1066,8 @@ export default function DashboardPage() {
               <span className="hidden sm:inline">New</span>
             </Button>
             
-            <Button
-              onClick={() => {
-                console.log('🔔 Testing notification from dashboard')
-                addNotification({
-                  type: 'booking',
-                  title: 'Test Notification',
-                  message: 'This is a test notification to check if the system works',
-                  data: { test: true }
-                })
-              }}
-              size="sm"
-              className="px-2 py-1 h-6 text-xs font-medium bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white shadow-lg rounded-md transition-all duration-300"
-            >
-              <AlertCircle className="h-3 w-3 mr-1" />
-              <span>Test</span>
-            </Button>
-            
-            {requestPushPermission && (
-              <Button
-                onClick={async () => {
-                  console.log('🔔 Testing push permission request')
-                  try {
-                    const granted = await requestPushPermission()
-                    console.log('🔔 Push permission result:', granted)
-                  } catch (error) {
-                    console.error('🔔 Push permission error:', error)
-                  }
-                }}
-                size="sm"
-                className="px-2 py-1 h-6 text-xs font-medium bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-700 hover:to-purple-600 text-white shadow-lg rounded-md transition-all duration-300"
-              >
-                <Bell className="h-3 w-3 mr-1" />
-                <span>Push</span>
-              </Button>
-            )}
+
+
           </div>
         </div>
       </header>
@@ -1124,24 +1091,7 @@ export default function DashboardPage() {
         <InstallPrompt />
       </div>
 
-      {/* Debug Test Button - Remove this after testing */}
-      <div className="px-4 py-2 bg-yellow-100 border-b border-yellow-200">
-        <Button
-          onClick={() => {
-            console.log('🔔 Testing notification from debug button')
-            addNotification({
-              type: 'booking',
-              title: 'Debug Test',
-              message: 'This is a debug test notification',
-              data: { debug: true }
-            })
-          }}
-          size="sm"
-          className="bg-red-600 hover:bg-red-700 text-white"
-        >
-          🔔 Test Notifications
-        </Button>
-      </div>
+
 
 
       {/* Main Content Area */}

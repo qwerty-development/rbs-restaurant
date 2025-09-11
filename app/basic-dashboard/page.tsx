@@ -512,51 +512,11 @@ export default function BasicDashboardPage() {
             Refresh
           </Button>
           
-          {requestPushPermission && (
-            <Button
-              onClick={async () => {
-                console.log('🔔 Basic Dashboard: Testing push permission request')
-                try {
-                  const granted = await requestPushPermission()
-                  console.log('🔔 Basic Dashboard: Push permission result:', granted)
-                } catch (error) {
-                  console.error('🔔 Basic Dashboard: Push permission error:', error)
-                }
-              }}
-              size="sm"
-              className="bg-purple-600 hover:bg-purple-700 text-white"
-            >
-              <Bell className="h-4 w-4 mr-2" />
-              Push Test
-            </Button>
-          )}
         </div>
       </div>
 
       {/* Push Notification Permission */}
       <PushNotificationPermission />
-
-      {/* Debug Test Button - Remove this after testing */}
-      <div className="p-4 bg-yellow-100 border border-yellow-200 rounded-lg">
-        <div className="flex items-center gap-4">
-          <span className="text-sm font-medium text-yellow-800">Debug: Test Notifications</span>
-          <Button
-            onClick={() => {
-              console.log('🔔 Testing notification from basic dashboard')
-              addNotification({
-                type: 'booking',
-                title: 'Basic Dashboard Test',
-                message: 'This is a test notification from the basic dashboard',
-                data: { debug: true, source: 'basic-dashboard' }
-              })
-            }}
-            size="sm"
-            className="bg-red-600 hover:bg-red-700 text-white"
-          >
-            🔔 Test Notifications
-          </Button>
-        </div>
-      </div>
 
       {/* Analytics Cards */}
       {analytics && (
