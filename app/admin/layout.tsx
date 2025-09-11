@@ -13,7 +13,15 @@ import {
   BarChart3, 
   Shield,
   Menu,
-  X
+  X,
+  UserCheck,
+  Calendar,
+  Star,
+  Database,
+  TrendingUp,
+  FileText,
+  Bell,
+  CreditCard
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 
@@ -96,10 +104,37 @@ export default function AdminLayout({
   }
 
   const navigationItems = [
-    { name: 'Dashboard', href: '/admin', icon: BarChart3, current: true },
-    { name: 'Restaurants', href: '/admin/restaurants', icon: Building, current: false },
-    { name: 'Users', href: '/admin/users', icon: Users, current: false },
-    { name: 'Settings', href: '/admin/settings', icon: Settings, current: false },
+    { 
+      section: 'Overview',
+      items: [
+        { name: 'Dashboard', href: '/admin', icon: BarChart3, current: true },
+        
+      ]
+    },
+    {
+      section: 'Management',
+      items: [
+        { name: 'Restaurants', href: '/admin/restaurants', icon: Building, current: false },
+        { name: 'Users', href: '/admin/users', icon: Users, current: false },
+        { name: 'Staff', href: '/admin/staff', icon: UserCheck, current: false },
+      ]
+    },
+    {
+      section: 'Operations',
+      items: [
+        { name: 'Bookings', href: '/admin/bookings', icon: Calendar, current: false },
+        { name: 'Reviews', href: '/admin/reviews', icon: Star, current: false },
+        { name: 'Notifications', href: '/admin/notifications', icon: Bell, current: false },
+      ]
+    },
+    {
+      section: 'System',
+      items: [
+        { name: 'Data Management', href: '/admin/data', icon: Database, current: false },
+        { name: 'Reports', href: '/admin/reports', icon: FileText, current: false },
+        { name: 'Settings', href: '/admin/settings', icon: Settings, current: false },
+      ]
+    }
   ]
 
   return (
@@ -121,20 +156,30 @@ export default function AdminLayout({
               <X className="h-5 w-5" />
             </Button>
           </div>
-          <nav className="flex-1 px-4 py-4 space-y-2">
-            {navigationItems.map((item) => (
-              <a
-                key={item.name}
-                href={item.href}
-                className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  item.current
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <item.icon className="mr-3 h-5 w-5" />
-                {item.name}
-              </a>
+          <nav className="flex-1 px-4 py-4 space-y-4">
+            {navigationItems.map((section) => (
+              <div key={section.section} className="space-y-2">
+                <h3 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  {section.section}
+                </h3>
+                <div className="space-y-1">
+                  {section.items.map((item) => (
+                    <a
+                      key={item.name}
+                      href={item.href}
+                      className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation ${
+                        item.current
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                      style={{ minHeight: '44px' }}
+                    >
+                      <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
+                      {item.name}
+                    </a>
+                  ))}
+                </div>
+              </div>
             ))}
           </nav>
           <div className="border-t p-4">
@@ -170,20 +215,30 @@ export default function AdminLayout({
             <h1 className="ml-3 text-xl font-bold text-gray-900">RBS Admin</h1>
           </div>
           
-          <nav className="flex-1 px-4 py-6 space-y-2">
-            {navigationItems.map((item) => (
-              <a
-                key={item.name}
-                href={item.href}
-                className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  item.current
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <item.icon className="mr-3 h-5 w-5" />
-                {item.name}
-              </a>
+          <nav className="flex-1 px-4 py-6 space-y-6">
+            {navigationItems.map((section) => (
+              <div key={section.section} className="space-y-3">
+                <h3 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  {section.section}
+                </h3>
+                <div className="space-y-1">
+                  {section.items.map((item) => (
+                    <a
+                      key={item.name}
+                      href={item.href}
+                      className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation ${
+                        item.current
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                      style={{ minHeight: '44px' }}
+                    >
+                      <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
+                      {item.name}
+                    </a>
+                  ))}
+                </div>
+              </div>
             ))}
           </nav>
 
