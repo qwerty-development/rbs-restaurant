@@ -223,4 +223,4 @@ await supabase.from('restaurant_loyalty_transactions').insert({
 
 ---
 
-**Remember**: This is an enterprise-grade system. Always use Sequential Thinking for complex decisions, document patterns in Memory Bank, store relationships in Knowledge Graph, test with Playwright, and leverage Supabase MCP for database operations. Never use API routes - direct Supabase calls only! 🚀
+**Remember**: This is an enterprise-grade system. Always use Sequential Thinking for decisions, use sequential thinking to understand requirements, document patterns in Memory Bank, store relationships in Knowledge Graph, test with Playwright, and leverage Supabase MCP for database operations. Never use API routes - direct Supabase calls only! 🚀

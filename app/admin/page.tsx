@@ -7,12 +7,16 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'react-hot-toast'
-import { AlertTriangle, Plus, Building, Users, RefreshCw } from 'lucide-react'
+import { AlertTriangle, Plus, Building, Users, RefreshCw, Search, X, Loader2, CheckCircle2, MapPin } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
+import { AddressSearch } from '@/components/location/address-search'
+import { LocationPicker } from '@/components/location/location-picker'
+import type { Coordinates } from '@/lib/utils/location'
 
 interface Restaurant {
   name: string
@@ -24,6 +28,7 @@ interface Restaurant {
   booking_policy: 'instant' | 'request'
   owner_email: string
   tier: 'basic' | 'pro'
+  coordinates?: Coordinates | null
   availability: {
     [key: string]: Array<{
       name: string
@@ -40,6 +45,15 @@ interface Staff {
   restaurantId: string
 }
 
+// User search types
+type SearchedUser = {
+  id: string
+  email: string
+  full_name: string
+  phone_number: string | null
+  avatar_url: string | null
+}
+
 const defaultRestaurant: Restaurant = {
   name: "",
   description: "",
@@ -50,6 +64,7 @@ const defaultRestaurant: Restaurant = {
   booking_policy: "instant",
   owner_email: "",
   tier: "pro",
+  coordinates: null,
   availability: {
     monday: [{ name: "", is_open: true, open_time: "11:00", close_time: "22:00" }],
     tuesday: [{ name: "", is_open: true, open_time: "11:00", close_time: "22:00" }],
@@ -80,12 +95,20 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false)
   const [creationProgress, setCreationProgress] = useState('')
   const [restaurant, setRestaurant] = useState<Restaurant>(defaultRestaurant)
+  const [showLocationPicker, setShowLocationPicker] = useState(false)
   const [existingRestaurants, setExistingRestaurants] = useState<{id: string, name: string}[]>([])
   const [newStaff, setNewStaff] = useState<Staff>({
     email: '',
     role: 'manager',
     restaurantId: ''
   })
+  
+  // Owner search state
+  const [ownerSearch, setOwnerSearch] = useState("")
+  const [searchedUsers, setSearchedUsers] = useState<SearchedUser[]>([])
+  const [selectedOwner, setSelectedOwner] = useState<SearchedUser | null>(null)
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false)
+  
   const router = useRouter()
   const supabase = createClient()
 
@@ -107,6 +130,20 @@ export default function AdminPage() {
     fetchExistingRestaurants()
   }, [supabase])
 
+  // Search users when owner search changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (ownerSearch && ownerSearch.length >= 3 && !selectedOwner) {
+        console.log('Searching for users with email:', ownerSearch)
+        searchUsers(ownerSearch)
+      } else if (ownerSearch.length < 3) {
+        setSearchedUsers([])
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [ownerSearch, selectedOwner])
+
   // Set default booking policy based on tier
   useEffect(() => {
     if (restaurant.tier === 'basic') {
@@ -116,6 +153,122 @@ export default function AdminPage() {
       setRestaurant(prev => ({ ...prev, booking_policy: 'instant' }))
     }
   }, [restaurant.tier])
+
+  // Search for users by email
+  const searchUsers = async (email: string) => {
+    if (!email || email.length < 3) {
+      setSearchedUsers([])
+      return
+    }
+
+    try {
+      setIsSearchingUsers(true)
+
+      // Clean and normalize the search email
+      const cleanEmail = email.trim().toLowerCase()
+      console.log('Searching for users with cleaned email:', cleanEmail)
+
+      // First try to search in profiles table by email
+      const { data: profileUsers, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, full_name, phone_number, avatar_url, email')
+        .or(`email.ilike.%${cleanEmail}%,email.eq.${cleanEmail}`)
+        .limit(20)
+
+      console.log('Profile search results:', profileUsers, 'Error:', profileError)
+
+      let users: SearchedUser[] = []
+
+      // If we found users in profiles, use them
+      if (profileUsers && profileUsers.length > 0) {
+        users = profileUsers.filter(u => u.email && u.full_name) as any
+      }
+
+      // If no users found by email, try searching by name (in case they typed a name instead of email)
+      if (users.length === 0) {
+        console.log('No email matches, trying name search...')
+        const { data: nameSearch, error: nameError } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone_number, avatar_url, email')
+          .ilike('full_name', `%${cleanEmail}%`)
+          .limit(10)
+
+        console.log('Name search results:', nameSearch, 'Error:', nameError)
+
+        if (nameSearch && nameSearch.length > 0) {
+          users = nameSearch.filter(u => u.email && u.full_name) as any
+        }
+      }
+
+      // If still no results, try a broader search
+      if (users.length === 0) {
+        console.log('No name matches, trying broader search...')
+        const emailParts = cleanEmail.includes('@') ? cleanEmail.split('@') : [cleanEmail]
+        const { data: broadSearch, error: broadError } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone_number, avatar_url, email')
+          .or(`full_name.ilike.%${emailParts[0]}%,email.ilike.%${emailParts[0]}%`)
+          .limit(15)
+
+        console.log('Broad search results:', broadSearch, 'Error:', broadError)
+
+        if (broadSearch && broadSearch.length > 0) {
+          users = broadSearch.filter(u => u.email && u.full_name) as any
+        }
+      }
+
+      // Filter out users with null/empty emails and ensure they have the required fields
+      const validUsers = users.filter(u => 
+        u.email && 
+        u.full_name && 
+        u.id
+      )
+
+      console.log('Final valid users:', validUsers)
+      setSearchedUsers(validUsers)
+
+    } catch (error: any) {
+      console.error('Error searching users:', error)
+      toast.error(error.message || 'Failed to search users')
+      setSearchedUsers([])
+    } finally {
+      setIsSearchingUsers(false)
+    }
+  }
+
+  // Handle user selection
+  const handleOwnerSelect = (user: SearchedUser) => {
+    setSelectedOwner(user)
+    setOwnerSearch(user.email)
+    setRestaurant(prev => ({ ...prev, owner_email: user.email }))
+    setSearchedUsers([])
+  }
+
+  // Clear user selection
+  const clearOwnerSelection = () => {
+    setSelectedOwner(null)
+    setOwnerSearch('')
+    setRestaurant(prev => ({ ...prev, owner_email: '' }))
+    setSearchedUsers([])
+  }
+
+  // Handle address and coordinates changes from AddressSearch
+  const handleAddressChange = (address: string, coordinates?: Coordinates) => {
+    setRestaurant(prev => ({ 
+      ...prev, 
+      address: address,
+      coordinates: coordinates || null
+    }))
+  }
+
+  // Handle location changes from LocationPicker  
+  const handleLocationPickerChange = (coordinates: Coordinates, address?: string) => {
+    setRestaurant(prev => ({ 
+      ...prev, 
+      coordinates: coordinates,
+      address: address || prev.address // Keep existing address if none provided
+    }))
+  }
 
   
 
@@ -144,8 +297,13 @@ export default function AdminPage() {
   }
 
   const handleCreateRestaurant = async () => {
-    if (!restaurant.name || !restaurant.address || !restaurant.phone_number || !restaurant.cuisine_type || !restaurant.owner_email) {
-      toast.error('Please fill in all required fields including owner email')
+    if (!restaurant.name || !restaurant.address || !restaurant.phone_number || !restaurant.cuisine_type || !selectedOwner) {
+      toast.error('Please fill in all required fields and select an owner')
+      return
+    }
+
+    if (!restaurant.coordinates) {
+      toast.error('Please select a valid address with location coordinates')
       return
     }
 
@@ -153,19 +311,13 @@ export default function AdminPage() {
     try {
       setCreationProgress(`Creating ${restaurant.name}...`)
 
-      // First, check if owner exists in profiles
-      const { data: ownerProfile, error: ownerError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', restaurant.owner_email)
-        .single()
-
-      if (ownerError || !ownerProfile) {
-        toast.error('Owner not found. The owner must be registered first.')
-        setLoading(false)
-        setCreationProgress('')
-        return
-      }
+      // Use selected owner's data
+      const ownerProfile = selectedOwner
+      
+      // Create location string from coordinates if available
+      const locationValue = restaurant.coordinates 
+        ? `POINT(${restaurant.coordinates.lng} ${restaurant.coordinates.lat})`
+        : `POINT(-74.006 40.7128)` // Default NYC location
       
       const { data, error } = await supabase
         .from('restaurants')
@@ -178,7 +330,7 @@ export default function AdminPage() {
           tier: restaurant.tier,
           price_range: restaurant.price_range,
           booking_policy: restaurant.booking_policy,
-          location: `POINT(-74.006 40.7128)`, // Default NYC location
+          location: locationValue,
           average_rating: 4.5,
           total_reviews: Math.floor(Math.random() * 100) + 10,
           featured: false,
@@ -205,7 +357,7 @@ export default function AdminPage() {
       }
 
       // Add the owner to restaurant_staff
-      setCreationProgress(`Setting up ${restaurant.name} - Adding owner...`)
+      setCreationProgress(`Adding owner to ${restaurant.name}...`)
       const { error: staffError } = await supabase
         .from('restaurant_staff')
         .insert({
@@ -222,172 +374,14 @@ export default function AdminPage() {
         toast.error('Restaurant created but failed to add owner. Please add manually.')
       }
       
-      setCreationProgress(`Setting up ${restaurant.name} - Creating sections...`)
-      
-      // Create restaurant sections first
-      const sections = [
-        { name: 'Main Dining', description: 'Primary dining area', capacity: 40, is_active: true },
-        { name: 'Bar Area', description: 'Bar seating and high tables', capacity: 15, is_active: true },
-        { name: 'Patio', description: 'Outdoor seating area', capacity: 20, is_active: true },
-        { name: 'Private Dining', description: 'Private dining room', capacity: 12, is_active: true }
-      ]
-
-      const sectionIds: { [key: string]: string } = {}
-      
-      for (const section of sections) {
-        const { data: sectionData, error: sectionError } = await supabase
-          .from('restaurant_sections')
-          .insert({
-            restaurant_id: data.id,
-            ...section
-          })
-          .select()
-          .single()
-
-        if (!sectionError && sectionData) {
-          sectionIds[section.name] = sectionData.id
-        }
-      }
-
-      setCreationProgress(`Setting up ${restaurant.name} - Creating tables...`)
-
-      // Create comprehensive table layout
-      const tables = [
-        // Main Dining Area Tables
-        { table_number: 'M1', table_type: 'standard', capacity: 2, x_position: 100, y_position: 100, section_id: sectionIds['Main Dining'] },
-        { table_number: 'M2', table_type: 'standard', capacity: 2, x_position: 200, y_position: 100, section_id: sectionIds['Main Dining'] },
-        { table_number: 'M3', table_type: 'standard', capacity: 4, x_position: 300, y_position: 100, section_id: sectionIds['Main Dining'] },
-        { table_number: 'M4', table_type: 'standard', capacity: 4, x_position: 400, y_position: 100, section_id: sectionIds['Main Dining'] },
-        { table_number: 'M5', table_type: 'booth', capacity: 6, x_position: 100, y_position: 200, section_id: sectionIds['Main Dining'] },
-        { table_number: 'M6', table_type: 'booth', capacity: 6, x_position: 300, y_position: 200, section_id: sectionIds['Main Dining'] },
-        { table_number: 'M7', table_type: 'window', capacity: 4, x_position: 100, y_position: 300, section_id: sectionIds['Main Dining'] },
-        { table_number: 'M8', table_type: 'window', capacity: 4, x_position: 200, y_position: 300, section_id: sectionIds['Main Dining'] },
-        
-        // Bar Area Tables
-        { table_number: 'B1', table_type: 'bar', capacity: 2, x_position: 100, y_position: 100, section_id: sectionIds['Bar Area'] },
-        { table_number: 'B2', table_type: 'bar', capacity: 2, x_position: 150, y_position: 100, section_id: sectionIds['Bar Area'] },
-        { table_number: 'B3', table_type: 'bar', capacity: 3, x_position: 200, y_position: 100, section_id: sectionIds['Bar Area'] },
-        { table_number: 'B4', table_type: 'standard', capacity: 4, x_position: 100, y_position: 200, section_id: sectionIds['Bar Area'] },
-        
-        // Patio Tables
-        { table_number: 'P1', table_type: 'patio', capacity: 4, x_position: 100, y_position: 100, section_id: sectionIds['Patio'] },
-        { table_number: 'P2', table_type: 'patio', capacity: 6, x_position: 200, y_position: 100, section_id: sectionIds['Patio'] },
-        { table_number: 'P3', table_type: 'patio', capacity: 8, x_position: 300, y_position: 100, section_id: sectionIds['Patio'] },
-        { table_number: 'P4', table_type: 'patio', capacity: 4, x_position: 100, y_position: 200, section_id: sectionIds['Patio'] },
-        
-        // Private Dining
-        { table_number: 'PD1', table_type: 'private', capacity: 12, x_position: 100, y_position: 100, section_id: sectionIds['Private Dining'] }
-      ]
-
-      for (const table of tables) {
-        await supabase
-          .from('restaurant_tables')
-          .insert({
-            restaurant_id: data.id,
-            ...table
-          })
-      }
-
-      setCreationProgress(`Setting up ${restaurant.name} - Creating weekly schedule...`)
-
-      // Create weekly availability schedule using restaurant.availability
-      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-      const weeklySchedule = []
-
-      for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
-        const dayName = dayNames[dayIndex]
-        const dayShifts = restaurant.availability[dayName] || []
-        
-        // For each shift in the day
-        for (const shift of dayShifts) {
-          if (shift.is_open && shift.open_time && shift.close_time) {
-            weeklySchedule.push({
-              restaurant_id: data.id,
-              day_of_week: dayName,
-              name: shift.name || null,
-              is_open: shift.is_open,
-              open_time: shift.open_time,
-              close_time: shift.close_time
-            })
-          }
-        }
-      }
-
-      // Insert weekly schedule into restaurant_hours table
-      if (weeklySchedule.length > 0) {
-        await supabase
-          .from('restaurant_hours')
-          .insert(weeklySchedule)
-      }
-
-      setCreationProgress(`Setting up ${restaurant.name} - Creating service periods...`)
-
-      // Create default service periods
-      const servicePeriods = [
-        { name: 'Breakfast', start_time: '08:00', end_time: '11:00', is_active: restaurant.cuisine_type !== 'Japanese' },
-        { name: 'Lunch', start_time: '12:00', end_time: '15:00', is_active: true },
-        { name: 'Dinner', start_time: '17:00', end_time: '22:00', is_active: true },
-        { name: 'Late Night', start_time: '22:00', end_time: '24:00', is_active: restaurant.price_range >= 3 }
-      ]
-
-      for (const period of servicePeriods) {
-        if (period.is_active) {
-          await supabase
-            .from('restaurant_service_periods')
-            .insert({
-              restaurant_id: data.id,
-              name: period.name,
-              start_time: period.start_time,
-              end_time: period.end_time,
-              is_active: true
-            })
-        }
-      }
-
-      setCreationProgress(`Setting up ${restaurant.name} - Creating 30-day availability...`)
-
-      // Create default table availability for the next 30 days
-      const today = new Date()
-      const availabilityPromises = []
-
-      for (let i = 0; i < 30; i++) {
-        const date = new Date(today)
-        date.setDate(today.getDate() + i)
-        
-        // Get day name for this date
-        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-        const dayName = dayNames[date.getDay()]
-        const dayShifts = restaurant.availability[dayName] || []
-        
-        // Find the first open shift for this day
-        const firstOpenShift = dayShifts.find(shift => shift.is_open && shift.open_time && shift.close_time)
-        
-        if (firstOpenShift) {
-          availabilityPromises.push(
-            supabase
-              .from('restaurant_daily_availability')
-              .insert({
-                restaurant_id: data.id,
-                date: date.toISOString().split('T')[0],
-                is_open: true,
-                open_time: firstOpenShift.open_time,
-                close_time: firstOpenShift.close_time,
-                max_capacity: 87, // Sum of all table capacities
-                special_notes: i === 0 ? 'Opening day - full service available' : null
-              })
-          )
-        }
-      }
-
-      await Promise.all(availabilityPromises)
-      
       // Update the existing restaurants list
       setExistingRestaurants(prev => [...prev, { id: data.id, name: data.name }])
       
-      toast.success(`Successfully created ${restaurant.name} with complete setup and assigned ${restaurant.owner_email} as owner!`)
+      toast.success(`Successfully created ${restaurant.name} and assigned ${selectedOwner.full_name} (${selectedOwner.email}) as owner!`)
       
       // Reset form after successful creation
       setRestaurant(defaultRestaurant)
+      clearOwnerSelection()
     } catch (error) {
       console.error('Error creating restaurant:', error)
       toast.error('Failed to create restaurant')
@@ -557,49 +551,34 @@ export default function AdminPage() {
         <TabsContent value="restaurants" className="space-y-6">
           <Card className="border-blue-200 bg-blue-50">
             <CardHeader>
-              <CardTitle className="text-blue-800">What Gets Created by Default</CardTitle>
+              <CardTitle className="text-blue-800">What Gets Created</CardTitle>
               <CardDescription>
-                Each restaurant comes with a complete setup ready for immediate use, including automatic owner assignment
+                Each restaurant is created with basic information and owner assignment only
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div className="space-y-2">
                   <h4 className="font-semibold text-blue-800">👤 Owner & Access</h4>
                   <ul className="space-y-1 text-blue-700">
-                    <li>• Owner automatically added</li>
-                    <li>• Full permissions granted</li>
+                    <li>• Owner automatically added to staff</li>
+                    <li>• Full permissions granted to owner</li>
                     <li>• Immediate access to dashboard</li>
-                    <li>• Staff invitation capability</li>
                   </ul>
                 </div>
                 <div className="space-y-2">
-                  <h4 className="font-semibold text-blue-800">🏢 Restaurant Sections</h4>
+                  <h4 className="font-semibold text-blue-800">� Restaurant Profile</h4>
                   <ul className="space-y-1 text-blue-700">
-                    <li>• Main Dining (40 seats)</li>
-                    <li>• Bar Area (15 seats)</li>
-                    <li>• Patio (20 seats)</li>
-                    <li>• Private Dining (12 seats)</li>
+                    <li>• Basic restaurant information</li>
+                    <li>• Contact details and address</li>
+                    <li>• Cuisine type and tier settings</li>
                   </ul>
                 </div>
-                <div className="space-y-2">
-                  <h4 className="font-semibold text-blue-800">🪑 Tables & Layout</h4>
-                  <ul className="space-y-1 text-blue-700">
-                    <li>• 17 total tables</li>
-                    <li>• Multiple table types</li>
-                    <li>• Proper positioning</li>
-                    <li>• 87 total capacity</li>
-                  </ul>
-                </div>
-                <div className="space-y-2">
-                  <h4 className="font-semibold text-blue-800">📅 Schedule & Hours</h4>
-                  <ul className="space-y-1 text-blue-700">
-                    <li>• Full weekly schedule</li>
-                    <li>• Extended weekend hours</li>
-                    <li>• Service periods</li>
-                    <li>• 30-day availability</li>
-                  </ul>
-                </div>
+              </div>
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-amber-800 text-sm">
+                  <strong>Note:</strong> Restaurants will need to set up their own sections, tables, schedules, and menu through the dashboard after creation.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -608,7 +587,7 @@ export default function AdminPage() {
             <CardHeader>
               <CardTitle>Create New Restaurant</CardTitle>
               <CardDescription>
-                Create a single restaurant with all necessary setup including tables, sections, schedules, and assign an owner.
+                Create a new restaurant with basic information and assign an owner.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -639,25 +618,162 @@ export default function AdminPage() {
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <Label>Address *</Label>
-                    <Input
-                      value={restaurant.address}
-                      onChange={(e) => updateRestaurant('address', e.target.value)}
-                      placeholder="Full restaurant address"
-                    />
+                    <Label>Restaurant Address *</Label>
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
+                        <AddressSearch
+                          value={restaurant.address}
+                          onChange={handleAddressChange}
+                          placeholder="Search for restaurant address..."
+                          className="flex-1"
+                          showCurrentLocation={true}
+                          maxResults={5}
+                          userLocation={restaurant.coordinates || undefined}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setShowLocationPicker(!showLocationPicker)}
+                          className="px-4"
+                        >
+                          {showLocationPicker ? 'Hide Map' : 'Open Map'}
+                        </Button>
+                      </div>
+                      
+                      {restaurant.coordinates && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <MapPin className="h-3 w-3 text-green-600" />
+                          <span>Location: {restaurant.coordinates.lat.toFixed(4)}, {restaurant.coordinates.lng.toFixed(4)}</span>
+                          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                            Coordinates Set
+                          </Badge>
+                        </div>
+                      )}
+
+                      {showLocationPicker && (
+                        <div className="border rounded-lg overflow-hidden">
+                          <LocationPicker
+                            value={restaurant.coordinates}
+                            onChange={handleLocationPickerChange}
+                            initialAddress={restaurant.address}
+                            height={350}
+                            showAddressSearch={false} // We have it above
+                            showCurrentLocation={false} // We have it in AddressSearch
+                            showCoordinateInput={true}
+                            zoom={15}
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div>
-                    <Label>Owner Email *</Label>
-                    <Input
-                      type="email"
-                      value={restaurant.owner_email}
-                      onChange={(e) => updateRestaurant('owner_email', e.target.value)}
-                      placeholder="owner@example.com"
-                    />
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Owner must be registered in the system first
-                    </p>
+                    <Label>Owner Search *</Label>
+                    <div className="relative">
+                      <Input
+                        type="email"
+                        placeholder="Enter email or name to search for owner..."
+                        value={ownerSearch}
+                        onChange={(e) => setOwnerSearch(e.target.value)}
+                        className="pr-20"
+                      />
+                      <div className="absolute right-2 top-2 flex items-center gap-1">
+                        {isSearchingUsers && (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        )}
+                        {ownerSearch && ownerSearch.length >= 3 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => searchUsers(ownerSearch)}
+                            disabled={isSearchingUsers}
+                          >
+                            <Search className="h-3 w-3" />
+                          </Button>
+                        )}
+                        {selectedOwner && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={clearOwnerSelection}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Search Results - Show directly under search box */}
+                    {searchedUsers.length > 0 && !selectedOwner && (
+                      <div className="mt-2 space-y-2 max-h-64 overflow-y-auto border rounded-lg bg-white shadow-lg">
+                        {searchedUsers.map((user) => (
+                          <div
+                            key={user.id}
+                            className="p-3 cursor-pointer hover:bg-muted/50 border-b last:border-b-0 transition-colors"
+                            onClick={() => handleOwnerSelect(user)}
+                          >
+                            <div className="flex items-center space-x-3">
+                              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                <span className="text-xs font-semibold">
+                                  {user.full_name.split(' ').map(n => n[0]).join('')}
+                                </span>
+                              </div>
+                              <div className="flex-1">
+                                <div className="font-medium">{user.full_name}</div>
+                                <div className="text-sm text-muted-foreground">{user.email}</div>
+                                {user.phone_number && (
+                                  <div className="text-sm text-muted-foreground">{user.phone_number}</div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Helper messages */}
+                    {ownerSearch && ownerSearch.length >= 3 && !isSearchingUsers && searchedUsers.length === 0 && !selectedOwner && (
+                      <div className="text-sm text-muted-foreground mt-1 space-y-1">
+                        <p>No users found. Try:</p>
+                        <ul className="text-xs list-disc list-inside ml-2 space-y-1">
+                          <li>Checking the email spelling</li>
+                          <li>Searching by name instead</li>
+                          <li>Using just the username part (before @)</li>
+                          <li>Making sure the user has registered</li>
+                        </ul>
+                      </div>
+                    )}
+                    {ownerSearch && ownerSearch.length < 3 && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Enter at least 3 characters to search
+                      </p>
+                    )}
                   </div>
+
+                  {/* Selected Owner Display */}
+                  {selectedOwner && (
+                    <div className="p-4 border rounded-lg bg-muted/50">
+                      <div className="flex items-center space-x-3">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-sm font-semibold">
+                            {selectedOwner.full_name.split(' ').map(n => n[0]).join('')}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-medium">{selectedOwner.full_name}</h4>
+                          <p className="text-sm text-muted-foreground">{selectedOwner.email}</p>
+                          {selectedOwner.phone_number && (
+                            <p className="text-sm text-muted-foreground">{selectedOwner.phone_number}</p>
+                          )}
+                        </div>
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <Label>Price Range (1-4)</Label>
                     <Select
@@ -762,7 +878,7 @@ export default function AdminPage() {
 
                 <Button
                   onClick={handleCreateRestaurant}
-                  disabled={loading || !restaurant.name || !restaurant.address || !restaurant.phone_number || !restaurant.cuisine_type || !restaurant.owner_email}
+                  disabled={loading || !restaurant.name || !restaurant.address || !restaurant.phone_number || !restaurant.cuisine_type || !selectedOwner || !restaurant.coordinates}
                   className="w-full"
                   size="lg"
                 >
