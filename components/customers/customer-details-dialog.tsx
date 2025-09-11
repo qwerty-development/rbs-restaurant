@@ -820,7 +820,7 @@ export function CustomerDetailsDialog({
                           <div className="space-y-1">
                             <span className="text-gray-600 font-medium">Preferred Tables</span>
                             <div className="text-gray-900 font-semibold">
-                              {customer.preferred_table_types.join(', ')}
+                              {customer.preferred_table_types.map(type => type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())).join(', ')}
                             </div>
                           </div>
                         )}
@@ -828,7 +828,7 @@ export function CustomerDetailsDialog({
                           <div className="space-y-1">
                             <span className="text-gray-600 font-medium">Preferred Times</span>
                             <div className="text-gray-900 font-semibold">
-                              {customer.preferred_time_slots.join(', ')}
+                              {customer.preferred_time_slots.map(slot => slot.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())).join(', ')}
                             </div>
                           </div>
                         )}
