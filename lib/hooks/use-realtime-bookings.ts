@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useQueryClient } from '@tanstack/react-query'
 import { Booking } from '@/types'
 import { RealtimeChannel } from '@supabase/supabase-js'
-import { toast } from 'sonner'
+
  
 
 interface UseRealtimeBookingsOptions {
