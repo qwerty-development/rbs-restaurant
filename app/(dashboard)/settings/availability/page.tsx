@@ -6,6 +6,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
@@ -115,28 +116,20 @@ export default function EnhancedAvailabilitySettingsPage() {
   const router = useRouter()
   const supabase = createClient()
   const queryClient = useQueryClient()
+  const { currentRestaurant } = useRestaurantContext()
   const [restaurantId, setRestaurantId] = useState<string>("")
   const [selectedDate, setSelectedDate] = useState<Date | undefined>()
   const [showSpecialHoursDialog, setShowSpecialHoursDialog] = useState(false)
   const [showClosureDialog, setShowClosureDialog] = useState(false)
 
+  // Set restaurant ID from current restaurant context
   useEffect(() => {
-    async function getRestaurantId() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: staffData } = await supabase
-          .from("restaurant_staff")
-          .select("restaurant_id")
-          .eq("user_id", user.id)
-          .single()
-        
-        if (staffData) {
-          setRestaurantId(staffData.restaurant_id)
-        }
-      }
+    if (currentRestaurant) {
+      setRestaurantId(currentRestaurant.restaurant.id)
+    } else {
+      setRestaurantId("")
     }
-    getRestaurantId()
-  }, [supabase])
+  }, [currentRestaurant])
 
   // Fetch all availability data
   const { data: availabilityData, isLoading } = useQuery({

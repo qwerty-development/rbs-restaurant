@@ -113,7 +113,7 @@ type OperationalSettingsData = z.infer<typeof operationalSettingsSchema>
 type PricingSettingsData = z.infer<typeof pricingSettingsSchema>
 
 export default function SettingsPage() {
-  const { tier } = useRestaurantContext()
+  const { tier, currentRestaurant } = useRestaurantContext()
   const supabase = createClient()
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState("general")
@@ -121,23 +121,14 @@ export default function SettingsPage() {
   // Get restaurant data
   const [restaurantId, setRestaurantId] = useState<string>("")
   
+  // Set restaurant ID from current restaurant context
   useEffect(() => {
-    async function getRestaurantId() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: staffData } = await supabase
-          .from("restaurant_staff")
-          .select("restaurant_id, role")
-          .eq("user_id", user.id)
-          .single()
-        
-        if (staffData) {
-          setRestaurantId(staffData.restaurant_id)
-        }
-      }
+    if (currentRestaurant) {
+      setRestaurantId(currentRestaurant.restaurant.id)
+    } else {
+      setRestaurantId("")
     }
-    getRestaurantId()
-  }, [supabase])
+  }, [currentRestaurant])
 
   // Fetch restaurant data
   const { data: restaurant, isLoading } = useQuery({

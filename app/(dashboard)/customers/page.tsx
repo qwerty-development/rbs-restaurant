@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
+import { useRestaurantContext } from '@/lib/contexts/restaurant-context'
 import { 
   Search, 
   Plus, 
@@ -83,6 +84,7 @@ export default function CustomersPage() {
   const router = useRouter()
   const supabase = createClient()
   const queryClient = useQueryClient()
+  const { currentRestaurant } = useRestaurantContext()
   
   // State
   const [customers, setCustomers] = useState<RestaurantCustomer[]>([])
@@ -359,7 +361,15 @@ export default function CustomersPage() {
         return
       }
 
-      // Get current staff data
+      // Use restaurant from context
+      if (!currentRestaurant) {
+        setLoading(false)
+        return
+      }
+
+      setRestaurantId(currentRestaurant.restaurant.id)
+
+      // Get current staff data for permission checking
       const { data: staffData, error: staffError } = await supabase
         .from('restaurant_staff')
         .select(`
@@ -370,6 +380,7 @@ export default function CustomersPage() {
           user_id
         `)
         .eq('user_id', user.id)
+        .eq('restaurant_id', currentRestaurant.restaurant.id)
         .eq('is_active', true)
         .single()
 
@@ -380,7 +391,6 @@ export default function CustomersPage() {
       }
 
       setCurrentStaff(staffData)
-      setRestaurantId(staffData.restaurant_id)
 
       // Check permissions
       if (!restaurantAuth.hasPermission(staffData.permissions, 'customers.view', staffData.role)) {
@@ -391,8 +401,8 @@ export default function CustomersPage() {
 
       // Load customers and tags
       await Promise.all([
-        loadCustomers(staffData.restaurant_id),
-        loadTags(staffData.restaurant_id)
+        loadCustomers(currentRestaurant.restaurant.id),
+        loadTags(currentRestaurant.restaurant.id)
       ])
 
     } catch (error) {
@@ -401,7 +411,7 @@ export default function CustomersPage() {
     } finally {
       setLoading(false)
     }
-  }, [router, loadCustomers, loadTags, supabase])
+  }, [router, loadCustomers, loadTags, supabase, currentRestaurant])
 
   // Load initial data
   useEffect(() => {

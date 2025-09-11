@@ -5,6 +5,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery } from "@tanstack/react-query"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { 
   format, 
   startOfMonth, 
@@ -60,23 +61,16 @@ export default function BookingCalendarPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [restaurantId, setRestaurantId] = useState<string>("")
 
+  const { currentRestaurant } = useRestaurantContext()
+  
+  // Set restaurant ID from current restaurant context
   useEffect(() => {
-    async function getRestaurantId() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: staffData } = await supabase
-          .from("restaurant_staff")
-          .select("restaurant_id")
-          .eq("user_id", user.id)
-          .single()
-        
-        if (staffData) {
-          setRestaurantId(staffData.restaurant_id)
-        }
-      }
+    if (currentRestaurant) {
+      setRestaurantId(currentRestaurant.restaurant.id)
+    } else {
+      setRestaurantId("")
     }
-    getRestaurantId()
-  }, [supabase])
+  }, [currentRestaurant])
 
   // Get date range based on view mode
   const getDateRange = () => {

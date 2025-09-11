@@ -206,7 +206,7 @@ export default function BookingsPage() {
   const tableService = useMemo(() => new TableAvailabilityService(), [])
   const requestService = useMemo(() => new BookingRequestService(), [])
 
-  // Get restaurant ID and user ID
+  // Get restaurant ID from context and user ID
   const [restaurantId, setRestaurantId] = useState<string>("")
   const [userId, setUserId] = useState<string>("")
   const [lastExpiredCheck, setLastExpiredCheck] = useState<Date>(new Date())
@@ -266,24 +266,25 @@ export default function BookingsPage() {
     }
   }, [restaurantId, userId, handleExpiredRequests])
   
+  // Get user ID
   useEffect(() => {
-    async function getRestaurantId() {
+    async function getUserId() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         setUserId(user.id)
-        const { data: staffData } = await supabase
-          .from("restaurant_staff")
-          .select("restaurant_id")
-          .eq("user_id", user.id)
-          .single()
-        
-        if (staffData) {
-          setRestaurantId(staffData.restaurant_id)
-        }
       }
     }
-    getRestaurantId()
+    getUserId()
   }, [supabase])
+
+  // Set restaurant ID from current restaurant context
+  useEffect(() => {
+    if (currentRestaurant) {
+      setRestaurantId(currentRestaurant.restaurant.id)
+    } else {
+      setRestaurantId("")
+    }
+  }, [currentRestaurant])
 
   // Fetch all bookings (for accurate statistics) - moved before conditional returns
   const { data: allBookings, isLoading: allBookingsLoading } = useQuery({

@@ -8,6 +8,7 @@ import { useRealTimeService } from "@/lib/services/real-time-service"
 import { getWorkflowAutomationService } from "@/lib/services/workflow-automation"
 import { useRestaurantOrchestrator } from "@/lib/services/restaurant-orchestrator"
 import { usePrintService } from "@/lib/services/print-service"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -350,26 +351,16 @@ export default function KitchenDashboard() {
   
   const supabase = createClient()
   const queryClient = useQueryClient()
+  const { currentRestaurant } = useRestaurantContext()
 
-  // Get restaurant ID from staff data
+  // Set restaurant ID from current restaurant context
   useEffect(() => {
-    const getRestaurantId = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: staff } = await supabase
-          .from('restaurant_staff')
-          .select('restaurant_id')
-          .eq('user_id', user.id)
-          .eq('is_active', true)
-          .single()
-        
-        if (staff) {
-          setRestaurantId(staff.restaurant_id)
-        }
-      }
+    if (currentRestaurant) {
+      setRestaurantId(currentRestaurant.restaurant.id)
+    } else {
+      setRestaurantId("")
     }
-    getRestaurantId()
-  }, [supabase])
+  }, [currentRestaurant])
 
   // Real-time service
   const { connectionStatus, subscribe, triggerOrderUpdate } = useRealTimeService(restaurantId)

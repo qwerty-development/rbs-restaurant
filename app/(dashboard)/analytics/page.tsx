@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery } from "@tanstack/react-query"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -96,27 +97,18 @@ type ReviewStats = {
 export default function AnalyticsPage() {
   const supabase = createClient()
   const router = useRouter()
+  const { currentRestaurant } = useRestaurantContext()
   const [restaurantId, setRestaurantId] = useState<string>("")
   const [dateRange, setDateRange] = useState<string>("7days")
 
-  // Get restaurant ID
+  // Set restaurant ID from current restaurant context
   useEffect(() => {
-    async function getRestaurantId() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: staffData } = await supabase
-          .from("restaurant_staff")
-          .select("restaurant_id")
-          .eq("user_id", user.id)
-          .single()
-        
-        if (staffData) {
-          setRestaurantId(staffData.restaurant_id)
-        }
-      }
+    if (currentRestaurant) {
+      setRestaurantId(currentRestaurant.restaurant.id)
+    } else {
+      setRestaurantId("")
     }
-    getRestaurantId()
-  }, [supabase])
+  }, [currentRestaurant])
 
   // Calculate date range
   const getDateRange = () => {

@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -87,28 +88,20 @@ export default function VIPPage() {
   
   const supabase = createClient()
   const queryClient = useQueryClient()
+  const { currentRestaurant } = useRestaurantContext()
 
   // Get restaurant ID
   const [restaurantId, setRestaurantId] = useState<string>("")
   
+  // Set restaurant ID from current restaurant context
   useEffect(() => {
-    async function getRestaurantId() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: staffData, error } = await supabase
-          .from("restaurant_staff")
-          .select("restaurant_id")
-          .eq("user_id", user.id)
-          .single()
-        
-        if (staffData) {
-          console.log('🏪 VIP Page - Restaurant ID set:', staffData.restaurant_id)
-          setRestaurantId(staffData.restaurant_id)
-        }
-      }
+    if (currentRestaurant) {
+      console.log('🏪 VIP Page - Restaurant ID set:', currentRestaurant.restaurant.id)
+      setRestaurantId(currentRestaurant.restaurant.id)
+    } else {
+      setRestaurantId("")
     }
-    getRestaurantId()
-  }, [supabase])
+  }, [currentRestaurant])
 
   // Debug: Expose queryClient to window for manual testing
   useEffect(() => {

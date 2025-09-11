@@ -75,6 +75,11 @@ export function RestaurantProvider({ children, forcedRestaurantId }: RestaurantP
       const restaurant = restaurants.find(r => r.restaurant.id === urlRestaurantId)
       if (restaurant) {
         setCurrentRestaurant(restaurant)
+        // Also save to localStorage for future sessions
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('selected-restaurant-id', urlRestaurantId)
+          localStorage.setItem('restaurant-tier', restaurant.restaurant.tier || 'pro')
+        }
         return
       }
     }
@@ -98,12 +103,34 @@ export function RestaurantProvider({ children, forcedRestaurantId }: RestaurantP
       setCurrentRestaurant(restaurants[0])
       // Cache tier for immediate access on refresh (only on client side)
       if (typeof window !== 'undefined') {
+        localStorage.setItem('selected-restaurant-id', restaurants[0].restaurant.id)
         localStorage.setItem('restaurant-tier', restaurants[0].restaurant.tier || 'pro')
+        // Also set cookie for middleware access
+        document.cookie = `selected-restaurant-id=${restaurants[0].restaurant.id}; path=/; max-age=${30 * 24 * 60 * 60}` // 30 days
       }
       return
     }
 
-    // Multiple restaurants and no selection - stay in overview mode
+    // Multiple restaurants and no selection - for non-overview pages, try to pick the first one
+    // This prevents multi-restaurant users from being stuck without a restaurant context
+    if (typeof window !== 'undefined') {
+      const currentPath = window.location.pathname
+      const isOverviewPage = currentPath === '/dashboard/overview'
+      
+      // If not on overview page and we have multiple restaurants but no selection,
+      // auto-select the first restaurant to prevent data loading issues
+      if (!isOverviewPage && restaurants.length > 1) {
+        const firstRestaurant = restaurants[0]
+        setCurrentRestaurant(firstRestaurant)
+        localStorage.setItem('selected-restaurant-id', firstRestaurant.restaurant.id)
+        localStorage.setItem('restaurant-tier', firstRestaurant.restaurant.tier || 'pro')
+        // Also set cookie for middleware access
+        document.cookie = `selected-restaurant-id=${firstRestaurant.restaurant.id}; path=/; max-age=${30 * 24 * 60 * 60}` // 30 days
+        return
+      }
+    }
+
+    // Multiple restaurants and no selection - stay in overview mode only if on overview page
     setCurrentRestaurant(null)
   }, [restaurants, isLoading, searchParams, forcedRestaurantId])
 
@@ -117,6 +144,9 @@ export function RestaurantProvider({ children, forcedRestaurantId }: RestaurantP
         localStorage.setItem('selected-restaurant-id', restaurantId)
         // Cache tier for immediate access on refresh
         localStorage.setItem('restaurant-tier', restaurant.restaurant.tier || 'pro')
+        
+        // Also set cookie for middleware access
+        document.cookie = `selected-restaurant-id=${restaurantId}; path=/; max-age=${30 * 24 * 60 * 60}` // 30 days
       }
       
       // Update URL to include restaurant parameter
@@ -129,10 +159,12 @@ export function RestaurantProvider({ children, forcedRestaurantId }: RestaurantP
   const goToOverview = () => {
     setCurrentRestaurant(null)
     
-    // Clear localStorage (only on client side)
+    // Clear localStorage and cookies (only on client side)
     if (typeof window !== 'undefined') {
       localStorage.removeItem('selected-restaurant-id')
       localStorage.removeItem('restaurant-tier')
+      // Clear cookie
+      document.cookie = 'selected-restaurant-id=; path=/; max-age=0'
     }
     
     // Remove restaurant parameter from URL

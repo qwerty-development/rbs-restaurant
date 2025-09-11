@@ -55,8 +55,24 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(redirectUrl)
     }
 
-    // If accessing /dashboard root with multiple restaurants and no param, redirect to overview
+    // If accessing /dashboard root with multiple restaurants and no param, check for saved preference
     if (request.nextUrl.pathname === '/dashboard' && staffData.length > 1 && !restaurantId) {
+      // Check if there's a saved restaurant preference in cookies
+      const savedRestaurantId = request.cookies.get('selected-restaurant-id')?.value
+      
+      if (savedRestaurantId) {
+        // Verify the saved restaurant ID is still valid for this user
+        const hasAccessToSaved = staffData.some(staff => staff.restaurant_id === savedRestaurantId)
+        
+        if (hasAccessToSaved) {
+          // Redirect to dashboard with the saved restaurant
+          const redirectUrl = request.nextUrl.clone()
+          redirectUrl.searchParams.set('restaurant', savedRestaurantId)
+          return NextResponse.redirect(redirectUrl)
+        }
+      }
+      
+      // No saved preference or invalid preference - redirect to overview
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = '/dashboard/overview'
       return NextResponse.redirect(redirectUrl)

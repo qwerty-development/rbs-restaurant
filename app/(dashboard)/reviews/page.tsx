@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery } from "@tanstack/react-query"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -83,29 +84,20 @@ type ReviewStats = {
 
 export default function ReviewsPage() {
   const supabase = createClient()
+  const { currentRestaurant } = useRestaurantContext()
   const [searchQuery, setSearchQuery] = useState("")
   const [ratingFilter, setRatingFilter] = useState<string>("all")
   const [sortBy, setSortBy] = useState<string>("newest")
   const [restaurantId, setRestaurantId] = useState<string>("")
 
-  // Get restaurant ID
+  // Set restaurant ID from current restaurant context
   useEffect(() => {
-    async function getRestaurantId() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: staffData } = await supabase
-          .from("restaurant_staff")
-          .select("restaurant_id")
-          .eq("user_id", user.id)
-          .single()
-        
-        if (staffData) {
-          setRestaurantId(staffData.restaurant_id)
-        }
-      }
+    if (currentRestaurant) {
+      setRestaurantId(currentRestaurant.restaurant.id)
+    } else {
+      setRestaurantId("")
     }
-    getRestaurantId()
-  }, [supabase])
+  }, [currentRestaurant])
 
   // Fetch reviews
   const { data: reviews, isLoading: reviewsLoading } = useQuery({

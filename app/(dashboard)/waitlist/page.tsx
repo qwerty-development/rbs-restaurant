@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
+import { useRestaurantContext } from '@/lib/contexts/restaurant-context'
 import { 
   Clock, 
   Users, 
@@ -85,6 +86,7 @@ interface WaitlistEntry {
 export default function WaitlistPage() {
   const router = useRouter()
   const supabase = createClient()
+  const { currentRestaurant } = useRestaurantContext()
   
   // State
   const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([])
@@ -129,24 +131,14 @@ export default function WaitlistPage() {
   const tableService = new TableAvailabilityService()
   const availabilityService = new RestaurantAvailability()
 
-  // Get restaurant ID
+  // Set restaurant ID from current restaurant context
   useEffect(() => {
-    async function getRestaurantId() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: staffData } = await supabase
-          .from("restaurant_staff")
-          .select("restaurant_id")
-          .eq("user_id", user.id)
-          .single()
-        
-        if (staffData) {
-          setRestaurantId(staffData.restaurant_id)
-        }
-      }
+    if (currentRestaurant) {
+      setRestaurantId(currentRestaurant.restaurant.id)
+    } else {
+      setRestaurantId("")
     }
-    getRestaurantId()
-  }, [])
+  }, [currentRestaurant])
 
   // Load waitlist entries
   const loadWaitlistEntries = useCallback(async (silent = false) => {

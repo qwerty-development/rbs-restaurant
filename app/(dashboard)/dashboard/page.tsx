@@ -234,35 +234,25 @@ export default function DashboardPage() {
     return () => window.removeEventListener('keydown', handleKeyPress)
   }, [])
 
-  // Get restaurant and user ID
+  // Get user ID and set restaurant ID from context
   useEffect(() => {
-    async function getIds() {
+    async function getUserId() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         setUserId(user.id)
-        
-        // Get restaurant ID from URL parameters
-        const urlParams = new URLSearchParams(window.location.search)
-        const restaurantParam = urlParams.get('restaurant')
-        
-        if (restaurantParam) {
-          // Verify user has access to this restaurant
-          const { data: staffData } = await supabase
-            .from("restaurant_staff")
-            .select("restaurant_id")
-            .eq("user_id", user.id)
-            .eq("restaurant_id", restaurantParam)
-            .eq("is_active", true)
-            .single()
-          
-          if (staffData) {
-            setRestaurantId(staffData.restaurant_id)
-          }
-        }
       }
     }
-    getIds()
+    getUserId()
   }, [supabase])
+
+  // Set restaurant ID from current restaurant context
+  useEffect(() => {
+    if (currentRestaurant) {
+      setRestaurantId(currentRestaurant.restaurant.id)
+    } else {
+      setRestaurantId("")
+    }
+  }, [currentRestaurant])
 
   // Fetch today's bookings
   const { data: todaysBookings = [], isLoading: bookingsLoading, refetch: refetchBookings } = useQuery({

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useOrders, useUpdateOrderStatus } from "@/lib/hooks/use-orders"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -277,26 +278,16 @@ export default function OrdersPage() {
   
   const supabase = createClient()
   const queryClient = useQueryClient()
+  const { currentRestaurant } = useRestaurantContext()
 
-  // Get restaurant ID from staff data
+  // Set restaurant ID from current restaurant context
   useEffect(() => {
-    const getRestaurantId = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: staff } = await supabase
-          .from('restaurant_staff')
-          .select('restaurant_id')
-          .eq('user_id', user.id)
-          .eq('is_active', true)
-          .single()
-        
-        if (staff) {
-          setRestaurantId(staff.restaurant_id)
-        }
-      }
+    if (currentRestaurant) {
+      setRestaurantId(currentRestaurant.restaurant.id)
+    } else {
+      setRestaurantId("")
     }
-    getRestaurantId()
-  }, [supabase])
+  }, [currentRestaurant])
 
   // Fetch orders using hooks
   const { data: ordersData, isLoading, error } = useOrders(restaurantId, {
