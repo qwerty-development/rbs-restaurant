@@ -12,11 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'react-hot-toast'
-import { AlertTriangle, Plus, Building, Users, RefreshCw, Search, X, Loader2, CheckCircle2, MapPin } from 'lucide-react'
+import { AlertTriangle, Plus, Building, Users, RefreshCw, Search, X, Loader2, CheckCircle2, MapPin, Camera, Save } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { AddressSearch } from '@/components/location/address-search'
 import { LocationPicker } from '@/components/location/location-picker'
 import type { Coordinates } from '@/lib/utils/location'
+import { EnhancedRestaurantImageUpload } from '@/components/ui/enhanced-restaurant-image-upload'
 
 interface Restaurant {
   name: string
@@ -103,6 +104,12 @@ export default function AdminPage() {
     restaurantId: ''
   })
   
+  // New state for pre-creation image upload
+  const [showPreImageUpload, setShowPreImageUpload] = useState(false)
+  const [mainImageUrl, setMainImageUrl] = useState<string>('')
+  const [imageUrls, setImageUrls] = useState<string[]>([])
+  const [tempRestaurantId, setTempRestaurantId] = useState<string>('')
+  
   // Owner search state
   const [ownerSearch, setOwnerSearch] = useState("")
   const [searchedUsers, setSearchedUsers] = useState<SearchedUser[]>([])
@@ -128,6 +135,9 @@ export default function AdminPage() {
     }
     
     fetchExistingRestaurants()
+    
+    // Generate a temporary ID for image upload
+    setTempRestaurantId(`temp-${Date.now()}-${Math.random().toString(36).substring(7)}`)
   }, [supabase])
 
   // Search users when owner search changes
@@ -252,6 +262,15 @@ export default function AdminPage() {
     setSearchedUsers([])
   }
 
+  // Handle opening/closing pre-upload image section
+  const handleOpenImageUpload = () => {
+    setShowPreImageUpload(true)
+  }
+
+  const handleCloseImageUpload = () => {
+    setShowPreImageUpload(false)
+  }
+
   // Handle address and coordinates changes from AddressSearch
   const handleAddressChange = (address: string, coordinates?: Coordinates) => {
     setRestaurant(prev => ({ 
@@ -331,6 +350,8 @@ export default function AdminPage() {
           price_range: restaurant.price_range,
           booking_policy: restaurant.booking_policy,
           location: locationValue,
+          main_image_url: mainImageUrl || null,
+          image_urls: imageUrls.length > 0 ? imageUrls : null,
           average_rating: 4.5,
           total_reviews: Math.floor(Math.random() * 100) + 10,
           featured: false,
@@ -377,11 +398,20 @@ export default function AdminPage() {
       // Update the existing restaurants list
       setExistingRestaurants(prev => [...prev, { id: data.id, name: data.name }])
       
-      toast.success(`Successfully created ${restaurant.name} and assigned ${selectedOwner.full_name} (${selectedOwner.email}) as owner!`)
+      const imageMessage = mainImageUrl || imageUrls.length > 0 
+        ? ` with ${imageUrls.length + (mainImageUrl ? 1 : 0)} image(s)`
+        : ''
       
-      // Reset form after successful creation
+      toast.success(`Successfully created ${restaurant.name}${imageMessage} and assigned ${selectedOwner.full_name} (${selectedOwner.email}) as owner!`)
+      
+      // Reset form and images after successful creation
       setRestaurant(defaultRestaurant)
       clearOwnerSelection()
+      setMainImageUrl('')
+      setImageUrls([])
+      setShowPreImageUpload(false)
+      // Generate new temp ID for next restaurant
+      setTempRestaurantId(`temp-${Date.now()}-${Math.random().toString(36).substring(7)}`)
     } catch (error) {
       console.error('Error creating restaurant:', error)
       toast.error('Failed to create restaurant')
@@ -574,10 +604,26 @@ export default function AdminPage() {
                     <li>• Cuisine type and tier settings</li>
                   </ul>
                 </div>
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-blue-800">📸 Image Management</h4>
+                  <ul className="space-y-1 text-blue-700">
+                    <li>• Upload main restaurant image (logo)</li>
+                    <li>• Add gallery images (up to 10)</li>
+                    <li>• Drag & drop reordering support</li>
+                  </ul>
+                </div>
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-blue-800">⚙️ Setup Process</h4>
+                  <ul className="space-y-1 text-blue-700">
+                    <li>• Step 1: Create restaurant profile</li>
+                    <li>• Step 2: Upload images (optional)</li>
+                    <li>• Additional setup via dashboard</li>
+                  </ul>
+                </div>
               </div>
               <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                 <p className="text-amber-800 text-sm">
-                  <strong>Note:</strong> Restaurants will need to set up their own sections, tables, schedules, and menu through the dashboard after creation.
+                  <strong>Note:</strong> After creating the restaurant, you'll have the option to upload images. Restaurants will still need to set up their own sections, tables, schedules, and menu through the dashboard.
                 </p>
               </div>
             </CardContent>
@@ -876,6 +922,67 @@ export default function AdminPage() {
                   </div>
                 </div>
 
+                {/* Image Upload Section - Before Restaurant Creation */}
+                <div className="mt-6 p-4 border rounded-lg bg-blue-50 border-blue-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h4 className="font-semibold text-blue-800 flex items-center gap-2">
+                        <Camera className="w-5 h-5" />
+                        Restaurant Images (Optional)
+                      </h4>
+                      <p className="text-sm text-blue-600 mt-1">
+                        Add images before creating the restaurant. You can upload a main image and gallery images.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={showPreImageUpload ? handleCloseImageUpload : handleOpenImageUpload}
+                      className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                    >
+                      {showPreImageUpload ? (
+                        <>
+                          <X className="w-4 h-4 mr-2" />
+                          Close Images
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Images
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {showPreImageUpload && (
+                    <div className="space-y-4">
+                      <EnhancedRestaurantImageUpload
+                        restaurantId={tempRestaurantId}
+                        mainImageUrl={mainImageUrl}
+                        images={imageUrls}
+                        onMainImageChange={setMainImageUrl}
+                        onImagesChange={setImageUrls}
+                        maxImages={10}
+                        maxFileSize={5}
+                      />
+                    </div>
+                  )}
+
+                  {(mainImageUrl || imageUrls.length > 0) && (
+                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center gap-2 text-green-800">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span className="font-medium">
+                          Images Ready: {imageUrls.length + (mainImageUrl ? 1 : 0)} image(s) selected
+                        </span>
+                      </div>
+                      <p className="text-green-600 text-sm mt-1">
+                        These images will be included when you create the restaurant.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 <Button
                   onClick={handleCreateRestaurant}
                   disabled={loading || !restaurant.name || !restaurant.address || !restaurant.phone_number || !restaurant.cuisine_type || !selectedOwner || !restaurant.coordinates}
@@ -888,7 +995,15 @@ export default function AdminPage() {
                       {creationProgress || 'Creating restaurant...'}
                     </div>
                   ) : (
-                    'Create Restaurant'
+                    <>
+                      <Building className="w-4 h-4 mr-2" />
+                      Create Restaurant
+                      {(mainImageUrl || imageUrls.length > 0) && (
+                        <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
+                          +{imageUrls.length + (mainImageUrl ? 1 : 0)} images
+                        </span>
+                      )}
+                    </>
                   )}
                 </Button>
               </div>
