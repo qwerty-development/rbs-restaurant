@@ -7,6 +7,8 @@ import { useNotifications } from '@/lib/contexts/notification-context'
 export function NotificationContainer() {
   const { notifications, removeNotification } = useNotifications()
 
+  console.log('🔔 NotificationContainer: Rendering with', notifications.length, 'notifications:', notifications)
+
   if (notifications.length === 0) return null
 
   return (
@@ -14,13 +16,10 @@ export function NotificationContainer() {
       {notifications.map((notification, index) => (
         <div
           key={notification.id}
-          className="transform transition-all duration-300 ease-out"
+          className="transform transition-all duration-300 ease-out animate-in slide-in-from-right"
           style={{
             animationDelay: `${index * 100}ms`,
-            transform: `translateY(${index * 8}px)`,
-            animationName: 'slideInFromRight',
-            animationDuration: '0.3s',
-            animationTimingFunction: 'ease-out'
+            transform: `translateY(${index * 8}px)`
           }}
         >
           <NotificationBanner

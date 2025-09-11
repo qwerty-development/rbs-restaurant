@@ -1,6 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import { pushNotificationManager, PushNotificationData } from '@/lib/push-notifications'
 
 export interface Notification {
   id: string
@@ -18,12 +19,34 @@ interface NotificationContextType {
   removeNotification: (id: string) => void
   clearAllNotifications: () => void
   playNotificationSound: (type: 'booking' | 'order' | 'general', variant?: 'success' | 'error' | 'info' | 'warning') => void
+  requestPushPermission: () => Promise<boolean>
+  isPushEnabled: boolean
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined)
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([])
+  const [isPushEnabled, setIsPushEnabled] = useState(false)
+
+  // Initialize push notifications
+  useEffect(() => {
+    const initPush = async () => {
+      const initialized = await pushNotificationManager.initialize()
+      if (initialized) {
+        const hasPermission = await pushNotificationManager.isPermissionGranted()
+        setIsPushEnabled(hasPermission)
+      }
+    }
+    initPush()
+  }, [])
+
+  const requestPushPermission = useCallback(async (): Promise<boolean> => {
+    const permission = await pushNotificationManager.requestPermission()
+    const granted = permission === 'granted'
+    setIsPushEnabled(granted)
+    return granted
+  }, [])
 
   const playNotificationSound = useCallback((type: 'booking' | 'order' | 'general', variant?: 'success' | 'error' | 'info' | 'warning') => {
     try {
@@ -62,19 +85,40 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, [])
 
   const addNotification = useCallback((notification: Omit<Notification, 'id' | 'timestamp'>) => {
+    console.log('🔔 NotificationContext: Adding notification:', notification)
     const newNotification: Notification = {
       ...notification,
       id: Math.random().toString(36).substring(2, 11),
       timestamp: new Date()
     }
     
-    setNotifications(prev => [newNotification, ...prev])
+    setNotifications(prev => {
+      const updated = [newNotification, ...prev]
+      console.log('🔔 NotificationContext: Updated notifications array:', updated.length, 'notifications')
+      return updated
+    })
     
     // Play sound for booking notifications
     if (notification.type === 'booking') {
+      console.log('🔔 NotificationContext: Playing sound for booking notification')
       playNotificationSound('booking', notification.variant)
     }
-  }, [playNotificationSound])
+
+    // Send push notification if enabled (fire and forget)
+    if (isPushEnabled) {
+      console.log('🔔 NotificationContext: Sending push notification')
+      const pushData: PushNotificationData = {
+        title: notification.title,
+        body: notification.message,
+        icon: '/icon-192x192.png',
+        url: '/dashboard',
+        data: notification.data
+      }
+      pushNotificationManager.sendNotification(pushData).catch(error => {
+        console.error('Failed to send push notification:', error)
+      })
+    }
+  }, [playNotificationSound, isPushEnabled])
 
   const removeNotification = useCallback((id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id))
@@ -106,7 +150,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         addNotification,
         removeNotification,
         clearAllNotifications,
-        playNotificationSound
+        playNotificationSound,
+        requestPushPermission,
+        isPushEnabled
       }}
     >
       {children}
@@ -119,5 +165,9 @@ export function useNotifications() {
   if (context === undefined) {
     throw new Error('useNotifications must be used within a NotificationProvider')
   }
+  
+  // Debug logging
+  console.log('🔔 useNotifications: Available methods:', Object.keys(context))
+  
   return context
 }

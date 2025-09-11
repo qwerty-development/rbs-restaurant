@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { format, startOfDay, endOfDay, addMinutes, differenceInMinutes, addDays } from "date-fns"
 import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
+import { useNotifications } from "@/lib/contexts/notification-context"
+import { PushNotificationPermission } from "@/components/notifications/push-notification-permission"
 import { UnifiedFloorPlan } from "@/components/dashboard/unified-floor-plan"
 import { CheckInQueue } from "@/components/dashboard/checkin-queue"
 import { WaitlistPanel } from "@/components/dashboard/waitlist-panel"
@@ -44,7 +46,8 @@ import {
   AlertTriangle,
   List,
   Badge,
-  Users
+  Users,
+  Bell
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -52,6 +55,12 @@ import { Input } from "@/components/ui/input"
 export default function DashboardPage() {
   const router = useRouter()
   const { currentRestaurant, tier, isLoading: contextLoading } = useRestaurantContext()
+  const notificationContext = useNotifications()
+  const { addNotification, requestPushPermission, isPushEnabled } = notificationContext || {}
+  
+  // Debug logging
+  console.log('🔔 Dashboard: Available notification methods:', Object.keys(notificationContext || {}))
+  console.log('🔔 Dashboard: requestPushPermission type:', typeof requestPushPermission)
   const [currentTime, setCurrentTime] = useState(new Date())
   const [showManualBooking, setShowManualBooking] = useState(false)
   const [selectedBooking, setSelectedBooking] = useState<any>(null)
@@ -1056,6 +1065,42 @@ export default function DashboardPage() {
               <UserPlus className="h-3 w-3 mr-1" />
               <span className="hidden sm:inline">New</span>
             </Button>
+            
+            <Button
+              onClick={() => {
+                console.log('🔔 Testing notification from dashboard')
+                addNotification({
+                  type: 'booking',
+                  title: 'Test Notification',
+                  message: 'This is a test notification to check if the system works',
+                  data: { test: true }
+                })
+              }}
+              size="sm"
+              className="px-2 py-1 h-6 text-xs font-medium bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white shadow-lg rounded-md transition-all duration-300"
+            >
+              <AlertCircle className="h-3 w-3 mr-1" />
+              <span>Test</span>
+            </Button>
+            
+            {requestPushPermission && (
+              <Button
+                onClick={async () => {
+                  console.log('🔔 Testing push permission request')
+                  try {
+                    const granted = await requestPushPermission()
+                    console.log('🔔 Push permission result:', granted)
+                  } catch (error) {
+                    console.error('🔔 Push permission error:', error)
+                  }
+                }}
+                size="sm"
+                className="px-2 py-1 h-6 text-xs font-medium bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-700 hover:to-purple-600 text-white shadow-lg rounded-md transition-all duration-300"
+              >
+                <Bell className="h-3 w-3 mr-1" />
+                <span>Push</span>
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -1069,9 +1114,33 @@ export default function DashboardPage() {
         onViewAll={() => setShowPendingModal(true)}
       />
 
+      {/* Push Notification Permission */}
+      <div className="px-4">
+        <PushNotificationPermission />
+      </div>
+
       {/* PWA Install Prompt */}
       <div className="px-4">
         <InstallPrompt />
+      </div>
+
+      {/* Debug Test Button - Remove this after testing */}
+      <div className="px-4 py-2 bg-yellow-100 border-b border-yellow-200">
+        <Button
+          onClick={() => {
+            console.log('🔔 Testing notification from debug button')
+            addNotification({
+              type: 'booking',
+              title: 'Debug Test',
+              message: 'This is a debug test notification',
+              data: { debug: true }
+            })
+          }}
+          size="sm"
+          className="bg-red-600 hover:bg-red-700 text-white"
+        >
+          🔔 Test Notifications
+        </Button>
       </div>
 
 

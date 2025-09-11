@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+import { useNotifications } from "@/lib/contexts/notification-context"
+import { PushNotificationPermission } from "@/components/notifications/push-notification-permission"
 import { 
   Calendar as CalendarIcon, 
   Search, 
@@ -28,7 +30,8 @@ import {
   Mail,
   MessageSquare,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Bell
 } from "lucide-react"
 
 export default function BasicDashboardPage() {
@@ -40,6 +43,12 @@ export default function BasicDashboardPage() {
   
   const supabase = createClient()
   const queryClient = useQueryClient()
+  const notificationContext = useNotifications()
+  const { addNotification, requestPushPermission, isPushEnabled } = notificationContext || {}
+  
+  // Debug logging
+  console.log('🔔 Basic Dashboard: Available notification methods:', Object.keys(notificationContext || {}))
+  console.log('🔔 Basic Dashboard: requestPushPermission type:', typeof requestPushPermission)
 
   // Get restaurant and user info
   useEffect(() => {
@@ -183,6 +192,16 @@ export default function BasicDashboardPage() {
           const newBooking = payload.new
           if (!newBooking) return
           
+          // Trigger notification for new booking
+          const guestName = newBooking.guest_name || newBooking.user?.full_name || 'Guest'
+          console.log('🔔 Basic Dashboard: Adding notification for new booking:', { guestName, partySize: newBooking.party_size })
+          addNotification({
+            type: 'booking',
+            title: 'New Booking Request',
+            message: `New booking request from ${guestName} for ${newBooking.party_size} guests`,
+            data: newBooking
+          })
+          
           // Fetch the complete booking data with profiles
           try {
             const { data: completeBooking, error } = await supabase
@@ -245,7 +264,40 @@ export default function BasicDashboardPage() {
         async (payload) => {
           console.log('📝 Booking UPDATE received in basic dashboard:', payload)
           const updatedBooking = payload.new
+          const previousBooking = payload.old
           if (!updatedBooking) return
+          
+          // Trigger notification for status changes
+          if (previousBooking && previousBooking.status !== updatedBooking.status) {
+            const guestName = updatedBooking.guest_name || updatedBooking.user?.full_name || 'Guest'
+            console.log('🔔 Basic Dashboard: Adding notification for status change:', { 
+              guestName, 
+              oldStatus: previousBooking.status, 
+              newStatus: updatedBooking.status 
+            })
+            
+            const statusMap: Record<string, { title: string; message: string; variant?: 'success' | 'error' }> = {
+              confirmed: { title: 'Booking Confirmed', message: `Booking for ${guestName} confirmed`, variant: 'success' },
+              declined_by_restaurant: { title: 'Booking Declined', message: `Booking for ${guestName} declined`, variant: 'error' },
+              cancelled_by_user: { title: 'Booking Cancelled', message: `Booking for ${guestName} cancelled by customer`, variant: 'error' },
+              cancelled_by_restaurant: { title: 'Booking Cancelled', message: `Booking for ${guestName} cancelled by restaurant`, variant: 'error' },
+              arrived: { title: 'Guest Arrived', message: `${guestName} has checked in` },
+              seated: { title: 'Guest Seated', message: `${guestName} has been seated` },
+              completed: { title: 'Booking Completed', message: `${guestName}'s booking completed` },
+              no_show: { title: 'No-show', message: `${guestName} marked as no-show` }
+            }
+
+            const statusInfo = statusMap[updatedBooking.status as string]
+            if (statusInfo) {
+              addNotification({
+                type: 'booking',
+                title: statusInfo.title,
+                message: statusInfo.message,
+                data: updatedBooking,
+                variant: statusInfo.variant
+              })
+            }
+          }
           
           // Fetch the complete booking data with profiles
           try {
@@ -449,18 +501,62 @@ export default function BasicDashboardPage() {
             })()}
           </p>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={() => refetch()}
-          disabled={isLoading}
-        >
-          <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => refetch()}
+            disabled={isLoading}
+          >
+            <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
+            Refresh
+          </Button>
+          
+          {requestPushPermission && (
+            <Button
+              onClick={async () => {
+                console.log('🔔 Basic Dashboard: Testing push permission request')
+                try {
+                  const granted = await requestPushPermission()
+                  console.log('🔔 Basic Dashboard: Push permission result:', granted)
+                } catch (error) {
+                  console.error('🔔 Basic Dashboard: Push permission error:', error)
+                }
+              }}
+              size="sm"
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+            >
+              <Bell className="h-4 w-4 mr-2" />
+              Push Test
+            </Button>
+          )}
+        </div>
       </div>
 
+      {/* Push Notification Permission */}
+      <PushNotificationPermission />
 
+      {/* Debug Test Button - Remove this after testing */}
+      <div className="p-4 bg-yellow-100 border border-yellow-200 rounded-lg">
+        <div className="flex items-center gap-4">
+          <span className="text-sm font-medium text-yellow-800">Debug: Test Notifications</span>
+          <Button
+            onClick={() => {
+              console.log('🔔 Testing notification from basic dashboard')
+              addNotification({
+                type: 'booking',
+                title: 'Basic Dashboard Test',
+                message: 'This is a test notification from the basic dashboard',
+                data: { debug: true, source: 'basic-dashboard' }
+              })
+            }}
+            size="sm"
+            className="bg-red-600 hover:bg-red-700 text-white"
+          >
+            🔔 Test Notifications
+          </Button>
+        </div>
+      </div>
 
       {/* Analytics Cards */}
       {analytics && (

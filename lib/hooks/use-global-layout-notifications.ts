@@ -19,7 +19,7 @@ export function useGlobalLayoutNotifications() {
  
 
   // Extract restaurant ID from URL or search params
-  const getRestaurantId = () => {
+  const getRestaurantId = async () => {
     
     // Check if we're on a dashboard page with restaurant param
     if (pathname.startsWith('/dashboard') || pathname.startsWith('/basic-dashboard')) {
@@ -36,6 +36,27 @@ export function useGlobalLayoutNotifications() {
       if (typeof window !== 'undefined') {
         const storedRestaurantId = localStorage.getItem('selected-restaurant-id')
         if (storedRestaurantId) return storedRestaurantId
+      }
+      
+      // For basic dashboard, try to get from database
+      if (pathname.startsWith('/basic-dashboard')) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) {
+            const { data: staffData } = await supabase
+              .from("restaurant_staff")
+              .select("restaurant_id")
+              .eq("user_id", user.id)
+              .single()
+            
+            if (staffData) {
+              console.log('🔔 GlobalLayoutNotifications: Found restaurant ID from database:', staffData.restaurant_id)
+              return staffData.restaurant_id
+            }
+          }
+        } catch (error) {
+          console.log('🔔 GlobalLayoutNotifications: Error getting restaurant ID from database:', error)
+        }
       }
     }
     
@@ -72,9 +93,21 @@ export function useGlobalLayoutNotifications() {
   }
 
   useEffect(() => {
-    const restaurantId = getRestaurantId()
-    
-    if (!restaurantId) return
+    const setupNotifications = async () => {
+      // Skip global notifications on basic dashboard - it has its own notification system
+      if (pathname.startsWith('/basic-dashboard')) {
+        console.log('🔔 GlobalLayoutNotifications: Skipping setup on basic dashboard - using local notifications')
+        return
+      }
+      
+      const restaurantId = await getRestaurantId()
+      
+      console.log('🔔 GlobalLayoutNotifications: Setting up with restaurantId:', restaurantId)
+      
+      if (!restaurantId) {
+        console.log('🔔 GlobalLayoutNotifications: No restaurantId, skipping setup')
+        return
+      }
 
     // Create realtime channel for bookings
     const channel = supabase
@@ -87,8 +120,12 @@ export function useGlobalLayoutNotifications() {
           table: 'bookings'
         },
         async (payload) => {
+          console.log('🔔 GlobalLayoutNotifications: Received INSERT event:', payload)
           const newBooking = payload.new as Booking
-          if (!newBooking || newBooking.restaurant_id !== restaurantId) return
+          if (!newBooking || newBooking.restaurant_id !== restaurantId) {
+            console.log('🔔 GlobalLayoutNotifications: Skipping booking - no newBooking or wrong restaurant')
+            return
+          }
           
           // Update query cache for global bookings
           queryClient.setQueryData(
@@ -133,6 +170,7 @@ export function useGlobalLayoutNotifications() {
           
           // Add global notification with sound
           const guestName = await resolveGuestName(newBooking)
+          console.log('🔔 Adding notification for new booking:', { guestName, partySize: newBooking.party_size, bookingId: newBooking.id })
           addNotification({
             type: 'booking',
             title: 'New Booking',
@@ -234,7 +272,14 @@ export function useGlobalLayoutNotifications() {
           }
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('🔔 GlobalLayoutNotifications: Channel subscription status:', status)
+        if (status === 'SUBSCRIBED') {
+          console.log('🔔 GlobalLayoutNotifications: Successfully subscribed to real-time updates for restaurant:', restaurantId)
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('🔔 GlobalLayoutNotifications: Channel subscription error')
+        }
+      })
 
     channelRef.current = channel
 
@@ -245,6 +290,9 @@ export function useGlobalLayoutNotifications() {
         channelRef.current = null
       }
     }
+    }
+    
+    setupNotifications()
   }, [pathname, searchParams, queryClient, addNotification, supabase])
 
   return {
