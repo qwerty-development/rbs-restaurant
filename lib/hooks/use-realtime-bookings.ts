@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useQueryClient } from '@tanstack/react-query'
 import { Booking } from '@/types'
 import { RealtimeChannel } from '@supabase/supabase-js'
+import { toast } from 'sonner'
  
 
 interface UseRealtimeBookingsOptions {
@@ -10,6 +11,8 @@ interface UseRealtimeBookingsOptions {
   onBookingCreated?: (booking: Booking) => void
   onBookingUpdated?: (booking: Booking, previousBooking?: Booking) => void
   onBookingDeleted?: (bookingId: string) => void
+  enableToasts?: boolean
+  enableSound?: boolean
 }
 
 interface RealtimeBookingsState {
@@ -23,7 +26,8 @@ export function useRealtimeBookings(options: UseRealtimeBookingsOptions) {
     restaurantId,
     onBookingCreated,
     onBookingUpdated,
-    onBookingDeleted
+    onBookingDeleted,
+    enableToasts = false
   } = options
 
   const supabase = createClient()
