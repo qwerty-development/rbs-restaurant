@@ -2,9 +2,11 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { format, startOfDay, endOfDay, addMinutes, differenceInMinutes, addDays } from "date-fns"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { UnifiedFloorPlan } from "@/components/dashboard/unified-floor-plan"
 import { CheckInQueue } from "@/components/dashboard/checkin-queue"
 import { WaitlistPanel } from "@/components/dashboard/waitlist-panel"
@@ -48,6 +50,8 @@ import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 
 export default function DashboardPage() {
+  const router = useRouter()
+  const { currentRestaurant, tier, isLoading: contextLoading } = useRestaurantContext()
   const [currentTime, setCurrentTime] = useState(new Date())
   const [showManualBooking, setShowManualBooking] = useState(false)
   const [selectedBooking, setSelectedBooking] = useState<any>(null)
@@ -66,12 +70,20 @@ export default function DashboardPage() {
     warnings: string[]
     onConfirm: () => void
   }>({ show: false, warnings: [], onConfirm: () => {} })
+  const [showPendingModal, setShowPendingModal] = useState(false)
   
   const supabase = createClient()
   const queryClient = useQueryClient()
   const tableService = new TableAvailabilityService()
   const statusService = new TableStatusService()
   const requestService = new BookingRequestService()
+
+  // Redirect Basic tier users to their dedicated dashboard - MUST be before any conditional returns
+  useEffect(() => {
+    if (tier === 'basic') {
+      router.replace('/basic-dashboard')
+    }
+  }, [tier, router])
 
   // Comprehensive table availability validation with shared table support
   const validateTableAvailability = (tableIds: string[], bookingId: string, partySize: number): { valid: boolean; errors: string[]; warnings: string[] } => {
@@ -911,7 +923,8 @@ export default function DashboardPage() {
            specialRequests.includes(query)
   })
 
-  if (!restaurantId || !userId) {
+  // Loading state for context and initial data
+  if (contextLoading || !restaurantId || !userId || tier === null) {
     return (
       <div className="flex items-center justify-center h-screen bg-gradient-to-br from-background to-card" suppressHydrationWarning>
         <div className="text-center">
@@ -923,6 +936,18 @@ export default function DashboardPage() {
           </div>
           <p className="text-lg font-medium text-foreground">Loading restaurant data...</p>
           <p className="text-sm text-muted-foreground mt-1">Preparing your dashboard</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Basic tier users are redirected via useEffect at the top
+  if (tier === 'basic') {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p>Redirecting to Basic dashboard...</p>
         </div>
       </div>
     )
@@ -1041,12 +1066,14 @@ export default function DashboardPage() {
         awaitingCheckIn={stats.awaitingCheckIn}
         bookings={todaysBookings}
         currentTime={currentTime}
+        onViewAll={() => setShowPendingModal(true)}
       />
 
       {/* PWA Install Prompt */}
       <div className="px-4">
         <InstallPrompt />
       </div>
+
 
       {/* Main Content Area */}
       <main className="flex-1 flex overflow-hidden">
@@ -1080,19 +1107,7 @@ export default function DashboardPage() {
 
         {/* Right Sidebar with Tabs for Queue and Waitlist */}
         <div className="w-[380px] border-l border-border bg-card flex flex-col flex-shrink-0 overflow-hidden">
-          {/* Pending Requests Section */}
-          {stats.pendingCount > 0 && (
-            <div className="border-b border-border flex-shrink-0">
-              <div className="p-3">
-                <PendingRequestsPanel
-                  bookings={todaysBookings}
-                  restaurantId={restaurantId}
-                  userId={userId}
-                  onUpdate={() => queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })}
-                />
-              </div>
-            </div>
-          )}
+
 
           {/* Booking Conflict Alerts */}
           <div className="px-2 py-1 flex-shrink-0">
@@ -1228,6 +1243,32 @@ export default function DashboardPage() {
                 updateBookingMutation.mutate({ bookingId, updates: { status } })
               }
               customersData={customersData}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pending Requests Modal */}
+      <Dialog open={showPendingModal} onOpenChange={setShowPendingModal}>
+        <DialogContent className="max-w-3xl w-full max-h-[90vh] overflow-hidden p-0">
+          <div className="flex-shrink-0 px-6 py-4 border-b bg-white">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-lg">
+                Pending Requests
+              </DialogTitle>
+              <DialogDescription>
+                Fast accept or decline new booking requests
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-4">
+            <PendingRequestsPanel
+              bookings={todaysBookings}
+              restaurantId={restaurantId}
+              userId={userId}
+              onUpdate={() => {
+                queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+              }}
             />
           </div>
         </DialogContent>

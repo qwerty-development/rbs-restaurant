@@ -15,6 +15,7 @@ export interface RestaurantStaffInfo {
     cuisine_type: string
     status: 'active' | 'inactive' | 'suspended'
     phone_number: string | null
+    tier: 'basic' | 'pro'
     created_at: string
   }
 }
@@ -43,6 +44,7 @@ export function useUserRestaurants() {
             cuisine_type,
             status,
             phone_number,
+            tier,
             created_at
           )
         `)

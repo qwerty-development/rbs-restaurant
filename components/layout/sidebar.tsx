@@ -35,6 +35,7 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
   const router = useRouter()
   const supabase = createClient()
   const { isCollapsed, setIsCollapsed, toggleSidebar } = useSidebar()
+  const { hasFeature, tier } = useRestaurantContext()
 
   // Keyboard navigation support
   useEffect(() => {
@@ -72,13 +73,39 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
     }
   }
 
-  const filteredNavItems = NAV_ITEMS.filter(item => 
-    !item.permission || restaurantAuth.hasPermission(permissions, item.permission, role)
-  )
+  const filteredNavItems = NAV_ITEMS.filter(item => {
+    // Check permission first
+    if (item.permission && !restaurantAuth.hasPermission(permissions, item.permission, role)) {
+      return false
+    }
+    
+    // Check tier feature
+    if (item.tierFeature && !hasFeature(item.tierFeature)) {
+      return false
+    }
+    
+    return true
+  }).map(item => {
+    // Transform Dashboard href based on tier
+    if (item.title === 'Dashboard' && tier === 'basic') {
+      return { ...item, href: '/basic-dashboard' }
+    }
+    return item
+  })
 
-  const filteredBottomItems = BOTTOM_NAV_ITEMS.filter(item => 
-    !item.permission || restaurantAuth.hasPermission(permissions, item.permission, role)
-  )
+  const filteredBottomItems = BOTTOM_NAV_ITEMS.filter(item => {
+    // Check permission first
+    if (item.permission && !restaurantAuth.hasPermission(permissions, item.permission, role)) {
+      return false
+    }
+    
+    // Check tier feature (skip if no tierFeature specified - like Help)
+    if (item.tierFeature && !hasFeature(item.tierFeature)) {
+      return false
+    }
+    
+    return true
+  })
 
   return (
     <>

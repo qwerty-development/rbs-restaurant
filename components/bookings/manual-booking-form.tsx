@@ -52,7 +52,8 @@ import {
   Search,
   X,
   Star,
-  UserCheck
+  UserCheck,
+  Info
 } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { BookingTermsCheckbox } from "@/components/ui/terms-checkbox"
@@ -1415,168 +1416,261 @@ export function ManualBookingForm({
           )}
           
 
+          {/* Debug Information */}
+
 
           {!isSharedBooking ? (
             // Regular table selection
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {regularTables?.map((table) => {
-              const isSelected = selectedTables.includes(table.id)
-              const isAvailable = getTableAvailability(table.id)
-              const availabilityInfo = availability?.tables.find(t => t.tableId === table.id)
-              
-              // Check if table will be occupied during the selected booking time
-              let isOccupiedDuringBookingTime = false
-              let conflictingBooking = null
-              
-              if (bookingDate && bookingTime) {
-                const [hours, minutes] = bookingTime.split(":")
-                const bookingDateTime = new Date(bookingDate)
-                bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
-                const bookingEndTime = addMinutes(bookingDateTime, turnTime || 120)
+              {(() => {
+                // Sort tables: available first, then occupied
+                const sortedTables = [...(regularTables || [])].sort((a, b) => {
+                  const aOccupied = bookingDate && bookingTime ? (() => {
+                    const [hours, minutes] = bookingTime.split(":")
+                    const bookingDateTime = new Date(bookingDate)
+                    bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+                    const bookingEndTime = addMinutes(bookingDateTime, turnTime || 120)
 
-                const conflict = currentBookings.find(booking => {
-                  const hasTable = booking.tables?.some((t: any) => t.id === table.id)
-                  if (!hasTable) return false
+                    return currentBookings.some(booking => {
+                      const hasTable = booking.tables?.some((t: any) => t.id === a.id)
+                      if (!hasTable) return false
 
-                  const existingBookingTime = new Date(booking.booking_time)
-                  const existingBookingEndTime = addMinutes(existingBookingTime, booking.turn_time_minutes || 120)
+                      const existingBookingTime = new Date(booking.booking_time)
+                      const existingBookingEndTime = addMinutes(existingBookingTime, booking.turn_time_minutes || 120)
 
-                  const conflictingStatuses = [
-                    'confirmed', 'arrived', 'seated', 'ordered', 'appetizers', 
-                    'main_course', 'dessert', 'payment'
-                  ]
-                  
-                  if (!conflictingStatuses.includes(booking.status)) {
-                    return false
-                  }
+                      const conflictingStatuses = [
+                        'confirmed', 'arrived', 'seated', 'ordered', 'appetizers', 
+                        'main_course', 'dessert', 'payment'
+                      ]
+                      
+                      if (!conflictingStatuses.includes(booking.status)) {
+                        return false
+                      }
 
-                  // Check for time overlap
-                  return (
-                    bookingDateTime < existingBookingEndTime && 
-                    bookingEndTime > existingBookingTime
-                  )
+                      return (
+                        bookingDateTime < existingBookingEndTime && 
+                        bookingEndTime > existingBookingTime
+                      )
+                    })
+                  })() : false
+
+                  const bOccupied = bookingDate && bookingTime ? (() => {
+                    const [hours, minutes] = bookingTime.split(":")
+                    const bookingDateTime = new Date(bookingDate)
+                    bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+                    const bookingEndTime = addMinutes(bookingDateTime, turnTime || 120)
+
+                    return currentBookings.some(booking => {
+                      const hasTable = booking.tables?.some((t: any) => t.id === b.id)
+                      if (!hasTable) return false
+
+                      const existingBookingTime = new Date(booking.booking_time)
+                      const existingBookingEndTime = addMinutes(existingBookingTime, booking.turn_time_minutes || 120)
+
+                      const conflictingStatuses = [
+                        'confirmed', 'arrived', 'seated', 'ordered', 'appetizers', 
+                        'main_course', 'dessert', 'payment'
+                      ]
+                      
+                      if (!conflictingStatuses.includes(booking.status)) {
+                        return false
+                      }
+
+                      return (
+                        bookingDateTime < existingBookingEndTime && 
+                        bookingEndTime > existingBookingTime
+                      )
+                    })
+                  })() : false
+
+                  // Available tables first, then occupied
+                  if (aOccupied && !bOccupied) return 1
+                  if (!aOccupied && bOccupied) return -1
+                  return 0
                 })
 
-                if (conflict) {
-                  isOccupiedDuringBookingTime = true
-                  conflictingBooking = conflict
-                }
-              }
+                return sortedTables.map((table) => {
+                  const isSelected = selectedTables.includes(table.id)
+                  const isAvailable = getTableAvailability(table.id)
+                  const availabilityInfo = availability?.tables.find(t => t.tableId === table.id)
+                  
+                  // Check if table will be occupied during the selected booking time
+                  let isOccupiedDuringBookingTime = false
+                  let conflictingBooking = null
+                  
+                  if (bookingDate && bookingTime) {
+                    const [hours, minutes] = bookingTime.split(":")
+                    const bookingDateTime = new Date(bookingDate)
+                    bookingDateTime.setHours(parseInt(hours), parseInt(minutes))
+                    const bookingEndTime = addMinutes(bookingDateTime, turnTime || 120)
 
-              return (
-                <label
-                  key={table.id}
-                  className={cn(
-                    "flex items-center p-4 border rounded-xl cursor-pointer transition-all duration-200 w-full min-w-0 hover:shadow-md",
-                    isSelected && "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 shadow-sm ring-1 ring-blue-200 dark:ring-blue-800",
-                    !isSelected && isAvailable && "hover:bg-slate-50 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700",
-                    !isAvailable && !isSelected && "opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-800",
-                    isOccupiedDuringBookingTime && "bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700 ring-1 ring-red-200 dark:ring-red-800"
-                  )}
-                >
-                  <Checkbox
-                    checked={isSelected}
-                    onCheckedChange={() => {
-                      if (!isAvailable && !isSelected) {
-                        toast.error("This table is not available for the selected time")
-                        return
+                    const conflict = currentBookings.find(booking => {
+                      const hasTable = booking.tables?.some((t: any) => t.id === table.id)
+                      if (!hasTable) return false
+
+                      const existingBookingTime = new Date(booking.booking_time)
+                      const existingBookingEndTime = addMinutes(existingBookingTime, booking.turn_time_minutes || 120)
+
+                      const conflictingStatuses = [
+                        'confirmed', 'arrived', 'seated', 'ordered', 'appetizers', 
+                        'main_course', 'dessert', 'payment'
+                      ]
+                      
+                      if (!conflictingStatuses.includes(booking.status)) {
+                        return false
                       }
-                      handleTableToggle(table.id)
-                    }}
-                    disabled={isLoading || (!isAvailable && !isSelected)}
-                    className="mr-3 flex-shrink-0"
-                  />
-                  <div className="flex-1 min-w-0 overflow-hidden">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Table2 className="h-4 w-4 text-slate-600 dark:text-slate-400 flex-shrink-0" />
-                      <span className="font-semibold text-slate-800 dark:text-slate-100">T{table.table_number}</span>
-                      {isOccupiedDuringBookingTime && (
-                        <Badge variant="destructive" className="text-xs px-2 py-0.5 flex-shrink-0 bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300 border-red-300 dark:border-red-700">Booked</Badge>
+
+                      // Check for time overlap
+                      return (
+                        bookingDateTime < existingBookingEndTime && 
+                        bookingEndTime > existingBookingTime
+                      )
+                    })
+
+                    if (conflict) {
+                      isOccupiedDuringBookingTime = true
+                      conflictingBooking = conflict
+                    }
+                  }
+
+                  return (
+                    <div
+                      key={table.id}
+                      onClick={() => {
+                        if (!isAvailable && !isSelected) {
+                          toast.error("This table is not available for the selected time")
+                          return
+                        }
+                        handleTableToggle(table.id)
+                      }}
+                      className={cn(
+                        "relative p-4 border rounded-xl cursor-pointer transition-all duration-200 w-full h-32 flex flex-col justify-between",
+                        isSelected && "bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700 shadow-sm ring-2 ring-green-200 dark:ring-green-800",
+                        !isSelected && isAvailable && "hover:bg-slate-50 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700",
+                        !isAvailable && !isSelected && "opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-800",
+                        isOccupiedDuringBookingTime && "bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700 ring-1 ring-red-200 dark:ring-red-800"
                       )}
-                    </div>
-                    <p className="text-sm text-slate-600 dark:text-slate-300 mb-2 truncate">
-                      <Users className="h-3 w-3 inline mr-1" />
-                      {table.capacity} seats • {table.table_type}
-                    </p>
-                    {table.features && table.features.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-2 max-w-full">
-                        {table.features.slice(0, 2).map((feature: string, idx: number) => (
-                          <Badge key={idx} variant="outline" className="text-xs px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 truncate max-w-[80px]">
-                            {feature}
-                          </Badge>
-                        ))}
-                        {table.features.length > 2 && (
-                          <Badge variant="outline" className="text-xs px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600">
-                            +{table.features.length - 2}
-                          </Badge>
+                    >
+                      {/* Header with table number and info icon */}
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-2 min-w-0 flex-1">
+                          <div className="flex flex-col items-center gap-2 flex-shrink-0">
+                            <div className="w-5 h-5 bg-slate-100 dark:bg-slate-700 rounded flex items-center justify-center">
+                              <Table2 className="h-3 w-3 text-slate-600 dark:text-slate-400" />
+                            </div>
+                            <Users className="h-3 w-3 text-slate-600 dark:text-slate-400" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-semibold text-slate-800 dark:text-slate-100 truncate">T{table.table_number}</div>
+                            <div className="text-slate-600 dark:text-slate-300 text-xs mt-1">
+                              {table.capacity}
+                            </div>
+                          </div>
+                        </div>
+                        {table.features && table.features.length > 0 && (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors mt-0.5"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Info className="h-3 w-3 text-slate-500 dark:text-slate-400" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-3" side="top">
+                              <div className="space-y-2">
+                                <div className="text-sm font-medium text-slate-800 dark:text-slate-100">Table Features</div>
+                                <div className="flex flex-wrap gap-1">
+                                  {table.features.map((feature: string, idx: number) => (
+                                    <Badge key={idx} variant="outline" className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600">
+                                      {feature}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         )}
                       </div>
-                    )}
-                    {isOccupiedDuringBookingTime && conflictingBooking && (
-                      <p className="text-xs text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded border border-red-200 dark:border-red-800 truncate">
-                        <span className="font-medium">Booked by:</span> {(conflictingBooking.user?.full_name || conflictingBooking.guest_name || 'Guest').substring(0, 20)}
-                        {(conflictingBooking.user?.full_name || conflictingBooking.guest_name || '').length > 20 && '...'}
-                        <br />
-                        <span className="font-medium">Time:</span> {format(new Date(conflictingBooking.booking_time), "h:mm a")}
-                      </p>
-                    )}
-                    {availabilityInfo && !availabilityInfo.isAvailable && !isOccupiedDuringBookingTime && (
-                      <p className="text-xs text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded border border-red-200 dark:border-red-800">
-                        Not available at this time
-                      </p>
-                    )}
-                  </div>
-                </label>
-              )
-            })}
+
+                      {/* Table type */}
+                      <div className="text-xs text-slate-500 dark:text-slate-400 capitalize truncate">
+                        {table.table_type}
+                      </div>
+
+                      {/* Conflict info */}
+                      {isOccupiedDuringBookingTime && conflictingBooking && (
+                        <div className="absolute bottom-1 left-1 right-1 text-xs text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded border border-red-200 dark:border-red-800">
+                          <div className="truncate">
+                            <span className="font-medium">Booked by:</span> {(conflictingBooking.user?.full_name || conflictingBooking.guest_name || 'Guest').substring(0, 15)}
+                            {(conflictingBooking.user?.full_name || conflictingBooking.guest_name || '').length > 15 && '...'}
+                          </div>
+                          <div className="truncate">
+                            <span className="font-medium">Time:</span> {format(new Date(conflictingBooking.booking_time), "h:mm a")}
+                          </div>
+                        </div>
+                      )}
+                      {availabilityInfo && !availabilityInfo.isAvailable && !isOccupiedDuringBookingTime && (
+                        <div className="absolute bottom-1 left-1 right-1 text-xs text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded border border-red-200 dark:border-red-800">
+                          Not available at this time
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              })()}
             </div>
           ) : (
             // Shared table selection
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {sharedTables?.map((table) => {
                 const isSelected = selectedSharedTable === table.id
                 
                 return (
-                  <label
+                  <div
                     key={table.id}
+                    onClick={() => {
+                      setSelectedSharedTable(table.id)
+                      setValue("table_ids", [table.id])
+                      setValue("is_shared_booking", true)
+                    }}
                     className={cn(
-                      "flex items-center p-4 border rounded-xl cursor-pointer transition-all duration-200",
-                      isSelected && "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 shadow-sm ring-1 ring-blue-200 dark:ring-blue-800",
+                      "relative p-4 border rounded-xl cursor-pointer transition-all duration-200 w-full h-32 flex flex-col justify-between",
+                      isSelected && "bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700 shadow-sm ring-2 ring-green-200 dark:ring-green-800",
                       !isSelected && "hover:bg-slate-50 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700"
                     )}
                   >
-                    <input
-                      type="radio"
-                      name="shared_table"
-                      value={table.id}
-                      checked={isSelected}
-                      onChange={() => {
-                        setSelectedSharedTable(table.id)
-                        setValue("table_ids", [table.id])
-                        setValue("is_shared_booking", true)
-                      }}
-                      className="mr-3"
-                      disabled={isLoading}
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Table2 className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-                        <span className="font-semibold">Table {table.table_number}</span>
-                        <Badge variant="secondary" className="text-xs">
-                          Shared
-                        </Badge>
+                    {/* Header with table number and capacity */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-2 min-w-0 flex-1">
+                        <div className="flex flex-col items-center gap-2 flex-shrink-0">
+                          <div className="w-5 h-5 bg-slate-100 dark:bg-slate-700 rounded flex items-center justify-center">
+                            <Table2 className="h-3 w-3 text-slate-600 dark:text-slate-400" />
+                          </div>
+                          <Users className="h-3 w-3 text-slate-600 dark:text-slate-400" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-slate-800 dark:text-slate-100 truncate">T{table.table_number}</div>
+                          <div className="text-slate-600 dark:text-slate-300 text-xs mt-1">
+                            {table.capacity}
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-sm text-slate-600 dark:text-slate-300">
-                        <Users className="h-3 w-3 inline mr-1" />
-                        Capacity: {table.capacity}
-                      </p>
+                    </div>
+
+                    {/* Shared badge and max party info */}
+                    <div className="flex items-center justify-between">
+                      <Badge variant="secondary" className="text-xs px-1 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700">
+                        Shared
+                      </Badge>
                       {table.max_party_size_per_booking && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                          Max {table.max_party_size_per_booking} seats per booking
-                        </p>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          Max {table.max_party_size_per_booking} per booking
+                        </div>
                       )}
                     </div>
-                  </label>
+                  </div>
                 )
               })}
             </div>

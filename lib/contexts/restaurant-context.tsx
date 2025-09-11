@@ -4,12 +4,15 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useUserRestaurants, type RestaurantStaffInfo } from "@/lib/hooks/use-restaurants"
+import { getRestaurantTier, hasFeature, type RestaurantTier } from "@/lib/utils/tier"
 
 interface RestaurantContextType {
   restaurants: RestaurantStaffInfo[]
   currentRestaurant: RestaurantStaffInfo | null
   isLoading: boolean
   isMultiRestaurant: boolean
+  tier: RestaurantTier | null
+  hasFeature: (feature: string) => boolean
   switchRestaurant: (restaurantId: string) => void
   goToOverview: () => void
 }
@@ -28,6 +31,31 @@ export function RestaurantProvider({ children, forcedRestaurantId }: RestaurantP
   const [currentRestaurant, setCurrentRestaurant] = useState<RestaurantStaffInfo | null>(null)
   
   const isMultiRestaurant = restaurants.length > 1
+  
+  // Get current restaurant tier - be defensive about loading state
+  const getTier = () => {
+    if (currentRestaurant) {
+      return getRestaurantTier(currentRestaurant.restaurant)
+    }
+    
+    // During loading, check localStorage for cached tier (only on client side)
+    if (isLoading && typeof window !== 'undefined') {
+      const cachedTier = localStorage.getItem('restaurant-tier')
+      return cachedTier === 'basic' ? 'basic' : (cachedTier === 'pro' ? 'pro' : null)
+    }
+    
+    return 'pro'
+  }
+  
+  const tier = getTier()
+  
+  
+  
+  // Feature checker function
+  const checkFeature = (feature: string) => {
+    if (!tier) return false // During loading, deny all features
+    return hasFeature(tier, feature as any)
+  }
   
   useEffect(() => {
     if (isLoading || restaurants.length === 0) return
@@ -51,19 +79,27 @@ export function RestaurantProvider({ children, forcedRestaurantId }: RestaurantP
       }
     }
 
-    // Check localStorage for last selected restaurant
-    const savedRestaurantId = localStorage.getItem('selected-restaurant-id')
-    if (savedRestaurantId) {
-      const restaurant = restaurants.find(r => r.restaurant.id === savedRestaurantId)
-      if (restaurant) {
-        setCurrentRestaurant(restaurant)
-        return
+    // Check localStorage for last selected restaurant (only on client side)
+    if (typeof window !== 'undefined') {
+      const savedRestaurantId = localStorage.getItem('selected-restaurant-id')
+      if (savedRestaurantId) {
+        const restaurant = restaurants.find(r => r.restaurant.id === savedRestaurantId)
+        if (restaurant) {
+          setCurrentRestaurant(restaurant)
+          // Cache tier for immediate access on refresh
+          localStorage.setItem('restaurant-tier', restaurant.restaurant.tier || 'pro')
+          return
+        }
       }
     }
 
     // If single restaurant, auto-select it
     if (restaurants.length === 1) {
       setCurrentRestaurant(restaurants[0])
+      // Cache tier for immediate access on refresh (only on client side)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('restaurant-tier', restaurants[0].restaurant.tier || 'pro')
+      }
       return
     }
 
@@ -75,7 +111,13 @@ export function RestaurantProvider({ children, forcedRestaurantId }: RestaurantP
     const restaurant = restaurants.find(r => r.restaurant.id === restaurantId)
     if (restaurant) {
       setCurrentRestaurant(restaurant)
-      localStorage.setItem('selected-restaurant-id', restaurantId)
+      
+      // Cache selections (only on client side)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('selected-restaurant-id', restaurantId)
+        // Cache tier for immediate access on refresh
+        localStorage.setItem('restaurant-tier', restaurant.restaurant.tier || 'pro')
+      }
       
       // Update URL to include restaurant parameter
       const currentUrl = new URL(window.location.href)
@@ -86,7 +128,12 @@ export function RestaurantProvider({ children, forcedRestaurantId }: RestaurantP
 
   const goToOverview = () => {
     setCurrentRestaurant(null)
-    localStorage.removeItem('selected-restaurant-id')
+    
+    // Clear localStorage (only on client side)
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('selected-restaurant-id')
+      localStorage.removeItem('restaurant-tier')
+    }
     
     // Remove restaurant parameter from URL
     const currentUrl = new URL(window.location.href)
@@ -101,6 +148,8 @@ export function RestaurantProvider({ children, forcedRestaurantId }: RestaurantP
         currentRestaurant,
         isLoading,
         isMultiRestaurant,
+        tier,
+        hasFeature: checkFeature,
         switchRestaurant,
         goToOverview,
       }}

@@ -14,6 +14,7 @@ export interface Restaurant {
     open_time: string // HH:mm format
     close_time: string // HH:mm format
   }[]
+  tier: 'basic' | 'pro'
   created_at: string
   updated_at: string
   // Location data - PostGIS geometry stored as WKB hex string

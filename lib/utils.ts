@@ -20,3 +20,18 @@ export function titleCase(s?: string) {
     .map(w => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
 }
+
+// Returns a safe display name for a booking/customer-like object
+// Prefers explicit guest name, then linked profile full_name, then phone, then a generic fallback
+export function getBookingDisplayName(entity: any): string {
+  if (!entity) return 'Guest'
+  const nameCandidate = entity.guest_name
+    || entity.user?.full_name
+    || entity.profile?.full_name
+    || entity.profiles?.full_name
+    || entity.guest_phone
+    || entity.user?.phone_number
+
+  const trimmed = typeof nameCandidate === 'string' ? nameCandidate.trim() : String(nameCandidate || '')
+  return trimmed && trimmed.length > 0 ? trimmed : 'Guest'
+}
