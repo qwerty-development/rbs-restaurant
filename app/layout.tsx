@@ -18,7 +18,7 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Plate Management",
   description: "Complete restaurant management system",
-  manifest: '/manifest.webmanifest',
+  manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -27,6 +27,7 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: '/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-384x384.png', sizes: '384x384', type: 'image/png' },
       { url: '/icon-512x512.png', sizes: '512x512', type: 'image/png' },
     ],
     apple: [
@@ -54,8 +55,9 @@ export default function RootLayout({
         <meta name="msapplication-config" content="none" />
         <meta name="screen-orientation" content="landscape" />
         <meta name="orientation" content="landscape" />
-        <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="manifest" href="/manifest.json" />
         <link rel="icon" type="image/png" sizes="192x192" href="/icon-192x192.png" />
+        <link rel="icon" type="image/png" sizes="384x384" href="/icon-384x384.png" />
         <link rel="icon" type="image/png" sizes="512x512" href="/icon-512x512.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>

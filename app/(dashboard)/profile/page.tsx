@@ -49,7 +49,7 @@ const profileSchema = z.object({
 })
 
 const passwordSchema = z.object({
-  currentPassword: z.string().min(6, "Password must be at least 6 characters"),
+  currentPassword: z.string(),
   newPassword: z.string().min(6, "Password must be at least 6 characters"),
   confirmPassword: z.string().min(6, "Password must be at least 6 characters"),
 }).refine((data) => data.newPassword === data.confirmPassword, {
