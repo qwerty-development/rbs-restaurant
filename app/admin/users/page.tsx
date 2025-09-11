@@ -283,6 +283,43 @@ export default function UserManagement() {
     }
   }
 
+  const handleExportUsers = async () => {
+    try {
+      const csv = [
+        'Name,Email,Phone,Membership Tier,User Rating,Total Bookings,Completed Bookings,Loyalty Points,Favorite Cuisines,Dietary Restrictions,Allergies,Created At',
+        ...filteredUsers.map(user => [
+          `"${user.full_name || ''}"`,
+          user.email,
+          user.phone_number || '',
+          user.membership_tier,
+          user.user_rating || 0,
+          user.total_bookings,
+          user.completed_bookings,
+          user.loyalty_points,
+          `"${user.favorite_cuisines?.join('; ') || ''}"`,
+          `"${user.dietary_restrictions?.join('; ') || ''}"`,
+          `"${user.allergies?.join('; ') || ''}"`,
+          new Date(user.created_at).toLocaleDateString()
+        ].join(','))
+      ].join('\n')
+
+      const blob = new Blob([csv], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `users_${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      toast.success('User data exported successfully')
+    } catch (error) {
+      console.error('Error exporting data:', error)
+      toast.error('Failed to export user data')
+    }
+  }
+
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -343,7 +380,7 @@ export default function UserManagement() {
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Button>
+          <Button onClick={handleExportUsers}>
             <Download className="w-4 h-4 mr-2" />
             Export Users
           </Button>

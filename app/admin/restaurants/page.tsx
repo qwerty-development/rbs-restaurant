@@ -82,12 +82,27 @@ export default function RestaurantManagement() {
     average_rating: 0
   })
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [cuisineFilter, setCuisineFilter] = useState('all')
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
+  const [showAddDialog, setShowAddDialog] = useState(false)
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    address: '',
+    phone_number: '',
+    cuisine_type: '',
+    opening_time: '09:00',
+    closing_time: '22:00',
+    price_range: 2,
+    booking_policy: 'request',
+    featured: false
+  })
 
   const supabase = createClient()
 
@@ -221,6 +236,152 @@ export default function RestaurantManagement() {
     }
   }
 
+  const handleCreateRestaurant = async () => {
+    setSaving(true)
+    try {
+      if (!formData.name.trim() || !formData.address.trim() || !formData.phone_number.trim()) {
+        toast.error('Please fill in all required fields')
+        return
+      }
+
+      const { error } = await supabase
+        .from('restaurants')
+        .insert([{
+          name: formData.name.trim(),
+          description: formData.description.trim(),
+          address: formData.address.trim(),
+          phone_number: formData.phone_number.trim(),
+          cuisine_type: formData.cuisine_type.trim(),
+          opening_time: formData.opening_time,
+          closing_time: formData.closing_time,
+          price_range: formData.price_range,
+          booking_policy: formData.booking_policy,
+          featured: formData.featured,
+          status: 'active',
+          average_rating: 0,
+          total_reviews: 0
+        }])
+
+      if (error) throw error
+
+      await fetchRestaurants()
+      setShowAddDialog(false)
+      resetFormData()
+      toast.success('Restaurant created successfully')
+    } catch (error) {
+      console.error('Error creating restaurant:', error)
+      toast.error('Failed to create restaurant')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdateRestaurant = async () => {
+    if (!selectedRestaurant) return
+
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('restaurants')
+        .update({
+          name: formData.name.trim(),
+          description: formData.description.trim(),
+          address: formData.address.trim(),
+          phone_number: formData.phone_number.trim(),
+          cuisine_type: formData.cuisine_type.trim(),
+          opening_time: formData.opening_time,
+          closing_time: formData.closing_time,
+          price_range: formData.price_range,
+          booking_policy: formData.booking_policy,
+          featured: formData.featured,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', selectedRestaurant.id)
+
+      if (error) throw error
+
+      await fetchRestaurants()
+      setShowEditDialog(false)
+      setSelectedRestaurant(null)
+      toast.success('Restaurant updated successfully')
+    } catch (error) {
+      console.error('Error updating restaurant:', error)
+      toast.error('Failed to update restaurant')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleExportRestaurants = async () => {
+    setExporting(true)
+    try {
+      const csv = [
+        'Name,Description,Address,Phone,Cuisine,Opening Time,Closing Time,Price Range,Status,Average Rating,Total Reviews,Featured',
+        ...filteredRestaurants.map(restaurant => [
+          `"${restaurant.name}"`,
+          `"${restaurant.description}"`,
+          `"${restaurant.address}"`,
+          restaurant.phone_number,
+          restaurant.cuisine_type,
+          restaurant.opening_time,
+          restaurant.closing_time,
+          restaurant.price_range,
+          restaurant.status,
+          restaurant.average_rating,
+          restaurant.total_reviews,
+          restaurant.featured
+        ].join(','))
+      ].join('\n')
+
+      const blob = new Blob([csv], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `restaurants_${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      toast.success('Restaurant data exported successfully')
+    } catch (error) {
+      console.error('Error exporting data:', error)
+      toast.error('Failed to export restaurant data')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const resetFormData = () => {
+    setFormData({
+      name: '',
+      description: '',
+      address: '',
+      phone_number: '',
+      cuisine_type: '',
+      opening_time: '09:00',
+      closing_time: '22:00',
+      price_range: 2,
+      booking_policy: 'request',
+      featured: false
+    })
+  }
+
+  const populateFormData = (restaurant: Restaurant) => {
+    setFormData({
+      name: restaurant.name,
+      description: restaurant.description,
+      address: restaurant.address,
+      phone_number: restaurant.phone_number,
+      cuisine_type: restaurant.cuisine_type,
+      opening_time: restaurant.opening_time,
+      closing_time: restaurant.closing_time,
+      price_range: restaurant.price_range,
+      booking_policy: restaurant.booking_policy,
+      featured: restaurant.featured
+    })
+  }
+
   const filteredRestaurants = restaurants.filter(restaurant => {
     const matchesSearch = restaurant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          restaurant.cuisine_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -283,7 +444,14 @@ export default function RestaurantManagement() {
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Button>
+          <Button variant="outline" onClick={handleExportRestaurants} disabled={exporting}>
+            <Download className={`w-4 h-4 mr-2 ${exporting ? 'animate-spin' : ''}`} />
+            {exporting ? 'Exporting...' : 'Export'}
+          </Button>
+          <Button onClick={() => {
+            resetFormData()
+            setShowAddDialog(true)
+          }}>
             <Plus className="w-4 h-4 mr-2" />
             Add Restaurant
           </Button>
@@ -483,6 +651,7 @@ export default function RestaurantManagement() {
                       size="sm"
                       onClick={() => {
                         setSelectedRestaurant(restaurant)
+                        populateFormData(restaurant)
                         setShowEditDialog(true)
                       }}
                       style={{ minHeight: '36px' }}
@@ -618,6 +787,261 @@ export default function RestaurantManagement() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Restaurant Dialog */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add New Restaurant</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="name">Restaurant Name *</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  placeholder="Enter restaurant name"
+                />
+              </div>
+              <div>
+                <Label htmlFor="cuisine_type">Cuisine Type *</Label>
+                <Input
+                  id="cuisine_type"
+                  value={formData.cuisine_type}
+                  onChange={(e) => setFormData({...formData, cuisine_type: e.target.value})}
+                  placeholder="e.g., Italian, Asian, American"
+                />
+              </div>
+              <div>
+                <Label htmlFor="phone_number">Phone Number *</Label>
+                <Input
+                  id="phone_number"
+                  value={formData.phone_number}
+                  onChange={(e) => setFormData({...formData, phone_number: e.target.value})}
+                  placeholder="Restaurant phone number"
+                />
+              </div>
+              <div>
+                <Label htmlFor="price_range">Price Range</Label>
+                <Select value={formData.price_range.toString()} onValueChange={(value) => setFormData({...formData, price_range: parseInt(value)})}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">$ - Budget Friendly</SelectItem>
+                    <SelectItem value="2">$$ - Moderate</SelectItem>
+                    <SelectItem value="3">$$$ - Upscale</SelectItem>
+                    <SelectItem value="4">$$$$ - Fine Dining</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="opening_time">Opening Time</Label>
+                <Input
+                  id="opening_time"
+                  type="time"
+                  value={formData.opening_time}
+                  onChange={(e) => setFormData({...formData, opening_time: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label htmlFor="closing_time">Closing Time</Label>
+                <Input
+                  id="closing_time"
+                  type="time"
+                  value={formData.closing_time}
+                  onChange={(e) => setFormData({...formData, closing_time: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="address">Address *</Label>
+              <Input
+                id="address"
+                value={formData.address}
+                onChange={(e) => setFormData({...formData, address: e.target.value})}
+                placeholder="Full restaurant address"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={formData.description}
+                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                placeholder="Brief description of the restaurant"
+                rows={3}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="booking_policy">Booking Policy</Label>
+                <Select value={formData.booking_policy} onValueChange={(value) => setFormData({...formData, booking_policy: value})}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="instant">Instant Confirmation</SelectItem>
+                    <SelectItem value="request">Request Based</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center space-x-2 pt-6">
+                <Switch
+                  id="featured"
+                  checked={formData.featured}
+                  onCheckedChange={(checked) => setFormData({...formData, featured: checked})}
+                />
+                <Label htmlFor="featured">Featured Restaurant</Label>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateRestaurant} disabled={saving}>
+                {saving ? 'Creating...' : 'Create Restaurant'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Restaurant Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Restaurant</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-name">Restaurant Name *</Label>
+                <Input
+                  id="edit-name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  placeholder="Enter restaurant name"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-cuisine_type">Cuisine Type *</Label>
+                <Input
+                  id="edit-cuisine_type"
+                  value={formData.cuisine_type}
+                  onChange={(e) => setFormData({...formData, cuisine_type: e.target.value})}
+                  placeholder="e.g., Italian, Asian, American"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-phone_number">Phone Number *</Label>
+                <Input
+                  id="edit-phone_number"
+                  value={formData.phone_number}
+                  onChange={(e) => setFormData({...formData, phone_number: e.target.value})}
+                  placeholder="Restaurant phone number"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-price_range">Price Range</Label>
+                <Select value={formData.price_range.toString()} onValueChange={(value) => setFormData({...formData, price_range: parseInt(value)})}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">$ - Budget Friendly</SelectItem>
+                    <SelectItem value="2">$$ - Moderate</SelectItem>
+                    <SelectItem value="3">$$$ - Upscale</SelectItem>
+                    <SelectItem value="4">$$$$ - Fine Dining</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit-opening_time">Opening Time</Label>
+                <Input
+                  id="edit-opening_time"
+                  type="time"
+                  value={formData.opening_time}
+                  onChange={(e) => setFormData({...formData, opening_time: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-closing_time">Closing Time</Label>
+                <Input
+                  id="edit-closing_time"
+                  type="time"
+                  value={formData.closing_time}
+                  onChange={(e) => setFormData({...formData, closing_time: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="edit-address">Address *</Label>
+              <Input
+                id="edit-address"
+                value={formData.address}
+                onChange={(e) => setFormData({...formData, address: e.target.value})}
+                placeholder="Full restaurant address"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="edit-description">Description</Label>
+              <Textarea
+                id="edit-description"
+                value={formData.description}
+                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                placeholder="Brief description of the restaurant"
+                rows={3}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-booking_policy">Booking Policy</Label>
+                <Select value={formData.booking_policy} onValueChange={(value) => setFormData({...formData, booking_policy: value})}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="instant">Instant Confirmation</SelectItem>
+                    <SelectItem value="request">Request Based</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center space-x-2 pt-6">
+                <Switch
+                  id="edit-featured"
+                  checked={formData.featured}
+                  onCheckedChange={(checked) => setFormData({...formData, featured: checked})}
+                />
+                <Label htmlFor="edit-featured">Featured Restaurant</Label>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => {
+                setShowEditDialog(false)
+                setSelectedRestaurant(null)
+              }}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateRestaurant} disabled={saving}>
+                {saving ? 'Updating...' : 'Update Restaurant'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
