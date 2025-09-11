@@ -2,9 +2,11 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { format, startOfDay, endOfDay, addDays, isToday, isTomorrow, addMinutes, differenceInMinutes } from "date-fns"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -162,6 +164,8 @@ function StatCard({
 }
 
 export default function BookingsPage() {
+  const router = useRouter()
+  const { currentRestaurant, tier, isLoading: contextLoading } = useRestaurantContext()
   const now = useMemo(() => new Date(), [])
   const [selectedDate, setSelectedDate] = useState<Date>(now)
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
@@ -279,7 +283,7 @@ export default function BookingsPage() {
     getRestaurantId()
   }, [supabase])
 
-  // Fetch all bookings (for accurate statistics)
+  // Fetch all bookings (for accurate statistics) - moved before conditional returns
   const { data: allBookings, isLoading: allBookingsLoading } = useQuery({
     queryKey: ["all-bookings", restaurantId],
     queryFn: async () => {
@@ -317,6 +321,144 @@ export default function BookingsPage() {
     },
     enabled: !!restaurantId,
   })
+
+  // Real-time subscription for all bookings
+  useEffect(() => {
+    if (!restaurantId) return
+
+    console.log('🔗 Setting up real-time subscription for all bookings')
+    
+    const channel = supabase
+      .channel(`all-bookings:${restaurantId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'bookings',
+          filter: `restaurant_id=eq.${restaurantId}`
+        },
+        async (payload) => {
+          console.log('📥 New booking INSERT received in all bookings:', payload)
+          const newBooking = payload.new
+          if (!newBooking) return
+          
+          // Fetch the complete booking data with profiles and tables
+          try {
+            const { data: completeBooking, error } = await supabase
+              .from('bookings')
+              .select(`
+                *,
+                profiles!bookings_user_id_fkey(
+                  id,
+                  full_name,
+                  phone_number
+                ),
+                booking_tables(
+                  table:restaurant_tables(*)
+                )
+              `)
+              .eq('id', newBooking.id)
+              .single()
+            
+            if (error) {
+              console.error('Error fetching complete booking data:', error)
+              return
+            }
+            
+            // Transform the data
+            const transformedBooking = {
+              ...completeBooking,
+              user: completeBooking.profiles || null,
+              tables: completeBooking.booking_tables?.map((bt: { table: any }) => bt.table) || []
+            } as Booking
+            
+            // Update query cache with complete data
+            queryClient.setQueryData(
+              ['all-bookings', restaurantId],
+              (oldData: Booking[] | undefined) => {
+                if (!oldData) return [transformedBooking]
+                
+                // Check if booking already exists (avoid duplicates)
+                const exists = oldData.some(b => b.id === transformedBooking.id)
+                if (exists) return oldData
+                
+                // Add new booking and sort by booking time
+                const updated = [...oldData, transformedBooking]
+                return updated.sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+              }
+            )
+          } catch (error) {
+            console.error('Error processing new booking:', error)
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'bookings',
+          filter: `restaurant_id=eq.${restaurantId}`
+        },
+        async (payload) => {
+          console.log('📝 Booking UPDATE received in all bookings:', payload)
+          const updatedBooking = payload.new
+          if (!updatedBooking) return
+          
+          // Fetch the complete booking data with profiles and tables
+          try {
+            const { data: completeBooking, error } = await supabase
+              .from('bookings')
+              .select(`
+                *,
+                profiles!bookings_user_id_fkey(
+                  id,
+                  full_name,
+                  phone_number
+                ),
+                booking_tables(
+                  table:restaurant_tables(*)
+                )
+              `)
+              .eq('id', updatedBooking.id)
+              .single()
+            
+            if (error) {
+              console.error('Error fetching complete booking data for update:', error)
+              return
+            }
+            
+            // Transform the data
+            const transformedBooking = {
+              ...completeBooking,
+              user: completeBooking.profiles || null,
+              tables: completeBooking.booking_tables?.map((bt: { table: any }) => bt.table) || []
+            } as Booking
+            
+            // Update query cache with complete data
+            queryClient.setQueryData(
+              ['all-bookings', restaurantId],
+              (oldData: Booking[] | undefined) => {
+                if (!oldData) return [transformedBooking]
+                
+                return oldData.map(booking =>
+                  booking.id === transformedBooking.id ? transformedBooking : booking
+                ).sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+              }
+            )
+          } catch (error) {
+            console.error('Error processing booking update:', error)
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      console.log('🔌 Cleaning up all bookings subscription')
+      supabase.removeChannel(channel)
+    }
+  }, [restaurantId, queryClient, supabase])
 
   // Fetch displayed bookings (filtered for current view)
   const { data: displayedBookings, isLoading } = useQuery({
@@ -416,6 +558,144 @@ export default function BookingsPage() {
     },
     enabled: !!restaurantId,
   })
+
+  // Real-time subscription for displayed bookings
+  useEffect(() => {
+    if (!restaurantId) return
+
+    console.log('🔗 Setting up real-time subscription for displayed bookings')
+    
+    const channel = supabase
+      .channel(`displayed-bookings:${restaurantId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'bookings',
+          filter: `restaurant_id=eq.${restaurantId}`
+        },
+        async (payload) => {
+          console.log('📥 New booking INSERT received in displayed bookings:', payload)
+          const newBooking = payload.new
+          if (!newBooking) return
+          
+          // Fetch the complete booking data with profiles and tables
+          try {
+            const { data: completeBooking, error } = await supabase
+              .from('bookings')
+              .select(`
+                *,
+                profiles!bookings_user_id_fkey(
+                  id,
+                  full_name,
+                  phone_number
+                ),
+                booking_tables(
+                  table:restaurant_tables(*)
+                )
+              `)
+              .eq('id', newBooking.id)
+              .single()
+            
+            if (error) {
+              console.error('Error fetching complete booking data:', error)
+              return
+            }
+            
+            // Transform the data
+            const transformedBooking = {
+              ...completeBooking,
+              user: completeBooking.profiles || null,
+              tables: completeBooking.booking_tables?.map((bt: { table: any }) => bt.table) || []
+            } as Booking
+            
+            // Update query cache with complete data
+            queryClient.setQueryData(
+              ['displayed-bookings', restaurantId, selectedDate, statusFilter, timeFilter, dateRange, viewMode],
+              (oldData: Booking[] | undefined) => {
+                if (!oldData) return [transformedBooking]
+                
+                // Check if booking already exists (avoid duplicates)
+                const exists = oldData.some(b => b.id === transformedBooking.id)
+                if (exists) return oldData
+                
+                // Add new booking and sort by booking time
+                const updated = [...oldData, transformedBooking]
+                return updated.sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+              }
+            )
+          } catch (error) {
+            console.error('Error processing new booking:', error)
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'bookings',
+          filter: `restaurant_id=eq.${restaurantId}`
+        },
+        async (payload) => {
+          console.log('📝 Booking UPDATE received in displayed bookings:', payload)
+          const updatedBooking = payload.new
+          if (!updatedBooking) return
+          
+          // Fetch the complete booking data with profiles and tables
+          try {
+            const { data: completeBooking, error } = await supabase
+              .from('bookings')
+              .select(`
+                *,
+                profiles!bookings_user_id_fkey(
+                  id,
+                  full_name,
+                  phone_number
+                ),
+                booking_tables(
+                  table:restaurant_tables(*)
+                )
+              `)
+              .eq('id', updatedBooking.id)
+              .single()
+            
+            if (error) {
+              console.error('Error fetching complete booking data for update:', error)
+              return
+            }
+            
+            // Transform the data
+            const transformedBooking = {
+              ...completeBooking,
+              user: completeBooking.profiles || null,
+              tables: completeBooking.booking_tables?.map((bt: { table: any }) => bt.table) || []
+            } as Booking
+            
+            // Update query cache with complete data
+            queryClient.setQueryData(
+              ['displayed-bookings', restaurantId, selectedDate, statusFilter, timeFilter, dateRange, viewMode],
+              (oldData: Booking[] | undefined) => {
+                if (!oldData) return [transformedBooking]
+                
+                return oldData.map(booking =>
+                  booking.id === transformedBooking.id ? transformedBooking : booking
+                ).sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+              }
+            )
+          } catch (error) {
+            console.error('Error processing booking update:', error)
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      console.log('🔌 Cleaning up displayed bookings subscription')
+      supabase.removeChannel(channel)
+    }
+  }, [restaurantId, selectedDate, statusFilter, timeFilter, dateRange, viewMode, queryClient, supabase])
 
   // Fetch table utilization stats
   const { data: tableStats } = useQuery({
@@ -1077,6 +1357,50 @@ export default function BookingsPage() {
       setRequestFilter("all")
     }
   }, [requestFilter, bookingStats.pending])
+
+  // Redirect Basic tier users - they don't have access to this page
+  useEffect(() => {
+    if (tier === 'basic') {
+      // Redirect to Basic dashboard immediately
+      router.replace('/basic-dashboard')
+    }
+  }, [tier, router])
+
+  if (tier === 'basic') {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center max-w-md">
+          <h1 className="text-2xl font-bold mb-4">Page Not Available</h1>
+          <p className="text-muted-foreground mb-6">
+            This page is not available for your current plan. All booking management is handled through your dashboard.
+          </p>
+          <p className="text-sm text-muted-foreground mb-6">
+            Redirecting you to your dashboard...
+          </p>
+          <div className="space-y-2">
+            <a 
+              href="/basic-dashboard" 
+              className="inline-flex items-center justify-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+            >
+              Go to Dashboard
+            </a>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Loading state for Basic tier and initial loading
+  if (contextLoading || tier === null || !restaurantId) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-border mx-auto mb-4" />
+          <p className="text-lg font-medium">Loading bookings...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 tablet:space-y-8 animate-in fade-in-0 duration-500">

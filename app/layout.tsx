@@ -7,6 +7,10 @@ import { Toaster as SonnerToaster } from "sonner"
 import { Providers } from "@/components/provider"
 import { InstallPrompt } from "@/components/pwa/install-prompt"
 import { PWAProvider } from "@/components/pwa/pwa-provider"
+import { NotificationProvider } from "@/lib/contexts/notification-context"
+import { NotificationContainer } from "@/components/notifications/notification-container"
+import { GlobalLayoutNotifications } from "@/components/notifications/global-layout-notifications"
+ 
 // import { Analytics } from "@vercel/analytics/next"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -58,15 +62,20 @@ export default function RootLayout({
       <body className={inter.className}>
         <Providers>
           <PWAProvider>
-            {children}
-            <div className="fixed bottom-3 left-3 right-3 z-40 sm:max-w-sm sm:left-auto sm:right-3">
-              <InstallPrompt />
-            </div>
-            {/* Global PWA install prompt (auto-hides when not eligible) */}
-            {/* Note: Import added below */}
-            <Toaster position="top-center" />
-            <SonnerToaster richColors position="top-center" />
-            {/* <Analytics /> */}
+            <NotificationProvider>
+              <GlobalLayoutNotifications />
+              {children}
+              <NotificationContainer />
+              
+              <div className="fixed bottom-3 left-3 right-3 z-40 sm:max-w-sm sm:left-auto sm:right-3">
+                <InstallPrompt />
+              </div>
+              {/* Global PWA install prompt (auto-hides when not eligible) */}
+              {/* Note: Import added below */}
+              <Toaster position="top-center" />
+              <SonnerToaster richColors position="top-center" />
+              {/* <Analytics /> */}
+            </NotificationProvider>
           </PWAProvider>
         </Providers>
       </body>

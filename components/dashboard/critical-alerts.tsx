@@ -2,6 +2,7 @@
 "use client"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { 
   AlertTriangle,
   Timer,
@@ -15,13 +16,15 @@ interface CriticalAlertsProps {
   awaitingCheckIn: number
   bookings: any[]
   currentTime: Date
+  onViewAll?: () => void
 }
 
 export function CriticalAlerts({ 
   pendingCount, 
   awaitingCheckIn, 
   bookings, 
-  currentTime 
+  currentTime,
+  onViewAll
 }: CriticalAlertsProps) {
   // Calculate expiring requests
   const expiringRequests = bookings.filter(b => {
@@ -95,7 +98,21 @@ export function CriticalAlerts({
           </div>
         </div>
         
-       
+        <Button 
+          variant="secondary" 
+          size="sm"
+          className="bg-white/20 hover:bg-white/30 text-white border-0 font-medium"
+          onClick={() => {
+            if (onViewAll) {
+              onViewAll()
+            } else {
+              // Scroll to the pending requests section
+              document.querySelector('.pending-requests')?.scrollIntoView({ behavior: 'smooth' })
+            }
+          }}
+        >
+          View All
+        </Button>
       </div>
     </div>
   )

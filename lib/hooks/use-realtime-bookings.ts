@@ -3,15 +3,13 @@ import { createClient } from '@/lib/supabase/client'
 import { useQueryClient } from '@tanstack/react-query'
 import { Booking } from '@/types'
 import { RealtimeChannel } from '@supabase/supabase-js'
-import toast from 'react-hot-toast'
+ 
 
 interface UseRealtimeBookingsOptions {
   restaurantId: string
   onBookingCreated?: (booking: Booking) => void
   onBookingUpdated?: (booking: Booking, previousBooking?: Booking) => void
   onBookingDeleted?: (bookingId: string) => void
-  enableToasts?: boolean
-  enableSound?: boolean
 }
 
 interface RealtimeBookingsState {
@@ -25,45 +23,19 @@ export function useRealtimeBookings(options: UseRealtimeBookingsOptions) {
     restaurantId,
     onBookingCreated,
     onBookingUpdated,
-    onBookingDeleted,
-    enableToasts = true,
-    enableSound = false
+    onBookingDeleted
   } = options
 
   const supabase = createClient()
   const queryClient = useQueryClient()
   const channelRef = useRef<RealtimeChannel | null>(null)
+ 
   
   const [state, setState] = useState<RealtimeBookingsState>({
     isConnected: false,
     lastUpdate: null,
     connectionErrors: 0
   })
-
-  // Sound notification function
-  const playNotificationSound = useCallback((type: 'new' | 'update' | 'urgent') => {
-    if (!enableSound) return
-    
-    try {
-      const audio = new Audio()
-      switch (type) {
-        case 'new':
-          audio.src = '/sounds/notification-new.mp3'
-          break
-        case 'update':
-          audio.src = '/sounds/notification-update.mp3'
-          break
-        case 'urgent':
-          audio.src = '/sounds/notification-urgent.mp3'
-          break
-      }
-      audio.play().catch(error => {
-        console.warn('Failed to play notification sound:', error)
-      })
-    } catch (error) {
-      console.warn('Notification sound error:', error)
-    }
-  }, [enableSound])
 
   useEffect(() => {
     if (!restaurantId) return
@@ -76,13 +48,11 @@ export function useRealtimeBookings(options: UseRealtimeBookingsOptions) {
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'bookings',
-          filter: `restaurant_id=eq.${restaurantId}`
+          table: 'bookings'
         },
         (payload) => {
-          console.log('New booking:', payload)
-          
           const newBooking = payload.new as Booking
+          if (!newBooking || newBooking.restaurant_id !== restaurantId) return
           
           // Update query cache
           queryClient.setQueryData(
@@ -99,19 +69,7 @@ export function useRealtimeBookings(options: UseRealtimeBookingsOptions) {
           // Call callback
           onBookingCreated?.(newBooking)
           
-          // Show toast notification
-          if (enableToasts) {
-            toast.success(
-              `New booking request from ${newBooking.guest_name}`,
-              {
-                duration: 5000,
-                position: 'top-right'
-              }
-            )
-          }
-          
-          // Play sound
-          playNotificationSound('new')
+          // Notifications are handled globally in layout hook
           
           // Update state
           setState(prev => ({
@@ -125,13 +83,11 @@ export function useRealtimeBookings(options: UseRealtimeBookingsOptions) {
         {
           event: 'UPDATE',
           schema: 'public',
-          table: 'bookings',
-          filter: `restaurant_id=eq.${restaurantId}`
+          table: 'bookings'
         },
         (payload) => {
-          console.log('Updated booking:', payload)
-          
           const updatedBooking = payload.new as Booking
+          if (!updatedBooking || updatedBooking.restaurant_id !== restaurantId) return
           const previousBooking = payload.old as Booking
           
           // Update query cache
@@ -151,37 +107,8 @@ export function useRealtimeBookings(options: UseRealtimeBookingsOptions) {
           // Call callback
           onBookingUpdated?.(updatedBooking, previousBooking)
           
-          // Show toast notification for status changes
-          if (enableToasts && previousBooking.status !== updatedBooking.status) {
-            const statusMessages = {
-              confirmed: `Booking for ${updatedBooking.guest_name} confirmed`,
-              declined_by_restaurant: `Booking for ${updatedBooking.guest_name} declined`,
-              cancelled_by_user: `Booking for ${updatedBooking.guest_name} cancelled by user`,
-              arrived: `${updatedBooking.guest_name} has checked in`,
-              seated: `${updatedBooking.guest_name} has been seated`,
-              completed: `${updatedBooking.guest_name}'s booking completed`,
-              no_show: `${updatedBooking.guest_name} marked as no-show`
-            }
-            
-            const message = statusMessages[updatedBooking.status as keyof typeof statusMessages]
-            if (message) {
-              toast(message, {
-                duration: 4000,
-                position: 'top-right',
-                icon: updatedBooking.status === 'arrived' ? '👋' : 
-                      updatedBooking.status === 'completed' ? '✅' : 
-                      updatedBooking.status === 'no_show' ? '❌' : '📝'
-              })
-            }
-          }
+          // Notifications are handled globally in layout hook
           
-          // Play sound for urgent updates
-          const urgentStatuses = ['arrived', 'no_show', 'cancelled_by_user']
-          if (urgentStatuses.includes(updatedBooking.status)) {
-            playNotificationSound('urgent')
-          } else {
-            playNotificationSound('update')
-          }
           
           // Update state
           setState(prev => ({
@@ -195,13 +122,12 @@ export function useRealtimeBookings(options: UseRealtimeBookingsOptions) {
         {
           event: 'DELETE',
           schema: 'public',
-          table: 'bookings',
-          filter: `restaurant_id=eq.${restaurantId}`
+          table: 'bookings'
         },
         (payload) => {
-          console.log('Deleted booking:', payload)
-          
-          const deletedBookingId = payload.old.id as string
+          const deleted = payload.old as Booking
+          if (!deleted || deleted.restaurant_id !== restaurantId) return
+          const deletedBookingId = deleted.id as string
           
           // Update query cache
           queryClient.setQueryData(
@@ -233,9 +159,7 @@ export function useRealtimeBookings(options: UseRealtimeBookingsOptions) {
           }))
         }
       )
-      .subscribe((status, error) => {
-        console.log('Realtime subscription status:', status, error)
-        
+      .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           setState(prev => ({
             ...prev,
@@ -248,13 +172,6 @@ export function useRealtimeBookings(options: UseRealtimeBookingsOptions) {
             isConnected: false,
             connectionErrors: prev.connectionErrors + 1
           }))
-          
-          if (enableToasts && state.connectionErrors > 2) {
-            toast.error('Realtime connection issues. Some updates may be delayed.', {
-              duration: 5000,
-              position: 'bottom-center'
-            })
-          }
         }
       })
 
@@ -263,7 +180,6 @@ export function useRealtimeBookings(options: UseRealtimeBookingsOptions) {
     // Cleanup function
     return () => {
       if (channelRef.current) {
-        console.log('Unsubscribing from realtime channel')
         supabase.removeChannel(channelRef.current)
         channelRef.current = null
       }
@@ -273,7 +189,7 @@ export function useRealtimeBookings(options: UseRealtimeBookingsOptions) {
         isConnected: false
       }))
     }
-  }, [restaurantId, queryClient, onBookingCreated, onBookingUpdated, onBookingDeleted, enableToasts, enableSound, state.connectionErrors, supabase, playNotificationSound])
+  }, [restaurantId, queryClient, onBookingCreated, onBookingUpdated, onBookingDeleted, state.connectionErrors, supabase])
 
   // Method to manually reconnect
   const reconnect = () => {

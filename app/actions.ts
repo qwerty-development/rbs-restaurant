@@ -2,12 +2,14 @@
 
 import webpush from 'web-push'
 
-// Configure VAPID details
-webpush.setVapidDetails(
-  'mailto:your-restaurant@example.com',
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-)
+// Configure VAPID details only if keys are available
+if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    'mailto:your-restaurant@example.com',
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  )
+}
 
 // In-memory storage for demo purposes
 // In production, you would store subscriptions in your database
@@ -78,6 +80,12 @@ export async function unsubscribeUser(endpoint?: string) {
 
 export async function sendNotification(payload: NotificationPayload) {
   try {
+    // Check if VAPID keys are configured
+    if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+      console.warn('Push notifications disabled: VAPID keys not configured')
+      return { success: false, error: 'Push notifications not configured' }
+    }
+
     if (subscriptions.length === 0) {
       return { success: false, error: 'No subscriptions available' }
     }
@@ -127,25 +135,34 @@ export async function sendNotification(payload: NotificationPayload) {
 export async function sendBookingNotification(
   type: 'new_booking' | 'booking_reminder' | 'booking_cancelled',
   bookingDetails: {
-    customerName: string
+    customerName?: string
     date: string
     time: string
     partySize: number
     tableNumber?: string
   }
 ) {
+  // Check if VAPID keys are configured
+  if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+    console.warn('Push notifications disabled: VAPID keys not configured')
+    return { success: false, error: 'Push notifications not configured' }
+  }
   let title: string
   let body: string
   let url = '/bookings'
 
+  const safeName = (bookingDetails.customerName && bookingDetails.customerName.trim().length > 0)
+    ? bookingDetails.customerName
+    : 'Guest'
+
   switch (type) {
     case 'new_booking':
       title = '🍽️ New Booking Received'
-      body = `${bookingDetails.customerName} - ${bookingDetails.partySize} guests on ${bookingDetails.date} at ${bookingDetails.time}`
+      body = `${safeName} - ${bookingDetails.partySize} guests on ${bookingDetails.date} at ${bookingDetails.time}`
       break
     case 'booking_reminder':
       title = '⏰ Booking Reminder'
-      body = `${bookingDetails.customerName} - ${bookingDetails.partySize} guests arriving soon${bookingDetails.tableNumber ? ` at Table ${bookingDetails.tableNumber}` : ''}`
+      body = `${safeName} - ${bookingDetails.partySize} guests arriving soon${bookingDetails.tableNumber ? ` at Table ${bookingDetails.tableNumber}` : ''}`
       url = '/dashboard'
       break
     case 'booking_cancelled':

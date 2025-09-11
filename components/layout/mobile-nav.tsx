@@ -15,6 +15,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Role } from '@/lib/restaurant-auth'
 import { NAV_ITEMS, BOTTOM_NAV_ITEMS } from '@/components/layout/nav-config'
+import { useRestaurantContext } from '@/lib/contexts/restaurant-context'
 
 interface MobileNavProps {
   restaurant: {
@@ -33,6 +34,7 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
   const router = useRouter()
   const supabase = createClient()
   const [isOpen, setIsOpen] = useState(false)
+  const { hasFeature, tier } = useRestaurantContext()
 
   const handleSignOut = async () => {
     try {
@@ -45,13 +47,39 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
     }
   }
 
-  const filteredNavItems = NAV_ITEMS.filter(item => 
-    !item.permission || restaurantAuth.hasPermission(permissions, item.permission, role)
-  )
+  const filteredNavItems = NAV_ITEMS.filter(item => {
+    // Check permission first
+    if (item.permission && !restaurantAuth.hasPermission(permissions, item.permission, role)) {
+      return false
+    }
+    
+    // Check tier feature
+    if (item.tierFeature && !hasFeature(item.tierFeature)) {
+      return false
+    }
+    
+    return true
+  }).map(item => {
+    // Transform Dashboard href based on tier
+    if (item.title === 'Dashboard' && tier === 'basic') {
+      return { ...item, href: '/basic-dashboard' }
+    }
+    return item
+  })
 
-  const filteredBottomItems = BOTTOM_NAV_ITEMS.filter(item => 
-    !item.permission || restaurantAuth.hasPermission(permissions, item.permission, role)
-  )
+  const filteredBottomItems = BOTTOM_NAV_ITEMS.filter(item => {
+    // Check permission first
+    if (item.permission && !restaurantAuth.hasPermission(permissions, item.permission, role)) {
+      return false
+    }
+    
+    // Check tier feature (skip if no tierFeature specified - like Help)
+    if (item.tierFeature && !hasFeature(item.tierFeature)) {
+      return false
+    }
+    
+    return true
+  })
 
   return (
     <>
