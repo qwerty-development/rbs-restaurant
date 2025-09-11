@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -14,7 +13,6 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from 'react-hot-toast'
 import { AlertTriangle, Plus, Building, Users, RefreshCw, Search, X, Loader2, CheckCircle2, MapPin, Camera, Save } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
-import { AddressSearch } from '@/components/location/address-search'
 import { LocationPicker } from '@/components/location/location-picker'
 import type { Coordinates } from '@/lib/utils/location'
 import { EnhancedRestaurantImageUpload } from '@/components/ui/enhanced-restaurant-image-upload'
@@ -77,20 +75,6 @@ const defaultRestaurant: Restaurant = {
   }
 }
 
-const getAmbanceByPriceRange = (priceRange: number): string[] => {
-  switch (priceRange) {
-    case 1:
-      return ['casual', 'family-friendly', 'quick-service']
-    case 2:
-      return ['casual', 'neighborhood', 'comfortable']
-    case 3:
-      return ['upscale', 'romantic', 'elegant']
-    case 4:
-      return ['fine-dining', 'luxury', 'sophisticated', 'intimate']
-    default:
-      return ['casual']
-  }
-}
 
 export default function AdminPage() {
   const [loading, setLoading] = useState(false)
@@ -116,7 +100,6 @@ export default function AdminPage() {
   const [selectedOwner, setSelectedOwner] = useState<SearchedUser | null>(null)
   const [isSearchingUsers, setIsSearchingUsers] = useState(false)
   
-  const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
@@ -352,19 +335,10 @@ export default function AdminPage() {
           location: locationValue,
           main_image_url: mainImageUrl || null,
           image_urls: imageUrls.length > 0 ? imageUrls : null,
-          average_rating: 4.5,
-          total_reviews: Math.floor(Math.random() * 100) + 10,
+          average_rating: 0,
+          total_reviews: 0,
           featured: false,
-          status: 'active',
-          // Enhanced default settings
-          booking_window_days: 30,
-          cancellation_window_hours: 24,
-          table_turnover_minutes: restaurant.price_range <= 2 ? 90 : 120,
-          dietary_options: ['vegetarian', 'vegan', 'gluten-free'],
-          parking_available: true,
-          outdoor_seating: true,
-          ambiance_tags: getAmbanceByPriceRange(restaurant.price_range),
-          tags: [restaurant.cuisine_type.toLowerCase(), 'reservations', 'full-service']
+          status: 'active'
         })
         .select()
         .single()
@@ -393,6 +367,36 @@ export default function AdminPage() {
       if (staffError) {
         console.error('Error adding owner:', staffError)
         toast.error('Restaurant created but failed to add owner. Please add manually.')
+      }
+
+      // Create restaurant hours based on availability settings
+      setCreationProgress(`Setting up operating hours for ${restaurant.name}...`)
+      const DAYS_OF_WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+      
+      const allShifts: any[] = []
+      DAYS_OF_WEEK.forEach(day => {
+        const dayShifts = restaurant.availability[day] || []
+        dayShifts.forEach(shift => {
+          allShifts.push({
+            restaurant_id: data.id,
+            day_of_week: day,
+            name: shift.name || null,
+            is_open: shift.is_open,
+            open_time: shift.is_open ? shift.open_time : null,
+            close_time: shift.is_open ? shift.close_time : null,
+          })
+        })
+      })
+
+      if (allShifts.length > 0) {
+        const { error: hoursError } = await supabase
+          .from('restaurant_hours')
+          .insert(allShifts)
+
+        if (hoursError) {
+          console.error('Error creating restaurant hours:', hoursError)
+          toast.error('Restaurant created but failed to set operating hours. Please set them in settings.')
+        }
       }
       
       // Update the existing restaurants list
@@ -667,14 +671,11 @@ export default function AdminPage() {
                     <Label>Restaurant Address *</Label>
                     <div className="space-y-3">
                       <div className="flex gap-2">
-                        <AddressSearch
+                        <Input
                           value={restaurant.address}
-                          onChange={handleAddressChange}
-                          placeholder="Search for restaurant address..."
+                          onChange={(e) => handleAddressChange(e.target.value)}
+                          placeholder="Enter restaurant address..."
                           className="flex-1"
-                          showCurrentLocation={true}
-                          maxResults={5}
-                          userLocation={restaurant.coordinates || undefined}
                         />
                         <Button
                           type="button"

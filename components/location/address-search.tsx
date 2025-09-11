@@ -232,10 +232,8 @@ export function AddressSearch({
 
   // Update query when value prop changes
   useEffect(() => {
-    if (value !== state.query) {
-      setState(prev => ({ ...prev, query: value }));
-    }
-  }, [value, state.query]);
+    setState(prev => ({ ...prev, query: value || '' }));
+  }, [value]);
 
   return (
     <div className={cn('relative', className)}>
