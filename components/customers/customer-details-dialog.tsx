@@ -141,6 +141,19 @@ export function CustomerDetailsDialog({
       // Email is already included in the customer data from profiles
       setCustomerWithEmail(customer)
 
+      // Load notes
+      const { data: notesData } = await supabase
+        .from('customer_notes')
+        .select(`
+          *,
+          created_by_profile:profiles!customer_notes_created_by_fkey(
+            full_name,
+            avatar_url
+          )
+        `)
+        .eq('customer_id', customer.id)
+        .order('created_at', { ascending: false })
+
       // Load relationships
       const { data: relationshipsData } = await supabase
         .from('customer_relationships')
@@ -278,6 +291,7 @@ export function CustomerDetailsDialog({
         .neq('id', customer.id)
         .order('guest_name')
 
+      setNotes(notesData || [])
       setRelationships(relationshipsData || [])
       setBookingHistory(bookingsData || [])
       setTotalBookingCount(actualTotalBookings)
@@ -1023,7 +1037,7 @@ export function CustomerDetailsDialog({
                           <div className="flex items-center gap-2 mb-2">
                             <span className="text-lg">{getNoteIcon(note.category)}</span>
                             <Badge variant="outline" className="text-xs">
-                              {note.category}
+                              {note.category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                             </Badge>
                             {note.is_important && (
                               <Badge variant="destructive" className="text-xs">

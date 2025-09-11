@@ -21,8 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { 
@@ -30,7 +28,6 @@ import {
   Tag, 
   Star, 
   Ban,
-  Mail,
   MessageSquare,
   Download,
   Trash2
@@ -52,7 +49,6 @@ const isLightColor = (hexColor: string): boolean => {
   // Return true if light (needs dark text)
   return luminance > 0.6
 }
-import { Input } from '../ui/input'
 
 interface CustomerBulkActionsProps {
   selectedCustomers: RestaurantCustomer[]
@@ -72,9 +68,7 @@ export function CustomerBulkActions({
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [showTagDialog, setShowTagDialog] = useState(false)
-  const [showMessageDialog, setShowMessageDialog] = useState(false)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const [message, setMessage] = useState({ subject: '', body: '' })
 
   // Bulk tag assignment
   const handleBulkTagAssignment = async () => {
@@ -167,54 +161,6 @@ export function CustomerBulkActions({
     URL.revokeObjectURL(url)
   }
 
-  // Send bulk message/email
-  const handleSendMessage = async () => {
-    if (!message.subject.trim() || !message.body.trim()) return
-
-    try {
-      setLoading(true)
-      
-      // Create a campaign record
-      const { data: campaign, error: campaignError } = await supabase
-        .from('customer_campaigns')
-        .insert({
-          restaurant_id: selectedCustomers[0].restaurant_id,
-          name: message.subject,
-          type: 'email',
-          content: message.body,
-          recipient_count: selectedCustomers.length,
-          created_by: currentUserId
-        })
-        .select()
-        .single()
-
-      if (campaignError) throw campaignError
-
-      // Create campaign recipients
-      const recipients = selectedCustomers.map((customer:any) => ({
-        campaign_id: campaign.id,
-        customer_id: customer.id,
-        email: customer.profile?.email || customer.guest_email,
-        status: 'pending'
-      }))
-
-      const { error: recipientError } = await supabase
-        .from('campaign_recipients')
-        .insert(recipients)
-
-      if (recipientError) throw recipientError
-
-      toast.success(`Message queued for ${selectedCustomers.length} customers`)
-      setShowMessageDialog(false)
-      setMessage({ subject: '', body: '' })
-      onClearSelection()
-    } catch (error) {
-      console.error('Error sending message:', error)
-      toast.error('Failed to send message')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   if (selectedCustomers.length === 0) return null
 
@@ -261,11 +207,6 @@ export function CustomerBulkActions({
               </DropdownMenuItem>
               
               <DropdownMenuSeparator />
-              
-              <DropdownMenuItem onClick={() => setShowMessageDialog(true)}>
-                <Mail className="mr-2 h-4 w-4" />
-                Send Message
-              </DropdownMenuItem>
               
               <DropdownMenuItem onClick={handleExportSelected}>
                 <Download className="mr-2 h-4 w-4" />
@@ -341,65 +282,6 @@ export function CustomerBulkActions({
         </DialogContent>
       </Dialog>
 
-      {/* Message Dialog */}
-      <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Send Message to Customers</DialogTitle>
-            <DialogDescription>
-              Compose a message to send to {selectedCustomers.length} selected customers
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="subject">Subject</Label>
-              <Input
-                id="subject"
-                placeholder="Special offer for our valued customers"
-                value={message.subject}
-                onChange={(e) => setMessage({ ...message, subject: e.target.value })}
-              />
-            </div>
-            
-            <div>
-              <Label htmlFor="body">Message</Label>
-              <Textarea
-                id="body"
-                placeholder="Type your message here..."
-                rows={6}
-                value={message.body}
-                onChange={(e) => setMessage({ ...message, body: e.target.value })}
-              />
-            </div>
-            
-            <div className="text-sm text-gray-600">
-              <p>This message will be sent to:</p>
-              <ul className="list-disc list-inside mt-1">
-                <li>{selectedCustomers.filter((c:any) => c.profile?.email || c.guest_email).length} customers with email addresses</li>
-              </ul>
-            </div>
-          </div>
-          
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowMessageDialog(false)
-                setMessage({ subject: '', body: '' })
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSendMessage}
-              disabled={loading || !message.subject.trim() || !message.body.trim()}
-            >
-              {loading ? 'Sending...' : 'Send Message'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   )
 }
