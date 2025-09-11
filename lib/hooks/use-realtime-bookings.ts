@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { toast } from 'react-hot-toast'
 import { createClient } from '@/lib/supabase/client'
 import { useQueryClient } from '@tanstack/react-query'
 import { Booking } from '@/types'
@@ -10,6 +11,8 @@ interface UseRealtimeBookingsOptions {
   onBookingCreated?: (booking: Booking) => void
   onBookingUpdated?: (booking: Booking, previousBooking?: Booking) => void
   onBookingDeleted?: (bookingId: string) => void
+  enableToasts?: boolean
+  enableSound?: boolean
 }
 
 interface RealtimeBookingsState {
@@ -23,7 +26,9 @@ export function useRealtimeBookings(options: UseRealtimeBookingsOptions) {
     restaurantId,
     onBookingCreated,
     onBookingUpdated,
-    onBookingDeleted
+    onBookingDeleted,
+    enableToasts = false,
+    enableSound = false
   } = options
 
   const supabase = createClient()

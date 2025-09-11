@@ -1,5 +1,6 @@
 // app/(dashboard)/dashboard/analytics/page.tsx
 "use client"
+export const dynamic = 'force-dynamic'
 
 import { useState, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
