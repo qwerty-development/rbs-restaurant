@@ -113,17 +113,81 @@ export function CustomerBulkActions({
     try {
       setLoading(true)
       
+      // Filter out guest customers (customers without user_id) for VIP operations
+      const customersWithAccounts = selectedCustomers.filter(customer => customer.user_id)
+      const guestCustomers = selectedCustomers.filter(customer => !customer.user_id)
+      
+      if (guestCustomers.length > 0) {
+        toast.error(`${guestCustomers.length} guest customer${guestCustomers.length > 1 ? 's' : ''} cannot be ${vipStatus ? 'marked as VIP' : 'removed from VIP'}. Only registered customers can have VIP status.`)
+      }
+      
+      if (customersWithAccounts.length === 0) {
+        setLoading(false)
+        return
+      }
+
+      // Handle VIP operations for registered customers only
+      if (vipStatus) {
+        // Adding VIP status - need to handle both restaurant_vip_users and restaurant_customers tables
+        const restaurantId = customersWithAccounts[0]?.restaurant_id
+        
+        if (!restaurantId) {
+          throw new Error('Restaurant ID not found')
+        }
+
+        // First, delete any existing VIP records to avoid constraint issues
+        await supabase
+          .from('restaurant_vip_users')
+          .delete()
+          .eq('restaurant_id', restaurantId)
+          .in('user_id', customersWithAccounts.map(c => c.user_id))
+
+        // Insert new VIP records
+        const vipRecords = customersWithAccounts.map(customer => ({
+          restaurant_id: restaurantId,
+          user_id: customer.user_id,
+          extended_booking_days: 60,
+          priority_booking: true,
+          valid_until: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // 1 year from now
+        }))
+
+        const { error: vipInsertError } = await supabase
+          .from('restaurant_vip_users')
+          .insert(vipRecords)
+
+        if (vipInsertError) throw vipInsertError
+      } else {
+        // Removing VIP status - delete from restaurant_vip_users table
+        const restaurantId = customersWithAccounts[0]?.restaurant_id
+        
+        if (restaurantId) {
+          await supabase
+            .from('restaurant_vip_users')
+            .delete()
+            .eq('restaurant_id', restaurantId)
+            .in('user_id', customersWithAccounts.map(c => c.user_id))
+        }
+      }
+
+      // Update restaurant_customers table for registered customers only
       const { error } = await supabase
         .from('restaurant_customers')
         .update({ 
           vip_status: vipStatus,
           updated_at: new Date().toISOString()
         })
-        .in('id', selectedCustomers.map(c => c.id))
+        .in('id', customersWithAccounts.map(c => c.id))
 
       if (error) throw error
 
-      toast.success(`${selectedCustomers.length} customers ${vipStatus ? 'marked as' : 'removed from'} VIP`)
+      const successMessage = customersWithAccounts.length > 0 
+        ? `${customersWithAccounts.length} registered customer${customersWithAccounts.length > 1 ? 's' : ''} ${vipStatus ? 'marked as' : 'removed from'} VIP`
+        : ''
+
+      if (successMessage) {
+        toast.success(successMessage)
+      }
+      
       onClearSelection()
       onUpdate()
     } catch (error) {
@@ -164,12 +228,23 @@ export function CustomerBulkActions({
 
   if (selectedCustomers.length === 0) return null
 
+  // Calculate customer type counts for better UX
+  const registeredCustomers = selectedCustomers.filter(c => c.user_id)
+  const guestCustomers = selectedCustomers.filter(c => !c.user_id)
+
   return (
     <>
-      <div className="flex items-center gap-2 p-4 bg-blue-300 rounded-lg">
-        <span className="text-sm font-medium">
-          {selectedCustomers.length} customer{selectedCustomers.length > 1 ? 's' : ''} selected
-        </span>
+      <div className="flex items-center gap-2 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-medium">
+            {selectedCustomers.length} customer{selectedCustomers.length > 1 ? 's' : ''} selected
+          </span>
+          {guestCustomers.length > 0 && (
+            <span className="text-xs text-gray-600">
+              {registeredCustomers.length} registered, {guestCustomers.length} guest
+            </span>
+          )}
+        </div>
         
         <div className="flex gap-2 ml-auto">
           <Button
@@ -196,14 +271,26 @@ export function CustomerBulkActions({
                 Assign Tags
               </DropdownMenuItem>
               
-              <DropdownMenuItem onClick={() => handleBulkVIPUpdate(true)}>
+              <DropdownMenuItem 
+                onClick={() => handleBulkVIPUpdate(true)}
+                disabled={registeredCustomers.length === 0}
+              >
                 <Star className="mr-2 h-4 w-4" />
                 Mark as VIP
+                {registeredCustomers.length === 0 && (
+                  <span className="ml-2 text-xs text-gray-400">(registered only)</span>
+                )}
               </DropdownMenuItem>
               
-              <DropdownMenuItem onClick={() => handleBulkVIPUpdate(false)}>
+              <DropdownMenuItem 
+                onClick={() => handleBulkVIPUpdate(false)}
+                disabled={registeredCustomers.length === 0}
+              >
                 <Star className="mr-2 h-4 w-4" />
                 Remove VIP Status
+                {registeredCustomers.length === 0 && (
+                  <span className="ml-2 text-xs text-gray-400">(registered only)</span>
+                )}
               </DropdownMenuItem>
               
               <DropdownMenuSeparator />
