@@ -33,7 +33,8 @@
       "mcp__supabase__execute_sql",
       "mcp__puppeteer__puppeteer_fill",
       "mcp__puppeteer__puppeteer_click",
-      "mcp__puppeteer__puppeteer_evaluate"
+      "mcp__puppeteer__puppeteer_evaluate",
+      "Bash(ls:*)"
     ],
     "deny": []
   },
