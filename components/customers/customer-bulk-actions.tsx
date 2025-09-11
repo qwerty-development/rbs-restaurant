@@ -27,10 +27,7 @@ import {
   MoreHorizontal, 
   Tag, 
   Star, 
-  Ban,
-  MessageSquare,
-  Download,
-  Trash2
+  Download
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { RestaurantCustomer, CustomerTag } from '@/types/customer'
@@ -39,9 +36,9 @@ import type { RestaurantCustomer, CustomerTag } from '@/types/customer'
 const isLightColor = (hexColor: string): boolean => {
   // Convert hex to RGB
   const hex = hexColor.replace('#', '')
-  const r = parseInt(hex.substr(0, 2), 16)
-  const g = parseInt(hex.substr(2, 2), 16)
-  const b = parseInt(hex.substr(4, 2), 16)
+  const r = parseInt(hex.substring(0, 2), 16)
+  const g = parseInt(hex.substring(2, 4), 16)
+  const b = parseInt(hex.substring(4, 6), 16)
   
   // Calculate relative luminance
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
@@ -161,11 +158,42 @@ export function CustomerBulkActions({
         const restaurantId = customersWithAccounts[0]?.restaurant_id
         
         if (restaurantId) {
-          await supabase
-            .from('restaurant_vip_users')
-            .delete()
-            .eq('restaurant_id', restaurantId)
-            .in('user_id', customersWithAccounts.map(c => c.user_id))
+          // For each customer, find and delete their specific VIP record (matching individual logic)
+          for (const customer of customersWithAccounts) {
+            try {
+              // First find the VIP record
+              const { data: vipRecord, error: findError } = await supabase
+                .from('restaurant_vip_users')
+                .select('id')
+                .eq('restaurant_id', restaurantId)
+                .eq('user_id', customer.user_id)
+                .single()
+
+              if (findError && findError.code !== 'PGRST116') { // PGRST116 is "not found"
+                console.error('Error finding VIP record for customer:', customer.id, findError)
+                // Continue with other customers instead of failing completely
+                continue
+              }
+
+              // Delete the VIP record if it exists
+              if (vipRecord) {
+                const { error: deleteError } = await supabase
+                  .from('restaurant_vip_users')
+                  .delete()
+                  .eq('id', vipRecord.id)
+
+                if (deleteError) {
+                  console.error('Error deleting VIP record for customer:', customer.id, deleteError)
+                  // Continue with other customers instead of failing completely
+                  continue
+                }
+              }
+            } catch (error) {
+              console.error('Error processing VIP removal for customer:', customer.id, error)
+              // Continue with other customers
+              continue
+            }
+          }
         }
       }
 
