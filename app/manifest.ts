@@ -60,13 +60,13 @@ export default function manifest(): MetadataRoute.Manifest {
     },
     screenshots: [
       {
-        src: '/screenshot-wide.png',
+        src: '/icon.png',
         sizes: '1280x720',
         type: 'image/png',
         form_factor: 'wide',
       },
       {
-        src: '/screenshot-narrow.png',
+        src: '/icon.png',
         sizes: '375x812',
         type: 'image/png',
         form_factor: 'narrow',
