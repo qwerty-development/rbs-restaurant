@@ -8,7 +8,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { format, startOfDay, endOfDay, addMinutes, differenceInMinutes, addDays } from "date-fns"
 import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { useNotifications } from "@/lib/contexts/notification-context"
-import { useEnhancedRealtimeAll, type ConnectionStats } from "@/lib/hooks/use-enhanced-realtime"
 import { PushNotificationPermission } from "@/components/notifications/push-notification-permission"
 import { UnifiedFloorPlan } from "@/components/dashboard/unified-floor-plan"
 import { CheckInQueue } from "@/components/dashboard/checkin-queue"
@@ -20,7 +19,6 @@ import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
 import { InstallPrompt } from "@/components/pwa/install-prompt"
 import { BookingDetails } from "@/components/bookings/booking-details"
 import { BookingConflictAlerts } from "@/components/dashboard/booking-conflict-alerts"
-import { ConnectionStatus, GlobalConnectionStatus } from "@/components/dashboard/connection-status"
 import { TableAvailabilityService } from "@/lib/table-availability"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
 import { BookingRequestService } from "@/lib/booking-request-service"
@@ -255,16 +253,6 @@ export default function DashboardPage() {
       setRestaurantId("")
     }
   }, [currentRestaurant])
-
-  // Enhanced real-time subscriptions
-  const { 
-    connectionManager,
-    connectionStats, 
-    forceReconnect 
-  } = useEnhancedRealtimeAll({ restaurantId })
-
-  // Extract connection status from stats
-  const isConnected = connectionStats?.isConnected ?? false
 
   // Fetch today's bookings
   const { data: todaysBookings = [], isLoading: bookingsLoading, refetch: refetchBookings } = useQuery({
@@ -1045,16 +1033,6 @@ export default function DashboardPage() {
 
           {/* Right Side - Compact Action Buttons */}
           <div className="flex items-center gap-1">
-            {/* Connection Status Indicator */}
-            {connectionStats && (
-              <ConnectionStatus 
-                isConnected={isConnected}
-                connectionStats={connectionStats}
-                onReconnect={forceReconnect}
-                compact={true}
-              />
-            )}
-            
             <Button
               onClick={() => setShowTimeline(!showTimeline)}
               size="sm"
@@ -1403,15 +1381,6 @@ export default function DashboardPage() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* Global Connection Status Indicator */}
-      {connectionStats && (
-        <GlobalConnectionStatus 
-          isConnected={isConnected}
-          connectionStats={connectionStats}
-          onReconnect={forceReconnect}
-        />
-      )}
     </div>
   )
 }

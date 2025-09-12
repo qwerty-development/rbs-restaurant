@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { pushNotificationManager, PushNotificationData } from '@/lib/push-notifications'
-import { getRealtimeConnectionManager } from '@/lib/services/realtime-connection-manager'
 
 export interface Notification {
   id: string
@@ -22,7 +21,6 @@ interface NotificationContextType {
   playNotificationSound: (type: 'booking' | 'order' | 'general', variant?: 'success' | 'error' | 'info' | 'warning') => void
   requestPushPermission: () => Promise<boolean>
   isPushEnabled: boolean
-  connectionStatus: { isConnected: boolean; connectionStats?: any }
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined)
@@ -30,13 +28,8 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isPushEnabled, setIsPushEnabled] = useState(false)
-  const [connectionStatus, setConnectionStatus] = useState<{ isConnected: boolean; connectionStats?: any }>({ 
-    isConnected: true 
-  })
-  
-  const connectionManager = getRealtimeConnectionManager()
 
-  // Initialize push notifications and connection monitoring
+  // Initialize push notifications
   useEffect(() => {
     const initPush = async () => {
       const initialized = await pushNotificationManager.initialize()
@@ -45,22 +38,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         setIsPushEnabled(hasPermission)
       }
     }
-    
-    // connectionStatus tracking - Monitor connection status continuously
-    const updateConnectionStatus = () => {
-      const stats = connectionManager.getConnectionStats()
-      setConnectionStatus({
-        isConnected: stats.isConnected,
-        connectionStats: stats
-      })
-    }
-    
     initPush()
-    updateConnectionStatus()
-    
-    // Update connection status periodically
-    const interval = setInterval(updateConnectionStatus, 2000)
-    return () => clearInterval(interval)
   }, [])
 
   const requestPushPermission = useCallback(async (): Promise<boolean> => {
@@ -126,36 +104,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       playNotificationSound('booking', notification.variant)
     }
 
-    // Send push notification if enabled - enhanced with connection awareness
-    // Connection-aware notifications - Enhanced notification behavior based on connection status
+    // Send push notification if enabled (fire and forget)
     if (isPushEnabled) {
-      console.log('🔔 NotificationContext: Sending push notification', {
-        isConnected: connectionStatus.isConnected,
-        type: notification.type
-      })
-      
-      let pushTitle = notification.title
-      let pushBody = notification.message
-      
-      // Enhanced addNotification - Enhance notification based on connection status
-      if (!connectionStatus.isConnected) {
-        pushTitle = `[Offline] ${notification.title}`
-        pushBody = `${notification.message}\n(Will sync when online)`
-      }
-      
+      console.log('🔔 NotificationContext: Sending push notification')
       const pushData: PushNotificationData = {
-        title: pushTitle,
-        body: pushBody,
+        title: notification.title,
+        body: notification.message,
         icon: '/icon-192x192.png',
         url: '/dashboard',
-        data: {
-          ...notification.data,
-          notificationType: notification.type,
-          variant: notification.variant,
-          connectionStatus: connectionStatus.isConnected ? 'online' : 'offline'
-        }
+        data: notification.data
       }
-      
       pushNotificationManager.sendNotification(pushData).catch(error => {
         console.error('Failed to send push notification:', error)
       })
@@ -194,8 +152,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         clearAllNotifications,
         playNotificationSound,
         requestPushPermission,
-        isPushEnabled,
-        connectionStatus
+        isPushEnabled
       }}
     >
       {children}

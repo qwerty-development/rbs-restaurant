@@ -1,7 +1,7 @@
 "use client"
 
 import { Suspense } from 'react'
-import { useGlobalLayoutNotifications } from '@/lib/hooks/use-global-layout-notifications-enhanced'
+import { useGlobalLayoutNotifications } from '@/lib/hooks/use-global-layout-notifications'
 
 function GlobalLayoutNotificationsContent() {
   useGlobalLayoutNotifications()

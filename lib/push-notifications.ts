@@ -1,8 +1,6 @@
 // lib/push-notifications.ts
 "use client"
 
-import { getRealtimeConnectionManager } from '@/lib/services/realtime-connection-manager'
-
 export interface PushNotificationData {
   title: string
   body: string
@@ -15,7 +13,6 @@ export interface PushNotificationData {
 class PushNotificationManager {
   private registration: ServiceWorkerRegistration | null = null
   private isSupported = false
-  private connectionManager = getRealtimeConnectionManager()
 
   constructor() {
     this.isSupported = 'serviceWorker' in navigator && 'PushManager' in window
@@ -28,44 +25,13 @@ class PushNotificationManager {
     }
 
     try {
-      // Wait for our enhanced service worker to be ready
       this.registration = await navigator.serviceWorker.ready
-      console.log('Push notification manager initialized with enhanced service worker')
-      
-      // Listen to PWA lifecycle events from our connection manager
-      this.setupPWALifecycleIntegration()
-      
+      console.log('Push notification manager initialized')
       return true
     } catch (error) {
       console.error('Failed to initialize push notifications:', error)
       return false
     }
-  }
-
-  private setupPWALifecycleIntegration() {
-    // Listen to visibility changes to coordinate with our enhanced system
-    if (typeof window !== 'undefined') {
-      document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this))
-      window.addEventListener('online', this.handleOnlineStatus.bind(this))
-      window.addEventListener('offline', this.handleOfflineStatus.bind(this))
-    }
-  }
-
-  private handleVisibilityChange() {
-    if (document.visibilityState === 'visible') {
-      console.log('🔔 Push Manager: App became visible - coordinating with connection manager')
-      // The connection manager will handle reconnection
-    } else {
-      console.log('🔔 Push Manager: App backgrounded - notifications still active')
-    }
-  }
-
-  private handleOnlineStatus() {
-    console.log('🔔 Push Manager: Online - notifications fully operational')
-  }
-
-  private handleOfflineStatus() {
-    console.log('🔔 Push Manager: Offline - local notifications only')
   }
 
   async requestPermission(): Promise<NotificationPermission> {
@@ -79,13 +45,6 @@ class PushNotificationManager {
       console.error('Push notifications require HTTPS or localhost')
       alert('Push notifications require HTTPS. Please access the site via HTTPS.')
       return 'denied'
-    }
-
-    // Check connection status before requesting permission
-    // Connection status checks - Verify connection before permission request
-    const connectionStats = this.connectionManager.getConnectionStats()
-    if (!connectionStats.isConnected) {
-      console.log('⚠️ Push Manager: Requesting permission while offline - may have limited functionality')
     }
 
     try {
@@ -134,27 +93,16 @@ class PushNotificationManager {
       return
     }
 
-    // Enhanced sendNotification - Check connection status and adapt behavior
-    const connectionStats = this.connectionManager.getConnectionStats()
-    let notificationData = { ...data }
-    
-    if (!connectionStats.isConnected) {
-      // Enhance notification for offline mode
-      notificationData.title = `[Offline] ${data.title}`
-      notificationData.body = `${data.body}\n(Device offline - syncing when online)`
-    }
-
     try {
-      await this.registration.showNotification(notificationData.title, {
-        body: notificationData.body,
-        icon: notificationData.icon || '/icon-192x192.png',
-        badge: notificationData.badge || '/icon-192x192.png',
+      await this.registration.showNotification(data.title, {
+        body: data.body,
+        icon: data.icon || '/icon-192x192.png',
+        badge: data.badge || '/icon-192x192.png',
         data: {
           dateOfArrival: Date.now(),
-          primaryKey: notificationData.data?.id || '1',
-          url: notificationData.url || '/dashboard',
-          connectionStatus: connectionStats.isConnected ? 'online' : 'offline',
-          ...notificationData.data
+          primaryKey: data.data?.id || '1',
+          url: data.url || '/dashboard',
+          ...data.data
         },
         actions: [
           {
@@ -167,16 +115,8 @@ class PushNotificationManager {
             title: 'Dismiss',
             icon: '/icon-192x192.png'
           }
-        ],
-        tag: 'restaurant-notification', // Prevent duplicate notifications
-        renotify: true, // Show even if similar notification exists
-        requireInteraction: connectionStats.isConnected ? false : true // Keep visible when offline
+        ]
       } as NotificationOptions)
-      
-      console.log('🔔 Push notification sent successfully', {
-        title: notificationData.title,
-        online: connectionStats.isConnected
-      })
     } catch (error) {
       console.error('Failed to send push notification:', error)
     }
@@ -194,42 +134,13 @@ class PushNotificationManager {
         return subscription
       }
 
-      // Check connection before subscribing
-      const connectionStats = this.connectionManager.getConnectionStats()
-      if (!connectionStats.isConnected) {
-        console.log('⚠️ Push Manager: Subscribing while offline - subscription will sync when online')
-      }
-
       // For now, we'll use a simple approach without a push service
       // In production, you'd want to use a service like Firebase Cloud Messaging
-      console.log('Push subscription would be created here (enhanced with connection awareness)')
+      console.log('Push subscription would be created here')
       return null
     } catch (error) {
       console.error('Failed to subscribe to push notifications:', error)
       return null
-    }
-  }
-
-  // New method to get connection-aware status
-  getEnhancedStatus() {
-    const connectionStats = this.connectionManager.getConnectionStats()
-    return {
-      isSupported: this.isSupported,
-      hasPermission: this.getCurrentPermission() === 'granted',
-      isConnected: connectionStats.isConnected,
-      connectionStats,
-      canSendNotifications: this.isSupported && 
-                           this.getCurrentPermission() === 'granted' && 
-                           !!this.registration
-    }
-  }
-
-  // Method to cleanup listeners
-  destroy() {
-    if (typeof window !== 'undefined') {
-      document.removeEventListener('visibilitychange', this.handleVisibilityChange.bind(this))
-      window.removeEventListener('online', this.handleOnlineStatus.bind(this))
-      window.removeEventListener('offline', this.handleOfflineStatus.bind(this))
     }
   }
 }

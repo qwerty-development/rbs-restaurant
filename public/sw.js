@@ -1,5 +1,4 @@
-const VERSION = 'v10'
-const CACHE_NAME = `rbs-restaurant-${VERSION}`
+const CACHE_NAME = 'rbs-restaurant-v9'
 const urlsToCache = [
   '/',
   '/app',
@@ -10,15 +9,7 @@ const urlsToCache = [
   '/apple-touch-icon.png'
 ]
 
-// Keep track of app visibility and connection state
-let appState = {
-  isVisible: true,
-  lastVisibleTime: Date.now(),
-  connectionCheckInterval: null,
-  keepAliveInterval: null
-}
-
-// Install event - cache resources and setup background processes
+// Install event - cache resources and register periodic sync
 self.addEventListener('install', function (event) {
   console.log('Service Worker installing...')
   event.waitUntil(
@@ -100,7 +91,7 @@ self.addEventListener('fetch', function (event) {
   }
 })
 
-// Activate event - clean up old caches and start monitoring
+// Activate event - clean up old caches
 self.addEventListener('activate', function (event) {
   console.log('Service Worker activating...')
   event.waitUntil(
@@ -116,76 +107,9 @@ self.addEventListener('activate', function (event) {
     }).then(() => {
       // Take control of all pages immediately
       return self.clients.claim()
-    }).then(() => {
-      // Start connection monitoring
-      startConnectionMonitoring()
     })
   )
 })
-
-// Start connection monitoring for real-time subscriptions
-function startConnectionMonitoring() {
-  console.log('🔄 Starting connection monitoring')
-  
-  // Clear any existing intervals
-  if (appState.connectionCheckInterval) {
-    clearInterval(appState.connectionCheckInterval)
-  }
-  if (appState.keepAliveInterval) {
-    clearInterval(appState.keepAliveInterval)
-  }
-  
-  // Connection health check every 60 seconds
-  appState.connectionCheckInterval = setInterval(() => {
-    checkConnectionHealth()
-  }, 60000)
-  
-  // Keep alive ping every 2 minutes when app is visible
-  appState.keepAliveInterval = setInterval(() => {
-    if (appState.isVisible) {
-      sendKeepAlive()
-    }
-  }, 120000)
-}
-
-// Check connection health and notify clients if needed
-function checkConnectionHealth() {
-  const timeSinceVisible = Date.now() - appState.lastVisibleTime
-  const fiveMinutes = 5 * 60 * 1000
-  
-  // If app has been hidden for more than 5 minutes, notify clients to reconnect
-  if (!appState.isVisible && timeSinceVisible > fiveMinutes) {
-    console.log('⚠️ App has been hidden for >5 minutes, suggesting reconnection')
-    notifyClientsToReconnect('long_background')
-  }
-}
-
-// Send keep alive to maintain connection
-function sendKeepAlive() {
-  // Lightweight request to keep connections alive
-  fetch('/api/health', { 
-    method: 'HEAD',
-    cache: 'no-cache'
-  }).then(() => {
-    console.log('❤️ Keep alive successful')
-  }).catch((error) => {
-    console.warn('❤️ Keep alive failed:', error)
-    notifyClientsToReconnect('keep_alive_failed')
-  })
-}
-
-// Notify all clients to check/reconnect real-time subscriptions
-function notifyClientsToReconnect(reason) {
-  self.clients.matchAll().then(function (clients) {
-    clients.forEach(function (client) {
-      client.postMessage({
-        type: 'SW_RECONNECT_NEEDED',
-        reason: reason,
-        timestamp: Date.now()
-      })
-    })
-  })
-}
 
 // Push event - handle push notifications
 self.addEventListener('push', function (event) {
@@ -245,20 +169,16 @@ self.addEventListener('notificationclick', function (event) {
 self.addEventListener('sync', function (event) {
   if (event.tag === 'background-sync') {
     event.waitUntil(
-      // Perform background sync operations and notify for reconnection
-      console.log('Background sync triggered - notifying clients')
+      // Perform background sync operations
+      console.log('Background sync triggered')
     )
-    // Notify clients that network is back
-    notifyClientsToReconnect('background_sync')
   }
 })
 
-// Enhanced message handling from the main thread
+// Handle messages from the main thread
 self.addEventListener('message', function (event) {
   if (event.data && event.data.type === 'APP_VISIBLE') {
     console.log('📱 App became visible - service worker notified')
-    appState.isVisible = true
-    appState.lastVisibleTime = event.data.timestamp || Date.now()
     
     // Notify all clients that the app is visible
     self.clients.matchAll().then(function (clients) {
@@ -269,17 +189,10 @@ self.addEventListener('message', function (event) {
         })
       })
     })
-  } else if (event.data && event.data.type === 'APP_HIDDEN') {
-    console.log('📱 App became hidden - service worker notified')
-    appState.isVisible = false
-    appState.lastVisibleTime = event.data.timestamp || Date.now()
-  } else if (event.data && event.data.type === 'FORCE_RECONNECT') {
-    console.log('🔄 Force reconnect requested')
-    notifyClientsToReconnect('manual_request')
   }
 })
 
-// Periodic sync for keeping the app alive and checking connection health
+// Periodic sync for keeping the app alive
 self.addEventListener('periodicsync', function (event) {
   if (event.tag === 'keep-alive') {
     event.waitUntil(
@@ -291,8 +204,6 @@ self.addEventListener('periodicsync', function (event) {
         })
         .catch(error => {
           console.warn('Periodic sync failed:', error)
-          // Notify clients that periodic sync failed
-          notifyClientsToReconnect('periodic_sync_failed')
         })
     )
   }

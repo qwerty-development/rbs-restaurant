@@ -1,21 +1,19 @@
 "use client"
 
 import { useEffect, useRef } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNotifications } from '@/lib/contexts/notification-context'
-import { getRealtimeConnectionManager } from '@/lib/services/realtime-connection-manager'
-import { createClient } from '@/lib/supabase/client'
+import { RealtimeChannel } from '@supabase/supabase-js'
 import { Booking } from '@/types'
 import { getBookingDisplayName } from '@/lib/utils'
 import { usePathname, useSearchParams } from 'next/navigation'
 
 export function useGlobalLayoutNotifications() {
+  const supabase = createClient()
   const queryClient = useQueryClient()
   const { addNotification } = useNotifications()
-  const connectionManager = getRealtimeConnectionManager()
-  const unsubscribeFunctionsRef = useRef<Array<() => void>>([])
-  const channelRef = useRef<any>(null)
-  const supabase = createClient()
+  const channelRef = useRef<RealtimeChannel | null>(null)
   const pathname = usePathname()
   const searchParams = useSearchParams()
  
@@ -121,7 +119,7 @@ export function useGlobalLayoutNotifications() {
           schema: 'public',
           table: 'bookings'
         },
-        async (payload: any) => {
+        async (payload) => {
           console.log('🔔 GlobalLayoutNotifications: Received INSERT event:', payload)
           const newBooking = payload.new as Booking
           if (!newBooking || newBooking.restaurant_id !== restaurantId) {
@@ -189,7 +187,7 @@ export function useGlobalLayoutNotifications() {
           table: 'bookings',
           filter: `restaurant_id=eq.${restaurantId}`
         },
-        async (payload: any) => {
+        async (payload) => {
           const updatedBooking = payload.new as Booking
           const previousBooking = payload.old as Booking
           
@@ -274,19 +272,12 @@ export function useGlobalLayoutNotifications() {
           }
         }
       )
-      .subscribe((status: any) => {
+      .subscribe((status) => {
         console.log('🔔 GlobalLayoutNotifications: Channel subscription status:', status)
         if (status === 'SUBSCRIBED') {
           console.log('🔔 GlobalLayoutNotifications: Successfully subscribed to real-time updates for restaurant:', restaurantId)
         } else if (status === 'CHANNEL_ERROR') {
           console.error('🔔 GlobalLayoutNotifications: Channel subscription error')
-        }
-        
-        // Connection awareness in subscribe - Monitor connection status during subscription
-        const connectionManager = getRealtimeConnectionManager()
-        const connectionStats = connectionManager.getConnectionStats()
-        if (!connectionStats.isConnected) {
-          console.warn('🔔 GlobalLayoutNotifications: Subscription completed but connection is unstable')
         }
       })
 

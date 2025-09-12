@@ -2,7 +2,6 @@
 // Central orchestrator for all restaurant operations - booking, tables, orders, kitchen
 
 import { createClient } from '@/lib/supabase/client'
-import { getRealtimeConnectionManager } from '@/lib/services/realtime-connection-manager'
 import { getBookingOrderIntegrationService } from './booking-order-integration'
 import { getRealTimeService } from './real-time-service'
 import { useState, useEffect } from 'react'
@@ -80,8 +79,6 @@ export interface BookingTimelineEvent {
 
 class RestaurantOrchestrator {
   private supabase = createClient()
-  private connectionManager = getRealtimeConnectionManager()
-  private unsubscribeFunctions: Array<() => void> = []
   private state: RestaurantState = {
     tables: {},
     bookings: {},
@@ -99,66 +96,50 @@ class RestaurantOrchestrator {
 
   constructor(restaurantId: string) {
     this.restaurantId = restaurantId
-    this.initializeEnhancedRealTimeSubscriptions()
+    this.initializeRealTimeSubscriptions()
   }
 
-  // Initialize enhanced real-time subscriptions for all components
-  private async initializeEnhancedRealTimeSubscriptions() {
-    console.log('🎭 Initializing enhanced restaurant orchestrator subscriptions for:', this.restaurantId)
+  // Initialize real-time subscriptions for all components
+  private async initializeRealTimeSubscriptions() {
+    const realTimeService = getRealTimeService( this.restaurantId)
+    
+    // Subscribe to order updates
+    realTimeService.subscribe('order_updated', (event) => {
+      this.handleOrderUpdate(event.order_update!)
+    })
 
-    // Clear any existing subscriptions
-    this.unsubscribeFunctions.forEach(unsubscribe => unsubscribe())
-    this.unsubscribeFunctions = []
+    // Subscribe to kitchen updates
+    realTimeService.subscribe('kitchen_update', (event:any) => {
+      this.handleKitchenUpdate(event.data!)
+    })
 
-    try {
-      // Subscribe to booking changes using enhanced connection manager
-      const unsubscribeBookings = this.connectionManager.subscribe(
-        `orchestrator-bookings:${this.restaurantId}`,
-        this.restaurantId,
-        'bookings',
-        '*',
-        (payload: any) => {
-          console.log('📅 Orchestrator booking change:', payload)
-          this.handleBookingChange(payload)
-        }
-      )
-
-      // Subscribe to order changes using enhanced connection manager
-      const unsubscribeOrders = this.connectionManager.subscribe(
-        `orchestrator-orders:${this.restaurantId}`,
-        this.restaurantId,
-        'orders',
-        '*',
-        (payload: any) => {
-          console.log('🍽️ Orchestrator order change:', payload)
-          this.handleOrderChange(payload)
-        }
-      )
-
-      // Subscribe to table changes using enhanced connection manager
-      const unsubscribeTables = this.connectionManager.subscribe(
-        `orchestrator-tables:${this.restaurantId}`,
-        this.restaurantId,
-        'restaurant_tables',
-        '*',
-        (payload: any) => {
-          console.log('🪑 Orchestrator table change:', payload)
-          this.handleTablesChange(payload)
-        }
-      )
-
-      this.unsubscribeFunctions.push(unsubscribeBookings, unsubscribeOrders, unsubscribeTables)
-
-    } catch (error) {
-      console.error('❌ Error initializing orchestrator subscriptions:', error)
-    }
-  }
-
-  // Cleanup method for subscriptions
-  destroy() {
-    console.log('🧹 Cleaning up restaurant orchestrator subscriptions')
-    this.unsubscribeFunctions.forEach(unsubscribe => unsubscribe())
-    this.unsubscribeFunctions = []
+    // Subscribe to booking changes
+    this.supabase
+      .channel(`restaurant-orchestrator:${this.restaurantId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'bookings',
+        filter: `restaurant_id=eq.${this.restaurantId}`
+      }, (payload) => {
+        this.handleBookingChange(payload)
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'orders',
+        filter: `restaurant_id=eq.${this.restaurantId}`
+      }, (payload) => {
+        this.handleOrderChange(payload)
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'order_items'
+      }, (payload) => {
+        this.handleOrderItemChange(payload)
+      })
+      .subscribe()
   }
 
   // Get current restaurant state
@@ -193,20 +174,6 @@ class RestaurantOrchestrator {
       await this.updateAffectedTables(booking.table_ids || [])
     } else {
       await this.refreshBookingState(booking.id)
-    }
-
-    this.notifyListeners()
-  }
-
-  // Handle table changes
-  private async handleTablesChange(payload: any) {
-    const table = payload.new || payload.old
-    if (!table) return
-
-    if (payload.eventType === 'DELETE') {
-      delete this.state.tables[table.id]
-    } else {
-      await this.refreshTableState(table.id)
     }
 
     this.notifyListeners()
