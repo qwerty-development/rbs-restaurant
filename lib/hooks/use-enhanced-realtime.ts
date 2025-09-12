@@ -13,7 +13,6 @@ export interface UseEnhancedRealtimeOptions {
   restaurantId: string
   enableToasts?: boolean
   onConnectionChange?: (stats: ConnectionStats) => void
-  disabled?: boolean
 }
 
 // Enhanced real-time hook for orders
@@ -289,16 +288,8 @@ export function useEnhancedRealtimeWaitlist(options: UseEnhancedRealtimeOptions)
 
 // Combined hook for all real-time subscriptions
 export function useEnhancedRealtimeAll(options: UseEnhancedRealtimeOptions) {
-  const { restaurantId, enableToasts = true, onConnectionChange, disabled } = options
+  const { restaurantId, enableToasts = true, onConnectionChange } = options
   const [connectionStats, setConnectionStats] = useState<ConnectionStats | null>(null)
-
-  if (disabled) {
-    return {
-      connectionManager: getRealtimeConnectionManager(),
-      connectionStats: null,
-      forceReconnect: () => {},
-    }
-  }
   
   // Set up all subscriptions
   const { connectionManager: ordersManager } = useEnhancedRealtimeOrders({ restaurantId, enableToasts })
