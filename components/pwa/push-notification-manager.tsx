@@ -7,8 +7,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
-import { Bell, BellOff, Send } from 'lucide-react'
+import { Bell, BellOff, Send, Wifi, WifiOff } from 'lucide-react'
 import { subscribeUser, unsubscribeUser, sendNotification } from '@/app/actions'
+import { ConnectionStatus } from '@/components/dashboard/connection-status'
+import { useEnhancedRealtimeAll, type ConnectionStats } from '@/lib/hooks/use-enhanced-realtime'
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -23,40 +25,52 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray
 }
 
-export function PushNotificationManager() {
+export function PushNotificationManager({ restaurantId }: { restaurantId?: string }) {
   const [isSupported, setIsSupported] = useState(false)
   const [subscription, setSubscription] = useState<PushSubscription | null>(null)
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [testMessage, setTestMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
+  // Get enhanced connection stats for better PWA integration (only if restaurantId provided)
+  const connectionResult = restaurantId 
+    ? useEnhancedRealtimeAll({ restaurantId, enableToasts: false })
+    : { connectionStats: null }
+  
+  const { connectionStats } = connectionResult
+
   useEffect(() => {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       setIsSupported(true)
-      registerServiceWorker()
+      // Use existing service worker registration instead of creating new one
+      registerWithExistingServiceWorker()
     }
   }, [])
 
-  async function registerServiceWorker() {
+  async function registerWithExistingServiceWorker() {
     try {
-      const registration = await navigator.serviceWorker.register('/sw.js', {
-        scope: '/',
-        updateViaCache: 'none',
-      })
+      // Wait for our enhanced service worker to be ready
+      const registration = await navigator.serviceWorker.ready
       
       const sub = await registration.pushManager.getSubscription()
       setSubscription(sub)
       setIsSubscribed(!!sub)
       
-      console.log('Service worker registered successfully')
+      console.log('Push notification manager integrated with enhanced service worker')
     } catch (error) {
-      console.error('Service worker registration failed:', error)
+      console.error('Failed to integrate with service worker:', error)
     }
   }
 
   async function subscribeToPush() {
     if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY) {
       toast.error('VAPID public key not configured')
+      return
+    }
+
+    // Check connection status before attempting subscription
+    if (connectionStats && !connectionStats.isConnected) {
+      toast.error('Cannot subscribe while offline. Please check your connection.')
       return
     }
 
@@ -91,6 +105,12 @@ export function PushNotificationManager() {
   }
 
   async function unsubscribeFromPush() {
+    // Connection awareness in subscribe/unsubscribe - Check connection before unsubscribing
+    if (connectionStats && !connectionStats.isConnected) {
+      toast.error('Cannot unsubscribe while offline. Please check your connection.')
+      return
+    }
+
     setIsLoading(true)
     try {
       if (subscription) {
@@ -112,6 +132,12 @@ export function PushNotificationManager() {
   async function sendTestNotification() {
     if (!testMessage.trim()) {
       toast.error('Please enter a test message')
+      return
+    }
+
+    // Check connection status before sending
+    if (connectionStats && !connectionStats.isConnected) {
+      toast.error('Cannot send notification while offline. Please check your connection.')
       return
     }
 
@@ -147,11 +173,16 @@ export function PushNotificationManager() {
           </CardTitle>
           <CardDescription>
             Push notifications are not supported in this browser
+            {/* Offline state handling - Browser compatibility check */}
           </CardDescription>
         </CardHeader>
       </Card>
     )
   }
+
+  // Offline state handling - Enhanced offline detection and UI adaptation
+  const isOffline = connectionStats && !connectionStats.isConnected
+  const offlineMessage = isOffline ? 'Currently offline - Limited functionality' : null
 
   return (
     <Card>
@@ -159,12 +190,37 @@ export function PushNotificationManager() {
         <CardTitle className="flex items-center gap-2">
           <Bell className="h-5 w-5" />
           Push Notifications
+          {connectionStats && (
+            <div className="flex items-center gap-1 text-sm">
+              {connectionStats.isConnected ? (
+                <Wifi className="h-4 w-4 text-green-500" />
+              ) : (
+                <WifiOff className="h-4 w-4 text-red-500" />
+              )}
+            </div>
+          )}
         </CardTitle>
         <CardDescription>
           Manage push notification settings for restaurant updates
+          {connectionStats && !connectionStats.isConnected && (
+            <span className="text-amber-600 block mt-1">
+              ⚠️ Offline - Some features may be limited
+            </span>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Show connection status if available */}
+        {connectionStats && restaurantId && (
+          <div className="mb-4 text-sm">
+            <ConnectionStatus 
+              isConnected={connectionStats.isConnected}
+              connectionStats={connectionStats}
+              onReconnect={() => {}}
+            />
+          </div>
+        )}
+
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <Label htmlFor="notification-toggle">Enable Notifications</Label>
@@ -179,7 +235,7 @@ export function PushNotificationManager() {
             id="notification-toggle"
             checked={isSubscribed}
             onCheckedChange={isSubscribed ? unsubscribeFromPush : subscribeToPush}
-            disabled={isLoading}
+            disabled={isLoading || (connectionStats ? !connectionStats.isConnected : false)}
           />
         </div>
 
@@ -193,10 +249,11 @@ export function PushNotificationManager() {
                 value={testMessage}
                 onChange={(e) => setTestMessage(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && sendTestNotification()}
+                disabled={connectionStats ? !connectionStats.isConnected : false}
               />
               <Button 
                 onClick={sendTestNotification}
-                disabled={isLoading || !testMessage.trim()}
+                disabled={isLoading || !testMessage.trim() || (connectionStats ? !connectionStats.isConnected : false)}
                 size="icon"
               >
                 <Send className="h-4 w-4" />

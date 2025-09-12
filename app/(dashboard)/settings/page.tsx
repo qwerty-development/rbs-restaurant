@@ -864,7 +864,7 @@ export default function SettingsPage() {
             <InstallPrompt />
             
             {/* Push Notifications */}
-            <PushNotificationManager />
+            <PushNotificationManager restaurantId={restaurantId} />
             
             {/* PWA Status Card */}
             <Card>

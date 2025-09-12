@@ -17,6 +17,8 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { useNotifications } from "@/lib/contexts/notification-context"
+import { useEnhancedRealtimeBookings } from "@/lib/hooks/use-enhanced-realtime"
+import { ConnectionStatus, GlobalConnectionStatus } from "@/components/dashboard/connection-status"
 import { PushNotificationPermission } from "@/components/notifications/push-notification-permission"
 import { 
   Calendar as CalendarIcon, 
@@ -51,6 +53,19 @@ export default function BasicDashboardPage() {
   // Debug logging
   console.log('🔔 Basic Dashboard: Available notification methods:', Object.keys(notificationContext || {}))
   console.log('🔔 Basic Dashboard: requestPushPermission type:', typeof requestPushPermission)
+
+  // Enhanced real-time subscriptions
+  const { connectionManager, connectionStats } = useEnhancedRealtimeBookings({
+    restaurantId: restaurantId || '',
+    enableToasts: true,
+    onConnectionChange: (stats) => {
+      console.log('📊 Basic Dashboard connection stats:', stats)
+    }
+  })
+
+  // Extract connection status and reconnection method
+  const isConnected = connectionStats?.isConnected ?? false
+  const forceReconnect = () => connectionManager.forceReconnect()
 
   // Get user info
   useEffect(() => {
@@ -163,188 +178,8 @@ export default function BasicDashboardPage() {
     enabled: !!restaurantId,
   })
 
-  // Real-time subscription for immediate updates
-  useEffect(() => {
-    if (!restaurantId) return
-
-    console.log('🔗 Setting up real-time subscription for basic dashboard')
-    
-    const channel = supabase
-      .channel(`basic-dashboard-bookings:${restaurantId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'bookings',
-          filter: `restaurant_id=eq.${restaurantId}`
-        },
-        async (payload) => {
-          console.log('📥 New booking INSERT received in basic dashboard:', payload)
-          const newBooking = payload.new
-          if (!newBooking) return
-          
-          // Trigger notification for new booking
-          const guestName = newBooking.guest_name || newBooking.user?.full_name || 'Guest'
-          console.log('🔔 Basic Dashboard: Adding notification for new booking:', { guestName, partySize: newBooking.party_size })
-          addNotification({
-            type: 'booking',
-            title: 'New Booking Request',
-            message: `New booking request from ${guestName} for ${newBooking.party_size} guests`,
-            data: newBooking
-          })
-          
-          // Fetch the complete booking data with profiles
-          try {
-            const { data: completeBooking, error } = await supabase
-              .from('bookings')
-              .select(`
-                id,
-                booking_time,
-                party_size,
-                status,
-                special_requests,
-                created_at,
-                user_id,
-                profiles!bookings_user_id_fkey (
-                  id,
-                  full_name,
-                  phone_number,
-                  email
-                )
-              `)
-              .eq('id', newBooking.id)
-              .single()
-            
-            if (error) {
-              console.error('Error fetching complete booking data:', error)
-              return
-            }
-            
-            // Update query cache with complete data
-            queryClient.setQueryData(
-              ['basic-bookings', restaurantId, selectedDate],
-              (oldData: any[] | undefined) => {
-                if (!oldData) return [completeBooking]
-                
-                // Check if booking already exists (avoid duplicates)
-                const exists = oldData.some(b => b.id === completeBooking.id)
-                if (exists) return oldData
-                
-                // Add new booking at the beginning and sort
-                const updated = [completeBooking, ...oldData]
-                return updated.sort((a, b) => {
-                  if (a.status === 'pending' && b.status !== 'pending') return -1
-                  if (a.status !== 'pending' && b.status === 'pending') return 1
-                  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                })
-              }
-            )
-          } catch (error) {
-            console.error('Error processing new booking:', error)
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'bookings',
-          filter: `restaurant_id=eq.${restaurantId}`
-        },
-        async (payload) => {
-          console.log('📝 Booking UPDATE received in basic dashboard:', payload)
-          const updatedBooking = payload.new
-          const previousBooking = payload.old
-          if (!updatedBooking) return
-          
-          // Trigger notification for status changes
-          if (previousBooking && previousBooking.status !== updatedBooking.status) {
-            const guestName = updatedBooking.guest_name || updatedBooking.user?.full_name || 'Guest'
-            console.log('🔔 Basic Dashboard: Adding notification for status change:', { 
-              guestName, 
-              oldStatus: previousBooking.status, 
-              newStatus: updatedBooking.status 
-            })
-            
-            const statusMap: Record<string, { title: string; message: string; variant?: 'success' | 'error' }> = {
-              confirmed: { title: 'Booking Confirmed', message: `Booking for ${guestName} confirmed`, variant: 'success' },
-              declined_by_restaurant: { title: 'Booking Declined', message: `Booking for ${guestName} declined`, variant: 'error' },
-              cancelled_by_user: { title: 'Booking Cancelled', message: `Booking for ${guestName} cancelled by customer`, variant: 'error' },
-              cancelled_by_restaurant: { title: 'Booking Cancelled', message: `Booking for ${guestName} cancelled by restaurant`, variant: 'error' },
-              arrived: { title: 'Guest Arrived', message: `${guestName} has checked in` },
-              seated: { title: 'Guest Seated', message: `${guestName} has been seated` },
-              completed: { title: 'Booking Completed', message: `${guestName}'s booking completed` },
-              no_show: { title: 'No-show', message: `${guestName} marked as no-show` }
-            }
-
-            const statusInfo = statusMap[updatedBooking.status as string]
-            if (statusInfo) {
-              addNotification({
-                type: 'booking',
-                title: statusInfo.title,
-                message: statusInfo.message,
-                data: updatedBooking,
-                variant: statusInfo.variant
-              })
-            }
-          }
-          
-          // Fetch the complete booking data with profiles
-          try {
-            const { data: completeBooking, error } = await supabase
-              .from('bookings')
-              .select(`
-                id,
-                booking_time,
-                party_size,
-                status,
-                special_requests,
-                created_at,
-                user_id,
-                profiles!bookings_user_id_fkey (
-                  id,
-                  full_name,
-                  phone_number,
-                  email
-                )
-              `)
-              .eq('id', updatedBooking.id)
-              .single()
-            
-            if (error) {
-              console.error('Error fetching complete booking data for update:', error)
-              return
-            }
-            
-            // Update query cache with complete data
-            queryClient.setQueryData(
-              ['basic-bookings', restaurantId, selectedDate],
-              (oldData: any[] | undefined) => {
-                if (!oldData) return [completeBooking]
-                
-                return oldData.map(booking =>
-                  booking.id === completeBooking.id ? completeBooking : booking
-                ).sort((a, b) => {
-                  if (a.status === 'pending' && b.status !== 'pending') return -1
-                  if (a.status !== 'pending' && b.status === 'pending') return 1
-                  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                })
-              }
-            )
-          } catch (error) {
-            console.error('Error processing booking update:', error)
-          }
-        }
-      )
-      .subscribe()
-
-    return () => {
-      console.log('🔌 Cleaning up basic dashboard subscription')
-      supabase.removeChannel(channel)
-    }
-  }, [restaurantId, selectedDate, queryClient, supabase])
+  // Real-time subscriptions are handled by useEnhancedRealtimeBookings hook above
+  // This automatically manages booking INSERT/UPDATE events with proper error handling and reconnection
 
   // Analytics query - today's data
   const { data: analytics } = useQuery({
@@ -506,6 +341,16 @@ export default function BasicDashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Connection Status Indicator */}
+          {connectionStats && (
+            <ConnectionStatus 
+              isConnected={isConnected}
+              connectionStats={connectionStats}
+              onReconnect={forceReconnect}
+              compact={true}
+            />
+          )}
+          
           <Button 
             variant="outline" 
             size="sm" 
@@ -776,6 +621,15 @@ export default function BasicDashboardPage() {
           ))
         )}
       </div>
+
+      {/* Global Connection Status Indicator */}
+      {connectionStats && (
+        <GlobalConnectionStatus 
+          isConnected={isConnected}
+          connectionStats={connectionStats}
+          onReconnect={forceReconnect}
+        />
+      )}
     </div>
   )
 }
