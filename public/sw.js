@@ -9,18 +9,26 @@ const urlsToCache = [
   '/apple-touch-icon.png'
 ]
 
-// Install event - cache resources
+// Install event - cache resources and register periodic sync
 self.addEventListener('install', function (event) {
   console.log('Service Worker installing...')
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(function (cache) {
-        console.log('Opened cache')
-        return cache.addAll(urlsToCache)
+    Promise.all([
+      caches.open(CACHE_NAME)
+        .then(function (cache) {
+          console.log('Opened cache')
+          return cache.addAll(urlsToCache)
+        })
+        .catch(function (error) {
+          console.log('Cache install failed:', error)
+        }),
+      // Register periodic sync for keep-alive (if supported)
+      self.registration.periodicSync && self.registration.periodicSync.register('keep-alive', {
+        minInterval: 30000 // 30 seconds
+      }).catch(function (error) {
+        console.log('Periodic sync registration failed:', error)
       })
-      .catch(function (error) {
-        console.log('Cache install failed:', error)
-      })
+    ])
   )
   // Force the waiting service worker to become the active service worker
   self.skipWaiting()
@@ -163,6 +171,40 @@ self.addEventListener('sync', function (event) {
     event.waitUntil(
       // Perform background sync operations
       console.log('Background sync triggered')
+    )
+  }
+})
+
+// Handle messages from the main thread
+self.addEventListener('message', function (event) {
+  if (event.data && event.data.type === 'APP_VISIBLE') {
+    console.log('📱 App became visible - service worker notified')
+    
+    // Notify all clients that the app is visible
+    self.clients.matchAll().then(function (clients) {
+      clients.forEach(function (client) {
+        client.postMessage({
+          type: 'SW_APP_VISIBLE',
+          timestamp: event.data.timestamp
+        })
+      })
+    })
+  }
+})
+
+// Periodic sync for keeping the app alive
+self.addEventListener('periodicsync', function (event) {
+  if (event.tag === 'keep-alive') {
+    event.waitUntil(
+      // Perform lightweight sync to keep the app active
+      fetch('/api/health', { method: 'HEAD' })
+        .then(response => {
+          console.log('Periodic sync: App is healthy')
+          return response
+        })
+        .catch(error => {
+          console.warn('Periodic sync failed:', error)
+        })
     )
   }
 })

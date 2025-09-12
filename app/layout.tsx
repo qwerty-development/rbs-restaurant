@@ -10,6 +10,7 @@ import { PWAProvider } from "@/components/pwa/pwa-provider"
 import { NotificationProvider } from "@/lib/contexts/notification-context"
 import { NotificationContainer } from "@/components/notifications/notification-container"
 import { GlobalLayoutNotifications } from "@/components/notifications/global-layout-notifications"
+import { AppVisibilityHandler } from "@/components/pwa/app-visibility-handler"
  
 // import { Analytics } from "@vercel/analytics/next"
 
@@ -65,6 +66,7 @@ export default function RootLayout({
         <Providers>
           <PWAProvider>
             <NotificationProvider>
+              <AppVisibilityHandler />
               <GlobalLayoutNotifications />
               {children}
               <NotificationContainer />
