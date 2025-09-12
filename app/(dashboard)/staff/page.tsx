@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { restaurantAuth, type StaffMember, type Role } from "@/lib/restaurant-auth"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
@@ -236,12 +237,13 @@ const PERMISSIONS = [
 export default function StaffPage() {
   const router = useRouter()
   const supabase = createClient()
+  const { currentRestaurant, isLoading: contextLoading } = useRestaurantContext()
+  const restaurantId = currentRestaurant?.restaurant.id
   
   // State
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([])
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [currentStaff, setCurrentStaff] = useState<any>(null)
-  const [restaurantId, setRestaurantId] = useState<string>("")
   const [loading, setLoading] = useState(true)
   const [isAddingStaff, setIsAddingStaff] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -306,7 +308,27 @@ export default function StaffPage() {
     }
   }, [editWatchedRole, editForm, isEditingStaff])
 
+  // Check permissions on mount
+  useEffect(() => {
+    if (!contextLoading && currentRestaurant) {
+      const hasPermission = restaurantAuth.hasPermission(
+        currentRestaurant.permissions,
+        'staff.manage',
+        currentRestaurant.role
+      )
+      
+      if (!hasPermission) {
+        toast.error("You don't have permission to manage staff")
+        router.push('/dashboard')
+      }
+    } else if (!contextLoading && !currentRestaurant) {
+      router.push('/dashboard/overview')
+    }
+  }, [contextLoading, currentRestaurant, router])
+
   const loadInitialData = async () => {
+    if (!restaurantId) return
+    
     try {
       setLoading(true)
 
@@ -318,7 +340,7 @@ export default function StaffPage() {
       }
       setCurrentUser(user)
 
-      // Get current staff data
+      // Get current staff data for this restaurant
       const { data: staffData, error: staffError } = await supabase
         .from('restaurant_staff')
         .select(`
@@ -328,6 +350,7 @@ export default function StaffPage() {
           restaurant_id
         `)
         .eq('user_id', user.id)
+        .eq('restaurant_id', restaurantId)
         .eq('is_active', true)
         .single()
 
@@ -339,29 +362,10 @@ export default function StaffPage() {
         return
       }
 
-      // Debug: Log the complete staff data
-      console.log('Complete staff data received:', staffData)
-
       setCurrentStaff(staffData)
-      setRestaurantId(staffData.restaurant_id)
-
-      // Debug: Log the permission check data
-      console.log('Permission check debug:', {
-        permissions: staffData.permissions,
-        role: staffData.role,
-        requiredPermission: 'staff.manage',
-        hasPermission: restaurantAuth.hasPermission(staffData.permissions, 'staff.manage', staffData.role)
-      })
-
-      // Check if user can manage staff
-      if (!restaurantAuth.hasPermission(staffData.permissions, 'staff.manage', staffData.role)) {
-        toast.error("You don't have permission to manage staff")
-        router.push('/dashboard')
-        return
-      }
 
       // Load staff members
-      await loadStaffMembers(staffData.restaurant_id)
+      await loadStaffMembers(restaurantId)
 
     } catch (error) {
       console.error('Error loading initial data:', error)
@@ -371,10 +375,12 @@ export default function StaffPage() {
     }
   }
 
-  // Load initial data
+  // Load initial data when restaurant ID is available
   useEffect(() => {
-    loadInitialData()
-  }, [])
+    if (restaurantId) {
+      loadInitialData()
+    }
+  }, [restaurantId])
 
   const loadStaffMembers = async (restaurantId: string) => {
     try {
@@ -655,10 +661,20 @@ export default function StaffPage() {
     )
   }
 
-  if (loading) {
+  if (contextLoading || loading) {
     return (
       <div className="flex items-center justify-center h-96">
         <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
+  }
+
+  if (!currentRestaurant || !restaurantId) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <p className="text-gray-600">No restaurant selected.</p>
+        </div>
       </div>
     )
   }

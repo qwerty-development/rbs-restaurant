@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { 
-  Upload, 
   Download, 
   FileText, 
   CheckCircle, 
@@ -26,6 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { restaurantAuth } from '@/lib/restaurant-auth'
+import { useRestaurantContext } from '@/lib/contexts/restaurant-context'
 import { migrateServemeData, type MigrationResult, type MigrationResults } from '@/lib/services/migration-service'
 
 interface MigrationProgress {
@@ -42,10 +42,11 @@ interface MigrationProgress {
 export default function MigrationPage() {
   const router = useRouter()
   const supabase = createClient()
+  const { currentRestaurant, isLoading: contextLoading } = useRestaurantContext()
+  const restaurantId = currentRestaurant?.restaurant.id
   
   // State
   const [loading, setLoading] = useState(true)
-  const [restaurantId, setRestaurantId] = useState<string>('')
   const [currentStaff, setCurrentStaff] = useState<any>(null)
   const [migrationProgress, setMigrationProgress] = useState<MigrationProgress | null>(null)
   const [isRunning, setIsRunning] = useState(false)
@@ -59,7 +60,27 @@ export default function MigrationPage() {
   // Results
   const [migrationResults, setMigrationResults] = useState<MigrationResults | null>(null)
 
+  // Check permissions on mount
+  useEffect(() => {
+    if (!contextLoading && currentRestaurant) {
+      const hasPermission = restaurantAuth.hasPermission(
+        currentRestaurant.permissions,
+        'settings.manage',
+        currentRestaurant.role
+      )
+      
+      if (!hasPermission) {
+        toast.error("You don't have permission to access migration tools")
+        router.push('/dashboard')
+      }
+    } else if (!contextLoading && !currentRestaurant) {
+      router.push('/dashboard/overview')
+    }
+  }, [contextLoading, currentRestaurant, router])
+
   const loadInitialData = useCallback(async () => {
+    if (!restaurantId) return
+    
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
@@ -67,7 +88,7 @@ export default function MigrationPage() {
         return
       }
 
-      // Get current staff data
+      // Get current staff data for this restaurant
       const { data: staffData, error: staffError } = await supabase
         .from('restaurant_staff')
         .select(
@@ -79,6 +100,7 @@ export default function MigrationPage() {
           user_id
         `)
         .eq('user_id', user.id)
+        .eq('restaurant_id', restaurantId)
         .eq('is_active', true)
         .single()
 
@@ -89,14 +111,6 @@ export default function MigrationPage() {
       }
 
       setCurrentStaff(staffData)
-      setRestaurantId(staffData.restaurant_id)
-
-      // Check permissions - only managers and owners can access migration
-      if (!restaurantAuth.hasPermission(staffData.permissions, 'settings.manage', staffData.role)) {
-        toast.error("You don't have permission to access migration tools")
-        router.push('/dashboard')
-        return
-      }
 
     } catch (error) {
       console.error('Error loading data:', error)
@@ -104,11 +118,13 @@ export default function MigrationPage() {
     } finally {
       setLoading(false)
     }
-  }, [supabase, router])
+  }, [restaurantId, supabase, router])
 
   useEffect(() => {
-    loadInitialData()
-  }, [loadInitialData])
+    if (restaurantId) {
+      loadInitialData()
+    }
+  }, [restaurantId, loadInitialData])
 
   const handleFileUpload = (file: File, type: 'customers' | 'bookings' | 'tables') => {
     // Validate file type
@@ -138,6 +154,11 @@ export default function MigrationPage() {
   const runMigration = async (dryRun: boolean = false) => {
     if (!customersFile && !bookingsFile && !tablesFile) {
       toast.error('Please upload at least one file to migrate')
+      return
+    }
+
+    if (!restaurantId) {
+      toast.error('No restaurant selected')
       return
     }
 
@@ -206,12 +227,22 @@ export default function MigrationPage() {
     toast.success('Sample files downloaded successfully!')
   }
 
-  if (loading) {
+  if (contextLoading || loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
           <p className="text-sm text-gray-600">Loading migration tools...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!currentRestaurant || !restaurantId) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <p className="text-gray-600">No restaurant selected.</p>
         </div>
       </div>
     )

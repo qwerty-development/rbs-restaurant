@@ -5,6 +5,7 @@ import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery } from "@tanstack/react-query"
 import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
+import { restaurantAuth } from "@/lib/restaurant-auth"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -15,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { RevenueDashboard } from "@/components/analytics/revenue-dashboard"
 import { BusinessIntelligenceDashboard } from "@/components/analytics/business-intelligence-dashboard"
 import { BookingAnalyticsDashboard } from "@/components/analytics/booking-analytics-dashboard"
@@ -97,18 +99,25 @@ type ReviewStats = {
 export default function AnalyticsPage() {
   const supabase = createClient()
   const router = useRouter()
-  const { currentRestaurant } = useRestaurantContext()
-  const [restaurantId, setRestaurantId] = useState<string>("")
+  const { currentRestaurant, isLoading: contextLoading } = useRestaurantContext()
   const [dateRange, setDateRange] = useState<string>("7days")
+  const restaurantId = currentRestaurant?.restaurant.id
 
-  // Set restaurant ID from current restaurant context
+  // Check permissions on mount - only after context has loaded and restaurant is selected
   useEffect(() => {
-    if (currentRestaurant) {
-      setRestaurantId(currentRestaurant.restaurant.id)
-    } else {
-      setRestaurantId("")
+    if (!contextLoading && currentRestaurant) {
+      const hasPermission = restaurantAuth.hasPermission(
+        currentRestaurant.permissions,
+        'analytics.view',
+        currentRestaurant.role
+      )
+      
+      if (!hasPermission) {
+        router.push('/dashboard')
+      }
     }
-  }, [currentRestaurant])
+    // Don't redirect to overview immediately - let the context auto-select restaurant first
+  }, [contextLoading, currentRestaurant, router])
 
   // Calculate date range
   const getDateRange = () => {
@@ -128,6 +137,14 @@ export default function AnalyticsPage() {
   }
 
   const { start, end } = getDateRange()
+
+  // Helper function to format currency
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    }).format(amount)
+  }
 
   // Fetch booking statistics
   const { data: bookingStats, isLoading: bookingStatsLoading } = useQuery({
@@ -535,15 +552,27 @@ export default function AnalyticsPage() {
     enabled: !!restaurantId,
   })
 
-  const isLoading = bookingStatsLoading || timeStatsLoading || reviewStatsLoading || 
-                   operationalStatsLoading || menuPerformanceLoading || staffMetricsLoading
+  const isDataLoading = bookingStatsLoading || timeStatsLoading || reviewStatsLoading || 
+                        operationalStatsLoading || menuPerformanceLoading || staffMetricsLoading
 
-  if (isLoading) {
+  // Show loading while context is loading or while we have a restaurant but data is loading
+  if (contextLoading || (currentRestaurant && isDataLoading)) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
           <p className="mt-4">Loading analytics...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Only show "no restaurant selected" if context has loaded and there's still no restaurant
+  if (!contextLoading && (!currentRestaurant || !restaurantId)) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <p className="text-gray-600">No restaurant selected.</p>
         </div>
       </div>
     )
@@ -805,16 +834,131 @@ export default function AnalyticsPage() {
         </TabsContent>
 
         <TabsContent value="revenue" className="space-y-4">
-          <FinancialAnalyticsDashboard />
-          <RevenueDashboard />
+          <Card>
+            <CardHeader>
+              <CardTitle>Revenue Analytics</CardTitle>
+              <CardDescription>Detailed revenue analysis and trends</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">{bookingStats ? formatCurrency(bookingStats.revenue) : '$0'}</div>
+                    <p className="text-sm text-muted-foreground">Total Revenue</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">{bookingStats ? formatCurrency(bookingStats.averageSpend) : '$0'}</div>
+                    <p className="text-sm text-muted-foreground">Average Spend</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">{bookingStats?.completed || 0}</div>
+                    <p className="text-sm text-muted-foreground">Completed Bookings</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="bookings" className="space-y-4">
-          <BookingAnalyticsDashboard />
+          <Card>
+            <CardHeader>
+              <CardTitle>Booking Analytics</CardTitle>
+              <CardDescription>Booking patterns and performance metrics</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <h4 className="font-medium mb-2">Booking Status</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span>Total</span>
+                        <Badge variant="outline">{bookingStats?.total || 0}</Badge>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Confirmed</span>
+                        <Badge variant="default">{bookingStats?.confirmed || 0}</Badge>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Completed</span>
+                        <Badge variant="default">{bookingStats?.completed || 0}</Badge>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Cancelled</span>
+                        <Badge variant="destructive">{bookingStats?.cancelled || 0}</Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-2">Performance</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span>Conversion Rate</span>
+                        <span>{bookingStats?.conversionRate?.toFixed(1) || 0}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Busiest Day</span>
+                        <span>{timeStats?.busiestDay || 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Peak Hour</span>
+                        <span>{timeStats?.busiestHour || 'N/A'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="customers" className="space-y-4">
-          <CustomerAnalyticsDashboard />
+          <Card>
+            <CardHeader>
+              <CardTitle>Customer Analytics</CardTitle>
+              <CardDescription>Customer insights and behavior patterns</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <h4 className="font-medium mb-2">Customer Metrics</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span>Average Party Size</span>
+                        <span>{timeStats?.averagePartySize || 0} guests</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Average Rating</span>
+                        <span className="flex items-center gap-1">
+                          {reviewStats?.averageRating?.toFixed(1) || '0.0'}
+                          <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Recent Reviews</span>
+                        <span>{reviewStats?.recentReviews || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-2">Engagement</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span>Total Reviews</span>
+                        <span>{reviewStats?.totalReviews || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Recent Average</span>
+                        <span>{reviewStats?.recentAverage?.toFixed(1) || '0.0'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="menu" className="space-y-4">
@@ -985,62 +1129,79 @@ export default function AnalyticsPage() {
         </TabsContent>
 
         <TabsContent value="operations" className="space-y-4">
-          <OperationalAnalyticsDashboard />
-          
           <Card>
             <CardHeader>
-              <CardTitle>Additional Operational Insights</CardTitle>
+              <CardTitle>Operational Analytics</CardTitle>
               <CardDescription>
                 Key metrics to optimize your restaurant operations
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="p-4 border rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">Table Turnover</span>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <h4 className="font-medium mb-2">Table Operations</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span>Table Utilization</span>
+                        <span>{operationalStats?.tableUtilization || 0}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Average Wait Time</span>
+                        <span>{operationalStats?.averageWaitTime || 0}min</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Turnover Rate</span>
+                        <span>{operationalStats?.turnoverRate || 0}</span>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Average table turnover time is {timeStats?.averageTurnTime || 0} minutes. 
-                    {(timeStats?.averageTurnTime || 0) > 150 && " Consider optimizing service flow to reduce wait times."}
-                  </p>
+                  <div>
+                    <h4 className="font-medium mb-2">Service Metrics</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span>Average Turn Time</span>
+                        <span>{timeStats?.averageTurnTime || 0}min</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Average Party Size</span>
+                        <span>{timeStats?.averagePartySize || 0} guests</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>No-Show Rate</span>
+                        <span>
+                          {bookingStats && bookingStats.total > 0
+                            ? Math.round((bookingStats.noShow / bookingStats.total) * 100)
+                            : 0}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="p-4 border rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">Party Size Trends</span>
+                <div className="space-y-4 mt-6">
+                  <div className="p-4 border rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Table Turnover</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Average table turnover time is {timeStats?.averageTurnTime || 0} minutes. 
+                      {(timeStats?.averageTurnTime || 0) > 150 && " Consider optimizing service flow to reduce wait times."}
+                    </p>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Average party size is {timeStats?.averagePartySize || 0} guests. 
-                    This helps with table allocation and menu planning.
-                  </p>
-                </div>
 
-                <div className="p-4 border rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">No-Show Rate</span>
+                  <div className="p-4 border rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Completion Rate</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {bookingStats && bookingStats.total > 0
+                        ? Math.round((bookingStats.completed / bookingStats.total) * 100)
+                        : 0}% of bookings are completed successfully.
+                    </p>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {bookingStats && bookingStats.total > 0
-                      ? Math.round((bookingStats.noShow / bookingStats.total) * 100)
-                      : 0}% of bookings result in no-shows.
-                    {bookingStats && (bookingStats.noShow / bookingStats.total) > 0.1 && " Consider implementing a confirmation system."}
-                  </p>
-                </div>
-
-                <div className="p-4 border rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">Completion Rate</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {bookingStats && bookingStats.total > 0
-                      ? Math.round((bookingStats.completed / bookingStats.total) * 100)
-                      : 0}% of bookings are completed successfully.
-                  </p>
                 </div>
               </div>
             </CardContent>

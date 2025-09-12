@@ -4,6 +4,8 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
+import { restaurantAuth } from "@/lib/restaurant-auth"
 import { useQuery } from "@tanstack/react-query"
 import { 
   startOfMonth, 
@@ -91,29 +93,25 @@ interface CustomerMetrics {
 export default function CustomerAnalyticsPage() {
   const router = useRouter()
   const supabase = createClient()
+  const { currentRestaurant, isLoading: contextLoading } = useRestaurantContext()
+  const restaurantId = currentRestaurant?.restaurant.id
   const [timeRange, setTimeRange] = useState<TimeRange>("quarter")
-  const [selectedSegment, setSelectedSegment] = useState<CustomerSegment | "all">("all")
-  const [restaurantId, setRestaurantId] = useState<string>("")
   const [debugInfo, setDebugInfo] = useState<any>(null)
 
+  // Check permissions on mount
   useEffect(() => {
-    async function getRestaurantId() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: staffData } = await supabase
-          .from("restaurant_staff")
-          .select("restaurant_id")
-          .eq("user_id", user.id)
-          .single()
-        
-        if (staffData) {
-          setRestaurantId(staffData.restaurant_id)
-          console.log("Restaurant ID:", staffData.restaurant_id)
-        }
+    if (!contextLoading && currentRestaurant) {
+      const hasPermission = restaurantAuth.hasPermission(
+        currentRestaurant.permissions,
+        'analytics.view',
+        currentRestaurant.role
+      )
+      
+      if (!hasPermission) {
+        router.push('/dashboard')
       }
     }
-    getRestaurantId()
-  }, [supabase])
+  }, [contextLoading, currentRestaurant, router])
 
   // Get date range - use created_at for when customers first booked
   const getDateRange = () => {
@@ -346,7 +344,7 @@ export default function CustomerAnalyticsPage() {
     }
 
     const now = new Date()
-    uniqueCustomers.forEach((customer, userId) => {
+    uniqueCustomers.forEach((_, userId) => {
       const stats = customerStats.get(userId)
       if (!stats) return
 
@@ -370,7 +368,6 @@ export default function CustomerAnalyticsPage() {
 
     // Calculate customers who made bookings in the current period
     const periodCustomerIds = new Set(periodBookings.map((b: any) => b.user_id))
-    const customersInPeriod = periodCustomerIds.size
 
     // Calculate metrics
     const totalCustomers = uniqueCustomers.size
@@ -502,9 +499,6 @@ export default function CustomerAnalyticsPage() {
 
   const metrics = calculateMetrics()
 
-  // Chart colors using brand palette
-  const COLORS = ["#7A2E4A", "#D4C4E0", "#FFF0E6", "#10B981", "#F97316"]
-
   const getSegmentColor = (segment: string) => {
     switch (segment.toLowerCase()) {
       case "new": return "#10B981" // Keep green for new
@@ -532,7 +526,7 @@ export default function CustomerAnalyticsPage() {
     )
   }
 
-  if (isLoading) {
+  if (contextLoading || isLoading || !restaurantId) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -99,10 +100,11 @@ interface BusinessMetrics {
 
 export function BusinessIntelligenceDashboard() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
-  const [restaurantId, setRestaurantId] = useState<string>("")
   const [mounted, setMounted] = useState(false)
-
+  
   const supabase = createClient()
+  const { currentRestaurant, isLoading: contextLoading } = useRestaurantContext()
+  const restaurantId = currentRestaurant?.restaurant.id
 
   // Debug: Make sure this component is loading the new code
   console.log('🔥 BusinessIntelligenceDashboard LOADED - NEW VERSION WITH FIXES')
@@ -123,25 +125,7 @@ export function BusinessIntelligenceDashboard() {
     return () => clearInterval(interval)
   }, [mounted])
 
-  // Get restaurant ID
-  useEffect(() => {
-    async function getRestaurantId() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: staffData } = await supabase
-          .from("restaurant_staff")
-          .select("restaurant_id")
-          .eq("user_id", user.id)
-          .eq("is_active", true)
-          .single()
-
-        if (staffData) {
-          setRestaurantId(staffData.restaurant_id)
-        }
-      }
-    }
-    getRestaurantId()
-  }, [supabase])
+  // Remove the old restaurant ID fetching logic since we're using context now
 
   const { data: metrics, isLoading, error, refetch } = useQuery({
     queryKey: ['business-metrics', restaurantId],
@@ -446,7 +430,7 @@ export function BusinessIntelligenceDashboard() {
   }
 
   // Don't render until mounted to prevent hydration mismatch
-  if (!mounted || isLoading || !restaurantId) {
+  if (!mounted || contextLoading || isLoading || !restaurantId) {
     return (
       <Card>
         <CardContent className="p-6">

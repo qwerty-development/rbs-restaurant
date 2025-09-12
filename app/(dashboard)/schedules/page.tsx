@@ -32,6 +32,7 @@ import {
 } from "lucide-react"
 import { restaurantAuth } from "@/lib/restaurant-auth"
 import { createClient } from "@/lib/supabase/client"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { staffSchedulingService } from "@/lib/services/staff-scheduling"
 import { ScheduleCalendar } from "@/components/staff/schedule-calendar"
 import { ShiftForm } from "@/components/staff/shift-form"
@@ -43,11 +44,12 @@ import { toast } from "react-hot-toast"
 export default function SchedulesPage() {
   const router = useRouter()
   const supabase = createClient()
+  const { currentRestaurant, isLoading: contextLoading } = useRestaurantContext()
+  const restaurantId = currentRestaurant?.restaurant.id
   
   // State
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [currentStaff, setCurrentStaff] = useState<any>(null)
-  const [restaurantId, setRestaurantId] = useState<string>("")
   const [staffMembers, setStaffMembers] = useState<RestaurantStaff[]>([])
   const [shifts, setShifts] = useState<StaffShift[]>([])
   const [timeClockEntries, setTimeClockEntries] = useState<TimeClockEntry[]>([])
@@ -133,7 +135,27 @@ export default function SchedulesPage() {
     }
   }, [])
 
+  // Check permissions on mount
+  useEffect(() => {
+    if (!contextLoading && currentRestaurant) {
+      const hasPermission = restaurantAuth.hasPermission(
+        currentRestaurant.permissions,
+        'schedules.view',
+        currentRestaurant.role
+      )
+      
+      if (!hasPermission) {
+        toast.error("You don't have permission to view schedules")
+        router.push('/dashboard')
+      }
+    } else if (!contextLoading && !currentRestaurant) {
+      router.push('/dashboard/overview')
+    }
+  }, [contextLoading, currentRestaurant, router])
+
   const loadInitialData = useCallback(async () => {
+    if (!restaurantId) return
+    
     try {
       setLoading(true)
 
@@ -145,7 +167,7 @@ export default function SchedulesPage() {
       }
       setCurrentUser(user)
 
-      // Get current staff data
+      // Get current staff data for this restaurant
       const { data: staffData, error: staffError } = await supabase
         .from('restaurant_staff')
         .select(`
@@ -156,6 +178,7 @@ export default function SchedulesPage() {
           user_id
         `)
         .eq('user_id', user.id)
+        .eq('restaurant_id', restaurantId)
         .eq('is_active', true)
         .single()
 
@@ -166,27 +189,13 @@ export default function SchedulesPage() {
       }
 
       setCurrentStaff(staffData)
-      setRestaurantId(staffData.restaurant_id)
-
-      // Check permissions
-      const canViewSchedules = restaurantAuth.hasPermission(
-        staffData.permissions,
-        'schedules.view',
-        staffData.role
-      )
-
-      if (!canViewSchedules) {
-        toast.error("You don't have permission to view schedules")
-        router.push('/dashboard')
-        return
-      }
 
       // Load data in parallel
       await Promise.all([
-        loadStaffMembers(staffData.restaurant_id),
-        loadShifts(staffData.restaurant_id),
-        loadTimeClockEntries(staffData.restaurant_id),
-        loadPositions(staffData.restaurant_id)
+        loadStaffMembers(restaurantId),
+        loadShifts(restaurantId),
+        loadTimeClockEntries(restaurantId),
+        loadPositions(restaurantId)
       ])
 
     } catch (error) {
@@ -195,10 +204,12 @@ export default function SchedulesPage() {
     } finally {
       setLoading(false)
     }
-  }, [supabase, router, loadStaffMembers, loadShifts, loadTimeClockEntries, loadPositions])
+  }, [restaurantId, supabase, router, loadStaffMembers, loadShifts, loadTimeClockEntries, loadPositions])
 
   useEffect(() => {
-    loadInitialData()
+    if (restaurantId) {
+      loadInitialData()
+    }
   }, [loadInitialData])
 
   const handleCreateShift = (date?: string, staffId?: string) => {
@@ -306,10 +317,10 @@ export default function SchedulesPage() {
   const currentStaffMember = staffMembers.find(staff => staff.user_id === currentUser?.id)
 
   // Permission checks
-  const canManageSchedules = !!(currentStaff && restaurantAuth.hasPermission(
-    currentStaff.permissions,
+  const canManageSchedules = !!(currentRestaurant && restaurantAuth.hasPermission(
+    currentRestaurant.permissions,
     'schedules.manage',
-    currentStaff.role
+    currentRestaurant.role
   ))
 
   // Statistics
@@ -331,7 +342,7 @@ export default function SchedulesPage() {
     }
   }, [shifts, timeClockEntries])
 
-  if (loading) {
+  if (contextLoading || loading) {
     return (
       <div className="space-y-8">
         <div className="flex items-center justify-between">
@@ -354,6 +365,16 @@ export default function SchedulesPage() {
             <Skeleton className="h-96 w-full" />
           </CardContent>
         </Card>
+      </div>
+    )
+  }
+
+  if (!currentRestaurant || !restaurantId) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <p className="text-gray-600">No restaurant selected.</p>
+        </div>
       </div>
     )
   }
