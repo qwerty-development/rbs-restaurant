@@ -53,7 +53,6 @@ import {
 import Link from "next/link"
 import { PushNotificationManager } from "@/components/pwa/push-notification-manager"
 import { InstallPrompt } from "@/components/pwa/install-prompt"
-import { DownloadAppButton } from "@/components/pwa/download-app-button"
 import { LocationManager } from "@/components/location/location-manager"
 import { MigrationWidget } from "@/components/migration/migration-widget"
 import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
@@ -301,24 +300,6 @@ export default function SettingsPage() {
 
       {/* Quick Access Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {/* Download App Quick Access */}
-        <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setActiveTab("pwa")}>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Download className="h-5 w-5" />
-                  Download App
-                </CardTitle>
-                <CardDescription>
-                  Install the PWA for the best experience
-                </CardDescription>
-              </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
-            </div>
-          </CardHeader>
-        </Card>
-
         {/* Add new settings card for availability */}
         <Link href="/settings/availability">
           <Card className="cursor-pointer hover:shadow-lg transition-shadow">
@@ -879,8 +860,8 @@ export default function SettingsPage() {
 
         <TabsContent value="pwa" className="space-y-4">
           <div className="space-y-6">
-            {/* Download App Button - Primary CTA */}
-            <DownloadAppButton />
+            {/* PWA Install Prompt */}
+            <InstallPrompt />
             
             {/* Push Notifications */}
             <PushNotificationManager />
@@ -890,10 +871,10 @@ export default function SettingsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Smartphone className="h-5 w-5" />
-                  Progressive Web App Features
+                  Progressive Web App Status
                 </CardTitle>
                 <CardDescription>
-                  Technical information about PWA capabilities
+                  Information about PWA features and capabilities
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
