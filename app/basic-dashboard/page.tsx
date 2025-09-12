@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { format, startOfDay, endOfDay, parseISO } from "date-fns"
 import { toast } from "react-hot-toast"
@@ -38,11 +39,12 @@ export default function BasicDashboardPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("pending")
-  const [restaurantId, setRestaurantId] = useState<string>("")
   const [userId, setUserId] = useState<string>("")
   
   const supabase = createClient()
   const queryClient = useQueryClient()
+  const { currentRestaurant, isLoading: contextLoading } = useRestaurantContext()
+  const restaurantId = currentRestaurant?.restaurant.id
   const notificationContext = useNotifications()
   const { addNotification, requestPushPermission, isPushEnabled } = notificationContext || {}
   
@@ -50,25 +52,15 @@ export default function BasicDashboardPage() {
   console.log('🔔 Basic Dashboard: Available notification methods:', Object.keys(notificationContext || {}))
   console.log('🔔 Basic Dashboard: requestPushPermission type:', typeof requestPushPermission)
 
-  // Get restaurant and user info
+  // Get user info
   useEffect(() => {
-    async function getRestaurantInfo() {
+    async function getUserInfo() {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         setUserId(user.id)
-        
-        const { data: staffData } = await supabase
-          .from("restaurant_staff")
-          .select("restaurant_id")
-          .eq("user_id", user.id)
-          .single()
-        
-        if (staffData) {
-          setRestaurantId(staffData.restaurant_id)
-        }
       }
     }
-    getRestaurantInfo()
+    getUserInfo()
   }, [supabase])
 
   // Fetch bookings - combines date-specific bookings with ALL pending requests
@@ -484,6 +476,18 @@ export default function BasicDashboardPage() {
       bookingId: booking.id,
       status: 'declined_by_restaurant'
     })
+  }
+
+  // Show loading while context is loading or no restaurant selected
+  if (contextLoading || !restaurantId) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-4">Loading dashboard...</p>
+        </div>
+      </div>
+    )
   }
 
   return (

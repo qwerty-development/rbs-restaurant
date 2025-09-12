@@ -37,21 +37,28 @@ export default async function BasicLayout({
     redirect("/login")
   }
 
-  // Handle both array and object formats from Supabase
-  const firstStaff = staffData[0]
-  const restaurant = Array.isArray(firstStaff.restaurant) 
-    ? firstStaff.restaurant[0] 
-    : firstStaff.restaurant
+  // For multi-tenant users, find a basic tier restaurant
+  let basicRestaurantStaffData = null
+  for (const staff of staffData) {
+    const restaurant = Array.isArray(staff.restaurant) 
+      ? staff.restaurant[0] 
+      : staff.restaurant
+    
+    if (restaurant?.tier === 'basic') {
+      basicRestaurantStaffData = [staff]
+      break
+    }
+  }
 
-  // Verify this is a Basic tier restaurant
-  if (restaurant?.tier !== 'basic') {
+  // If no basic tier restaurant found, redirect to main dashboard
+  if (!basicRestaurantStaffData) {
     redirect("/dashboard")
   }
 
   return (
     <RestaurantProvider>
       <SidebarProvider>
-        <DashboardLayoutInner staffData={staffData}>
+        <DashboardLayoutInner staffData={basicRestaurantStaffData}>
           {children}
         </DashboardLayoutInner>
       </SidebarProvider>

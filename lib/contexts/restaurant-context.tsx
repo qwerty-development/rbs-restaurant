@@ -4,7 +4,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useUserRestaurants, type RestaurantStaffInfo } from "@/lib/hooks/use-restaurants"
-import { getRestaurantTier, hasFeature, type RestaurantTier } from "@/lib/utils/tier"
+import { getRestaurantTier, hasFeature, getNavigationItems, type RestaurantTier } from "@/lib/utils/tier"
 
 interface RestaurantContextType {
   restaurants: RestaurantStaffInfo[]
@@ -149,10 +149,62 @@ export function RestaurantProvider({ children, forcedRestaurantId }: RestaurantP
         document.cookie = `selected-restaurant-id=${restaurantId}; path=/; max-age=${30 * 24 * 60 * 60}` // 30 days
       }
       
-      // Update URL to include restaurant parameter
-      const currentUrl = new URL(window.location.href)
-      currentUrl.searchParams.set('restaurant', restaurantId)
-      router.replace(currentUrl.pathname + currentUrl.search)
+      // Smart routing based on restaurant tier and current route
+      const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
+      const restaurantTier = getRestaurantTier(restaurant.restaurant)
+      const availableRoutes = getNavigationItems(restaurantTier).map(item => item.href)
+      
+      // Define route mapping for tier-specific redirects
+      const routeRedirects: Record<string, string> = {
+        // Basic tier gets redirected to basic dashboard
+        '/dashboard': restaurantTier === 'basic' ? '/basic-dashboard' : '/dashboard',
+        '/basic-dashboard': restaurantTier === 'pro' ? '/dashboard' : '/basic-dashboard',
+      }
+      
+      // Pro-tier only routes that should redirect Basic tier users to basic dashboard
+      const proOnlyRoutes = [
+        '/analytics', '/tables', '/customers', '/vip', '/waitlist', 
+        '/loyalty', '/offers', '/staff', '/schedules', '/orders', 
+        '/kitchen', '/notifications'
+      ]
+      
+      // Check if current route is available for the new restaurant's tier
+      const isProOnlyRoute = proOnlyRoutes.some(route => currentPath.startsWith(route))
+      const currentRouteAvailable = availableRoutes.some(route => currentPath.startsWith(route)) || 
+                                   currentPath === '/basic-dashboard' || 
+                                   currentPath.startsWith('/dashboard')
+      
+      if (typeof window !== 'undefined') {
+        let targetPath = currentPath
+        
+        // If switching to Basic tier and on a Pro-only route, redirect to basic dashboard
+        if (restaurantTier === 'basic' && isProOnlyRoute) {
+          targetPath = '/basic-dashboard'
+        }
+        // If switching to Pro tier and on basic dashboard, redirect to main dashboard
+        else if (restaurantTier === 'pro' && currentPath === '/basic-dashboard') {
+          targetPath = '/dashboard'
+        }
+        // If current route is not available for new restaurant tier, redirect to appropriate homepage
+        else if (!currentRouteAvailable) {
+          targetPath = restaurantTier === 'basic' ? '/basic-dashboard' : '/dashboard'
+        } else {
+          // Apply tier-specific route redirects
+          const redirectPath = routeRedirects[currentPath]
+          if (redirectPath) {
+            targetPath = redirectPath
+          }
+        }
+        
+        // Update URL with restaurant parameter and navigate to appropriate route
+        const targetUrl = new URL(targetPath, window.location.origin)
+        targetUrl.searchParams.set('restaurant', restaurantId)
+        
+        console.log(`🔄 Switching restaurant: ${restaurant.restaurant.name} (${restaurantTier} tier)`)
+        console.log(`🔄 Current path: ${currentPath} → Target path: ${targetPath}`)
+        
+        router.replace(targetUrl.pathname + targetUrl.search)
+      }
     }
   }
 
