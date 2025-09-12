@@ -1,22 +1,21 @@
 "use client"
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNotifications } from '@/lib/contexts/notification-context'
-import { RealtimeChannel } from '@supabase/supabase-js'
 import { Booking } from '@/types'
 import { getBookingDisplayName } from '@/lib/utils'
 import { usePathname, useSearchParams } from 'next/navigation'
+import { useRobustRealtime } from './use-robust-realtime'
 
 export function useGlobalLayoutNotifications() {
   const supabase = createClient()
   const queryClient = useQueryClient()
   const { addNotification } = useNotifications()
-  const channelRef = useRef<RealtimeChannel | null>(null)
   const pathname = usePathname()
   const searchParams = useSearchParams()
- 
+  const [restaurantId, setRestaurantId] = useState<string | null>(null)
 
   // Extract restaurant ID from URL or search params
   const getRestaurantId = async () => {
@@ -92,210 +91,206 @@ export function useGlobalLayoutNotifications() {
     return 'Guest'
   }
 
+  // Handle realtime events
+  const handleRealtimeEvent = async (payload: any, subscription: any) => {
+    if (!restaurantId) return
+
+    const { eventType, new: newRecord, old: oldRecord } = payload
+
+    if (subscription.table === 'bookings') {
+      if (eventType === 'INSERT') {
+        await handleBookingInsert(newRecord as Booking)
+      } else if (eventType === 'UPDATE') {
+        await handleBookingUpdate(newRecord as Booking, oldRecord as Booking)
+      }
+    }
+  }
+
+  const handleBookingInsert = async (newBooking: Booking) => {
+    if (!restaurantId || newBooking.restaurant_id !== restaurantId) return
+    
+    console.log('🔔 GlobalLayoutNotifications: Received INSERT event:', newBooking)
+
+    // Update query cache for global bookings
+    queryClient.setQueryData(
+      ['bookings', restaurantId],
+      (oldData: { bookings: Booking[] } | undefined) => {
+        if (!oldData) return { bookings: [newBooking] }
+        return {
+          ...oldData,
+          bookings: [newBooking, ...oldData.bookings]
+        }
+      }
+    )
+
+    // Also update main dashboard queries
+    queryClient.setQueryData(
+      ['all-bookings', restaurantId],
+      (oldData: Booking[] | undefined) => {
+        if (!oldData) return [newBooking]
+        const exists = oldData.some(b => b.id === newBooking.id)
+        if (exists) return oldData
+        return [...oldData, newBooking].sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+      }
+    )
+
+    // Update displayed bookings for current date
+    const today = new Date()
+    queryClient.setQueryData(
+      ['displayed-bookings', restaurantId, today, 'all', 'all', 'today', 'upcoming'],
+      (oldData: Booking[] | undefined) => {
+        if (!oldData) return [newBooking]
+        const exists = oldData.some(b => b.id === newBooking.id)
+        if (exists) return oldData
+        return [...oldData, newBooking].sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+      }
+    )
+
+    // Invalidate today's bookings
+    queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+    
+    // Add notification
+    const guestName = await resolveGuestName(newBooking)
+    console.log('🔔 Adding notification for new booking:', { guestName, partySize: newBooking.party_size, bookingId: newBooking.id })
+    addNotification({
+      type: 'booking',
+      title: 'New Booking',
+      message: `New booking request from ${guestName} for ${newBooking.party_size} guests`,
+      data: newBooking
+    })
+  }
+
+  const handleBookingUpdate = async (updatedBooking: Booking, previousBooking: Booking) => {
+    if (!restaurantId || updatedBooking.restaurant_id !== restaurantId) return
+
+    // Update query cache for global bookings
+    queryClient.setQueryData(
+      ['bookings', restaurantId],
+      (oldData: { bookings: Booking[] } | undefined) => {
+        if (!oldData) return { bookings: [updatedBooking] }
+        return {
+          ...oldData,
+          bookings: oldData.bookings.map(booking =>
+            booking.id === updatedBooking.id ? updatedBooking : booking
+          )
+        }
+      }
+    )
+
+    // Update main dashboard queries
+    queryClient.setQueryData(
+      ['all-bookings', restaurantId],
+      (oldData: Booking[] | undefined) => {
+        if (!oldData) return [updatedBooking]
+        return oldData.map(booking =>
+          booking.id === updatedBooking.id ? updatedBooking : booking
+        ).sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+      }
+    )
+
+    // Update displayed bookings for various filters
+    const today = new Date()
+    const commonFilters = [
+      [restaurantId, today, 'all', 'all', 'today', 'upcoming'],
+      [restaurantId, today, 'pending', 'all', 'today', 'upcoming'],
+      [restaurantId, today, 'confirmed', 'all', 'today', 'upcoming'],
+      [restaurantId, today, 'cancelled_by_user', 'all', 'today', 'upcoming'],
+      [restaurantId, today, 'declined_by_restaurant', 'all', 'today', 'upcoming']
+    ]
+
+    commonFilters.forEach(filterKey => {
+      queryClient.setQueryData(
+        ['displayed-bookings', ...filterKey],
+        (oldData: Booking[] | undefined) => {
+          if (!oldData) return [updatedBooking]
+          return oldData.map(booking =>
+            booking.id === updatedBooking.id ? updatedBooking : booking
+          ).sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
+        }
+      )
+    })
+
+    // Invalidate today's bookings
+    queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
+    
+    // Add notification for status changes
+    if (previousBooking.status !== updatedBooking.status) {
+      const guestName = await resolveGuestName(updatedBooking)
+      const statusMap: Record<string, { title: string; message: string }> = {
+        confirmed: { title: 'Booking Confirmed', message: `Booking for ${guestName} confirmed` },
+        declined_by_restaurant: { title: 'Booking Declined', message: `Booking for ${guestName} declined by restaurant` },
+        cancelled_by_user: { title: 'Booking Cancelled', message: `Booking for ${guestName} cancelled by customer` },
+        cancelled_by_restaurant: { title: 'Booking Cancelled', message: `Booking for ${guestName} cancelled by restaurant` },
+        arrived: { title: 'Guest Arrived', message: `${guestName} has checked in` },
+        seated: { title: 'Guest Seated', message: `${guestName} has been seated` },
+        completed: { title: 'Booking Completed', message: `${guestName}'s booking completed` },
+        no_show: { title: 'No-show', message: `${guestName} marked as no-show` }
+      }
+
+      const statusInfo = statusMap[updatedBooking.status as string]
+      if (statusInfo) {
+        addNotification({
+          type: 'booking',
+          title: statusInfo.title,
+          message: statusInfo.message,
+          data: updatedBooking,
+          variant: ['cancelled_by_user', 'cancelled_by_restaurant', 'declined_by_restaurant'].includes(updatedBooking.status as string)
+            ? 'error'
+            : updatedBooking.status === 'confirmed'
+            ? 'success'
+            : undefined
+        })
+      }
+    }
+  }
+
+  // Get restaurant ID effect
   useEffect(() => {
-    const setupNotifications = async () => {
+    const fetchRestaurantId = async () => {
       // Skip global notifications on basic dashboard - it has its own notification system
       if (pathname.startsWith('/basic-dashboard')) {
         console.log('🔔 GlobalLayoutNotifications: Skipping setup on basic dashboard - using local notifications')
         return
       }
       
-      const restaurantId = await getRestaurantId()
-      
-      console.log('🔔 GlobalLayoutNotifications: Setting up with restaurantId:', restaurantId)
-      
-      if (!restaurantId) {
-        console.log('🔔 GlobalLayoutNotifications: No restaurantId, skipping setup')
-        return
-      }
-
-    // Create realtime channel for bookings
-    const channel = supabase
-      .channel(`global-layout-bookings:restaurant:${restaurantId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'bookings'
-        },
-        async (payload) => {
-          console.log('🔔 GlobalLayoutNotifications: Received INSERT event:', payload)
-          const newBooking = payload.new as Booking
-          if (!newBooking || newBooking.restaurant_id !== restaurantId) {
-            console.log('🔔 GlobalLayoutNotifications: Skipping booking - no newBooking or wrong restaurant')
-            return
-          }
-          
-          // Update query cache for global bookings
-          queryClient.setQueryData(
-            ['bookings', restaurantId],
-            (oldData: { bookings: Booking[] } | undefined) => {
-              if (!oldData) return { bookings: [newBooking] }
-              return {
-                ...oldData,
-                bookings: [newBooking, ...oldData.bookings]
-              }
-            }
-          )
-
-          // Also update main dashboard queries
-          queryClient.setQueryData(
-            ['all-bookings', restaurantId],
-            (oldData: Booking[] | undefined) => {
-              if (!oldData) return [newBooking]
-              const exists = oldData.some(b => b.id === newBooking.id)
-              if (exists) return oldData
-              return [...oldData, newBooking].sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
-            }
-          )
-
-          // Update displayed bookings for current date (if it matches)
-          const today = new Date()
-          const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-          const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
-          
-          queryClient.setQueryData(
-            ['displayed-bookings', restaurantId, today, 'all', 'all', 'today', 'upcoming'],
-            (oldData: Booking[] | undefined) => {
-              if (!oldData) return [newBooking]
-              const exists = oldData.some(b => b.id === newBooking.id)
-              if (exists) return oldData
-              return [...oldData, newBooking].sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
-            }
-          )
-
-          // Invalidate/refresh dashboard today's bookings to sync red banner immediately
-          queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
-          
-          // Add global notification with sound
-          const guestName = await resolveGuestName(newBooking)
-          console.log('🔔 Adding notification for new booking:', { guestName, partySize: newBooking.party_size, bookingId: newBooking.id })
-          addNotification({
-            type: 'booking',
-            title: 'New Booking',
-            message: `New booking request from ${guestName} for ${newBooking.party_size} guests`,
-            data: newBooking
-          })
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'bookings',
-          filter: `restaurant_id=eq.${restaurantId}`
-        },
-        async (payload) => {
-          const updatedBooking = payload.new as Booking
-          const previousBooking = payload.old as Booking
-          
-          // Update query cache for global bookings
-          queryClient.setQueryData(
-            ['bookings', restaurantId],
-            (oldData: { bookings: Booking[] } | undefined) => {
-              if (!oldData) return { bookings: [updatedBooking] }
-              return {
-                ...oldData,
-                bookings: oldData.bookings.map(booking =>
-                  booking.id === updatedBooking.id ? updatedBooking : booking
-                )
-              }
-            }
-          )
-
-          // Also update main dashboard queries
-          queryClient.setQueryData(
-            ['all-bookings', restaurantId],
-            (oldData: Booking[] | undefined) => {
-              if (!oldData) return [updatedBooking]
-              return oldData.map(booking =>
-                booking.id === updatedBooking.id ? updatedBooking : booking
-              ).sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
-            }
-          )
-
-          // Update displayed bookings for all possible filter combinations
-          const today = new Date()
-          const commonFilters = [
-            [restaurantId, today, 'all', 'all', 'today', 'upcoming'],
-            [restaurantId, today, 'pending', 'all', 'today', 'upcoming'],
-            [restaurantId, today, 'confirmed', 'all', 'today', 'upcoming'],
-            [restaurantId, today, 'cancelled_by_user', 'all', 'today', 'upcoming'],
-            [restaurantId, today, 'declined_by_restaurant', 'all', 'today', 'upcoming']
-          ]
-
-          commonFilters.forEach(filterKey => {
-            queryClient.setQueryData(
-              ['displayed-bookings', ...filterKey],
-              (oldData: Booking[] | undefined) => {
-                if (!oldData) return [updatedBooking]
-                return oldData.map(booking =>
-                  booking.id === updatedBooking.id ? updatedBooking : booking
-                ).sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
-              }
-            )
-          })
-
-          // Invalidate/refresh dashboard today's bookings to sync red banner immediately
-          queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
-          
-          // Add global notification for status changes
-          if (previousBooking.status !== updatedBooking.status) {
-            const guestName = await resolveGuestName(updatedBooking)
-            const statusMap: Record<string, { title: string; message: string }> = {
-              confirmed: { title: 'Booking Confirmed', message: `Booking for ${guestName} confirmed` },
-              declined_by_restaurant: { title: 'Booking Declined', message: `Booking for ${guestName} declined by restaurant` },
-              cancelled_by_user: { title: 'Booking Cancelled', message: `Booking for ${guestName} cancelled by customer` },
-              cancelled_by_restaurant: { title: 'Booking Cancelled', message: `Booking for ${guestName} cancelled by restaurant` },
-              arrived: { title: 'Guest Arrived', message: `${guestName} has checked in` },
-              seated: { title: 'Guest Seated', message: `${guestName} has been seated` },
-              completed: { title: 'Booking Completed', message: `${guestName}'s booking completed` },
-              no_show: { title: 'No-show', message: `${guestName} marked as no-show` }
-            }
-
-            const statusInfo = statusMap[updatedBooking.status as string]
-            if (statusInfo) {
-              addNotification({
-                type: 'booking',
-                title: statusInfo.title,
-                message: statusInfo.message,
-                data: updatedBooking,
-                variant: ['cancelled_by_user', 'cancelled_by_restaurant', 'declined_by_restaurant'].includes(updatedBooking.status as string)
-                  ? 'error'
-                  : updatedBooking.status === 'confirmed'
-                  ? 'success'
-                  : undefined
-              })
-            }
-          }
-        }
-      )
-      .subscribe((status) => {
-        console.log('🔔 GlobalLayoutNotifications: Channel subscription status:', status)
-        if (status === 'SUBSCRIBED') {
-          console.log('🔔 GlobalLayoutNotifications: Successfully subscribed to real-time updates for restaurant:', restaurantId)
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('🔔 GlobalLayoutNotifications: Channel subscription error')
-        }
-      })
-
-    channelRef.current = channel
-
-    // Cleanup function
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current)
-        channelRef.current = null
-      }
-    }
+      const id = await getRestaurantId()
+      console.log('🔔 GlobalLayoutNotifications: Found restaurantId:', id)
+      setRestaurantId(id)
     }
     
-    setupNotifications()
-  }, [pathname, searchParams, queryClient, addNotification, supabase])
+    fetchRestaurantId()
+  }, [pathname, searchParams, supabase])
+
+  // Robust realtime subscription
+  const realtimeState = useRobustRealtime({
+    channelName: `global-layout-bookings:restaurant:${restaurantId}`,
+    subscriptions: restaurantId ? [
+      {
+        table: 'bookings',
+        event: 'INSERT',
+        filter: `restaurant_id=eq.${restaurantId}`
+      },
+      {
+        table: 'bookings',
+        event: 'UPDATE', 
+        filter: `restaurant_id=eq.${restaurantId}`
+      }
+    ] : [],
+    onEvent: handleRealtimeEvent,
+    enableRetry: true,
+    maxRetries: 5,
+    retryDelay: 1000,
+    healthCheckInterval: 30000,
+    enableLogging: true
+  })
 
   return {
-    isConnected: channelRef.current?.state === 'joined'
+    isConnected: realtimeState.isConnected,
+    connectionErrors: realtimeState.connectionErrors,
+    retryCount: realtimeState.retryCount,
+    lastEventTime: realtimeState.lastEventTime,
+    channelState: realtimeState.channelState,
+    isHealthy: realtimeState.isHealthy,
+    reconnect: realtimeState.reconnect
   }
 }

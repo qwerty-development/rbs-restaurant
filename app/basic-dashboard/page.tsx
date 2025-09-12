@@ -17,6 +17,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { useNotifications } from "@/lib/contexts/notification-context"
+import { useRobustRealtime } from "@/lib/hooks/use-robust-realtime"
 import { PushNotificationPermission } from "@/components/notifications/push-notification-permission"
 import { 
   Calendar as CalendarIcon, 

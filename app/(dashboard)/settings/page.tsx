@@ -879,8 +879,8 @@ export default function SettingsPage() {
 
         <TabsContent value="pwa" className="space-y-4">
           <div className="space-y-6">
-            {/* Download App Button - Primary CTA */}
-            <DownloadAppButton />
+            {/* Download App Button - Primary CTA with Diagnostics */}
+            <DownloadAppButton showDiagnostics={true} />
             
             {/* Push Notifications */}
             <PushNotificationManager />
