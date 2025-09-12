@@ -43,16 +43,16 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
 
           // Register background sync if supported
           if ('sync' in window.ServiceWorkerRegistration.prototype) {
-            registration.sync.register('background-sync').catch((error) => {
+            ;(registration as any).sync?.register('background-sync').catch((error: any) => {
               console.log('Background sync registration failed:', error)
             })
           }
 
           // Register periodic sync if supported
           if ('periodicSync' in window.ServiceWorkerRegistration.prototype) {
-            registration.periodicSync.register('keep-alive', {
+            ;(registration as any).periodicSync?.register('keep-alive', {
               minInterval: 30000 // 30 seconds
-            }).catch((error) => {
+            }).catch((error: any) => {
               console.log('Periodic sync registration failed:', error)
             })
           }
@@ -98,7 +98,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
       
       // Trigger background sync when coming back online
       if (swRegistration && 'sync' in window.ServiceWorkerRegistration.prototype) {
-        swRegistration.sync.register('background-sync').catch((error) => {
+        ;(swRegistration as any).sync?.register('background-sync').catch((error: any) => {
           console.log('Background sync failed:', error)
         })
       }

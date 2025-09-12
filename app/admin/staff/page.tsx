@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { useRestaurantContext } from '@/contexts/restaurant-context'
+import { useRestaurantContext } from '@/lib/contexts/restaurant-context'
+import { restaurantAuth } from '@/lib/restaurant-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -117,7 +118,8 @@ const PERMISSION_GROUPS = [
 
 export default function StaffManagement() {
   const router = useRouter()
-  const { restaurantId, loading: contextLoading, hasPermission } = useRestaurantContext()
+  const { currentRestaurant, isLoading: contextLoading, hasFeature } = useRestaurantContext()
+  const restaurantId = currentRestaurant?.restaurant.id
   const [staff, setStaff] = useState<Staff[]>([])
   const [restaurants, setRestaurants] = useState<any[]>([])
   const [stats, setStats] = useState<StaffStats>({
@@ -151,10 +153,14 @@ export default function StaffManagement() {
 
   // Check permissions on mount
   useEffect(() => {
-    if (!contextLoading && (!restaurantId || !hasPermission('staff.manage'))) {
+    if (!contextLoading && currentRestaurant && !restaurantAuth.hasPermission(
+      currentRestaurant.permissions, 
+      'staff.manage', 
+      currentRestaurant.role
+    )) {
       router.push('/dashboard')
     }
-  }, [contextLoading, restaurantId, hasPermission, router])
+  }, [contextLoading, currentRestaurant, router])
 
   useEffect(() => {
     if (restaurantId) {

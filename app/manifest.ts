@@ -58,10 +58,6 @@ export default function manifest(): MetadataRoute.Manifest {
     launch_handler: {
       client_mode: 'navigate-existing',
     },
-    background_sync: ['background-sync'],
-    periodic_background_sync: {
-      periodic_sync_tags: ['keep-alive'],
-    },
     screenshots: [
       {
         src: '/screenshot-wide.png',
