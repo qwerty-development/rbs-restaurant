@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useRestaurantContext } from '@/contexts/restaurant-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -114,6 +116,8 @@ const PERMISSION_GROUPS = [
 ]
 
 export default function StaffManagement() {
+  const router = useRouter()
+  const { restaurantId, loading: contextLoading, hasPermission } = useRestaurantContext()
   const [staff, setStaff] = useState<Staff[]>([])
   const [restaurants, setRestaurants] = useState<any[]>([])
   const [stats, setStats] = useState<StaffStats>({
@@ -145,9 +149,18 @@ export default function StaffManagement() {
 
   const supabase = createClient()
 
+  // Check permissions on mount
   useEffect(() => {
-    fetchData()
-  }, [])
+    if (!contextLoading && (!restaurantId || !hasPermission('staff.manage'))) {
+      router.push('/dashboard')
+    }
+  }, [contextLoading, restaurantId, hasPermission, router])
+
+  useEffect(() => {
+    if (restaurantId) {
+      fetchData()
+    }
+  }, [restaurantId])
 
   const fetchData = async () => {
     setLoading(true)
@@ -166,6 +179,8 @@ export default function StaffManagement() {
   }
 
   const fetchStaff = async () => {
+    if (!restaurantId) return
+    
     const { data: staffData, error } = await supabase
       .from('restaurant_staff')
       .select(`
@@ -173,6 +188,7 @@ export default function StaffManagement() {
         profile:profiles!restaurant_staff_user_id_fkey(id, full_name, email, phone_number, avatar_url),
         restaurant:restaurants(id, name, cuisine_type, status)
       `)
+      .eq('restaurant_id', restaurantId)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -208,10 +224,13 @@ export default function StaffManagement() {
   }
 
   const fetchStats = async () => {
+    if (!restaurantId) return
+    
     try {
       const { data: staffStats, error } = await supabase
         .from('restaurant_staff')
         .select('id, is_active, hired_at, terminated_at, user_id')
+        .eq('restaurant_id', restaurantId)
 
       if (error) throw error
 
@@ -255,6 +274,7 @@ export default function StaffManagement() {
           updated_at: new Date().toISOString()
         })
         .eq('id', staffId)
+        .eq('restaurant_id', restaurantId)
 
       if (error) throw error
 
@@ -283,6 +303,7 @@ export default function StaffManagement() {
         .from('restaurant_staff')
         .update(updateData)
         .eq('id', staffId)
+        .eq('restaurant_id', restaurantId)
 
       if (error) throw error
 
@@ -303,6 +324,7 @@ export default function StaffManagement() {
           updated_at: new Date().toISOString()
         })
         .eq('id', staffId)
+        .eq('restaurant_id', restaurantId)
 
       if (error) throw error
 
@@ -324,6 +346,7 @@ export default function StaffManagement() {
         .from('restaurant_staff')
         .delete()
         .eq('id', staffId)
+        .eq('restaurant_id', restaurantId)
 
       if (error) throw error
 
@@ -341,8 +364,8 @@ export default function StaffManagement() {
     setSaving(true)
     
     try {
-      if (!inviteFormData.email.trim() || !inviteFormData.restaurant_id) {
-        toast.error('Please fill in all required fields')
+      if (!inviteFormData.email.trim()) {
+        toast.error('Please enter an email address')
         return
       }
 
@@ -382,7 +405,7 @@ export default function StaffManagement() {
         .from('restaurant_staff')
         .select('id')
         .eq('user_id', userId)
-        .eq('restaurant_id', inviteFormData.restaurant_id)
+        .eq('restaurant_id', restaurantId)
         .single()
 
       if (staffCheckError && staffCheckError.code !== 'PGRST116') {
@@ -400,7 +423,7 @@ export default function StaffManagement() {
         .from('restaurant_staff')
         .insert([{
           user_id: userId,
-          restaurant_id: inviteFormData.restaurant_id,
+          restaurant_id: restaurantId,
           role: inviteFormData.role,
           permissions: inviteFormData.permissions,
           is_active: true,
@@ -498,12 +521,22 @@ export default function StaffManagement() {
     return 'bg-red-100 text-red-800'
   }
 
-  if (loading) {
+  if (contextLoading || loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading staff data...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!restaurantId) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <p className="text-gray-600">No restaurant access found.</p>
         </div>
       </div>
     )
@@ -1045,40 +1078,16 @@ export default function StaffManagement() {
           </DialogHeader>
           
           <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="staff-email">Email Address *</Label>
-                <Input
-                  id="staff-email"
-                  type="email"
-                  value={inviteFormData.email}
-                  onChange={(e) => setInviteFormData({...inviteFormData, email: e.target.value})}
-                  placeholder="staff@example.com"
-                />
-                <p className="text-xs text-gray-500 mt-1">User must already be registered on the platform</p>
-              </div>
-              
-              <div>
-                <Label htmlFor="staff-restaurant">Restaurant *</Label>
-                <Select value={inviteFormData.restaurant_id} onValueChange={(value) => setInviteFormData({...inviteFormData, restaurant_id: value})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select restaurant" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {restaurants.length === 0 ? (
-                      <SelectItem value="" disabled>
-                        No restaurants found
-                      </SelectItem>
-                    ) : (
-                      restaurants.map(restaurant => (
-                        <SelectItem key={restaurant.id} value={restaurant.id}>
-                          {restaurant.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label htmlFor="staff-email">Email Address *</Label>
+              <Input
+                id="staff-email"
+                type="email"
+                value={inviteFormData.email}
+                onChange={(e) => setInviteFormData({...inviteFormData, email: e.target.value})}
+                placeholder="staff@example.com"
+              />
+              <p className="text-xs text-gray-500 mt-1">User must already be registered on the platform</p>
             </div>
 
             <div>
