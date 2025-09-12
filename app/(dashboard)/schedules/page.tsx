@@ -210,7 +210,7 @@ export default function SchedulesPage() {
     if (restaurantId) {
       loadInitialData()
     }
-  }, [loadInitialData, restaurantId])
+  }, [loadInitialData])
 
   const handleCreateShift = (date?: string, staffId?: string) => {
     setShiftFormInitialDate(date || "")
