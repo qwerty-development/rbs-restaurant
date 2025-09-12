@@ -231,8 +231,10 @@ export default function SchedulesPage() {
     setRefreshTrigger(prev => prev + 1)
     
     // Also reload the parent data
-    loadShifts(restaurantId)
-    loadTimeClockEntries(restaurantId)
+    if (restaurantId) {
+      loadShifts(restaurantId)
+      loadTimeClockEntries(restaurantId)
+    }
   }
 
   const handleDeleteShift = async (shift: StaffShift) => {
@@ -280,7 +282,7 @@ export default function SchedulesPage() {
   }
 
   const confirmDeleteShift = async () => {
-    if (!shiftToDelete) return
+    if (!shiftToDelete || !restaurantId) return
 
     try {
       setIsDeleting(true)
@@ -532,13 +534,13 @@ export default function SchedulesPage() {
 
         {/* Time Clock Tab */}
         <TabsContent value="timeclock">
-          {currentStaffMember ? (
+          {currentStaffMember && restaurantId ? (
             <TimeClock
               restaurantId={restaurantId}
               currentStaff={currentStaffMember}
               onTimeClockChange={() => {
                 // Refresh time clock entries when clock in/out happens
-                loadTimeClockEntries(restaurantId)
+                if (restaurantId) loadTimeClockEntries(restaurantId)
               }}
             />
           ) : (
@@ -573,7 +575,7 @@ export default function SchedulesPage() {
                   </Button>
                   <Button 
                     variant="outline"
-                    onClick={() => loadShifts(restaurantId)}
+                    onClick={() => restaurantId && loadShifts(restaurantId)}
                     className="w-full justify-start"
                   >
                     <BarChart3 className="mr-2 h-4 w-4" />

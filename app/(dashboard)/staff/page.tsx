@@ -527,7 +527,7 @@ export default function StaffPage() {
 
   // Save edits
   const handleSaveEdit = async (data: EditStaffFormData) => {
-    if (!currentUser || !staffToEdit) return
+    if (!currentUser || !staffToEdit || !restaurantId) return
     try {
       setLoading(true)
       await restaurantAuth.updateStaffMember(
@@ -581,7 +581,7 @@ export default function StaffPage() {
 
   // Toggle staff status
   const handleToggleStatus = async (staffId: string, currentStatus: boolean) => {
-    if (!currentUser) return
+    if (!currentUser || !restaurantId) return
 
     try {
       await restaurantAuth.updateStaffMember(
