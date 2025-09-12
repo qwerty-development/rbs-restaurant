@@ -34,8 +34,7 @@
       "mcp__puppeteer__puppeteer_fill",
       "mcp__puppeteer__puppeteer_click",
       "mcp__puppeteer__puppeteer_evaluate",
-      "Bash(ls:*)",
-      "Bash(sed:*)"
+      "Bash(ls:*)"
     ],
     "deny": []
   },
