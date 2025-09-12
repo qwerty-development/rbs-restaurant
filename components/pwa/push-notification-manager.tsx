@@ -32,12 +32,11 @@ export function PushNotificationManager({ restaurantId }: { restaurantId?: strin
   const [testMessage, setTestMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  // Get enhanced connection stats for better PWA integration (only if restaurantId provided)
-  const connectionResult = restaurantId 
-    ? useEnhancedRealtimeAll({ restaurantId, enableToasts: false })
-    : { connectionStats: null }
-  
-  const { connectionStats } = connectionResult
+  const { connectionStats } = useEnhancedRealtimeAll({
+    restaurantId: restaurantId || '',
+    enableToasts: false,
+    disabled: !restaurantId,
+  })
 
   useEffect(() => {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
