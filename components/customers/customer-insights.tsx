@@ -11,11 +11,9 @@ import {
   TrendingDown,
   Users,
   Calendar,
-  DollarSign,
   Clock,
   AlertCircle,
-  Star,
-  PieChart
+  Star
 } from 'lucide-react'
 import { format } from 'date-fns'
 

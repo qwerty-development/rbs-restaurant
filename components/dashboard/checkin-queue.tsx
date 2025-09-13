@@ -219,14 +219,15 @@ export function CheckInQueue({
   // Fetch shared tables data
   const { data: sharedTablesSummary = [] } = useSharedTablesSummary(restaurantId, currentTime)
 
-  // Enhanced customer search with caching
+  // Enhanced customer search with caching - excludes admin and staff accounts
   const { data: customers, error: customersError, isLoading: customersLoading } = useQuery({
     queryKey: ["restaurant-customers-walkin", restaurantId, customerSearch],
     queryFn: async () => {
       if (!customerSearch.trim() || customerSearch.length < 1) return []
       if (!restaurantId) throw new Error("Restaurant ID is required")
       
-      const { data, error } = await supabase
+      // Get all matching customers first
+      const { data: customersData, error: customersError } = await supabase
         .from("restaurant_customers")
         .select(`
           *,
@@ -241,12 +242,52 @@ export function CheckInQueue({
         `)
         .eq("restaurant_id", restaurantId)
         .or(`guest_name.ilike.%${customerSearch}%,guest_email.ilike.%${customerSearch}%,guest_phone.ilike.%${customerSearch}%`)
-        .limit(10)
+        .limit(20) // Get more initially to filter out admins/staff
         .order("vip_status", { ascending: false })
         .order("total_bookings", { ascending: false })
 
-      if (error) throw error
-      return data || []
+      if (customersError) throw customersError
+
+      // Filter out admin and restaurant staff accounts
+      let filteredCustomersData = customersData || []
+      
+      if (filteredCustomersData.length > 0) {
+        // Get all user IDs that have profiles (registered users)
+        const customerUserIds = filteredCustomersData
+          .map(c => c.user_id)
+          .filter(id => id !== null)
+        
+        if (customerUserIds.length > 0) {
+          // Check for admin accounts
+          const { data: adminData } = await supabase
+            .from('rbs_admins')
+            .select('user_id')
+            .in('user_id', customerUserIds)
+          
+          const adminUserIds = new Set(adminData?.map(admin => admin.user_id) || [])
+          
+          // Check for restaurant staff accounts
+          const { data: staffData } = await supabase
+            .from('restaurant_staff')
+            .select('user_id')
+            .in('user_id', customerUserIds)
+            .eq('is_active', true)
+          
+          const staffUserIds = new Set(staffData?.map(staff => staff.user_id) || [])
+          
+          // Filter out customers who are admins or staff
+          filteredCustomersData = filteredCustomersData.filter(customer => {
+            // Keep guest customers (no user_id)
+            if (!customer.user_id) return true
+            
+            // Exclude admin and staff accounts
+            return !adminUserIds.has(customer.user_id) && !staffUserIds.has(customer.user_id)
+          })
+        }
+      }
+
+      // Return only the first 10 after filtering
+      return filteredCustomersData.slice(0, 10)
     },
     enabled: customerSearch.length >= 1 && !!restaurantId,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
@@ -1340,7 +1381,7 @@ export function CheckInQueue({
     await executeWalkInFlow(cleanedWalkInBooking)
   }
 
-  // Similar customers lookup when prompt open
+  // Similar customers lookup when prompt open - excludes admin and staff accounts
   const { data: similarCustomers, isLoading: similarLoading, error: similarError } = useQuery({
     queryKey: [
       "walkin-similar-restaurant-customers",
@@ -1374,7 +1415,8 @@ export function CheckInQueue({
 
       if (orFilters.length === 0) return []
 
-      const { data, error } = await supabase
+      // Get all matching customers first
+      const { data: customersData, error: customersError } = await supabase
         .from("restaurant_customers")
         .select(`
           *,
@@ -1387,11 +1429,51 @@ export function CheckInQueue({
         `)
         .eq("restaurant_id", restaurantId)
         .or(orFilters.join(","))
-        .limit(5)
+        .limit(10) // Get more initially to filter out admins/staff
         .order("last_visit", { ascending: false })
 
-      if (error) throw error
-      return data || []
+      if (customersError) throw customersError
+
+      // Filter out admin and restaurant staff accounts
+      let filteredCustomersData = customersData || []
+      
+      if (filteredCustomersData.length > 0) {
+        // Get all user IDs that have profiles (registered users)
+        const customerUserIds = filteredCustomersData
+          .map(c => c.user_id)
+          .filter(id => id !== null)
+        
+        if (customerUserIds.length > 0) {
+          // Check for admin accounts
+          const { data: adminData } = await supabase
+            .from('rbs_admins')
+            .select('user_id')
+            .in('user_id', customerUserIds)
+          
+          const adminUserIds = new Set(adminData?.map(admin => admin.user_id) || [])
+          
+          // Check for restaurant staff accounts
+          const { data: staffData } = await supabase
+            .from('restaurant_staff')
+            .select('user_id')
+            .in('user_id', customerUserIds)
+            .eq('is_active', true)
+          
+          const staffUserIds = new Set(staffData?.map(staff => staff.user_id) || [])
+          
+          // Filter out customers who are admins or staff
+          filteredCustomersData = filteredCustomersData.filter(customer => {
+            // Keep guest customers (no user_id)
+            if (!customer.user_id) return true
+            
+            // Exclude admin and staff accounts
+            return !adminUserIds.has(customer.user_id) && !staffUserIds.has(customer.user_id)
+          })
+        }
+      }
+
+      // Return only the first 5 after filtering
+      return filteredCustomersData.slice(0, 5)
     },
     enabled: !!restaurantId && showAddCustomerPrompt,
   })
