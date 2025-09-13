@@ -70,16 +70,171 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
     try {
       setLoading(true)
 
-      // Get all customers
-      const { data: customers, error: customersError } = await supabase
+      // Get all customers excluding admin and restaurant staff accounts
+      const { data: customersData, error: customersError } = await supabase
         .from('restaurant_customers')
         .select(`
           *,
-          profile:profiles(full_name)
+          profile:profiles!restaurant_customers_user_id_fkey(
+            id,
+            full_name,
+            email,
+            phone_number,
+            avatar_url,
+            allergies,
+            dietary_restrictions,
+            favorite_cuisines,
+            preferred_party_size,
+            notification_preferences,
+            loyalty_points,
+            membership_tier,
+            privacy_settings,
+            user_rating,
+            total_bookings,
+            completed_bookings,
+            cancelled_bookings,
+            no_show_bookings,
+            rating_last_updated,
+            created_at,
+            updated_at
+          )
         `)
         .eq('restaurant_id', restaurantId)
+        .order('created_at', { ascending: false })
 
       if (customersError) throw customersError
+
+      // Filter out admin and restaurant staff accounts
+      let filteredCustomersData = customersData || []
+      
+      if (filteredCustomersData.length > 0) {
+        // Get all user IDs that have profiles (registered users)
+        const customerUserIds = filteredCustomersData
+          .map(c => c.user_id)
+          .filter(id => id !== null)
+        
+        if (customerUserIds.length > 0) {
+          // Check for admin accounts
+          const { data: adminData } = await supabase
+            .from('rbs_admins')
+            .select('user_id')
+            .in('user_id', customerUserIds)
+          
+          const adminUserIds = new Set(adminData?.map(admin => admin.user_id) || [])
+          
+          // Check for restaurant staff accounts
+          const { data: staffData } = await supabase
+            .from('restaurant_staff')
+            .select('user_id')
+            .in('user_id', customerUserIds)
+            .eq('is_active', true)
+          
+          const staffUserIds = new Set(staffData?.map(staff => staff.user_id) || [])
+          
+          // Filter out customers who are admins or staff
+          filteredCustomersData = filteredCustomersData.filter(customer => {
+            // Keep guest customers (no user_id)
+            if (!customer.user_id) return true
+            
+            // Exclude admin and staff accounts
+            return !adminUserIds.has(customer.user_id) && !staffUserIds.has(customer.user_id)
+          })
+        }
+      }
+
+      // Calculate actual booking counts for all customers efficiently with deduplication
+      const customersWithCorrectCounts = await Promise.all(
+        filteredCustomersData.map(async (customer) => {
+          let allBookings: any[] = []
+          
+          try {
+            // Enhanced logic matching the customer details dialog
+            
+            // For registered users with profiles, prioritize user_id matching
+            if (customer.user_id && customer.profile) {
+              const { data: userBookings, error: userBookingsError } = await supabase
+                .from('bookings')
+                .select('id, booking_time')
+                .eq('user_id', customer.user_id)
+                .eq('restaurant_id', restaurantId)
+
+              if (!userBookingsError && userBookings) {
+                allBookings = [...allBookings, ...userBookings]
+              }
+            }
+
+            // For guest customers or when user_id matching fails, try multiple approaches
+            if (!customer.profile || allBookings.length === 0) {
+              // Method 1: Query by guest_email (most reliable for guest customers)
+              if (customer.guest_email) {
+                const { data: emailBookings, error: emailBookingsError } = await supabase
+                  .from('bookings')
+                  .select('id, booking_time')
+                  .eq('guest_email', customer.guest_email)
+                  .eq('restaurant_id', restaurantId)
+
+                if (!emailBookingsError && emailBookings) {
+                  // Add bookings that aren't already in the list (by ID)
+                  const existingIds = new Set(allBookings.map(b => b.id))
+                  const newBookings = emailBookings.filter(b => !existingIds.has(b.id))
+                  allBookings = [...allBookings, ...newBookings]
+                }
+              }
+
+              // Method 2: Query by guest_name and guest_email combination (high confidence match)
+              if (customer.guest_name && customer.guest_email) {
+                const { data: nameEmailBookings, error: nameEmailError } = await supabase
+                  .from('bookings')
+                  .select('id, booking_time')
+                  .eq('guest_name', customer.guest_name)
+                  .eq('guest_email', customer.guest_email)
+                  .eq('restaurant_id', restaurantId)
+
+                if (!nameEmailError && nameEmailBookings) {
+                  // Add bookings that aren't already in the list (by ID)
+                  const existingIds = new Set(allBookings.map(b => b.id))
+                  const newBookings = nameEmailBookings.filter(b => !existingIds.has(b.id))
+                  allBookings = [...allBookings, ...newBookings]
+                }
+              }
+
+              // Method 3: Query by guest_name only (lower confidence, use carefully)
+              if (customer.guest_name && allBookings.length === 0) {
+                const { data: nameBookings, error: nameBookingsError } = await supabase
+                  .from('bookings')
+                  .select('id, booking_time, guest_email')
+                  .eq('guest_name', customer.guest_name)
+                  .eq('restaurant_id', restaurantId)
+
+                if (!nameBookingsError && nameBookings) {
+                  // For name-only matches, be more selective to avoid false positives
+                  // Only include if guest_email matches or is null in both records
+                  const filteredBookings = nameBookings.filter(booking => {
+                    if (!customer.guest_email && !booking.guest_email) return true
+                    if (customer.guest_email && booking.guest_email === customer.guest_email) return true
+                    return false
+                  })
+
+                  const existingIds = new Set(allBookings.map(b => b.id))
+                  const newBookings = filteredBookings.filter(b => !existingIds.has(b.id))
+                  allBookings = [...allBookings, ...newBookings]
+                }
+              }
+            }
+
+            return {
+              ...customer,
+              total_bookings: allBookings.length
+            }
+          } catch (error) {
+            console.error('Error calculating booking count for customer:', customer.id, error)
+            // Fall back to original database value if calculation fails
+            return customer
+          }
+        })
+      )
+
+      const customers = customersWithCorrectCounts
 
       const now = new Date()
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
@@ -112,7 +267,7 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
           segments.regular++
         } else if (lastVisitDate && lastVisitDate < ninetyDaysAgo && customer.total_bookings > 0) {
           segments.lost++
-        } else if (lastVisitDate && lastVisitDate < thirtyDaysAgo && lastVisitDate > ninetyDaysAgo) {
+        } else if (lastVisitDate && lastVisitDate < thirtyDaysAgo && lastVisitDate >= ninetyDaysAgo && customer.total_bookings > 0) {
           segments.atRisk++
         } else if (firstVisitDate && firstVisitDate > thirtyDaysAgo) {
           segments.new++
@@ -122,10 +277,13 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
         totalVisits += customer.total_bookings
         if (customer.total_bookings > 1) returningCustomers++
 
-        // High cancellation/no-show
+        // High cancellation/no-show - use profile data if available
         if (customer.total_bookings > 0) {
-          const cancellationRate = customer.cancelled_count / customer.total_bookings
-          const noShowRate = customer.no_show_count / customer.total_bookings
+          const cancelledBookings = customer.profile?.cancelled_bookings || 0
+          const noShowBookings = customer.profile?.no_show_bookings || 0
+          
+          const cancellationRate = cancelledBookings / customer.total_bookings
+          const noShowRate = noShowBookings / customer.total_bookings
           
           if (cancellationRate > 0.3) highCancellation++
           if (noShowRate > 0.2) highNoShow++
