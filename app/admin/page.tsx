@@ -13,8 +13,9 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from 'react-hot-toast'
 import { AlertTriangle, Plus, Building, Users, RefreshCw, Search, X, Loader2, CheckCircle2, MapPin, Camera, Save } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
-import { LocationPicker } from '@/components/location/location-picker'
+import { LocationPicker, EnhancedAddressSearch } from '@/components/location'
 import type { Coordinates } from '@/lib/utils/location'
+import type { EnhancedGeocodingResult } from '@/lib/services/enhanced-geocoding'
 import { EnhancedRestaurantImageUpload } from '@/components/ui/enhanced-restaurant-image-upload'
 
 interface Restaurant {
@@ -330,13 +331,22 @@ export default function AdminPage() {
     setShowPreImageUpload(false)
   }
 
-  // Handle address and coordinates changes from AddressSearch
-  const handleAddressChange = (address: string, coordinates?: Coordinates) => {
+  // Handle address and coordinates changes from Enhanced AddressSearch
+  const handleAddressChange = (address: string, coordinates?: Coordinates, result?: EnhancedGeocodingResult) => {
     setRestaurant(prev => ({ 
       ...prev, 
       address: address,
       coordinates: coordinates || null
     }))
+    
+    // If we have a business result, we could potentially auto-fill some fields
+    if (result && result.name && result.type && 
+        (result.type === 'restaurant' || result.type === 'cafe' || result.type === 'bakery')) {
+      // Show a toast suggesting this might be a restaurant they want to add
+      toast.success(`Found business: ${result.name}`, {
+        duration: 3000,
+      });
+    }
   }
 
   // Handle location changes from LocationPicker  
@@ -864,12 +874,17 @@ export default function AdminPage() {
                       <Label>Restaurant Address *</Label>
                       <div className="space-y-3">
                         <div className="flex gap-2">
-                          <Input
-                            value={restaurant.address}
-                            onChange={(e) => handleAddressChange(e.target.value)}
-                            placeholder="Enter restaurant address..."
-                            className="flex-1"
-                          />
+                          <div className="flex-1">
+                            <EnhancedAddressSearch
+                              value={restaurant.address}
+                              onChange={handleAddressChange}
+                              placeholder="Search for businesses, restaurants, or addresses in Lebanon..."
+                              searchType="all"
+                              showBusinessDetails={true}
+                              showCurrentLocation={true}
+                              maxResults={8}
+                            />
+                          </div>
                           <Button
                             type="button"
                             variant="outline"

@@ -1,6 +1,7 @@
 // components/location/index.ts
 export { LocationPicker } from './location-picker';
 export { AddressSearch } from './address-search';
+export { EnhancedAddressSearch } from './enhanced-address-search';
 export { CurrentLocationButton, CurrentLocationIconButton, CurrentLocationTextButton } from './current-location-button';
 export { LocationManager } from './location-manager';
 

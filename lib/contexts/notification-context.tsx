@@ -85,7 +85,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, [])
 
   const addNotification = useCallback((notification: Omit<Notification, 'id' | 'timestamp'>) => {
-    console.log('🔔 NotificationContext: Adding notification:', notification)
+
     const newNotification: Notification = {
       ...notification,
       id: Math.random().toString(36).substring(2, 11),
@@ -94,19 +94,19 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     
     setNotifications(prev => {
       const updated = [newNotification, ...prev]
-      console.log('🔔 NotificationContext: Updated notifications array:', updated.length, 'notifications')
+ 
       return updated
     })
     
     // Play sound for booking notifications
     if (notification.type === 'booking') {
-      console.log('🔔 NotificationContext: Playing sound for booking notification')
+    
       playNotificationSound('booking', notification.variant)
     }
 
     // Send push notification if enabled (fire and forget)
     if (isPushEnabled) {
-      console.log('🔔 NotificationContext: Sending push notification')
+     
       const pushData: PushNotificationData = {
         title: notification.title,
         body: notification.message,
@@ -167,7 +167,7 @@ export function useNotifications() {
   }
   
   // Debug logging
-  console.log('🔔 useNotifications: Available methods:', Object.keys(context))
+ 
   
   return context
 }
