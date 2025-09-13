@@ -610,7 +610,64 @@ export default function WaitlistPage() {
   const addManualEntry = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      
+
+      // Basic validation
+      if (!manualEntry.party_size || manualEntry.party_size < 1) {
+        toast.error('Party size must be at least 1 person')
+        return
+      }
+
+      if (manualEntry.party_size > 20) {
+        toast.error('Party size cannot exceed 20 people')
+        return
+      }
+
+      // Check if we have available tables that can accommodate this party size
+      if (!allTables || allTables.length === 0) {
+        toast.error('No tables available in the restaurant')
+        return
+      }
+
+      // Calculate maximum possible capacity (all tables combined or largest single table based on table type)
+      let maxCapacity = 0
+      let availableTablesForPartySize = 0
+
+      if (manualEntry.table_type === 'any') {
+        // For 'any' table type, we can combine tables, so use total capacity
+        maxCapacity = allTables.reduce((sum, table) => sum + table.capacity, 0)
+        availableTablesForPartySize = allTables.filter(table => table.capacity >= manualEntry.party_size).length
+      } else {
+        // For specific table types, filter by type first
+        const filteredTables = allTables.filter(table =>
+          manualEntry.table_type === 'any' ||
+          table.table_type.toLowerCase() === manualEntry.table_type.toLowerCase()
+        )
+
+        if (filteredTables.length === 0) {
+          toast.error(`No ${manualEntry.table_type} tables available in the restaurant`)
+          return
+        }
+
+        // For specific table types, we can still combine tables
+        maxCapacity = filteredTables.reduce((sum, table) => sum + table.capacity, 0)
+        availableTablesForPartySize = filteredTables.filter(table => table.capacity >= manualEntry.party_size).length
+      }
+
+      // Check if party size exceeds restaurant's total capacity
+      if (manualEntry.party_size > maxCapacity) {
+        toast.error(`Party size of ${manualEntry.party_size} exceeds restaurant capacity of ${maxCapacity} seats`)
+        return
+      }
+
+      // For large parties, check if they can be accommodated
+      if (manualEntry.party_size > 8) {
+        const largestTable = Math.max(...allTables.map(table => table.capacity))
+        if (manualEntry.party_size > largestTable && availableTablesForPartySize === 0) {
+          toast.error(`Party size of ${manualEntry.party_size} requires table combination. Largest single table seats ${largestTable}`)
+          return
+        }
+      }
+
       // Check restaurant availability for the desired date and time range
       const startDateTime = new Date(manualEntry.desired_date)
       const [startHours, startMinutes] = manualEntry.desired_time_start.split(':')
@@ -619,6 +676,23 @@ export default function WaitlistPage() {
       const endDateTime = new Date(manualEntry.desired_date)
       const [endHours, endMinutes] = manualEntry.desired_time_end.split(':')
       endDateTime.setHours(parseInt(endHours), parseInt(endMinutes))
+
+      // Validate time range
+      if (startDateTime >= endDateTime) {
+        toast.error('End time must be after start time')
+        return
+      }
+
+      const timeDifferenceHours = (endDateTime.getTime() - startDateTime.getTime()) / (1000 * 60 * 60)
+      if (timeDifferenceHours < 0.5) {
+        toast.error('Time range must be at least 30 minutes')
+        return
+      }
+
+      if (timeDifferenceHours > 6) {
+        toast.error('Time range cannot exceed 6 hours')
+        return
+      }
 
       // Check if restaurant is open during the desired time range
       const startAvailability = await availabilityService.isRestaurantOpen(
@@ -686,7 +760,29 @@ export default function WaitlistPage() {
       loadWaitlistEntries()
     } catch (error) {
       console.error('Error adding entry:', error)
-      toast.error('Failed to add waitlist entry')
+
+      // Provide specific error messages based on the error type
+      if (error?.message?.includes('waitlist_restaurant_id_fkey')) {
+        toast.error('Invalid restaurant selected')
+      } else if (error?.message?.includes('check')) {
+        toast.error('Invalid data provided. Please check your inputs')
+      } else if (error?.message?.includes('unique')) {
+        toast.error('A similar waitlist entry already exists')
+      } else if (error?.message?.includes('permission')) {
+        toast.error('You do not have permission to add waitlist entries')
+      } else {
+        // Extract useful information from the error message
+        const errorMessage = error?.message || 'Unknown error occurred'
+        if (errorMessage.includes('party_size')) {
+          toast.error('Invalid party size specified')
+        } else if (errorMessage.includes('desired_date')) {
+          toast.error('Invalid date specified')
+        } else if (errorMessage.includes('desired_time_range')) {
+          toast.error('Invalid time range specified')
+        } else {
+          toast.error(`Failed to add waitlist entry: ${errorMessage}`)
+        }
+      }
     }
   }
 
@@ -1220,16 +1316,26 @@ export default function WaitlistPage() {
                   <Label htmlFor="party_size">Party Size *</Label>
                   <div className="relative">
                     <Users className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
+                    <Input
                       id="party_size"
-                  type="number"
+                      type="number"
                       min="1"
                       max="20"
-                  value={manualEntry.party_size}
-                  onChange={(e) => setManualEntry({ ...manualEntry, party_size: parseInt(e.target.value) || 1 })}
+                      value={manualEntry.party_size}
+                      onChange={(e) => setManualEntry({ ...manualEntry, party_size: parseInt(e.target.value) || 1 })}
                       className="pl-10"
-                />
-              </div>
+                    />
+                  </div>
+                  {allTables && allTables.length > 0 && (
+                    <div className="mt-2 text-sm text-muted-foreground">
+                      Restaurant capacity: {allTables.reduce((sum, table) => sum + table.capacity, 0)} seats total
+                      {manualEntry.party_size > 8 && (
+                        <div className="text-amber-600 mt-1">
+                          Large parties may require table combination
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
               <div>
