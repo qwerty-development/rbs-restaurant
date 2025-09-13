@@ -39,6 +39,7 @@ import {
   XCircle,
   Pause
 } from 'lucide-react'
+import { titleCase } from '@/lib/utils'
 
 interface Restaurant {
   id: string
@@ -594,7 +595,7 @@ export default function RestaurantManagement() {
                 <div className="flex items-center gap-2">
                   <Badge className={getStatusColor(restaurant.status)}>
                     {getStatusIcon(restaurant.status)}
-                    <span className="ml-1 capitalize">{restaurant.status}</span>
+                    <span className="ml-1">{titleCase(restaurant.status)}</span>
                   </Badge>
                   {restaurant.featured && (
                     <Badge variant="secondary">Featured</Badge>

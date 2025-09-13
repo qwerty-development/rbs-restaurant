@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatTimeRange, getTableTypeDisplay, getStatusColor } from '@/lib/utils/time-utils'
+import { titleCase } from '@/lib/utils'
 import { ContextualActions, QuickActionBar } from '@/components/workflow/contextual-actions'
 import type { WaitlistEntry } from '@/types'
 
@@ -125,7 +126,7 @@ export function WaitlistEntryCard({ entry, onStatusUpdate, onCreateBooking, prev
                   {entry.user?.full_name || 'Unknown Customer'}
                 </h3>
                 <Badge className={getStatusColor(entry.status)}>
-                  {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
+                  {titleCase(entry.status)}
                 </Badge>
               </div>
               <div className="flex items-center space-x-6 text-sm text-muted-foreground">

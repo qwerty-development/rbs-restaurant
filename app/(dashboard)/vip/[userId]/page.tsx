@@ -36,7 +36,7 @@ import {
 import { toast } from "react-hot-toast"
 import { ArrowLeft, Edit, Trash2, Crown, Star, TrendingUp, Calendar as CalendarIcon, Mail, Phone } from "lucide-react"
 import { format, addDays } from "date-fns"
-import { cn } from "@/lib/utils"
+import { cn, titleCase } from "@/lib/utils"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
@@ -434,7 +434,7 @@ export default function VIPUserDetailPage() {
                         </p>
                       </div>
                       <Badge variant={booking.status === 'confirmed' ? 'default' : 'secondary'}>
-                        {booking.status}
+                        {titleCase(booking.status)}
                       </Badge>
                     </li>
                   ))}

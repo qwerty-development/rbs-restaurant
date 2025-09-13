@@ -52,7 +52,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { cn } from '@/lib/utils'
+import { cn, titleCase } from '@/lib/utils'
 import { TableAvailabilityService } from '@/lib/table-availability'
 import { RestaurantAvailability } from '@/lib/restaurant-availability'
 import { customerUtils } from '@/lib/customer-utils'
@@ -869,7 +869,7 @@ export default function WaitlistPage() {
                             {entry.user?.full_name || entry.guest_name || 'Guest'}
                           </h3>
                           <Badge className={getStatusColor(entry.status)}>
-                            {entry.status}
+                            {titleCase(entry.status)}
                           </Badge>
                         </div>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">

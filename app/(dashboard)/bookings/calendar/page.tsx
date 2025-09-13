@@ -42,7 +42,7 @@ import {
   CalendarDays,
   CalendarRange
 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, titleCase } from "@/lib/utils"
 import type { Booking } from "@/types"
 
 type ViewMode = "month" | "week" | "day"
@@ -499,7 +499,7 @@ export default function BookingCalendarPage() {
                                   </CardDescription>
                                 </div>
                                 <Badge variant={booking.status === "confirmed" ? "default" : "secondary"}>
-                                  {booking.status}
+                                  {titleCase(booking.status)}
                                 </Badge>
                               </div>
                             </CardHeader>
