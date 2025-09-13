@@ -102,6 +102,82 @@ export default function AdminPage() {
   
   const supabase = createClient()
 
+  // Predefined cuisine types for consistency
+  const cuisineTypes = [
+    'Lebanese',
+    'Mediterranean',
+    'Italian',
+    'French',
+    'American',
+    'Mexican',
+    'Chinese',
+    'Japanese',
+    'Thai',
+    'Indian',
+    'Greek',
+    'Spanish',
+    'Seafood',
+    'Cafe',
+    'International',
+  ].sort()
+
+  // Phone number validation and formatting for Lebanese numbers
+  const validateLebananesePhone = (phone: string): { isValid: boolean; formatted?: string; error?: string } => {
+    // Remove all non-digit characters
+    const cleanPhone = phone.replace(/\D/g, '')
+    
+    // Lebanese phone number patterns:
+    // Mobile: 961 + 3/7/8/9 + 6 digits (total 10 digits after 961)
+    // Landline: 961 + area code (1-9) + 6-7 digits
+    
+    if (cleanPhone.length === 0) {
+      return { isValid: false, error: 'Phone number is required' }
+    }
+    
+    // Check if it starts with 961 (Lebanon country code)
+    if (!cleanPhone.startsWith('961')) {
+      // If it doesn't start with 961, check if it's a local number
+      if (cleanPhone.length === 8 && /^[3789]/.test(cleanPhone)) {
+        // Mobile number without country code
+        const formatted = `+961 ${cleanPhone.slice(0, 1)} ${cleanPhone.slice(1, 4)} ${cleanPhone.slice(4)}`
+        return { isValid: true, formatted }
+      } else if (cleanPhone.length === 7 && /^[1-9]/.test(cleanPhone)) {
+        // Landline without country code
+        const formatted = `+961 ${cleanPhone.slice(0, 1)} ${cleanPhone.slice(1, 4)} ${cleanPhone.slice(4)}`
+        return { isValid: true, formatted }
+      }
+      return { isValid: false, error: 'Lebanese phone numbers should start with +961 or be a valid local number' }
+    }
+    
+    const nationalNumber = cleanPhone.slice(3) // Remove 961
+    
+    if (nationalNumber.length < 7 || nationalNumber.length > 8) {
+      return { isValid: false, error: 'Invalid Lebanese phone number length' }
+    }
+    
+    // Mobile numbers (3, 7, 8, 9 + 6 digits)
+    if (nationalNumber.length === 7 && /^[3789]/.test(nationalNumber)) {
+      const formatted = `+961 ${nationalNumber.slice(0, 1)} ${nationalNumber.slice(1, 4)} ${nationalNumber.slice(4)}`
+      return { isValid: true, formatted }
+    }
+    
+    // Landline numbers (area code + 6-7 digits)
+    if ((nationalNumber.length === 7 || nationalNumber.length === 8) && /^[1-9]/.test(nationalNumber)) {
+      if (nationalNumber.length === 7) {
+        const formatted = `+961 ${nationalNumber.slice(0, 1)} ${nationalNumber.slice(1, 4)} ${nationalNumber.slice(4)}`
+        return { isValid: true, formatted }
+      } else {
+        const formatted = `+961 ${nationalNumber.slice(0, 1)} ${nationalNumber.slice(1, 4)} ${nationalNumber.slice(4, 7)}`
+        return { isValid: true, formatted }
+      }
+    }
+    
+    return { isValid: false, error: 'Invalid Lebanese phone number format' }
+  }
+
+  // State for phone validation
+  const [phoneError, setPhoneError] = useState<string>('')
+
   useEffect(() => {
     const fetchExistingRestaurants = async () => {
       const { data: restaurants, error } = await supabase
@@ -309,6 +385,14 @@ export default function AdminPage() {
       return
     }
 
+    // Validate phone number before creating
+    const phoneValidation = validateLebananesePhone(restaurant.phone_number)
+    if (!phoneValidation.isValid) {
+      toast.error(`Invalid phone number: ${phoneValidation.error}`)
+      setPhoneError(phoneValidation.error || 'Invalid phone number')
+      return
+    }
+
     setLoading(true)
     try {
       setCreationProgress(`Creating ${restaurant.name}...`)
@@ -492,6 +576,26 @@ export default function AdminPage() {
     setRestaurant(prev => ({ ...prev, [field]: value }))
   }
 
+  // Handle phone number input with validation
+  const handlePhoneChange = (value: string) => {
+    updateRestaurant('phone_number', value)
+    
+    if (value.trim()) {
+      const validation = validateLebananesePhone(value)
+      if (!validation.isValid) {
+        setPhoneError(validation.error || 'Invalid phone number')
+      } else {
+        setPhoneError('')
+        // Auto-format the phone number
+        if (validation.formatted && validation.formatted !== value) {
+          updateRestaurant('phone_number', validation.formatted)
+        }
+      }
+    } else {
+      setPhoneError('')
+    }
+  }
+
   const updateAvailability = (day: string, shiftIndex: number, field: string, value: any) => {
     setRestaurant(prev => ({
       ...prev,
@@ -641,286 +745,333 @@ export default function AdminPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                    <Label>Restaurant Name *</Label>
-                    <Input
-                      value={restaurant.name}
-                      onChange={(e) => updateRestaurant('name', e.target.value)}
-                      placeholder="Enter restaurant name"
-                    />
-                  </div>
-                  <div>
-                    <Label>Cuisine Type *</Label>
-                    <Input
-                      value={restaurant.cuisine_type}
-                      onChange={(e) => updateRestaurant('cuisine_type', e.target.value)}
-                      placeholder="e.g., Italian, Japanese, American"
-                    />
-                  </div>
-                  <div>
-                    <Label>Phone Number *</Label>
-                    <Input
-                      value={restaurant.phone_number}
-                      onChange={(e) => updateRestaurant('phone_number', e.target.value)}
-                      placeholder="+1234567890"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <Label>Restaurant Address *</Label>
-                    <div className="space-y-3">
-                      <div className="flex gap-2">
-                        <Input
-                          value={restaurant.address}
-                          onChange={(e) => handleAddressChange(e.target.value)}
-                          placeholder="Enter restaurant address..."
-                          className="flex-1"
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setShowLocationPicker(!showLocationPicker)}
-                          className="px-4"
-                        >
-                          {showLocationPicker ? 'Hide Map' : 'Open Map'}
-                        </Button>
-                      </div>
-                      
-                      {restaurant.coordinates && (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <MapPin className="h-3 w-3 text-green-600" />
-                          <span>Location: {restaurant.coordinates.lat.toFixed(4)}, {restaurant.coordinates.lng.toFixed(4)}</span>
-                          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
-                            Coordinates Set
-                          </Badge>
-                        </div>
-                      )}
-
-                      {showLocationPicker && (
-                        <div className="border rounded-lg overflow-hidden">
-                          <LocationPicker
-                            value={restaurant.coordinates}
-                            onChange={handleLocationPickerChange}
-                            initialAddress={restaurant.address}
-                            height={350}
-                            showAddressSearch={false} // We have it above
-                            showCurrentLocation={false} // We have it in AddressSearch
-                            showCoordinateInput={true}
-                            zoom={15}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <Label>Owner Search *</Label>
-                    <div className="relative">
-                      <Input
-                        type="email"
-                        placeholder="Enter email or name to search for owner..."
-                        value={ownerSearch}
-                        onChange={(e) => setOwnerSearch(e.target.value)}
-                        className="pr-20"
-                      />
-                      <div className="absolute right-2 top-2 flex items-center gap-1">
-                        {isSearchingUsers && (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        )}
-                        {ownerSearch && ownerSearch.length >= 3 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={() => searchUsers(ownerSearch)}
-                            disabled={isSearchingUsers}
-                          >
-                            <Search className="h-3 w-3" />
-                          </Button>
-                        )}
-                        {selectedOwner && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={clearOwnerSelection}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Search Results - Show directly under search box */}
-                    {searchedUsers.length > 0 && !selectedOwner && (
-                      <div className="mt-2 space-y-2 max-h-64 overflow-y-auto border rounded-lg bg-white shadow-lg">
-                        {searchedUsers.map((user) => (
-                          <div
-                            key={user.id}
-                            className="p-3 cursor-pointer hover:bg-muted/50 border-b last:border-b-0 transition-colors"
-                            onClick={() => handleOwnerSelect(user)}
-                          >
-                            <div className="flex items-center space-x-3">
-                              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                                <span className="text-xs font-semibold">
-                                  {user.full_name.split(' ').map(n => n[0]).join('')}
-                                </span>
-                              </div>
-                              <div className="flex-1">
-                                <div className="font-medium">{user.full_name}</div>
-                                <div className="text-sm text-muted-foreground">{user.email}</div>
-                                {user.phone_number && (
-                                  <div className="text-sm text-muted-foreground">{user.phone_number}</div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Helper messages */}
-                    {ownerSearch && ownerSearch.length >= 3 && !isSearchingUsers && searchedUsers.length === 0 && !selectedOwner && (
-                      <div className="text-sm text-muted-foreground mt-1 space-y-1">
-                        <p>No users found. Try:</p>
-                        <ul className="text-xs list-disc list-inside ml-2 space-y-1">
-                          <li>Checking the email spelling</li>
-                          <li>Searching by name instead</li>
-                          <li>Using just the username part (before @)</li>
-                          <li>Making sure the user has registered</li>
-                        </ul>
-                      </div>
-                    )}
-                    {ownerSearch && ownerSearch.length < 3 && (
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Enter at least 3 characters to search
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Selected Owner Display */}
-                  {selectedOwner && (
-                    <div className="p-4 border rounded-lg bg-muted/50">
-                      <div className="flex items-center space-x-3">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-sm font-semibold">
-                            {selectedOwner.full_name.split(' ').map(n => n[0]).join('')}
-                          </span>
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-medium">{selectedOwner.full_name}</h4>
-                          <p className="text-sm text-muted-foreground">{selectedOwner.email}</p>
-                          {selectedOwner.phone_number && (
-                            <p className="text-sm text-muted-foreground">{selectedOwner.phone_number}</p>
-                          )}
-                        </div>
-                        <CheckCircle2 className="h-5 w-5 text-green-600" />
-                      </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <Label>Price Range (1-4)</Label>
-                    <Select
-                      value={restaurant.price_range.toString()}
-                      onValueChange={(value) => updateRestaurant('price_range', parseInt(value))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">$ - Budget</SelectItem>
-                        <SelectItem value="2">$$ - Moderate</SelectItem>
-                        <SelectItem value="3">$$$ - Expensive</SelectItem>
-                        <SelectItem value="4">$$$$ - Very Expensive</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Restaurant Tier</Label>
-                    <Select
-                      value={restaurant.tier}
-                      onValueChange={(value: 'basic' | 'pro') => updateRestaurant('tier', value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="basic">Basic Tier</SelectItem>
-                        <SelectItem value="pro">Pro Tier</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {restaurant.tier === 'pro' && (
+              <div className="space-y-8">
+                {/* Basic Information Section */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 text-blue-800 border-b border-blue-200 pb-2">
+                    Basic Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div>
-                      <Label>Booking Policy</Label>
+                      <Label>Restaurant Name *</Label>
+                      <Input
+                        value={restaurant.name}
+                        onChange={(e) => updateRestaurant('name', e.target.value)}
+                        placeholder="Enter restaurant name"
+                      />
+                    </div>
+                    <div>
+                      <Label>Cuisine Type *</Label>
                       <Select
-                        value={restaurant.booking_policy}
-                        onValueChange={(value: 'instant' | 'request') => updateRestaurant('booking_policy', value)}
+                        value={restaurant.cuisine_type}
+                        onValueChange={(value) => updateRestaurant('cuisine_type', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select cuisine type" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {cuisineTypes.map((cuisine) => (
+                            <SelectItem key={cuisine} value={cuisine}>
+                              {cuisine}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Phone Number *</Label>
+                      <Input
+                        value={restaurant.phone_number}
+                        onChange={(e) => handlePhoneChange(e.target.value)}
+                        placeholder="+961 3 123 456 or 03123456"
+                        className={phoneError ? 'border-red-500' : ''}
+                      />
+                      {phoneError && (
+                        <p className="text-red-500 text-sm mt-1">{phoneError}</p>
+                      )}
+                      <p className="text-muted-foreground text-xs mt-1">
+                        Lebanese format: +961 X XXX XXX (mobile: 3/7/8/9, landline: 1-9)
+                      </p>
+                    </div>
+                    <div>
+                      <Label>Price Range (1-4)</Label>
+                      <Select
+                        value={restaurant.price_range.toString()}
+                        onValueChange={(value) => updateRestaurant('price_range', parseInt(value))}
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="instant">Instant Booking</SelectItem>
-                          <SelectItem value="request">Request Based</SelectItem>
+                          <SelectItem value="1">$ - Budget</SelectItem>
+                          <SelectItem value="2">$$ - Moderate</SelectItem>
+                          <SelectItem value="3">$$$ - Expensive</SelectItem>
+                          <SelectItem value="4">$$$$ - Very Expensive</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-                  )}
-                  <div className="md:col-span-3">
-                    <Label>Operating Hours</Label>
-                    <div className="space-y-4 mt-2">
-                      {Object.entries(restaurant.availability).map(([day, shifts]) => (
-                        <div key={day} className="grid grid-cols-12 gap-2 items-center">
-                          <div className="col-span-2">
-                            <Label className="text-sm capitalize">{day}</Label>
-                          </div>
-                          <div className="col-span-2">
-                            <Checkbox
-                              checked={shifts[0]?.is_open || false}
-                              onCheckedChange={(checked) => updateAvailability(day, 0, 'is_open', checked)}
-                            />
-                            <span className="ml-2 text-sm">Open</span>
-                          </div>
-                          {shifts[0]?.is_open && (
-                            <>
-                              <div className="col-span-3">
-                                <Input
-                                  type="time"
-                                  value={shifts[0]?.open_time || '11:00'}
-                                  onChange={(e) => updateAvailability(day, 0, 'open_time', e.target.value)}
-                                  className="w-full"
-                                />
-                              </div>
-                              <div className="col-span-1 text-center">
-                                <span className="text-sm">to</span>
-                              </div>
-                              <div className="col-span-3">
-                                <Input
-                                  type="time"
-                                  value={shifts[0]?.close_time || '22:00'}
-                                  onChange={(e) => updateAvailability(day, 0, 'close_time', e.target.value)}
-                                  className="w-full"
-                                />
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      ))}
+                    <div>
+                      <Label>Restaurant Tier</Label>
+                      <Select
+                        value={restaurant.tier}
+                        onValueChange={(value: 'basic' | 'pro') => updateRestaurant('tier', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="basic">Basic Tier</SelectItem>
+                          <SelectItem value="pro">Pro Tier</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {restaurant.tier === 'pro' && (
+                      <div>
+                        <Label>Booking Policy</Label>
+                        <Select
+                          value={restaurant.booking_policy}
+                          onValueChange={(value: 'instant' | 'request') => updateRestaurant('booking_policy', value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="instant">Instant Booking</SelectItem>
+                            <SelectItem value="request">Request Based</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    <div className="md:col-span-3">
+                      <Label>Description</Label>
+                      <Textarea
+                        value={restaurant.description}
+                        onChange={(e) => updateRestaurant('description', e.target.value)}
+                        rows={3}
+                        placeholder="Describe the restaurant atmosphere, cuisine, and special features"
+                      />
                     </div>
                   </div>
-                  <div className="md:col-span-3">
-                    <Label>Description</Label>
-                    <Textarea
-                      value={restaurant.description}
-                      onChange={(e) => updateRestaurant('description', e.target.value)}
-                      rows={3}
-                      placeholder="Describe the restaurant atmosphere, cuisine, and special features"
-                    />
+                </div>
+
+                {/* Location Section */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 text-blue-800 border-b border-blue-200 pb-2">
+                    Location Information
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Restaurant Address *</Label>
+                      <div className="space-y-3">
+                        <div className="flex gap-2">
+                          <Input
+                            value={restaurant.address}
+                            onChange={(e) => handleAddressChange(e.target.value)}
+                            placeholder="Enter restaurant address..."
+                            className="flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setShowLocationPicker(!showLocationPicker)}
+                            className="px-4"
+                          >
+                            {showLocationPicker ? 'Hide Map' : 'Open Map'}
+                          </Button>
+                        </div>
+                        
+                        {restaurant.coordinates && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <MapPin className="h-3 w-3 text-green-600" />
+                            <span>Location: {restaurant.coordinates.lat.toFixed(4)}, {restaurant.coordinates.lng.toFixed(4)}</span>
+                            <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                              Coordinates Set
+                            </Badge>
+                          </div>
+                        )}
+
+                        {showLocationPicker && (
+                          <div className="border rounded-lg overflow-hidden">
+                            <LocationPicker
+                              value={restaurant.coordinates}
+                              onChange={handleLocationPickerChange}
+                              initialAddress={restaurant.address}
+                              height={350}
+                              showAddressSearch={false} // We have it above
+                              showCurrentLocation={false} // We have it in AddressSearch
+                              showCoordinateInput={true}
+                              zoom={15}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
+                </div>
+
+                {/* Owner Section */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 text-blue-800 border-b border-blue-200 pb-2">
+                    Owner Information
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Owner Search *</Label>
+                      <div className="relative">
+                        <Input
+                          type="email"
+                          placeholder="Enter email or name to search for owner..."
+                          value={ownerSearch}
+                          onChange={(e) => setOwnerSearch(e.target.value)}
+                          className="pr-20"
+                        />
+                        <div className="absolute right-2 top-2 flex items-center gap-1">
+                          {isSearchingUsers && (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          )}
+                          {ownerSearch && ownerSearch.length >= 3 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={() => searchUsers(ownerSearch)}
+                              disabled={isSearchingUsers}
+                            >
+                              <Search className="h-3 w-3" />
+                            </Button>
+                          )}
+                          {selectedOwner && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={clearOwnerSelection}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Search Results - Show directly under search box */}
+                      {searchedUsers.length > 0 && !selectedOwner && (
+                        <div className="mt-2 space-y-2 max-h-64 overflow-y-auto border rounded-lg bg-white shadow-lg">
+                          {searchedUsers.map((user) => (
+                            <div
+                              key={user.id}
+                              className="p-3 cursor-pointer hover:bg-muted/50 border-b last:border-b-0 transition-colors"
+                              onClick={() => handleOwnerSelect(user)}
+                            >
+                              <div className="flex items-center space-x-3">
+                                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                  <span className="text-xs font-semibold">
+                                    {user.full_name.split(' ').map(n => n[0]).join('')}
+                                  </span>
+                                </div>
+                                <div className="flex-1">
+                                  <div className="font-medium">{user.full_name}</div>
+                                  <div className="text-sm text-muted-foreground">{user.email}</div>
+                                  {user.phone_number && (
+                                    <div className="text-sm text-muted-foreground">{user.phone_number}</div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Helper messages */}
+                      {ownerSearch && ownerSearch.length >= 3 && !isSearchingUsers && searchedUsers.length === 0 && !selectedOwner && (
+                        <div className="text-sm text-muted-foreground mt-1 space-y-1">
+                          <p>No users found. Try:</p>
+                          <ul className="text-xs list-disc list-inside ml-2 space-y-1">
+                            <li>Checking the email spelling</li>
+                            <li>Searching by name instead</li>
+                            <li>Using just the username part (before @)</li>
+                            <li>Making sure the user has registered</li>
+                          </ul>
+                        </div>
+                      )}
+                      {ownerSearch && ownerSearch.length < 3 && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Enter at least 3 characters to search
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Selected Owner Display */}
+                    {selectedOwner && (
+                      <div className="p-4 border rounded-lg bg-muted/50">
+                        <div className="flex items-center space-x-3">
+                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <span className="text-sm font-semibold">
+                              {selectedOwner.full_name.split(' ').map(n => n[0]).join('')}
+                            </span>
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-medium">{selectedOwner.full_name}</h4>
+                            <p className="text-sm text-muted-foreground">{selectedOwner.email}</p>
+                            {selectedOwner.phone_number && (
+                              <p className="text-sm text-muted-foreground">{selectedOwner.phone_number}</p>
+                            )}
+                          </div>
+                          <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Operating Hours Section */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 text-blue-800 border-b border-blue-200 pb-2">
+                    Operating Hours
+                  </h3>
+                  <div className="space-y-4">
+                    {Object.entries(restaurant.availability).map(([day, shifts]) => (
+                      <div key={day} className="grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-2">
+                          <Label className="text-sm capitalize">{day}</Label>
+                        </div>
+                        <div className="col-span-2">
+                          <Checkbox
+                            checked={shifts[0]?.is_open || false}
+                            onCheckedChange={(checked) => updateAvailability(day, 0, 'is_open', checked)}
+                          />
+                          <span className="ml-2 text-sm">Open</span>
+                        </div>
+                        {shifts[0]?.is_open && (
+                          <>
+                            <div className="col-span-3">
+                              <Input
+                                type="time"
+                                value={shifts[0]?.open_time || '11:00'}
+                                onChange={(e) => updateAvailability(day, 0, 'open_time', e.target.value)}
+                                className="w-full"
+                              />
+                            </div>
+                            <div className="col-span-1 text-center">
+                              <span className="text-sm">to</span>
+                            </div>
+                            <div className="col-span-3">
+                              <Input
+                                type="time"
+                                value={shifts[0]?.close_time || '22:00'}
+                                onChange={(e) => updateAvailability(day, 0, 'close_time', e.target.value)}
+                                className="w-full"
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 </div>
 
                 {/* Image Upload Section - Before Restaurant Creation */}
@@ -984,9 +1135,88 @@ export default function AdminPage() {
                   )}
                 </div>
 
+                {/* Form Validation Summary */}
+                <div className="mt-6 p-4 border rounded-lg bg-muted/20">
+                  <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5" />
+                    Form Completion Status
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      {restaurant.name ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <div className="w-4 h-4 border-2 border-red-500 rounded-full" />
+                      )}
+                      <span className={restaurant.name ? 'text-green-700' : 'text-red-600'}>
+                        Restaurant Name
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {restaurant.cuisine_type ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <div className="w-4 h-4 border-2 border-red-500 rounded-full" />
+                      )}
+                      <span className={restaurant.cuisine_type ? 'text-green-700' : 'text-red-600'}>
+                        Cuisine Type
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {restaurant.phone_number && !phoneError ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <div className="w-4 h-4 border-2 border-red-500 rounded-full" />
+                      )}
+                      <span className={restaurant.phone_number && !phoneError ? 'text-green-700' : 'text-red-600'}>
+                        Valid Phone Number
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {restaurant.address && restaurant.coordinates ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <div className="w-4 h-4 border-2 border-red-500 rounded-full" />
+                      )}
+                      <span className={restaurant.address && restaurant.coordinates ? 'text-green-700' : 'text-red-600'}>
+                        Address with Location
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {selectedOwner ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <div className="w-4 h-4 border-2 border-red-500 rounded-full" />
+                      )}
+                      <span className={selectedOwner ? 'text-green-700' : 'text-red-600'}>
+                        Owner Selected
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {mainImageUrl || imageUrls.length > 0 ? (
+                        <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                      ) : (
+                        <div className="w-4 h-4 border-2 border-gray-400 rounded-full" />
+                      )}
+                      <span className={mainImageUrl || imageUrls.length > 0 ? 'text-blue-700' : 'text-gray-600'}>
+                        Images (Optional)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
                 <Button
                   onClick={handleCreateRestaurant}
-                  disabled={loading || !restaurant.name || !restaurant.address || !restaurant.phone_number || !restaurant.cuisine_type || !selectedOwner || !restaurant.coordinates}
+                  disabled={
+                    loading || 
+                    !restaurant.name || 
+                    !restaurant.address || 
+                    !restaurant.phone_number || 
+                    !restaurant.cuisine_type || 
+                    !selectedOwner || 
+                    !restaurant.coordinates ||
+                    !!phoneError
+                  }
                   className="w-full"
                   size="lg"
                 >
