@@ -100,7 +100,7 @@ export function TodaysTimeline({
         return {
           icon: Timer,
           iconColor: 'text-amber-600',
-          bgColor: 'bg-amber-50 border-amber-200 hover:bg-amber-100',
+          bgColor: 'bg-amber-50 border-amber-200',
           badge: 'bg-amber-100 text-amber-800',
           badgeText: 'Needs Confirmation',
           urgent: true
@@ -110,7 +110,7 @@ export function TodaysTimeline({
           return {
             icon: AlertTriangle,
             iconColor: 'text-red-600',
-            bgColor: 'bg-red-50 border-red-200 hover:bg-red-100',
+            bgColor: 'bg-red-50 border-red-200',
             badge: 'bg-red-100 text-red-800',
             badgeText: `${Math.abs(minutesUntil)}m Late`,
             urgent: true
@@ -119,7 +119,7 @@ export function TodaysTimeline({
         return {
           icon: CheckCircle,
           iconColor: 'text-green-600',
-          bgColor: 'bg-green-50 border-green-200 hover:bg-green-100',
+          bgColor: 'bg-green-50 border-green-200',
           badge: 'bg-green-100 text-green-800',
           badgeText: 'Confirmed',
           urgent: false
@@ -128,7 +128,7 @@ export function TodaysTimeline({
         return {
           icon: UserCheck,
           iconColor: 'text-blue-600',
-          bgColor: 'bg-blue-50 border-blue-200 hover:bg-blue-100',
+          bgColor: 'bg-blue-50 border-blue-200',
           badge: 'bg-blue-100 text-blue-800',
           badgeText: 'Arrived - Needs Seating',
           urgent: true
@@ -137,7 +137,7 @@ export function TodaysTimeline({
         return {
           icon: Utensils,
           iconColor: 'text-purple-600',
-          bgColor: 'bg-purple-50 border-purple-200 hover:bg-purple-100',
+          bgColor: 'bg-purple-50 border-purple-200',
           badge: 'bg-purple-100 text-purple-800',
           badgeText: 'Just Seated',
           urgent: false
@@ -146,7 +146,7 @@ export function TodaysTimeline({
         return {
           icon: ChefHat,
           iconColor: 'text-indigo-600',
-          bgColor: 'bg-indigo-50 border-indigo-200 hover:bg-indigo-100',
+          bgColor: 'bg-indigo-50 border-indigo-200',
           badge: 'bg-indigo-100 text-indigo-800',
           badgeText: 'Order Placed',
           urgent: false
@@ -155,7 +155,7 @@ export function TodaysTimeline({
         return {
           icon: Coffee,
           iconColor: 'text-orange-600',
-          bgColor: 'bg-orange-50 border-orange-200 hover:bg-orange-100',
+          bgColor: 'bg-orange-50 border-orange-200',
           badge: 'bg-orange-100 text-orange-800',
           badgeText: 'Appetizers Served',
           urgent: false
@@ -164,7 +164,7 @@ export function TodaysTimeline({
         return {
           icon: Utensils,
           iconColor: 'text-emerald-600',
-          bgColor: 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100',
+          bgColor: 'bg-emerald-50 border-emerald-200',
           badge: 'bg-emerald-100 text-emerald-800',
           badgeText: 'Main Course',
           urgent: false
@@ -173,7 +173,7 @@ export function TodaysTimeline({
         return {
           icon: Cake,
           iconColor: 'text-pink-600',
-          bgColor: 'bg-pink-50 border-pink-200 hover:bg-pink-100',
+          bgColor: 'bg-pink-50 border-pink-200',
           badge: 'bg-pink-100 text-pink-800',
           badgeText: 'Dessert',
           urgent: false
@@ -182,7 +182,7 @@ export function TodaysTimeline({
         return {
           icon: CreditCard,
           iconColor: 'text-teal-600',
-          bgColor: 'bg-teal-50 border-teal-200 hover:bg-teal-100',
+          bgColor: 'bg-teal-50 border-teal-200',
           badge: 'bg-teal-100 text-teal-800',
           badgeText: 'Payment',
           urgent: false
@@ -191,7 +191,7 @@ export function TodaysTimeline({
         return {
           icon: CheckCircle,
           iconColor: 'text-gray-500',
-          bgColor: 'bg-gray-50 border-gray-200 hover:bg-gray-100',
+          bgColor: 'bg-gray-50 border-gray-200',
           badge: 'bg-gray-100 text-gray-700',
           badgeText: 'Completed',
           urgent: false
@@ -209,7 +209,7 @@ export function TodaysTimeline({
         return {
           icon: AlertCircle,
           iconColor: 'text-gray-600',
-          bgColor: 'bg-gray-50 border-gray-200 hover:bg-gray-100',
+          bgColor: 'bg-gray-50 border-gray-200',
           badge: 'bg-gray-100 text-gray-800',
           badgeText: titleCase(booking.status),
           urgent: false
