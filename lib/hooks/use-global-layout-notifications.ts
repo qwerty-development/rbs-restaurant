@@ -50,12 +50,12 @@ export function useGlobalLayoutNotifications() {
               .single()
             
             if (staffData) {
-              console.log('🔔 GlobalLayoutNotifications: Found restaurant ID from database:', staffData.restaurant_id)
+             
               return staffData.restaurant_id
             }
           }
         } catch (error) {
-          console.log('🔔 GlobalLayoutNotifications: Error getting restaurant ID from database:', error)
+         
         }
       }
     }
@@ -96,16 +96,16 @@ export function useGlobalLayoutNotifications() {
     const setupNotifications = async () => {
       // Skip global notifications on basic dashboard - it has its own notification system
       if (pathname.startsWith('/basic-dashboard')) {
-        console.log('🔔 GlobalLayoutNotifications: Skipping setup on basic dashboard - using local notifications')
+      
         return
       }
       
       const restaurantId = await getRestaurantId()
       
-      console.log('🔔 GlobalLayoutNotifications: Setting up with restaurantId:', restaurantId)
+    
       
       if (!restaurantId) {
-        console.log('🔔 GlobalLayoutNotifications: No restaurantId, skipping setup')
+       
         return
       }
 
@@ -120,11 +120,10 @@ export function useGlobalLayoutNotifications() {
           table: 'bookings'
         },
         async (payload) => {
-          console.log('🔔 GlobalLayoutNotifications: Received INSERT event:', payload)
+         
           const newBooking = payload.new as Booking
           if (!newBooking || newBooking.restaurant_id !== restaurantId) {
-            console.log('🔔 GlobalLayoutNotifications: Skipping booking - no newBooking or wrong restaurant')
-            return
+           
           }
           
           // Update query cache for global bookings
@@ -170,7 +169,7 @@ export function useGlobalLayoutNotifications() {
           
           // Add global notification with sound
           const guestName = await resolveGuestName(newBooking)
-          console.log('🔔 Adding notification for new booking:', { guestName, partySize: newBooking.party_size, bookingId: newBooking.id })
+         
           addNotification({
             type: 'booking',
             title: 'New Booking',
@@ -273,11 +272,10 @@ export function useGlobalLayoutNotifications() {
         }
       )
       .subscribe((status) => {
-        console.log('🔔 GlobalLayoutNotifications: Channel subscription status:', status)
+      
         if (status === 'SUBSCRIBED') {
-          console.log('🔔 GlobalLayoutNotifications: Successfully subscribed to real-time updates for restaurant:', restaurantId)
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('🔔 GlobalLayoutNotifications: Channel subscription error')
+        
+          
         }
       })
 
