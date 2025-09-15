@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 export async function GET(request: NextRequest) {
   // Verify this is coming from Vercel cron or authorized source
   const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer rbs-restaurant-cron-2025-secure-key-x7n9m4p8q2L`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

@@ -6,6 +6,6 @@
     }
   ],
   "env": {
-    "CRON_SECRET": "@cron_secret"
+    "CRON_SECRET": "rbs-restaurant-cron-2025-secure-key-x7n9m4p8q2L"
   }
 }
