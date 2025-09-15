@@ -71,16 +71,28 @@ export async function POST(request: NextRequest) {
         if (notification.channel === 'push') {
           // Handle push notifications
           try {
-            // Get push subscription for this specific user
-            const { data: subscription } = await supabase
+            // Get push subscriptions for this specific user (there might be multiple)
+            const { data: subscriptions, error: subError } = await supabase
               .from('push_subscriptions')
               .select('endpoint, p256dh, auth')
               .eq('user_id', notification.user_id)
               .eq('restaurant_id', restaurantId)
               .eq('is_active', true)
-              .single()
 
-            if (!subscription) {
+            if (subError) {
+              console.error(`❌ Error querying push subscriptions for ${notification.id}:`, subError)
+              await supabase
+                .from('notification_outbox')
+                .update({
+                  status: 'failed',
+                  error: `Subscription query error: ${subError.message}`
+                })
+                .eq('id', notification.id)
+              failed++
+              continue
+            }
+
+            if (!subscriptions || subscriptions.length === 0) {
               // No subscription - skip
               await supabase
                 .from('notification_outbox')
@@ -95,6 +107,10 @@ export async function POST(request: NextRequest) {
               console.log(`⏭️  Skipped push notification ${notification.id}: No subscription`)
               continue
             }
+
+            // Use the first active subscription (or send to all - but for now, just first)
+            const subscription = subscriptions[0]
+            console.log(`📱 Found ${subscriptions.length} push subscription(s) for user ${notification.user_id}, using first one`)
 
             // Send push notification
             const result = await notificationService.sendPushToSubscription(subscription, {

@@ -96,7 +96,7 @@ export function EnhancedPWAProvider({
         if (response.ok && result.success) {
           setIsSubscribed(true)
           setShowPermissionBanner(false)
-         
+          toast.success('🔔 Notifications enabled! You\'ll now receive important updates.')
           
           // Play notification sound if available
           if (audioRef.current) {
