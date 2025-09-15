@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    // Get pending notifications from outbox
+    // Get pending notifications from outbox (both push and inapp)
     const { data: pendingNotifications, error: fetchError } = await supabase
       .from('notification_outbox')
       .select(`
@@ -24,7 +24,6 @@ export async function POST(request: NextRequest) {
         notification:notifications(*)
       `)
       .eq('status', 'queued')
-      .eq('channel', 'push')
       .lte('scheduled_for', new Date().toISOString())
       .limit(50) // Process in batches
 
@@ -47,7 +46,7 @@ export async function POST(request: NextRequest) {
     let processed = 0
     let failed = 0
 
-    // Process each notification
+    // Process each notification individually
     for (const notification of pendingNotifications) {
       try {
         // Get restaurant_id from the notification data
@@ -66,21 +65,61 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // Send the notification
-        const result = await notificationService.sendToRestaurant(
-          restaurantId,
-          {
-            title: notification.title || notification.payload?.title || 'Notification',
-            body: notification.body || notification.payload?.body || notification.payload?.message || '',
-            type: notification.type,
-            priority: notification.priority || 'normal',
-            url: notification.payload?.url,
-            data: notification.payload?.data || {}
-          }
-        )
+        let success = false
+        let errorMessage = ''
 
-        if (result.success && result.sent > 0) {
-          // Successfully sent to at least one device
+        if (notification.channel === 'push') {
+          // Handle push notifications
+          try {
+            // Get push subscription for this specific user
+            const { data: subscription } = await supabase
+              .from('push_subscriptions')
+              .select('endpoint, p256dh, auth')
+              .eq('user_id', notification.user_id)
+              .eq('restaurant_id', restaurantId)
+              .eq('is_active', true)
+              .single()
+
+            if (!subscription) {
+              // No subscription - skip
+              await supabase
+                .from('notification_outbox')
+                .update({
+                  status: 'skipped',
+                  sent_at: new Date().toISOString(),
+                  error: 'No push subscription for user'
+                })
+                .eq('id', notification.id)
+
+              processed++
+              console.log(`⏭️  Skipped push notification ${notification.id}: No subscription`)
+              continue
+            }
+
+            // Send push notification
+            const result = await notificationService.sendPushToSubscription(subscription, {
+              title: notification.title || 'Notification',
+              body: notification.body || '',
+              type: notification.type,
+              priority: notification.priority || 'normal',
+              url: notification.payload?.url,
+              data: notification.payload?.data || {}
+            })
+
+            success = true
+            console.log(`✅ Sent push notification ${notification.id}`)
+          } catch (error: any) {
+            errorMessage = error.message || 'Push notification failed'
+            console.error(`❌ Failed push notification ${notification.id}:`, error)
+          }
+        } else if (notification.channel === 'inapp') {
+          // Handle in-app notifications - just mark as sent since they're stored in database
+          success = true
+          console.log(`✅ Processed in-app notification ${notification.id}`)
+        }
+
+        if (success) {
+          // Mark as sent
           await supabase
             .from('notification_outbox')
             .update({
@@ -90,34 +129,19 @@ export async function POST(request: NextRequest) {
             .eq('id', notification.id)
 
           processed++
-          console.log(`✅ Sent notification ${notification.id} to ${result.sent} devices`)
-        } else if (result.success && result.sent === 0) {
-          // No active subscriptions - skip this notification
-          await supabase
-            .from('notification_outbox')
-            .update({
-              status: 'skipped',
-              sent_at: new Date().toISOString(),
-              error: result.error || 'No active subscriptions'
-            })
-            .eq('id', notification.id)
-
-          processed++
-          console.log(`⏭️  Skipped notification ${notification.id}: ${result.error}`)
         } else {
-          // Failed to send
+          // Mark as failed
           const retryCount = (notification.attempts || 0) + 1
           await supabase
             .from('notification_outbox')
             .update({
               status: retryCount < 3 ? 'queued' : 'failed',
               attempts: retryCount,
-              error: result.error
+              error: errorMessage
             })
             .eq('id', notification.id)
 
           failed++
-          console.log(`❌ Failed notification ${notification.id}: ${result.error}`)
         }
       } catch (error: any) {
         console.error(`Failed to process notification ${notification.id}:`, error)

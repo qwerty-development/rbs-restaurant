@@ -523,6 +523,51 @@ export class NotificationService {
   }
 
   /**
+   * Send push notification to a single subscription
+   */
+  async sendPushToSubscription(subscription: any, payload: NotificationPayload) {
+    if (!webpush) {
+      throw new Error('Web push not configured')
+    }
+
+    const pushSubscription = {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: subscription.p256dh,
+        auth: subscription.auth
+      }
+    }
+
+    try {
+      const result = await webpush.sendNotification(
+        pushSubscription,
+        JSON.stringify({
+          title: payload.title,
+          body: payload.body,
+          icon: payload.icon || '/icon-192x192.png',
+          badge: payload.badge || '/icon-192x192.png',
+          tag: payload.tag,
+          data: {
+            url: payload.url || '/dashboard',
+            type: payload.type,
+            priority: payload.priority,
+            ...payload.data
+          },
+          actions: payload.actions || [
+            { action: 'view', title: 'View' },
+            { action: 'dismiss', title: 'Dismiss' }
+          ]
+        })
+      )
+
+      return result
+    } catch (error: any) {
+      console.error('Push notification failed:', error)
+      throw error
+    }
+  }
+
+  /**
    * Helper methods
    */
   private detectBrowser(): string {
