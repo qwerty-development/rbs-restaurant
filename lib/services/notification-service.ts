@@ -203,17 +203,31 @@ export class NotificationService {
         return { success: true, sent: 0, failed: 0, error: 'Blocked by preferences' }
       }
 
-      // Get all active subscriptions for restaurant staff
-      const { data: subscriptions, error: subError } = await this.supabase
-        .from('push_subscriptions')
-        .select(`
-          id, endpoint, p256dh, auth, user_id, restaurant_id, is_active,
-          profiles!user_id(id),
-          restaurant_staff!inner(user_id, restaurant_id, is_active)
-        `)
+      // First get all active staff for this restaurant
+      const { data: activeStaff, error: staffError } = await this.supabase
+        .from('restaurant_staff')
+        .select('user_id')
         .eq('restaurant_id', restaurantId)
         .eq('is_active', true)
-        .eq('restaurant_staff.is_active', true)
+
+      if (staffError) {
+        console.error('Failed to fetch active staff:', staffError)
+        return { success: false, sent: 0, failed: 0, error: staffError.message }
+      }
+
+      if (!activeStaff || activeStaff.length === 0) {
+        return { success: true, sent: 0, failed: 0, error: 'No active staff found' }
+      }
+
+      const activeStaffIds = activeStaff.map(s => s.user_id)
+
+      // Get push subscriptions for active staff members
+      const { data: subscriptions, error: subError } = await this.supabase
+        .from('push_subscriptions')
+        .select('id, endpoint, p256dh, auth, user_id, restaurant_id, is_active')
+        .eq('restaurant_id', restaurantId)
+        .eq('is_active', true)
+        .in('user_id', activeStaffIds)
 
       if (subError) {
         console.error('Failed to fetch subscriptions:', subError)
@@ -221,8 +235,10 @@ export class NotificationService {
       }
 
       if (!subscriptions || subscriptions.length === 0) {
-        return { success: true, sent: 0, failed: 0, error: 'No active subscriptions' }
+        return { success: true, sent: 0, failed: 0, error: 'No push subscriptions for active staff' }
       }
+
+      const validSubscriptions = subscriptions
 
       // Create notification record
       let notificationId = null
@@ -230,7 +246,7 @@ export class NotificationService {
         const { data: notificationRecord, error: notificationError } = await this.supabase
           .from('notifications')
           .insert({
-            user_id: subscriptions[0].user_id, // Use first user for record keeping
+            user_id: validSubscriptions[0].user_id, // Use first user for record keeping
             type: notification.type,
             title: notification.title,
             message: notification.body,
@@ -247,7 +263,7 @@ export class NotificationService {
 
       // Send notifications
       const results = await Promise.allSettled(
-        subscriptions.map(sub => 
+        validSubscriptions.map(sub =>
           this.sendPushNotification(sub as any, notification)
         )
       )
@@ -255,22 +271,22 @@ export class NotificationService {
       // Count results
       let sent = 0
       let failed = 0
-      
+
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           sent++
         } else {
           failed++
-          console.error(`Failed to send to ${subscriptions[index].endpoint}:`, result.reason)
-          
+          console.error(`Failed to send to ${validSubscriptions[index].endpoint}:`, result.reason)
+
           // Handle failed subscriptions
-          this.handleFailedSubscription(subscriptions[index] as any, result.reason)
+          this.handleFailedSubscription(validSubscriptions[index] as any, result.reason)
         }
       })
 
       // Log notification history
       if (notificationId) {
-        await this.logNotificationHistory(notificationId, restaurantId, subscriptions as any, results)
+        await this.logNotificationHistory(notificationId, restaurantId, validSubscriptions as any, results)
       }
 
       return { success: true, sent, failed }
