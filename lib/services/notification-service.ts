@@ -108,8 +108,8 @@ export class NotificationService {
             user_id: userId,
             p256dh,
             auth,
-            browser: deviceInfo?.browser || this.detectBrowser(),
-            device_type: deviceInfo?.device || this.detectDevice(),
+            browser: deviceInfo?.browser || 'unknown',
+            device_type: deviceInfo?.device || 'unknown',
             is_active: true,
             last_used: new Date().toISOString()
           })
@@ -129,8 +129,8 @@ export class NotificationService {
             endpoint: subscription.endpoint,
             p256dh,
             auth,
-            browser: deviceInfo?.browser || this.detectBrowser(),
-            device_type: deviceInfo?.device || this.detectDevice(),
+            browser: deviceInfo?.browser || 'unknown',
+            device_type: deviceInfo?.device || 'unknown',
             is_active: true
           })
 
