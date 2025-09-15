@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rbs-restaurant-v9'
+const CACHE_NAME = 'rbs-restaurant-v10'
 const urlsToCache = [
   '/',
   '/app',
@@ -6,7 +6,8 @@ const urlsToCache = [
   '/icon-192x192.png',
   '/icon-384x384.png',
   '/icon-512x512.png',
-  '/apple-touch-icon.png'
+  '/apple-touch-icon.png',
+  '/notification-sound.mp3'
 ]
 
 // Install event - cache resources and register periodic sync
@@ -113,63 +114,136 @@ self.addEventListener('activate', function (event) {
 
 // Push event - handle push notifications
 self.addEventListener('push', function (event) {
-  if (event.data) {
-    const data = event.data.json()
-    const options = {
-      body: data.body,
-      icon: data.icon || '/icon-192x192.png',
-      badge: '/icon-192x192.png',
-      vibrate: [100, 50, 100],
-      data: {
-        dateOfArrival: Date.now(),
-        primaryKey: data.id || '1',
-        url: data.url || '/dashboard'
-      },
-      actions: [
-        {
-          action: 'view',
-          title: 'View Details',
-          icon: '/icon-192x192.png'
-        },
-        {
-          action: 'dismiss',
-          title: 'Dismiss',
-          icon: '/icon-192x192.png'
-        }
-      ]
-    }
-    event.waitUntil(
-      self.registration.showNotification(data.title || 'Plate Management', options)
-    )
+  console.log('[SW] Push notification received')
+  
+  if (!event.data) {
+    console.log('[SW] No data in push notification')
+    return
   }
+
+  let data
+  try {
+    data = event.data.json()
+  } catch (e) {
+    console.error('[SW] Failed to parse push data:', e)
+    data = {
+      title: 'New Notification',
+      body: event.data.text()
+    }
+  }
+
+  const options = {
+    body: data.body || 'You have a new notification',
+    icon: data.icon || '/icon-192x192.png',
+    badge: '/icon-192x192.png',
+    vibrate: [200, 100, 200],
+    data: {
+      dateOfArrival: Date.now(),
+      primaryKey: Date.now(),
+      url: data.data?.url || '/dashboard',
+      type: data.data?.type || 'general',
+      notification_id: data.data?.notification_id,
+      ...data.data
+    },
+    actions: data.actions || [
+      { action: 'view', title: 'View', icon: '/icon-192x192.png' },
+      { action: 'dismiss', title: 'Dismiss', icon: '/icon-192x192.png' }
+    ],
+    tag: data.tag || `notification-${Date.now()}`,
+    renotify: true,
+    requireInteraction: data.priority === 'high',
+    silent: false
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(
+      data.title || 'Restaurant Notification',
+      options
+    ).then(() => {
+      // Track notification delivery
+      return fetch('/api/notifications/track-delivery', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          type: 'delivered',
+          notificationId: data.data?.notification_id,
+          timestamp: Date.now()
+        })
+      }).catch(error => {
+        console.log('[SW] Failed to track delivery:', error)
+      })
+    })
+  )
 })
 
 // Notification click event
 self.addEventListener('notificationclick', function (event) {
-  console.log('Notification click received.')
+  console.log('[SW] Notification clicked:', event.action)
   
   event.notification.close()
-  
-  const baseUrl = self.location.origin
 
-  if (event.action === 'view') {
-    const url = event.notification.data.url || '/dashboard'
-    const fullUrl = url.startsWith('http') ? url : baseUrl + url
-    event.waitUntil(clients.openWindow(fullUrl))
-  } else if (event.action === 'dismiss') {
-    // Just close the notification
-    return
-  } else {
-    // Default action - open the app
-    event.waitUntil(clients.openWindow(baseUrl + '/dashboard'))
+  // Track notification click
+  if (event.action !== 'dismiss') {
+    fetch('/api/notifications/track-delivery', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        type: 'clicked',
+        notificationId: event.notification.data?.notification_id,
+        action: event.action || 'default',
+        timestamp: Date.now()
+      })
+    }).catch(error => {
+      console.log('[SW] Failed to track click:', error)
+    })
   }
+
+  if (event.action === 'dismiss') {
+    return
+  }
+
+  const urlToOpen = event.notification.data?.url || '/dashboard'
+  const baseUrl = self.location.origin
+  const fullUrl = urlToOpen.startsWith('http') ? urlToOpen : baseUrl + urlToOpen
+
+  event.waitUntil(
+    clients.matchAll({
+      type: 'window',
+      includeUncontrolled: true
+    }).then((clientList) => {
+      // Check if there's already a window/tab open
+      for (let i = 0; i < clientList.length; i++) {
+        const client = clientList[i]
+        if (client.url.includes('/dashboard') && 'focus' in client) {
+          // Focus existing window and navigate to specific URL
+          client.postMessage({
+            type: 'NAVIGATE_TO',
+            url: urlToOpen
+          })
+          return client.focus()
+        }
+      }
+      
+      // If no window/tab is already open, open a new one
+      if (clients.openWindow) {
+        return clients.openWindow(fullUrl)
+      }
+    })
+  )
 })
 
 // Background sync event (for when connection is restored)
 self.addEventListener('sync', function (event) {
-  if (event.tag === 'background-sync') {
+  console.log('[SW] Background sync triggered:', event.tag)
+  
+  if (event.tag === 'sync-notifications') {
+    event.waitUntil(syncNotifications())
+  } else if (event.tag === 'background-sync') {
     event.waitUntil(
-      // Perform background sync operations
       console.log('Background sync triggered')
     )
   }
@@ -177,6 +251,8 @@ self.addEventListener('sync', function (event) {
 
 // Handle messages from the main thread
 self.addEventListener('message', function (event) {
+  console.log('[SW] Message received:', event.data)
+  
   if (event.data && event.data.type === 'APP_VISIBLE') {
     console.log('📱 App became visible - service worker notified')
     
@@ -190,10 +266,26 @@ self.addEventListener('message', function (event) {
       })
     })
   }
+  
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+  }
+  
+  if (event.data?.type === 'CHECK_NOTIFICATIONS') {
+    checkForNewNotifications()
+  }
+  
+  if (event.data?.type === 'CLEAR_CACHE') {
+    caches.delete(CACHE_NAME).then(() => {
+      console.log('[SW] Cache cleared')
+    })
+  }
 })
 
-// Periodic sync for keeping the app alive
+// Periodic sync for keeping the app alive and checking notifications
 self.addEventListener('periodicsync', function (event) {
+  console.log('[SW] Periodic sync triggered:', event.tag)
+  
   if (event.tag === 'keep-alive') {
     event.waitUntil(
       // Perform lightweight sync to keep the app active
@@ -207,4 +299,78 @@ self.addEventListener('periodicsync', function (event) {
         })
     )
   }
+  
+  if (event.tag === 'check-notifications') {
+    event.waitUntil(checkForNewNotifications())
+  }
 })
+
+// Helper functions for background sync
+async function syncNotifications() {
+  try {
+    const response = await fetch('/api/notifications/sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        timestamp: Date.now()
+      })
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      console.log('[SW] Notifications synced:', data)
+      
+      // Show any queued notifications
+      if (data.notifications && data.notifications.length > 0) {
+        for (const notification of data.notifications) {
+          await self.registration.showNotification(
+            notification.title,
+            {
+              body: notification.body,
+              icon: '/icon-192x192.png',
+              badge: '/icon-192x192.png',
+              data: notification.data || {}
+            }
+          )
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[SW] Failed to sync notifications:', error)
+    throw error // Retry sync later
+  }
+}
+
+async function checkForNewNotifications() {
+  try {
+    const response = await fetch('/api/notifications/check', {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      console.log('[SW] Checked for notifications:', data)
+      
+      // Show any new notifications
+      if (data.newNotifications && data.newNotifications.length > 0) {
+        for (const notification of data.newNotifications) {
+          await self.registration.showNotification(
+            notification.title,
+            {
+              body: notification.body,
+              icon: '/icon-192x192.png',
+              badge: '/icon-192x192.png',
+              data: notification.data || {}
+            }
+          )
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[SW] Failed to check notifications:', error)
+  }
+}
