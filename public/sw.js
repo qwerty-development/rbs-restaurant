@@ -139,20 +139,24 @@ self.addEventListener('push', function (event) {
     vibrate: [200, 100, 200],
     data: {
       dateOfArrival: Date.now(),
-      primaryKey: Date.now(),
+      primaryKey: data.data?.notification_id || Date.now(),
       url: data.data?.url || '/dashboard',
       type: data.data?.type || 'general',
       notification_id: data.data?.notification_id,
+      booking_id: data.data?.booking_id,
+      restaurant_id: data.data?.restaurant_id,
       ...data.data
     },
-    actions: data.actions || [
-      { action: 'view', title: 'View', icon: '/icon-192x192.png' },
+    actions: [
+      { action: 'view', title: 'View Booking', icon: '/icon-192x192.png' },
       { action: 'dismiss', title: 'Dismiss', icon: '/icon-192x192.png' }
     ],
-    tag: data.tag || `notification-${Date.now()}`,
-    renotify: true,
+    // Use booking_id for unique tags to prevent spam and allow updates
+    tag: data.data?.booking_id ? `booking-${data.data.booking_id}` : `notification-${data.data?.notification_id || Date.now()}`,
+    renotify: false, // Don't renotify for same booking
     requireInteraction: data.priority === 'high',
-    silent: false
+    silent: false,
+    timestamp: Date.now()
   }
 
   event.waitUntil(
