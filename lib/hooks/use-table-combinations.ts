@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
 import type { RestaurantTableCombinationWithTables } from "@/types"
 import { toast } from "react-hot-toast"
+import { tableCombinationsService } from "@/lib/services/table-combinations-service"
 
 export function useTableCombinations(restaurantId: string | undefined) {
   const supabase = createClient()
@@ -35,7 +36,6 @@ export function useTableCombinations(restaurantId: string | undefined) {
 }
 
 export function useCreateTableCombination() {
-  const supabase = createClient()
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -50,38 +50,16 @@ export function useCreateTableCombination() {
       secondaryTableId: string
       combinedCapacity: number
     }) => {
-      // Check if combination already exists (either direction)
-      const { data: existingCombinations, error: checkError } = await supabase
-        .from("table_combinations")
-        .select("id")
-        .eq("restaurant_id", restaurantId)
-        .eq("is_active", true)
-        .or(
-          `and(primary_table_id.eq.${primaryTableId},secondary_table_id.eq.${secondaryTableId}),` +
-          `and(primary_table_id.eq.${secondaryTableId},secondary_table_id.eq.${primaryTableId})`
-        )
-
-      if (checkError) throw checkError
-
-      if (existingCombinations && existingCombinations.length > 0) {
-        throw new Error("Table combination already exists!")
-      }
-
-      const { data, error } = await supabase
-        .from("table_combinations")
-        .insert({
-          restaurant_id: restaurantId,
-          primary_table_id: primaryTableId,
-          secondary_table_id: secondaryTableId,
-          combined_capacity: combinedCapacity,
-        })
-        .select()
-
-      if (error) throw error
-      return data
+      await tableCombinationsService.createCombination(
+        restaurantId,
+        primaryTableId,
+        secondaryTableId,
+        combinedCapacity
+      )
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["table-combinations", variables.restaurantId] })
+      queryClient.invalidateQueries({ queryKey: ["tables-with-sections", variables.restaurantId] })
       toast.success("Table combination created successfully")
     },
     onError: (error: any) => {
@@ -125,20 +103,15 @@ export function useCreateTableCombination() {
 }
 
 export function useDeleteTableCombination() {
-  const supabase = createClient()
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async ({ id, restaurantId }: { id: string; restaurantId: string }) => {
-      const { error } = await supabase
-        .from("table_combinations")
-        .update({ is_active: false })
-        .eq("id", id)
-
-      if (error) throw error
+      await tableCombinationsService.deleteCombination(id)
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["table-combinations", variables.restaurantId] })
+      queryClient.invalidateQueries({ queryKey: ["tables-with-sections", variables.restaurantId] })
       toast.success("Table combination deleted successfully")
     },
     onError: (error: any) => {

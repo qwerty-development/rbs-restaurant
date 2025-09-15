@@ -16,6 +16,7 @@ import { TableForm } from "@/components/tables/table-form"
 import { SectionManager } from "@/components/tables/section-manager"
 import { TableCombinationsManager } from "@/components/tables/table-combinations-manager"
 import { useTableCombinations, useCreateTableCombination, useDeleteTableCombination } from "@/lib/hooks/use-table-combinations"
+import { tableCombinationsService } from "@/lib/services/table-combinations-service"
 import { toast } from "react-hot-toast"
 import { 
   Plus, 
@@ -39,6 +40,7 @@ export default function TablesPage() {
   const [isAddingTable, setIsAddingTable] = useState(false)
   const [selectedSectionId, setSelectedSectionId] = useState<string>("all")
   const [showSectionManager, setShowSectionManager] = useState(false)
+  const [showDebug, setShowDebug] = useState(process.env.NODE_ENV === 'development')
   
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -144,12 +146,16 @@ export default function TablesPage() {
         restaurant_id: restaurantId,
       }
 
+      let savedTableId: string
+      let wasUpdating = !!selectedTable
+
       if (selectedTable) {
         const { error } = await supabase
           .from("restaurant_tables")
           .update(dataToSave)
           .eq("id", selectedTable.id)
         if (error) throw error
+        savedTableId = selectedTable.id
       } else {
         // Set default position based on section
         if (!dataToSave.x_position) {
@@ -157,10 +163,28 @@ export default function TablesPage() {
           dataToSave.y_position = 50
         }
         
-        const { error } = await supabase
+        const { data: insertedData, error } = await supabase
           .from("restaurant_tables")
           .insert(dataToSave)
+          .select("id")
+          .single()
         if (error) throw error
+        savedTableId = insertedData.id
+      }
+
+      // Sync table combinations if combinable_with was provided
+      if (dataToSave.combinable_with && Array.isArray(dataToSave.combinable_with)) {
+        // Get current table data for capacity calculation
+        const currentTableData = wasUpdating 
+          ? { ...selectedTable, ...dataToSave } as RestaurantTable
+          : { ...dataToSave, id: savedTableId } as RestaurantTable
+
+        await tableCombinationsService.syncCombinationsFromTableForm(
+          restaurantId,
+          savedTableId,
+          dataToSave.combinable_with,
+          currentTableData
+        )
       }
     },
     onSuccess: () => {
@@ -168,6 +192,7 @@ export default function TablesPage() {
       queryClient.refetchQueries({ queryKey: ["tables-with-sections", restaurantId] })
       queryClient.refetchQueries({ queryKey: ["restaurant-sections-with-counts", restaurantId] })
       queryClient.refetchQueries({ queryKey: ["restaurant-sections-active", restaurantId] })
+      queryClient.refetchQueries({ queryKey: ["table-combinations", restaurantId] })
       toast.success(selectedTable ? "Table updated" : "Table created")
       setIsAddingTable(false)
       setSelectedTable(null)
@@ -357,6 +382,20 @@ export default function TablesPage() {
     
     if (confirm("Are you sure you want to delete this table combination?")) {
       deleteCombinationMutation.mutate({ id, restaurantId })
+    }
+  }
+
+  const handleSyncCombinations = async () => {
+    if (!restaurantId) return
+    
+    try {
+      await tableCombinationsService.syncAllCombinations(restaurantId)
+      queryClient.refetchQueries({ queryKey: ["table-combinations", restaurantId] })
+      queryClient.refetchQueries({ queryKey: ["tables-with-sections", restaurantId] })
+      toast.success("Table combinations synchronized successfully")
+    } catch (error) {
+      console.error("Error syncing combinations:", error)
+      toast.error("Failed to sync table combinations")
     }
   }
 
@@ -560,6 +599,7 @@ export default function TablesPage() {
             combinations={tableCombinations || []}
             onCreateCombination={handleCreateCombination}
             onDeleteCombination={handleDeleteCombination}
+            onSyncCombinations={handleSyncCombinations}
           />
         </TabsContent>
 
@@ -611,6 +651,8 @@ export default function TablesPage() {
           />
         </DialogContent>
       </Dialog>
+
+      
     </div>
   )
 }

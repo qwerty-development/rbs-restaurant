@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Link, Trash2 } from "lucide-react"
+import { Plus, Link, Trash2, RefreshCw } from "lucide-react"
 import type { RestaurantTable, RestaurantTableCombinationWithTables } from "@/types"
 
 interface TableCombinationsManagerProps {
@@ -33,13 +33,15 @@ interface TableCombinationsManagerProps {
     combinedCapacity: number
   }) => void
   onDeleteCombination: (id: string) => void
+  onSyncCombinations?: () => void
 }
 
 export function TableCombinationsManager({
   tables,
   combinations,
   onCreateCombination,
-  onDeleteCombination
+  onDeleteCombination,
+  onSyncCombinations
 }: TableCombinationsManagerProps) {
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [primaryTableId, setPrimaryTableId] = useState("")
@@ -84,10 +86,18 @@ export function TableCombinationsManager({
                 Define which tables can be combined for larger parties
               </CardDescription>
             </div>
-            <Button onClick={() => setShowAddDialog(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Combination
-            </Button>
+            <div className="flex gap-2">
+              {onSyncCombinations && (
+                <Button variant="outline" onClick={onSyncCombinations}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Sync Combinations
+                </Button>
+              )}
+              <Button onClick={() => setShowAddDialog(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Combination
+              </Button>
+            </div>
           </div>
         </CardHeader>
       </Card>
