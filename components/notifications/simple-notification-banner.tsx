@@ -11,7 +11,7 @@ interface SimpleNotificationBannerProps {
 }
 
 export function SimpleNotificationBanner({ notification, onDismiss }: SimpleNotificationBannerProps) {
-  console.log('🔔 SimpleNotificationBanner rendering:', notification)
+  
 
   return (
     <div 

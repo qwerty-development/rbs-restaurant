@@ -59,8 +59,7 @@ export default function DashboardPage() {
   const { addNotification, requestPushPermission, isPushEnabled } = notificationContext || {}
   
   // Debug logging
-  console.log('🔔 Dashboard: Available notification methods:', Object.keys(notificationContext || {}))
-  console.log('🔔 Dashboard: requestPushPermission type:', typeof requestPushPermission)
+ 
   const [currentTime, setCurrentTime] = useState(new Date())
   const [showManualBooking, setShowManualBooking] = useState(false)
   const [selectedBooking, setSelectedBooking] = useState<any>(null)

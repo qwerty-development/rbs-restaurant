@@ -49,9 +49,7 @@ export default function BasicDashboardPage() {
   const { addNotification, requestPushPermission, isPushEnabled } = notificationContext || {}
   
   // Debug logging
-  console.log('🔔 Basic Dashboard: Available notification methods:', Object.keys(notificationContext || {}))
-  console.log('🔔 Basic Dashboard: requestPushPermission type:', typeof requestPushPermission)
-
+ 
   // Get user info
   useEffect(() => {
     async function getUserInfo() {
@@ -186,7 +184,7 @@ export default function BasicDashboardPage() {
           
           // Trigger notification for new booking
           const guestName = newBooking.guest_name || newBooking.user?.full_name || 'Guest'
-          console.log('🔔 Basic Dashboard: Adding notification for new booking:', { guestName, partySize: newBooking.party_size })
+        
           addNotification({
             type: 'booking',
             title: 'New Booking Request',
@@ -262,11 +260,7 @@ export default function BasicDashboardPage() {
           // Trigger notification for status changes
           if (previousBooking && previousBooking.status !== updatedBooking.status) {
             const guestName = updatedBooking.guest_name || updatedBooking.user?.full_name || 'Guest'
-            console.log('🔔 Basic Dashboard: Adding notification for status change:', { 
-              guestName, 
-              oldStatus: previousBooking.status, 
-              newStatus: updatedBooking.status 
-            })
+          
             
             const statusMap: Record<string, { title: string; message: string; variant?: 'success' | 'error' }> = {
               confirmed: { title: 'Booking Confirmed', message: `Booking for ${guestName} confirmed`, variant: 'success' },

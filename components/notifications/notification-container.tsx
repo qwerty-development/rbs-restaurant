@@ -7,7 +7,7 @@ import { useNotifications } from '@/lib/contexts/notification-context'
 export function NotificationContainer() {
   const { notifications, removeNotification } = useNotifications()
 
-  console.log('🔔 NotificationContainer: Rendering with', notifications.length, 'notifications:', notifications)
+  
 
   if (notifications.length === 0) return null
 

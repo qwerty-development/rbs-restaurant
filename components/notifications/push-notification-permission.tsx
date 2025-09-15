@@ -15,15 +15,12 @@ export function PushNotificationPermission() {
   const [isRequesting, setIsRequesting] = useState(false)
 
   // Debug logging
-  console.log('🔔 PushNotificationPermission: Context methods:', Object.keys(notificationContext || {}))
-  console.log('🔔 PushNotificationPermission: requestPushPermission type:', typeof requestPushPermission)
+ 
 
   useEffect(() => {
     // Check current permission status
     const currentPermission = pushNotificationManager.getCurrentPermission()
-    console.log('🔔 PushNotificationPermission: Current permission:', currentPermission)
     
-    // Show prompt if push notifications are not enabled
     if (!isPushEnabled) {
       const hasShownPrompt = localStorage.getItem('push-notification-prompt-shown')
       if (!hasShownPrompt || currentPermission === 'denied') {
