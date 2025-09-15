@@ -12,10 +12,11 @@ import { usePathname, useSearchParams } from 'next/navigation'
 export function useGlobalLayoutNotifications() {
   const supabase = createClient()
   const queryClient = useQueryClient()
-  const { addNotification } = useNotifications()
+  const { addNotification, requestPushPermission, isPushEnabled } = useNotifications()
   const channelRef = useRef<RealtimeChannel | null>(null)
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const pushSetupRef = useRef<boolean>(false)
  
 
   // Extract restaurant ID from URL or search params
@@ -96,17 +97,46 @@ export function useGlobalLayoutNotifications() {
     const setupNotifications = async () => {
       // Skip global notifications on basic dashboard - it has its own notification system
       if (pathname.startsWith('/basic-dashboard')) {
-      
         return
       }
-      
+
       const restaurantId = await getRestaurantId()
-      
-    
-      
+
       if (!restaurantId) {
-       
         return
+      }
+
+      // Set up push notifications automatically (once per session)
+      if (!pushSetupRef.current && !isPushEnabled) {
+        try {
+          // Check if user is authenticated and is staff
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) {
+            const { data: staffData } = await supabase
+              .from('restaurant_staff')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('restaurant_id', restaurantId)
+              .eq('is_active', true)
+              .single()
+
+            if (staffData) {
+              console.log('🔔 Setting up push notifications for authenticated staff member...')
+              // Wait a moment for the page to load completely
+              setTimeout(async () => {
+                const granted = await requestPushPermission()
+                if (granted) {
+                  console.log('✅ Push notifications enabled successfully')
+                } else {
+                  console.log('❌ Push notifications not enabled')
+                }
+              }, 2000)
+            }
+          }
+        } catch (error) {
+          console.error('Failed to set up push notifications:', error)
+        }
+        pushSetupRef.current = true
       }
 
     // Create realtime channel for bookings
@@ -291,7 +321,7 @@ export function useGlobalLayoutNotifications() {
     }
     
     setupNotifications()
-  }, [pathname, searchParams, queryClient, addNotification, supabase])
+  }, [pathname, searchParams, queryClient, addNotification, supabase, requestPushPermission, isPushEnabled])
 
   return {
     isConnected: channelRef.current?.state === 'joined'

@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { NotificationTestPanel } from '@/components/notifications/notification-test-panel'
 
 // Mock notification data - replace with real data from Supabase
 const notifications = [
@@ -54,6 +55,11 @@ export default function NotificationsPage() {
           <Check className="h-4 w-4 mr-2" />
           Mark All Read
         </Button>
+      </div>
+
+      {/* Test Panel for Development */}
+      <div className="flex justify-center">
+        <NotificationTestPanel />
       </div>
 
       <Card>

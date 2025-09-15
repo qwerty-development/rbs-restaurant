@@ -128,20 +128,47 @@ class PushNotificationManager {
     }
 
     try {
-      const subscription = await this.registration.pushManager.getSubscription()
+      // Check if already subscribed
+      let subscription = await this.registration.pushManager.getSubscription()
       if (subscription) {
         console.log('Already subscribed to push notifications')
         return subscription
       }
 
-      // For now, we'll use a simple approach without a push service
-      // In production, you'd want to use a service like Firebase Cloud Messaging
-      console.log('Push subscription would be created here')
-      return null
+      // Get the VAPID public key
+      const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+      if (!vapidPublicKey) {
+        console.error('VAPID public key not found')
+        return null
+      }
+
+      // Create new subscription
+      subscription = await this.registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: this.urlBase64ToUint8Array(vapidPublicKey)
+      })
+
+      console.log('✅ Successfully subscribed to push notifications')
+      return subscription
     } catch (error) {
       console.error('Failed to subscribe to push notifications:', error)
       return null
     }
+  }
+
+  private urlBase64ToUint8Array(base64String: string): Uint8Array {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4)
+    const base64 = (base64String + padding)
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+
+    const rawData = window.atob(base64)
+    const outputArray = new Uint8Array(rawData.length)
+
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i)
+    }
+    return outputArray
   }
 }
 

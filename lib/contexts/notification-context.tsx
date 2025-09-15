@@ -45,6 +45,38 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const permission = await pushNotificationManager.requestPermission()
     const granted = permission === 'granted'
     setIsPushEnabled(granted)
+
+    if (granted) {
+      // Create push subscription and save to database
+      try {
+        const subscription = await pushNotificationManager.subscribeToPush()
+        if (subscription) {
+          // Save subscription to database via API
+          const response = await fetch('/api/notifications/subscribe', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              subscription: subscription.toJSON(),
+              deviceInfo: {
+                browser: navigator.userAgent,
+                device: navigator.platform
+              }
+            })
+          })
+
+          if (!response.ok) {
+            console.error('Failed to save push subscription to database')
+          } else {
+            console.log('✅ Push subscription saved to database')
+          }
+        }
+      } catch (error) {
+        console.error('Failed to create push subscription:', error)
+      }
+    }
+
     return granted
   }, [])
 
