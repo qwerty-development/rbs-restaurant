@@ -97,7 +97,7 @@ const operationalSettingsSchema = z.object({
   cancellation_window_hours: z.number().min(1).max(48),
   table_turnover_minutes: z.number().min(30).max(240),
   booking_policy: z.enum(["instant", "request"]),
-  minimum_age: z.number().min(0).max(99).optional(),
+  minimum_age: z.number().max(99).nullable().optional(),
 })
 
 const pricingSettingsSchema = z.object({
@@ -171,7 +171,7 @@ export default function SettingsPage() {
       cancellation_window_hours: 24,
       table_turnover_minutes: 120,
       booking_policy: "instant",
-      minimum_age: undefined,
+      minimum_age: null,
     },
   })
 
@@ -206,7 +206,7 @@ export default function SettingsPage() {
         cancellation_window_hours: restaurant.cancellation_window_hours,
         table_turnover_minutes: restaurant.table_turnover_minutes,
         booking_policy: restaurant.booking_policy,
-        minimum_age: restaurant.minimum_age,
+        minimum_age: restaurant.minimum_age ?? null,
       })
 
       pricingForm.reset({
@@ -654,14 +654,22 @@ export default function SettingsPage() {
                           <FormControl>
                             <Input
                               type="number"
-                              placeholder="18"
-                              {...field}
-                              onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                              placeholder="No minimum age (leave empty)"
+                              value={field.value ?? ""}
+                              onChange={(e) => {
+                                const value = e.target.value.trim()
+                                if (value === "") {
+                                  field.onChange(null)
+                                } else {
+                                  const numValue = parseInt(value)
+                                  field.onChange(isNaN(numValue) ? null : numValue)
+                                }
+                              }}
                               disabled={updateRestaurantMutation.isPending}
                             />
                           </FormControl>
                           <FormDescription>
-                            Minimum age for booking (optional)
+                            Minimum age for booking (leave empty for no age restriction)
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
