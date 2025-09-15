@@ -169,6 +169,7 @@ export interface Restaurant {
     cancelled_bookings: number;
     no_show_bookings: number;
     rating_last_updated: string;
+    date_of_birth?: string;
   }
   
   export interface MenuItem {

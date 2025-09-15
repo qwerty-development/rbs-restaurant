@@ -263,7 +263,7 @@ export const customerUtils = {
   // Get customer booking patterns
   async getCustomerPatterns(customerId: string) {
     const supabase = createClient()
-    
+
     const { data: bookings } = await supabase
       .from('bookings')
       .select('booking_time, party_size, table_preferences')
@@ -302,7 +302,7 @@ export const customerUtils = {
     })
 
     // Get top preferences
-    const sortByCount = (obj: Record<string, number>) => 
+    const sortByCount = (obj: Record<string, number>) =>
       Object.entries(obj)
         .sort(([, a], [, b]) => b - a)
         .map(([key]) => key)
@@ -316,5 +316,36 @@ export const customerUtils = {
       averagePartySize: Math.round(totalPartySize / bookings.length),
       preferredTables: sortByCount(tablePrefs).slice(0, 3)
     }
+  },
+
+  // Calculate age from date of birth
+  calculateAge(dateOfBirth: string | Date | null | undefined): number | null {
+    if (!dateOfBirth) return null
+
+    const today = new Date()
+    const birthDate = new Date(dateOfBirth)
+
+    // Check if the date is valid
+    if (isNaN(birthDate.getTime())) return null
+
+    let age = today.getFullYear() - birthDate.getFullYear()
+    const monthDiff = today.getMonth() - birthDate.getMonth()
+
+    // If we haven't reached the birthday this year, subtract 1
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--
+    }
+
+    // Return null for negative ages (future dates) or unreasonable ages
+    if (age < 0 || age > 150) return null
+
+    return age
+  },
+
+  // Format age for display with "years old" suffix
+  formatAge(dateOfBirth: string | Date | null | undefined): string | null {
+    const age = this.calculateAge(dateOfBirth)
+    if (age === null) return null
+    return `${age} years old`
   }
 }

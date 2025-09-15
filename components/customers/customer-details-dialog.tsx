@@ -5,12 +5,12 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
   DialogTitle,
-  DialogDescription 
+  DialogDescription
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { customerUtils } from '@/lib/customer-utils'
 import {
   Select,
   SelectContent,
@@ -521,6 +522,12 @@ export function CustomerDetailsDialog({
                   <span className="flex items-center gap-1">
                     <Phone className="h-3 w-3" />
                     {customerWithEmail.profile?.phone_number || customerWithEmail.guest_phone}
+                  </span>
+                )}
+                {customerWithEmail.profile?.date_of_birth && (
+                  <span className="flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    {customerUtils.formatAge(customerWithEmail.profile.date_of_birth)}
                   </span>
                 )}
                 {customerWithEmail.first_visit && (

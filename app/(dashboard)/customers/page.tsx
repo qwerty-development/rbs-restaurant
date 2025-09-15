@@ -63,6 +63,7 @@ import { CustomerInsights } from '@/components/customers/customer-insights'
 import { EditCustomerDialog } from '@/components/customers/edit-customer-dialog'
 import { MigrationButton } from '@/components/migration/migration-button'
 import { restaurantAuth } from '@/lib/restaurant-auth'
+import { customerUtils } from '@/lib/customer-utils'
 import type { RestaurantCustomer, CustomerTag, CustomerFilters } from '@/types/customer'
 
 // Function to determine if a color is light and needs dark text
@@ -144,7 +145,8 @@ export default function CustomersPage() {
             no_show_bookings,
             rating_last_updated,
             created_at,
-            updated_at
+            updated_at,
+            date_of_birth
           ),
           tags:customer_tag_assignments(
             tag:customer_tags(*)
@@ -1010,6 +1012,11 @@ export default function CustomersPage() {
                         <div className="flex items-center gap-2">
                           <p className="font-medium">
                             {customer.profile?.full_name || customer.guest_name || 'Guest'}
+                            {customer.profile?.date_of_birth && (
+                              <span className="text-sm font-normal text-muted-foreground ml-2">
+                                ({customerUtils.formatAge(customer.profile.date_of_birth)})
+                              </span>
+                            )}
                           </p>
                           {customer.vip_status && (
                             <Badge variant="secondary" className="text-xs">

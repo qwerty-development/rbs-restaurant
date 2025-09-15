@@ -49,6 +49,7 @@ import { QuickCustomerNote } from "./quick-customer-note"
 import { CustomerBookingHistory } from "./customer-booking-history"
 import { LowRatingFlag, CustomerRatingDisplay } from "@/components/ui/low-rating-flag"
 import { titleCase } from "@/lib/utils"
+import { customerUtils } from "@/lib/customer-utils"
 
 interface BookingCustomerDetailsProps {
   booking: Booking
@@ -101,7 +102,8 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
             avatar_url,
             allergies,
             dietary_restrictions,
-            user_rating
+            user_rating,
+            date_of_birth
           ),
           tags:customer_tag_assignments(
             tag:customer_tags(*)
@@ -285,6 +287,11 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
               <div>
                 <CardTitle className="text-lg">
                   {customerData.profile?.full_name || customerData.guest_name}
+                  {customerData.profile?.date_of_birth && (
+                    <span className="text-sm font-normal text-muted-foreground ml-2">
+                      ({customerUtils.formatAge(customerData.profile.date_of_birth)})
+                    </span>
+                  )}
                 </CardTitle>
                 <CardDescription>
                   Customer since {customerData.first_visit ? format(new Date(customerData.first_visit), 'MMM d, yyyy') : 'Unknown'}
