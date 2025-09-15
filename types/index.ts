@@ -17,6 +17,7 @@ export interface Restaurant {
   tier: 'basic' | 'pro'
   created_at: string
   updated_at: string
+  minimum_age?: number
   // Location data - PostGIS geometry stored as WKB hex string
   location?: string; // PostGIS WKB hex format
   // Parsed location coordinates for frontend use

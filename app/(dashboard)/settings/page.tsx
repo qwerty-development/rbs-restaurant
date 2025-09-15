@@ -78,6 +78,7 @@ type Restaurant = {
   valet_parking: boolean
   outdoor_seating: boolean
   shisha_available: boolean
+  minimum_age?: number
 }
 
 // Form schemas
@@ -96,6 +97,7 @@ const operationalSettingsSchema = z.object({
   cancellation_window_hours: z.number().min(1).max(48),
   table_turnover_minutes: z.number().min(30).max(240),
   booking_policy: z.enum(["instant", "request"]),
+  minimum_age: z.number().min(0).max(99).optional(),
 })
 
 const pricingSettingsSchema = z.object({
@@ -169,6 +171,7 @@ export default function SettingsPage() {
       cancellation_window_hours: 24,
       table_turnover_minutes: 120,
       booking_policy: "instant",
+      minimum_age: undefined,
     },
   })
 
@@ -203,6 +206,7 @@ export default function SettingsPage() {
         cancellation_window_hours: restaurant.cancellation_window_hours,
         table_turnover_minutes: restaurant.table_turnover_minutes,
         booking_policy: restaurant.booking_policy,
+        minimum_age: restaurant.minimum_age,
       })
 
       pricingForm.reset({
@@ -572,7 +576,7 @@ export default function SettingsPage() {
                     )}
                   />
                   
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={operationalForm.control}
                       name="booking_window_days"
@@ -594,7 +598,7 @@ export default function SettingsPage() {
                         </FormItem>
                       )}
                     />
-                    
+
                     <FormField
                       control={operationalForm.control}
                       name="cancellation_window_hours"
@@ -616,7 +620,9 @@ export default function SettingsPage() {
                         </FormItem>
                       )}
                     />
-                    
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={operationalForm.control}
                       name="table_turnover_minutes"
@@ -633,6 +639,29 @@ export default function SettingsPage() {
                           </FormControl>
                           <FormDescription>
                             Minutes per booking
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={operationalForm.control}
+                      name="minimum_age"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Minimum Age</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="18"
+                              {...field}
+                              onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                              disabled={updateRestaurantMutation.isPending}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Minimum age for booking (optional)
                           </FormDescription>
                           <FormMessage />
                         </FormItem>

@@ -1,7 +1,7 @@
 // lib/customer-utils.ts
 
 import { createClient } from '@/lib/supabase/client'
-import type { RestaurantCustomer, CustomerTag, CustomerNote } from '@/types/customer'
+import type { RestaurantCustomer } from '@/types/customer'
 
 export const customerUtils = {
   // Search customers
