@@ -87,12 +87,7 @@ export function TableCombinationsManager({
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              {onSyncCombinations && (
-                <Button variant="outline" onClick={onSyncCombinations}>
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Sync Combinations
-                </Button>
-              )}
+              
               <Button onClick={() => setShowAddDialog(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 Add Combination
