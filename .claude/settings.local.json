@@ -44,5 +44,6 @@
     "fetch",
     "puppeteer",
     "supabase"
-  ]
+  ],
+  "enableAllProjectMcpServers": true
 }

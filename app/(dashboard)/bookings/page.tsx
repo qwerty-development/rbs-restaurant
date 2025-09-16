@@ -174,7 +174,7 @@ export default function BookingsPage() {
   const [viewMode, setViewMode] = useState<"upcoming" | "list" | "calendar" | "tables">("upcoming")
   const [showManualBooking, setShowManualBooking] = useState(false)
   const [timeFilter, setTimeFilter] = useState<string>("all") // all, lunch, dinner
-  const [dateRange, setDateRange] = useState<string>("today") // today, tomorrow, week
+  const [dateRange, setDateRange] = useState<string>("today") // today, tomorrow, week, all
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [selectedBookings, setSelectedBookings] = useState<string[]>([])
   const [showAnalytics, setShowAnalytics] = useState(false)
@@ -1734,6 +1734,14 @@ export default function BookingsPage() {
                   >
                     This Week
                   </Button>
+                  <Button
+                    variant={dateRange === "all" ? "default" : "outline"}
+                    size="default"
+                    onClick={() => setDateRange("all")}
+                    className="min-h-touch-lg font-medium"
+                  >
+                    All Dates
+                  </Button>
                   {dateRange === "custom" && (
                     <Badge variant="secondary" className="px-3 py-2 text-sm">
                       {format(selectedDate, "EEE, MMM d")} 
@@ -2155,6 +2163,14 @@ export default function BookingsPage() {
                     className="min-h-touch-lg font-medium"
                   >
                     Tomorrow ({format(addDays(now, 1), "MMM d")})
+                  </Button>
+                  <Button
+                    variant={dateRange === "all" ? "default" : "outline"}
+                    size="default"
+                    onClick={() => setDateRange("all")}
+                    className="min-h-touch-lg font-medium"
+                  >
+                    All Dates
                   </Button>
                 </div>
                 <div className="flex flex-wrap gap-3">
