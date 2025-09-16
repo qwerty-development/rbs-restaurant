@@ -364,7 +364,8 @@ export class BookingRequestService {
     bookingId: string, 
     userId: string, 
     reason?: string,
-    suggestAlternatives?: boolean
+    suggestAlternatives?: boolean,
+    decline_note?: string
   ): Promise<{
     success: boolean
     error?: string
@@ -398,7 +399,8 @@ export class BookingRequestService {
           status: "declined_by_restaurant",
           updated_at: new Date().toISOString(),
           suggested_alternative_time: alternatives?.times?.[0]?.time.toISOString(),
-          suggested_alternative_tables: alternatives?.tables
+          suggested_alternative_tables: alternatives?.tables,
+          decline_note
         })
         .eq("id", bookingId)
 

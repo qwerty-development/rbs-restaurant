@@ -68,7 +68,7 @@ export async function acceptBooking(bookingId: string, staffId: string): Promise
 /**
  * Decline a pending booking
  */
-export async function declineBooking(bookingId: string, staffId: string, reason?: string): Promise<BookingActionResult> {
+export async function declineBooking(bookingId: string, staffId: string, reason?: string, decline_note?: string): Promise<BookingActionResult> {
   try {
     const supabase = createClient()
 
@@ -80,6 +80,7 @@ export async function declineBooking(bookingId: string, staffId: string, reason?
         declined_at: new Date().toISOString(),
         declined_by_staff: staffId,
         declined_reason: reason || 'Declined by restaurant',
+        decline_note,
         updated_at: new Date().toISOString()
       })
       .eq('id', bookingId)

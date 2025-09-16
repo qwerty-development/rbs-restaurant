@@ -51,6 +51,7 @@ import { Alert, AlertDescription } from "../ui/alert"
 import { useBookingCustomers } from "@/lib/hooks/use-booking-customers"
 import { toast } from "react-hot-toast"
 import { LowRatingFlag } from "@/components/ui/low-rating-flag"
+import { DeclineNoteDialog } from "./decline-note-dialog"
 
 interface BookingListProps {
   bookings: Booking[]
@@ -238,6 +239,15 @@ export function BookingList({
   const requestService = useMemo(() => new BookingRequestService(), [])
   const tableService = useMemo(() => new TableAvailabilityService(), [])
   
+  // Decline note dialog state
+  const [declineDialog, setDeclineDialog] = useState<{
+    isOpen: boolean
+    bookingId: string | null
+  }>({
+    isOpen: false,
+    bookingId: null
+  })
+  
   // Load customer data for all bookings
   const { customerData, loading: customerLoading } = useBookingCustomers(
     bookings, 
@@ -288,6 +298,15 @@ export function BookingList({
   }
 
   const handlePendingAction = async (bookingId: string, action: 'confirm' | 'decline') => {
+    if (action === 'decline') {
+      // Open the decline note dialog instead of immediate decline
+      setDeclineDialog({
+        isOpen: true,
+        bookingId
+      })
+      return
+    }
+
     if (action === 'confirm') {
       // Quick validation before accepting
       const booking = bookings.find(b => b.id === bookingId)
@@ -307,6 +326,33 @@ export function BookingList({
     }
     
     onUpdateStatus(bookingId, action === 'confirm' ? 'confirmed' : 'declined_by_restaurant')
+  }
+
+  const handleDeclineWithNote = async (bookingId: string, note?: string) => {
+    // Close dialog first
+    setDeclineDialog({ isOpen: false, bookingId: null })
+    
+    try {
+      // Use the booking request service directly to decline with note
+      const result = await requestService.declineRequest(
+        bookingId,
+        'current-user', // This should be the current staff user ID
+        'Declined by restaurant staff',
+        false, // Don't suggest alternatives for now
+        note
+      )
+      
+      if (result.success) {
+        // Update the UI by calling the parent's update handler
+        onUpdateStatus(bookingId, 'declined_by_restaurant')
+        toast.success('Booking declined successfully')
+      } else {
+        toast.error(result.error || 'Failed to decline booking')
+      }
+    } catch (error) {
+      console.error('Error declining booking:', error)
+      toast.error('Failed to decline booking')
+    }
   }
 
   if (isLoading) {
@@ -503,9 +549,7 @@ export function BookingList({
                         <DropdownMenuItem
                           onClick={(e) => {
                             e.stopPropagation()
-                            if (confirm("Are you sure you want to decline this request?")) {
-                              handlePendingAction(booking.id, 'decline')
-                            }
+                            handlePendingAction(booking.id, 'decline')
                           }}
                           className="text-red-600"
                         >
@@ -755,6 +799,14 @@ export function BookingList({
           </Card>
         )
       })}
+      
+      {/* Decline Note Dialog */}
+      <DeclineNoteDialog
+        open={declineDialog.isOpen}
+        onOpenChange={(open) => setDeclineDialog({ isOpen: open, bookingId: open ? declineDialog.bookingId : null })}
+        onConfirm={(note) => declineDialog.bookingId && handleDeclineWithNote(declineDialog.bookingId, note)}
+        onCancel={() => setDeclineDialog({ isOpen: false, bookingId: null })}
+      />
     </div>
   )
 }
