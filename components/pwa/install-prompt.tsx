@@ -252,7 +252,11 @@ export function InstallPrompt({ variant = 'button' }: InstallPromptProps) {
     )
   }
 
-  // Button variant for header
+  // Button variant for header - don't show if already installed
+  if (variant === 'button' && isStandalone) {
+    return null
+  }
+
   const PopoverContentComponent = () => (
     <PopoverContent className="w-80 p-4" align="start">
       <div className="space-y-3">
