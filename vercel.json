@@ -1,8 +1,8 @@
 {
-  "crons": [
+ "crons": [
     {
-      "path": "/api/notifications/cron",
-      "schedule": "* * * * *"
+      "path": "/api/cron/process-notifications",
+      "schedule": "*/30 * * * * *"
     }
   ],
   "env": {

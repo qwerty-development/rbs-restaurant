@@ -898,7 +898,7 @@ export default function SettingsPage() {
         <TabsContent value="pwa" className="space-y-4">
           <div className="space-y-6">
             {/* PWA Install Prompt */}
-            <InstallPrompt />
+            <InstallPrompt variant="card" />
             
             {/* Push Notifications */}
             <PushNotificationManager />

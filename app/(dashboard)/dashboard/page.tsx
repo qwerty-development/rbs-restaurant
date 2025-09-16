@@ -1055,6 +1055,8 @@ export default function DashboardPage() {
               <span className="hidden sm:inline">New</span>
             </Button>
             
+            <InstallPrompt />
+            
 
 
           </div>
@@ -1073,11 +1075,6 @@ export default function DashboardPage() {
       {/* Push Notification Permission */}
       <div className="px-4">
         <PushNotificationPermission />
-      </div>
-
-      {/* PWA Install Prompt */}
-      <div className="px-4">
-        <InstallPrompt />
       </div>
 
 

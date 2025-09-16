@@ -12,6 +12,8 @@ import { SidebarProvider } from "@/lib/contexts/sidebar-context"
 import { RestaurantProvider } from "@/lib/contexts/restaurant-context"
 import { DashboardLayoutInner } from "@/components/layout/dashboard-layout-inner"
 import { EnhancedPWAProvider } from "@/components/pwa/enhanced-pwa-provider"
+import { NotificationManager } from "@/components/notification-manager"
+
 
 export default async function DashboardLayout({
   children,
@@ -50,6 +52,7 @@ export default async function DashboardLayout({
       <RestaurantProvider>
         <SidebarProvider>
           <DashboardLayoutInner staffData={staffData}>
+          <NotificationManager />
             {children}
           </DashboardLayoutInner>
         </SidebarProvider>
