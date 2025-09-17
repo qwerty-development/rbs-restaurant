@@ -394,6 +394,41 @@ export interface RestaurantSection {
     created_by_user?: Profile
   }
 
+  // Restaurant Open Hours - Physical operating hours (different from booking hours)
+  export interface RestaurantOpenHours {
+    id: string
+    restaurant_id: string
+    day_of_week: 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
+    service_type: 'breakfast' | 'lunch' | 'dinner' | 'general' | 'bar' | 'kitchen'
+    is_open: boolean
+    open_time: string | null // HH:mm format
+    close_time: string | null // HH:mm format
+    name: string | null // e.g., "Kitchen Hours", "Bar Service"
+    accepts_walkins: boolean // Whether walk-ins are accepted during these hours
+    notes: string | null // Additional information about service
+    created_at: string
+    updated_at: string
+  }
+
+  // Restaurant Status Information - computed from open hours and operating hours
+  export interface RestaurantStatus {
+    restaurant_id: string
+    is_open: boolean // Currently physically open
+    is_accepting_bookings: boolean // Currently accepting online bookings
+    current_service_type: string | null // Current service being offered
+    accepts_walkins_now: boolean // Currently accepting walk-ins
+    next_opening: {
+      day: string
+      time: string
+      service_type: string
+    } | null
+    next_booking_availability: {
+      day: string
+      time: string
+    } | null
+    status_message: string // Human-readable status
+  }
+
   export interface WaitlistEntry {
     id: string
     user_id: string

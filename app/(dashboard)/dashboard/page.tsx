@@ -19,6 +19,7 @@ import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
 import { InstallPrompt } from "@/components/pwa/install-prompt"
 import { BookingDetails } from "@/components/bookings/booking-details"
 import { BookingConflictAlerts } from "@/components/dashboard/booking-conflict-alerts"
+import { RestaurantStatusIndicator } from "@/components/dashboard/restaurant-status-badge"
 import { TableAvailabilityService } from "@/lib/table-availability"
 import { TableStatusService, type DiningStatus } from "@/lib/table-status"
 import { BookingRequestService } from "@/lib/booking-request-service"
@@ -1006,6 +1007,9 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2">
             {/* Enhanced Live Stats including Waitlist */}
             <div className="hidden sm:flex items-center gap-2 bg-primary/20 backdrop-blur-xl rounded-md px-2 py-0.5 border border-primary/30">
+              {/* Restaurant Status */}
+              <RestaurantStatusIndicator restaurantId={restaurantId} />
+              <div className="w-px h-3.5 bg-slate-600" />
               <div className="flex items-center gap-1">
                 <div className="h-1.5 w-1.5 bg-emerald-400 rounded-full animate-pulse" />
                 <span className="text-xs font-bold text-emerald-400">{stats.currentGuests}</span>
