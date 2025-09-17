@@ -86,17 +86,13 @@ interface TableFormProps {
   defaultSectionId?: string
 }
 
-const TABLE_FEATURES = [
-  "Window View",
-  "Private Area",
-  "Wheelchair Accessible",
-  "High Chair Compatible",
-  "Power Outlet",
-  "Corner Table",
-  "Near Kitchen",
-  "Near Restroom",
+const TABLE_LOCATIONS = [
+  "Indoor",
   "Outdoor",
-  "Covered",
+  "Bar Area",
+  "Rooftop",
+  "Patio",
+  "Private Room"
 ]
 
 export function TableForm({ 
@@ -108,7 +104,7 @@ export function TableForm({
   isLoading,
   defaultSectionId 
 }: TableFormProps) {
-  const [selectedFeatures, setSelectedFeatures] = useState<string[]>(table?.features || [])
+  const [selectedLocation, setSelectedLocation] = useState<string>(table?.features?.[0] || "Indoor")
   const [combinableWith, setCombinableWith] = useState<string[]>(table?.combinable_with || [])
   const [customValidationError, setCustomValidationError] = useState<string>("")
   
@@ -197,7 +193,7 @@ export function TableForm({
 
     onSubmit({
       ...data,
-      features: selectedFeatures,
+      features: [selectedLocation],
       combinable_with: isCombinable ? combinableWith : [],
     })
   }
@@ -445,31 +441,28 @@ export function TableForm({
         </div>
       </div>
 
-      {/* Features */}
+      {/* Table Location */}
       <div>
-        <Label>Table Features</Label>
-        <div className="grid grid-cols-2 gap-2 mt-2">
-          {TABLE_FEATURES.map((feature) => (
-            <label
-              key={feature}
-              className="flex items-center space-x-2 text-sm"
-            >
-              <Checkbox
-                checked={selectedFeatures.includes(feature)}
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    setSelectedFeatures([...selectedFeatures, feature])
-                  } else {
-                   // components/tables/table-form.tsx (continued)
-                    setSelectedFeatures(selectedFeatures.filter(f => f !== feature))
-                  }
-                }}
-                disabled={isLoading}
-              />
-              <span>{feature}</span>
-            </label>
-          ))}
-        </div>
+        <Label htmlFor="table_location">Table Location</Label>
+        <p className="text-sm text-muted-foreground mb-2">
+          Select the primary location type for this table
+        </p>
+        <Select
+          value={selectedLocation}
+          onValueChange={setSelectedLocation}
+          disabled={isLoading}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select table location" />
+          </SelectTrigger>
+          <SelectContent>
+            {TABLE_LOCATIONS.map((location) => (
+              <SelectItem key={location} value={location}>
+                {location}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Status Switches */}

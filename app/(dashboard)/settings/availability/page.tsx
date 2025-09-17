@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "react-hot-toast"
-import { 
+import {
   Save,
   ArrowLeft,
   Plus,
@@ -44,6 +44,7 @@ import {
   Clock,
   AlertTriangle,
 } from "lucide-react"
+import { OpenHoursForm } from "@/components/settings/open-hours-form"
 
 // Types
 interface SpecialHours {
@@ -381,13 +382,14 @@ export default function EnhancedAvailabilitySettingsPage() {
         </Button>
         <h1 className="text-3xl font-bold tracking-tight">Availability Settings</h1>
         <p className="text-muted-foreground">
-          Manage your restaurant's operating hours, special occasions, and closures.
+          Manage your restaurant's operating hours, open hours, special occasions, and closures.
         </p>
       </div>
 
       <Tabs defaultValue="regular" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="regular">Regular Hours</TabsTrigger>
+          <TabsTrigger value="regular">Booking Hours</TabsTrigger>
+          <TabsTrigger value="open">Open Hours</TabsTrigger>
           <TabsTrigger value="special">Special Hours</TabsTrigger>
           <TabsTrigger value="closures">Closures</TabsTrigger>
         </TabsList>
@@ -396,9 +398,9 @@ export default function EnhancedAvailabilitySettingsPage() {
         <TabsContent value="regular">
           <Card>
             <CardHeader>
-              <CardTitle>Regular Operating Hours</CardTitle>
+              <CardTitle>Booking Hours</CardTitle>
               <CardDescription>
-                Set your standard weekly operating hours. You can add multiple shifts per day (e.g., lunch and dinner service).
+                Set when you accept online bookings and reservations. You can add multiple shifts per day (e.g., lunch and dinner service).
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -543,6 +545,17 @@ export default function EnhancedAvailabilitySettingsPage() {
               </Form>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Open Hours Tab */}
+        <TabsContent value="open">
+          <OpenHoursForm
+            restaurantId={restaurantId}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ["restaurant-availability-all", restaurantId] })
+              toast.success("Open hours updated successfully")
+            }}
+          />
         </TabsContent>
 
         {/* Special Hours Tab */}

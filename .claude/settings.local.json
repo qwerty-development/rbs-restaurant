@@ -36,14 +36,16 @@
       "mcp__puppeteer__puppeteer_evaluate",
       "Bash(ls:*)",
       "mcp__supabase__apply_migration",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(npm run migrate:open-hours:dry-run:*)",
+      "Bash(npm run setup:open-hours:*)"
     ],
     "deny": []
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "fetch",
     "puppeteer",
     "supabase"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

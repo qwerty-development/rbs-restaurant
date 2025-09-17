@@ -126,54 +126,42 @@ export default function AdminPage() {
   const validateLebananesePhone = (phone: string): { isValid: boolean; formatted?: string; error?: string } => {
     // Remove all non-digit characters
     const cleanPhone = phone.replace(/\D/g, '')
-    
-    // Lebanese phone number patterns:
-    // Mobile: 961 + 3/7/8/9 + 6 digits (total 10 digits after 961)
-    // Landline: 961 + area code (1-9) + 6-7 digits
-    
+
     if (cleanPhone.length === 0) {
       return { isValid: false, error: 'Phone number is required' }
     }
-    
-    // Check if it starts with 961 (Lebanon country code)
-    if (!cleanPhone.startsWith('961')) {
-      // If it doesn't start with 961, check if it's a local number
-      if (cleanPhone.length === 8 && /^[3789]/.test(cleanPhone)) {
-        // Mobile number without country code
-        const formatted = `+961 ${cleanPhone.slice(0, 1)} ${cleanPhone.slice(1, 4)} ${cleanPhone.slice(4)}`
-        return { isValid: true, formatted }
-      } else if (cleanPhone.length === 7 && /^[1-9]/.test(cleanPhone)) {
-        // Landline without country code
-        const formatted = `+961 ${cleanPhone.slice(0, 1)} ${cleanPhone.slice(1, 4)} ${cleanPhone.slice(4)}`
+
+    // Lebanese mobile number patterns:
+    // +961 + 8 digits starting with 3, 7, or 8
+    // Examples: +96181972024, +96171234567, +96131234567
+
+    // If it starts with 0 and has 9 digits (0XXXXXXXX)
+    if (cleanPhone.startsWith('0') && cleanPhone.length === 9) {
+      const nationalNumber = cleanPhone.slice(1)
+      if (/^[378]/.test(nationalNumber)) {
+        const formatted = `+961${nationalNumber}`
         return { isValid: true, formatted }
       }
-      return { isValid: false, error: 'Lebanese phone numbers should start with +961 or be a valid local number' }
+      return { isValid: false, error: 'Lebanese mobile numbers must start with 3, 7, or 8' }
     }
-    
-    const nationalNumber = cleanPhone.slice(3) // Remove 961
-    
-    if (nationalNumber.length < 7 || nationalNumber.length > 8) {
-      return { isValid: false, error: 'Invalid Lebanese phone number length' }
+
+    // If it starts with 961 (with country code)
+    if (cleanPhone.startsWith('961')) {
+      const nationalNumber = cleanPhone.slice(3)
+      if (nationalNumber.length === 8 && /^[378]/.test(nationalNumber)) {
+        const formatted = `+961${nationalNumber}`
+        return { isValid: true, formatted }
+      }
+      return { isValid: false, error: 'Lebanese mobile numbers must be 8 digits starting with 3, 7, or 8' }
     }
-    
-    // Mobile numbers (3, 7, 8, 9 + 6 digits)
-    if (nationalNumber.length === 7 && /^[3789]/.test(nationalNumber)) {
-      const formatted = `+961 ${nationalNumber.slice(0, 1)} ${nationalNumber.slice(1, 4)} ${nationalNumber.slice(4)}`
+
+    // If it's just 8 digits starting with 3, 7, or 8
+    if (cleanPhone.length === 8 && /^[378]/.test(cleanPhone)) {
+      const formatted = `+961${cleanPhone}`
       return { isValid: true, formatted }
     }
-    
-    // Landline numbers (area code + 6-7 digits)
-    if ((nationalNumber.length === 7 || nationalNumber.length === 8) && /^[1-9]/.test(nationalNumber)) {
-      if (nationalNumber.length === 7) {
-        const formatted = `+961 ${nationalNumber.slice(0, 1)} ${nationalNumber.slice(1, 4)} ${nationalNumber.slice(4)}`
-        return { isValid: true, formatted }
-      } else {
-        const formatted = `+961 ${nationalNumber.slice(0, 1)} ${nationalNumber.slice(1, 4)} ${nationalNumber.slice(4, 7)}`
-        return { isValid: true, formatted }
-      }
-    }
-    
-    return { isValid: false, error: 'Invalid Lebanese phone number format' }
+
+    return { isValid: false, error: 'Please enter a valid Lebanese mobile number (+961XXXXXXXX)' }
   }
 
   // State for phone validation

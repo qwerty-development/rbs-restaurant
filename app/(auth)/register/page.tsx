@@ -49,27 +49,32 @@ const formSchema = z.object({
       (phone) => {
         // Remove all non-digit characters
         const digits = phone.replace(/\D/g, "")
-        
-        // Lebanese phone numbers:
-        // Mobile: +961 XX XXX XXX (8 digits after country code)
-        // Landline: +961 X XXX XXX (7 digits after country code)
-        // With country code: 961XXXXXXXX or 961XXXXXXX
-        // Without country code: 0XXXXXXXX or 0XXXXXXX
-        
-        if (digits.startsWith("961")) {
-          // With country code +961
-          const remaining = digits.slice(3)
-          return remaining.length === 8 || remaining.length === 7
-        } else if (digits.startsWith("0")) {
-          // Without country code, starts with 0
-          const remaining = digits.slice(1)
-          return remaining.length === 8 || remaining.length === 7
+
+        // Lebanese mobile numbers:
+        // +961 + 8 digits starting with 3, 7, or 8
+        // Examples: +96181972024, +96171234567, +96131234567
+
+        // If it starts with 0 and has 9 digits (0XXXXXXXX)
+        if (digits.startsWith('0') && digits.length === 9) {
+          const nationalNumber = digits.slice(1)
+          return /^[378]/.test(nationalNumber)
         }
-        
+
+        // If it starts with 961 (with country code)
+        if (digits.startsWith('961')) {
+          const nationalNumber = digits.slice(3)
+          return nationalNumber.length === 8 && /^[378]/.test(nationalNumber)
+        }
+
+        // If it's just 8 digits starting with 3, 7, or 8
+        if (digits.length === 8 && /^[378]/.test(digits)) {
+          return true
+        }
+
         return false
       },
       {
-        message: "Please enter a valid Lebanese phone number (+961 XX XXX XXX or 0X XXX XXX)"
+        message: "Please enter a valid Lebanese mobile number (+961XXXXXXXX)"
       }
     ),
   cuisineType: z.string().min(1, "Please select a cuisine type"),

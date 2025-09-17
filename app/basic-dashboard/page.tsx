@@ -82,6 +82,10 @@ export default function BasicDashboardPage() {
           status,
           special_requests,
           preferred_section,
+          occasion,
+          dietary_notes,
+          guest_name,
+          guest_email,
           created_at,
           user_id,
           profiles!bookings_user_id_fkey (
@@ -111,6 +115,10 @@ export default function BasicDashboardPage() {
           status,
           special_requests,
           preferred_section,
+          occasion,
+          dietary_notes,
+          guest_name,
+          guest_email,
           created_at,
           user_id,
           profiles!bookings_user_id_fkey (
@@ -205,6 +213,10 @@ export default function BasicDashboardPage() {
                 status,
                 special_requests,
                 preferred_section,
+                occasion,
+                dietary_notes,
+                      guest_name,
+                guest_email,
                 created_at,
                 user_id,
                 profiles!bookings_user_id_fkey (
@@ -299,6 +311,10 @@ export default function BasicDashboardPage() {
                 status,
                 special_requests,
                 preferred_section,
+                occasion,
+                dietary_notes,
+                      guest_name,
+                guest_email,
                 created_at,
                 user_id,
                 profiles!bookings_user_id_fkey (
@@ -627,7 +643,6 @@ export default function BasicDashboardPage() {
                 mode="single"
                 selected={selectedDate}
                 onSelect={(date) => date && setSelectedDate(date)}
-                initialFocus
               />
             </PopoverContent>
           </Popover>
@@ -691,26 +706,28 @@ export default function BasicDashboardPage() {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div>
                         {(() => {
                           const customer = Array.isArray(booking.profiles) ? booking.profiles[0] : booking.profiles
+                          const guestName = booking.guest_name || customer?.full_name
+                          const guestEmail = booking.guest_email || customer?.email
                           return (
                             <>
                               <h3 className="font-semibold text-lg mb-1">
-                                {customer?.full_name || 'Unknown Customer'}
+                                {guestName || 'Unknown Customer'}
                               </h3>
-                              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <div className="flex flex-col gap-1 text-sm text-muted-foreground">
                                 {customer?.phone_number && (
                                   <div className="flex items-center gap-1">
                                     <Phone className="h-3 w-3" />
                                     {customer.phone_number}
                                   </div>
                                 )}
-                                {customer?.email && (
+                                {guestEmail && (
                                   <div className="flex items-center gap-1">
                                     <Mail className="h-3 w-3" />
-                                    {customer.email}
+                                    {guestEmail}
                                   </div>
                                 )}
                               </div>
@@ -742,9 +759,15 @@ export default function BasicDashboardPage() {
                             </Badge>
                           </div>
                         )}
+                        {booking.occasion && (
+                          <div className="mt-2">
+                            <p className="text-xs text-muted-foreground">Occasion</p>
+                            <p className="text-sm font-medium">{booking.occasion}</p>
+                          </div>
+                        )}
                       </div>
 
-                      <div>
+                      <div className="space-y-3">
                         {booking.special_requests && (
                           <div>
                             <p className="text-sm text-muted-foreground mb-1">Special Requests</p>
@@ -754,6 +777,20 @@ export default function BasicDashboardPage() {
                             </div>
                           </div>
                         )}
+
+                        {booking.dietary_notes && booking.dietary_notes.length > 0 && (
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Dietary Notes</p>
+                            <div className="flex flex-wrap gap-1">
+                              {booking.dietary_notes.map((note: string, index: number) => (
+                                <Badge key={index} variant="outline" className="text-xs">
+                                  {note}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                       </div>
                     </div>
                   </div>
