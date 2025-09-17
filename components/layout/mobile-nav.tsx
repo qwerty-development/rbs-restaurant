@@ -64,6 +64,10 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
     if (item.title === 'Dashboard' && tier === 'basic') {
       return { ...item, href: '/basic-dashboard' }
     }
+    // Transform Sections href based on tier
+    if (item.title === 'Sections' && tier === 'basic') {
+      return { ...item, href: '/basic-dashboard/sections' }
+    }
     return item
   })
 

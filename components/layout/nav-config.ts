@@ -17,6 +17,7 @@ import {
   Crown,
   Clock,
   Upload,
+  Grid,
 } from 'lucide-react'
 
 export interface NavigationItem {
@@ -34,6 +35,7 @@ export const NAV_ITEMS: NavigationItem[] = [
   { title: 'Customers', href: '/customers', icon: Users, permission: 'customers.view', tierFeature: 'customer_management' },
   { title: 'VIP Customers', href: '/vip', icon: Crown, permission: 'vip.view', tierFeature: 'customer_management' },
   { title: 'Menu', href: '/menu', icon: Utensils, permission: 'menu.view', tierFeature: 'menu_management' },
+  { title: 'Sections', href: '/sections', icon: Grid, permission: null, tierFeature: 'section_management' },
   { title: 'Tables', href: '/tables', icon: TableIcon, permission: 'tables.view', tierFeature: 'table_management' },
   { title: 'Analytics', href: '/analytics', icon: BarChart3, permission: 'analytics.view', tierFeature: 'advanced_analytics' },
   { title: 'Waiting List', href: '/waitlist', icon: Clock, permission: 'bookings.view', tierFeature: 'waitlist' },

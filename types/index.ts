@@ -112,6 +112,10 @@ export interface Restaurant {
     acceptance_failed_reason: string | null
     suggested_alternative_time: string | null
     suggested_alternative_tables: string[] | null
+    source: string
+    is_shared_booking: boolean
+    decline_note: string | null
+    preferred_section: string | null
     
     // Relations
     user?: {

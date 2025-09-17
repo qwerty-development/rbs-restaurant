@@ -81,6 +81,7 @@ export default function BasicDashboardPage() {
           party_size,
           status,
           special_requests,
+          preferred_section,
           created_at,
           user_id,
           profiles!bookings_user_id_fkey (
@@ -109,6 +110,7 @@ export default function BasicDashboardPage() {
           party_size,
           status,
           special_requests,
+          preferred_section,
           created_at,
           user_id,
           profiles!bookings_user_id_fkey (
@@ -202,6 +204,7 @@ export default function BasicDashboardPage() {
                 party_size,
                 status,
                 special_requests,
+                preferred_section,
                 created_at,
                 user_id,
                 profiles!bookings_user_id_fkey (
@@ -295,6 +298,7 @@ export default function BasicDashboardPage() {
                 party_size,
                 status,
                 special_requests,
+                preferred_section,
                 created_at,
                 user_id,
                 profiles!bookings_user_id_fkey (
@@ -724,6 +728,20 @@ export default function BasicDashboardPage() {
                           <Users className="h-3 w-3" />
                           {booking.party_size} guests
                         </div>
+                        {booking.preferred_section && (
+                          <div className="flex items-center gap-1 text-sm mt-1">
+                            <Badge 
+                              variant="secondary" 
+                              className="text-xs"
+                              style={{
+                                backgroundColor: '#f1f5f9',
+                                color: '#1e293b'
+                              }}
+                            >
+                              {booking.preferred_section}
+                            </Badge>
+                          </div>
+                        )}
                       </div>
 
                       <div>

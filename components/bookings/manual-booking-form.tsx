@@ -57,6 +57,7 @@ import {
 } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { BookingTermsCheckbox } from "@/components/ui/terms-checkbox"
+import { PreferredSectionSelector } from "./preferred-section-selector"
 
 // Updated form schema with proper null handling and shared tables
 const formSchema = z.object({
@@ -70,6 +71,7 @@ const formSchema = z.object({
   turn_time_minutes: z.number().min(30).max(240),
   special_requests: z.string().optional(),
   occasion: z.string().optional(),
+  preferred_section: z.string().optional(),
   table_ids: z.array(z.string()).optional(),
   status: z.enum(["pending", "confirmed", "completed"]),
   acceptTerms: z.boolean().default(true), // Staff-created bookings default to accepted
@@ -961,6 +963,7 @@ export function ManualBookingForm({
         : (pendingSubmission.data.guest_email?.trim() || null),
       special_requests: pendingSubmission.data.special_requests?.trim() || null,
       occasion: pendingSubmission.data.occasion?.trim() || null,
+      preferred_section: pendingSubmission.data.preferred_section?.trim() || null,
       table_ids: selectedTables,
       shared_table_id: selectedSharedTable,
       booking_time: bookingDateTime.toISOString(),
@@ -1706,6 +1709,14 @@ export function ManualBookingForm({
               disabled={isLoading}
             />
           </div>
+
+          {/* Preferred Section Selector */}
+          <PreferredSectionSelector
+            restaurantId={restaurantId}
+            value={watch("preferred_section")}
+            onSectionSelect={(sectionName) => setValue("preferred_section", sectionName)}
+            disabled={isLoading}
+          />
 
           <div>
             <Label htmlFor="special_requests">Special Requests</Label>

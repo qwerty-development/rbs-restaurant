@@ -631,6 +631,19 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                     </p>
                   )}
                 </div>
+
+                {/* Preferred Section */}
+                {booking.preferred_section && (
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Preferred Section</Label>
+                    <div className="mt-2 flex items-center gap-2">
+                      <div className="h-3 w-3 rounded-full bg-primary/20"></div>
+                      <Badge variant="outline" className="px-2 py-1 text-sm">
+                        {booking.preferred_section}
+                      </Badge>
+                    </div>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="customer" className="space-y-6 m-0">

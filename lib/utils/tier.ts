@@ -39,6 +39,7 @@ export const TIER_FEATURES = {
     review_management: true,
     profile_management: true,
     settings_basic: true,
+    section_management: true, // Basic section management for organizing bookings
     
     // Disabled features
     bookings_advanced: false, // No separate bookings page
@@ -83,6 +84,7 @@ export const TIER_FEATURES = {
     review_management: true,
     profile_management: true,
     settings_basic: true,
+    section_management: true, // Pro tier has advanced section management via tables
     notifications_advanced: true,
   }
 } as const
@@ -138,6 +140,10 @@ export function getNavigationItems(tier: RestaurantTier) {
     { href: '/settings', label: 'Settings', feature: 'settings_basic' },
   ]
 
+  const basicOnlyItems = [
+    { href: '/basic-dashboard/sections', label: 'Sections', feature: 'section_management' },
+  ]
+
   const proOnlyItems = [
     { href: '/customers', label: 'Customers', feature: 'customer_management' },
     { href: '/vip', label: 'VIP Customers', feature: 'customer_management' },
@@ -154,6 +160,7 @@ export function getNavigationItems(tier: RestaurantTier) {
   ]
 
   // Filter items based on tier features
-  const allItems = [...baseItems, ...proOnlyItems]
+  const tierSpecificItems = tier === 'basic' ? basicOnlyItems : proOnlyItems
+  const allItems = [...baseItems, ...tierSpecificItems]
   return allItems.filter(item => hasFeature(tier, item.feature as keyof typeof TIER_FEATURES.basic))
 }

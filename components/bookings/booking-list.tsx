@@ -729,6 +729,21 @@ export function BookingList({
                     )}
                   </div>
                 </div>
+
+                {/* Preferred Section */}
+                {booking.preferred_section && (
+                  <div className="flex items-center gap-3">
+                    <div className="h-5 w-5 flex-shrink-0 flex items-center justify-center">
+                      <div className="h-3 w-3 rounded-full bg-primary/20"></div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Preferred:</span>
+                      <Badge variant="outline" className="px-2 py-1 text-xs">
+                        {booking.preferred_section}
+                      </Badge>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Request expiry timer - Enhanced visibility */}
