@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -74,6 +75,7 @@ interface RestaurantStats {
 }
 
 export default function RestaurantManagement() {
+  const router = useRouter()
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
   const [stats, setStats] = useState<RestaurantStats>({
     total_restaurants: 0,
@@ -222,6 +224,58 @@ export default function RestaurantManagement() {
     }
 
     try {
+      // Fetch image URLs to clean up storage assets before deletion
+      const { data: restaurant, error: fetchError } = await supabase
+        .from('restaurants')
+        .select('main_image_url, image_urls')
+        .eq('id', restaurantId)
+        .single()
+
+      if (fetchError) {
+        console.error('Error fetching restaurant before delete:', fetchError)
+      } else if (restaurant) {
+        const urls: string[] = []
+        if (restaurant.main_image_url) urls.push(restaurant.main_image_url)
+        if (Array.isArray(restaurant.image_urls)) urls.push(...restaurant.image_urls.filter(Boolean))
+
+        const extractBucketAndPath = (publicUrl: string): { bucket: string; path: string } | null => {
+          try {
+            const marker = '/storage/v1/object/public/'
+            const idx = publicUrl.indexOf(marker)
+            if (idx === -1) return null
+            const rest = publicUrl.substring(idx + marker.length)
+            const firstSlash = rest.indexOf('/')
+            if (firstSlash === -1) return null
+            const bucket = rest.substring(0, firstSlash)
+            const path = rest.substring(firstSlash + 1)
+            return { bucket, path }
+          } catch (_) {
+            return null
+          }
+        }
+
+        const removalsByBucket: Record<string, string[]> = {}
+        urls.forEach((u) => {
+          const parsed = extractBucketAndPath(u)
+          if (parsed) {
+            removalsByBucket[parsed.bucket] = removalsByBucket[parsed.bucket]
+              ? [...removalsByBucket[parsed.bucket], parsed.path]
+              : [parsed.path]
+          }
+        })
+
+        // Execute deletions per bucket
+        await Promise.all(Object.entries(removalsByBucket).map(async ([bucket, paths]) => {
+          try {
+            if (paths.length > 0) {
+              await supabase.storage.from(bucket).remove(paths)
+            }
+          } catch (e) {
+            console.warn('Failed to remove some images from bucket', bucket, e)
+          }
+        }))
+      }
+
       const { error } = await supabase
         .from('restaurants')
         .delete()
@@ -650,11 +704,7 @@ export default function RestaurantManagement() {
                     <Button 
                       variant="outline" 
                       size="sm"
-                      onClick={() => {
-                        setSelectedRestaurant(restaurant)
-                        populateFormData(restaurant)
-                        setShowEditDialog(true)
-                      }}
+                      onClick={() => router.push(`/admin/restaurants/${restaurant.id}`)}
                       style={{ minHeight: '36px' }}
                     >
                       <Edit2 className="w-4 h-4 mr-1" />
@@ -917,134 +967,7 @@ export default function RestaurantManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Restaurant Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Restaurant</DialogTitle>
-          </DialogHeader>
-          
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-name">Restaurant Name *</Label>
-                <Input
-                  id="edit-name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  placeholder="Enter restaurant name"
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-cuisine_type">Cuisine Type *</Label>
-                <Input
-                  id="edit-cuisine_type"
-                  value={formData.cuisine_type}
-                  onChange={(e) => setFormData({...formData, cuisine_type: e.target.value})}
-                  placeholder="e.g., Italian, Asian, American"
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-phone_number">Phone Number *</Label>
-                <Input
-                  id="edit-phone_number"
-                  value={formData.phone_number}
-                  onChange={(e) => setFormData({...formData, phone_number: e.target.value})}
-                  placeholder="Restaurant phone number"
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-price_range">Price Range</Label>
-                <Select value={formData.price_range.toString()} onValueChange={(value) => setFormData({...formData, price_range: parseInt(value)})}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">$ - Budget Friendly</SelectItem>
-                    <SelectItem value="2">$$ - Moderate</SelectItem>
-                    <SelectItem value="3">$$$ - Upscale</SelectItem>
-                    <SelectItem value="4">$$$$ - Fine Dining</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="edit-opening_time">Opening Time</Label>
-                <Input
-                  id="edit-opening_time"
-                  type="time"
-                  value={formData.opening_time}
-                  onChange={(e) => setFormData({...formData, opening_time: e.target.value})}
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-closing_time">Closing Time</Label>
-                <Input
-                  id="edit-closing_time"
-                  type="time"
-                  value={formData.closing_time}
-                  onChange={(e) => setFormData({...formData, closing_time: e.target.value})}
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="edit-address">Address *</Label>
-              <Input
-                id="edit-address"
-                value={formData.address}
-                onChange={(e) => setFormData({...formData, address: e.target.value})}
-                placeholder="Full restaurant address"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="edit-description">Description</Label>
-              <Textarea
-                id="edit-description"
-                value={formData.description}
-                onChange={(e) => setFormData({...formData, description: e.target.value})}
-                placeholder="Brief description of the restaurant"
-                rows={3}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-booking_policy">Booking Policy</Label>
-                <Select value={formData.booking_policy} onValueChange={(value) => setFormData({...formData, booking_policy: value})}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="instant">Instant Confirmation</SelectItem>
-                    <SelectItem value="request">Request Based</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center space-x-2 pt-6">
-                <Switch
-                  id="edit-featured"
-                  checked={formData.featured}
-                  onCheckedChange={(checked) => setFormData({...formData, featured: checked})}
-                />
-                <Label htmlFor="edit-featured">Featured Restaurant</Label>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => {
-                setShowEditDialog(false)
-                setSelectedRestaurant(null)
-              }}>
-                Cancel
-              </Button>
-              <Button onClick={handleUpdateRestaurant} disabled={saving}>
-                {saving ? 'Updating...' : 'Update Restaurant'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Edit Restaurant moved to dedicated page at /admin/restaurants/[id] */}
     </div>
   )
 }
