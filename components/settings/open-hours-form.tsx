@@ -25,7 +25,6 @@ import {
   FormMessage,
   FormDescription,
 } from "@/components/ui/form"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Plus,
   X,
@@ -100,7 +99,6 @@ interface OpenHoursFormProps {
 }
 
 export function OpenHoursForm({ restaurantId, onSuccess }: OpenHoursFormProps) {
-  const [selectedDay, setSelectedDay] = useState<string>('monday')
   const { data: existingOpenHours, isLoading } = useOpenHours(restaurantId)
   const updateOpenHours = useBulkUpdateOpenHours()
 
@@ -277,187 +275,106 @@ export function OpenHoursForm({ restaurantId, onSuccess }: OpenHoursFormProps) {
               </AlertDescription>
             </Alert>
 
-            {/* Day Selection Tabs */}
-            <Tabs value={selectedDay} onValueChange={setSelectedDay} className="w-full">
-              <TabsList className="grid w-full grid-cols-7 h-12">
-                {DAYS_OF_WEEK.map((day) => (
-                  <TabsTrigger
-                    key={day.value}
-                    value={day.value}
-                    className="text-xs font-medium"
-                  >
-                    {day.short}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-
-              {DAYS_OF_WEEK.map((day) => (
-                <TabsContent key={day.value} value={day.value} className="space-y-6 mt-6">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold flex items-center gap-2">
-                      <Calendar className="h-5 w-5" />
-                      {day.label} Schedule
-                    </h3>
-                    <div className="flex gap-2">
-                      <Select onValueChange={(serviceType) => addShift(day.value, serviceType)}>
-                        <SelectTrigger className="w-48">
-                          <SelectValue placeholder="Add Service" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {SERVICE_TYPES.map((service) => {
-                            const Icon = service.icon
-                            return (
-                              <SelectItem key={service.value} value={service.value}>
-                                <div className="flex items-center gap-2">
-                                  <div className={cn("w-3 h-3 rounded-full", service.color)} />
-                                  <Icon className="h-4 w-4" />
-                                  <span>{service.label}</span>
-                                </div>
-                              </SelectItem>
-                            )
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {/* Shifts for this day */}
-                  <div className="space-y-4">
-                    {getShiftsForDay(day.value).length === 0 ? (
-                      <Card className="border-dashed border-2 border-gray-300">
-                        <CardContent className="p-8 text-center">
-                          <Clock className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                          <h3 className="text-lg font-medium text-gray-600 mb-2">No shifts scheduled</h3>
-                          <p className="text-sm text-gray-500 mb-4">Add a service to get started</p>
-                        </CardContent>
-                      </Card>
-                    ) : (
-                      getShiftsForDay(day.value).map((shift, shiftIndex) => {
-                        const actualIndex = fields.findIndex(f => f === shift)
-                        const service = getServiceConfig(shift.service_type)
-                        const Icon = service.icon
-
-                        const getBorderColor = (bgColor: string) => {
-                          const colorMap: { [key: string]: string } = {
-                            'bg-blue-500': '#3b82f6',
-                            'bg-orange-500': '#f97316',
-                            'bg-green-500': '#22c55e',
-                            'bg-purple-500': '#a855f7',
-                            'bg-red-500': '#ef4444',
-                            'bg-yellow-500': '#eab308',
-                          }
-                          return colorMap[bgColor] || '#3b82f6'
-                        }
-
-                        return (
-                          <Card key={actualIndex} className="border-l-4" style={{ borderLeftColor: getBorderColor(service.color) }}>
-                            <CardContent className="p-4">
-                              <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-3">
-                                  <div className={cn("w-4 h-4 rounded-full", service.color)} />
-                                  <Icon className="h-5 w-5" />
-                                  <div>
-                                    <h4 className="font-semibold">{service.label}</h4>
-                                    <p className="text-sm text-gray-500">{service.desc}</p>
+            {/* Weekly Schedule - Linear Layout like Operating Hours */}
+            <div className="space-y-8">
+              {DAYS_OF_WEEK.map((day) => {
+                const shifts = getShiftsForDay(day.value) || []
+                return (
+                  <div key={day.value} className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-medium capitalize">{day.label}</h3>
+                      <div className="flex gap-2">
+                        <Select onValueChange={(serviceType) => addShift(day.value, serviceType)}>
+                          <SelectTrigger className="w-48">
+                            <SelectValue placeholder="Add Service" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SERVICE_TYPES.map((service) => {
+                              const Icon = service.icon
+                              return (
+                                <SelectItem key={service.value} value={service.value}>
+                                  <div className="flex items-center gap-2">
+                                    <div className={cn("w-3 h-3 rounded-full", service.color)} />
+                                    <Icon className="h-4 w-4" />
+                                    <span>{service.label}</span>
                                   </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => copyShiftToAllDays(actualIndex)}
-                                    className="h-8"
-                                  >
-                                    <Copy className="h-3 w-3 mr-1" />
-                                    Copy to All
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => remove(actualIndex)}
-                                    className="h-8 text-red-600 hover:text-red-700"
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              </div>
+                                </SelectItem>
+                              )
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
 
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-3">
+                      {shifts.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          No services scheduled. Add a service to get started.
+                        </div>
+                      ) : (
+                        shifts.map((shift) => {
+                          const actualIndex = fields.findIndex(f => f === shift)
+                          const service = getServiceConfig(shift.service_type)
+                          const Icon = service.icon
+
+                          return (
+                            <div key={actualIndex} className="flex items-center gap-4 p-4 border rounded-lg">
+                              {/* Open/Closed Switch */}
+                              <div className="flex items-center space-x-2">
                                 <FormField
                                   control={form.control}
                                   name={`shifts.${actualIndex}.is_open`}
                                   render={({ field }) => (
-                                    <div className="flex items-center space-x-2">
-                                      <Switch
-                                        checked={field.value}
-                                        onCheckedChange={field.onChange}
-                                      />
-                                      <Label className={cn(
-                                        "text-sm font-medium",
-                                        field.value ? "text-green-600" : "text-gray-500"
-                                      )}>
+                                    <FormItem className="flex items-center space-x-2">
+                                      <FormControl>
+                                        <Switch
+                                          checked={field.value}
+                                          onCheckedChange={field.onChange}
+                                        />
+                                      </FormControl>
+                                      <FormLabel className="!mt-0">
                                         {field.value ? "Open" : "Closed"}
-                                      </Label>
-                                    </div>
+                                      </FormLabel>
+                                    </FormItem>
                                   )}
                                 />
-
-                                {form.watch(`shifts.${actualIndex}.is_open`) && (
-                                  <>
-                                    <FormField
-                                      control={form.control}
-                                      name={`shifts.${actualIndex}.open_time`}
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel className="text-sm">Opens At</FormLabel>
-                                          <FormControl>
-                                            <Input
-                                              type="time"
-                                              {...field}
-                                              className="touch-manipulation"
-                                            />
-                                          </FormControl>
-                                          <FormMessage />
-                                        </FormItem>
-                                      )}
-                                    />
-
-                                    <FormField
-                                      control={form.control}
-                                      name={`shifts.${actualIndex}.close_time`}
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel className="text-sm">Closes At</FormLabel>
-                                          <FormControl>
-                                            <Input
-                                              type="time"
-                                              {...field}
-                                              className="touch-manipulation"
-                                            />
-                                          </FormControl>
-                                          <FormMessage />
-                                        </FormItem>
-                                      )}
-                                    />
-                                  </>
-                                )}
                               </div>
 
+                              {/* Service Type & Name */}
+                              <div className="flex items-center gap-2">
+                                <div className={cn("w-3 h-3 rounded-full", service.color)} />
+                                <Icon className="h-4 w-4" />
+                                <FormField
+                                  control={form.control}
+                                  name={`shifts.${actualIndex}.name`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormControl>
+                                        <Input
+                                          placeholder={service.label}
+                                          {...field}
+                                          className="w-44"
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+
+                              {/* Time Inputs */}
                               {form.watch(`shifts.${actualIndex}.is_open`) && (
-                                <div className="mt-4 space-y-3">
+                                <>
                                   <FormField
                                     control={form.control}
-                                    name={`shifts.${actualIndex}.name`}
+                                    name={`shifts.${actualIndex}.open_time`}
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel className="text-sm">Custom Name (Optional)</FormLabel>
                                         <FormControl>
                                           <Input
+                                            type="time"
                                             {...field}
-                                            placeholder={`${service.label} Service`}
-                                            className="touch-manipulation"
+                                            className="w-32"
                                           />
                                         </FormControl>
                                         <FormMessage />
@@ -465,32 +382,76 @@ export function OpenHoursForm({ restaurantId, onSuccess }: OpenHoursFormProps) {
                                     )}
                                   />
 
+                                  <span className="text-muted-foreground">to</span>
+
                                   <FormField
                                     control={form.control}
-                                    name={`shifts.${actualIndex}.accepts_walkins`}
+                                    name={`shifts.${actualIndex}.close_time`}
                                     render={({ field }) => (
-                                      <div className="flex items-center space-x-2">
-                                        <Switch
-                                          checked={field.value}
-                                          onCheckedChange={field.onChange}
-                                        />
-                                        <Label className="text-sm">
-                                          Accept walk-ins during this service
-                                        </Label>
-                                      </div>
+                                      <FormItem>
+                                        <FormControl>
+                                          <Input
+                                            type="time"
+                                            {...field}
+                                            className="w-32"
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
                                     )}
                                   />
-                                </div>
+                                </>
                               )}
-                            </CardContent>
-                          </Card>
-                        )
-                      })
-                    )}
+
+                              {/* Walk-ins Switch */}
+                              {form.watch(`shifts.${actualIndex}.is_open`) && (
+                                <FormField
+                                  control={form.control}
+                                  name={`shifts.${actualIndex}.accepts_walkins`}
+                                  render={({ field }) => (
+                                    <div className="flex items-center space-x-2">
+                                      <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                      />
+                                      <Label className="text-sm whitespace-nowrap">
+                                        Walk-ins
+                                      </Label>
+                                    </div>
+                                  )}
+                                />
+                              )}
+
+                              {/* Action Buttons */}
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => copyShiftToAllDays(actualIndex)}
+                                  title="Copy to all days"
+                                >
+                                  <Copy className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => remove(actualIndex)}
+                                  title="Remove shift"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
                   </div>
-                </TabsContent>
-              ))}
-            </Tabs>
+                )
+              })}
+            </div>
 
             {/* Submit Button - Centered to avoid PWA modal conflicts */}
             <div className="flex justify-center pt-6">
