@@ -365,8 +365,15 @@ export function useCreateSharedTable() {
       return data
     },
     onSuccess: (data, variables) => {
+      // Invalidate shared table specific queries
       queryClient.invalidateQueries({ queryKey: ["shared-tables-summary", variables.restaurantId] })
       queryClient.invalidateQueries({ queryKey: ["restaurant-tables", variables.restaurantId] })
+
+      // Invalidate main tables page queries to refresh floor plan and other views
+      queryClient.invalidateQueries({ queryKey: ["tables-with-sections", variables.restaurantId] })
+      queryClient.invalidateQueries({ queryKey: ["restaurant-sections-with-counts", variables.restaurantId] })
+      queryClient.invalidateQueries({ queryKey: ["restaurant-sections-active", variables.restaurantId] })
+
       toast.success(`Shared table ${variables.tableNumber} created successfully`)
     },
     onError: (error: any) => {
