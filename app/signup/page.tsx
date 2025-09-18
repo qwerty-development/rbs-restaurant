@@ -30,7 +30,8 @@ import { Loader2, UserPlus } from "lucide-react"
 import { RegistrationTermsCheckbox } from "@/components/ui/terms-checkbox"
 
 // Lebanese phone number validation regex
-const lebanesePhoneRegex = /^(\+961|961)[378]\d{7}$|^0?[378]\d{7}$/
+// Supports formats: +961 3 XXXXXX, +961 7X XXXXX, +961 81 XXXXX, 03 XXXXXX, 07X XXXXX, 081 XXXXX
+const lebanesePhoneRegex = /^(\+961|961)?(0?)([37]0?|7[0-9]|81)\d{5,6}$|^0?([37]0?|7[0-9]|81)\d{5,6}$/
 
 const formSchema = z.object({
   // Staff details
@@ -55,16 +56,20 @@ const formSchema = z.object({
       // Remove all non-digit characters first
       const digits = cleaned.replace(/\D/g, '')
 
-      // If it starts with 0, remove it and add +961
+      // If it starts with 0 and is 8 digits (like 03762324), remove 0 and add +961
+      if (digits.startsWith('0') && digits.length === 8) {
+        return `+961${digits.slice(1)}`
+      }
+      // If it starts with 0 and is 9 digits (like 070123456), remove 0 and add +961
       if (digits.startsWith('0') && digits.length === 9) {
         return `+961${digits.slice(1)}`
       }
       // If it starts with 961, add +
-      if (digits.startsWith('961') && digits.length === 11) {
+      if (digits.startsWith('961')) {
         return `+${digits}`
       }
-      // If it's just 8 digits starting with 3, 7, or 8, add +961
-      if (digits.length === 8 && /^[378]/.test(digits)) {
+      // If it's 7-8 digits starting with 3, 7, or 8, add +961
+      if (digits.length >= 7 && digits.length <= 8 && /^[378]/.test(digits)) {
         return `+961${digits}`
       }
       return cleaned
