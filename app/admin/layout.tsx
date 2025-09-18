@@ -138,13 +138,22 @@ export default function AdminLayout({
     }
   ]
 
+  // Determine the most specific (longest) matching nav item for current path
+  const allItems = navigationItems.flatMap(section => section.items)
+  const matchedItems = allItems.filter(item => {
+    if (item.href === '/admin') return pathname === '/admin'
+    return pathname === item.href || pathname.startsWith(item.href + '/')
+  })
+  const activeHref = matchedItems.reduce<string | null>((best, item) => {
+    if (!best) return item.href
+    return item.href.length > best.length ? item.href : best
+  }, null) || null
+
   const navigationWithActive = navigationItems.map(section => ({
     ...section,
     items: section.items.map(item => ({
       ...item,
-      current: item.href === '/admin'
-        ? pathname === '/admin'
-        : (pathname === item.href || pathname.startsWith(item.href + '/'))
+      current: item.href === activeHref
     }))
   }))
 
