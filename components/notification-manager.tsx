@@ -70,12 +70,15 @@ export function NotificationManager() {
       let subscription = await swRegistrationRef.current.pushManager.getSubscription()
 
       if (!subscription) {
+        const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+        if (!vapidPublicKey) {
+          console.warn('VAPID public key not configured; skipping push subscription')
+          return
+        }
         // Create new subscription
         subscription = await swRegistrationRef.current.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(
-            process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
-          ) as BufferSource
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource
         })
       }
 
@@ -242,7 +245,10 @@ export function NotificationManager() {
 }
 
 // Helper function
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
+function urlBase64ToUint8Array(base64String?: string): Uint8Array {
+  if (!base64String || typeof base64String !== 'string') {
+    return new Uint8Array()
+  }
   const padding = '='.repeat((4 - base64String.length % 4) % 4)
   const base64 = (base64String + padding)
     .replace(/-/g, '+')
