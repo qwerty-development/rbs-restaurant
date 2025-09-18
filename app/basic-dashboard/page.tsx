@@ -37,7 +37,8 @@ import {
   TrendingDown,
   Bell,
   Star,
-  MoreHorizontal
+  MoreHorizontal,
+  Gift
 } from "lucide-react"
 
 export default function BasicDashboardPage() {
@@ -142,6 +143,13 @@ export default function BasicDashboardPage() {
           guest_email,
           created_at,
           user_id,
+          applied_offer_id,
+          special_offers!bookings_applied_offer_id_fkey (
+            id,
+            title,
+            description,
+            discount_percentage
+          ),
           profiles!bookings_user_id_fkey (
             id,
             full_name,
@@ -182,6 +190,13 @@ export default function BasicDashboardPage() {
             guest_email,
             created_at,
             user_id,
+            applied_offer_id,
+            special_offers!bookings_applied_offer_id_fkey (
+              id,
+              title,
+              description,
+              discount_percentage
+            ),
             profiles!bookings_user_id_fkey (
               id,
               full_name,
@@ -223,6 +238,13 @@ export default function BasicDashboardPage() {
               guest_email,
               created_at,
               user_id,
+              applied_offer_id,
+              special_offers!bookings_applied_offer_id_fkey (
+                id,
+                title,
+                description,
+                discount_percentage
+              ),
               profiles!bookings_user_id_fkey (
                 id,
                 full_name,
@@ -1064,6 +1086,26 @@ export default function BasicDashboardPage() {
                                   {note}
                                 </Badge>
                               ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {booking.special_offers && (
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Applied Offer</p>
+                            <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                              <Gift className="h-4 w-4 mt-0.5 text-green-600" />
+                              <div>
+                                <p className="text-sm font-medium text-green-800">{booking.special_offers.title}</p>
+                                {booking.special_offers.description && (
+                                  <p className="text-xs text-green-700 mt-1">{booking.special_offers.description}</p>
+                                )}
+                                {booking.special_offers.discount_percentage && (
+                                  <Badge variant="secondary" className="mt-1 bg-green-100 text-green-800 text-xs">
+                                    {booking.special_offers.discount_percentage}% OFF
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
                           </div>
                         )}

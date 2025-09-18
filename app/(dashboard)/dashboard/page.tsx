@@ -282,6 +282,12 @@ export default function DashboardPage() {
               new_status,
               changed_at,
               metadata
+            ),
+            special_offers!bookings_applied_offer_id_fkey(
+              id,
+              title,
+              description,
+              discount_percentage
             )
           `)
           .eq("restaurant_id", restaurantId)
@@ -307,6 +313,12 @@ export default function DashboardPage() {
               new_status,
               changed_at,
               metadata
+            ),
+            special_offers!bookings_applied_offer_id_fkey(
+              id,
+              title,
+              description,
+              discount_percentage
             )
           `)
           .eq("restaurant_id", restaurantId)

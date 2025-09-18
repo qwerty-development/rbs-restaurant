@@ -303,6 +303,12 @@ export default function BookingsPage() {
           ),
           booking_tables(
             table:restaurant_tables(*)
+          ),
+          special_offers!bookings_applied_offer_id_fkey(
+            id,
+            title,
+            description,
+            discount_percentage
           )
         `)
         .eq("restaurant_id", restaurantId)
@@ -359,6 +365,12 @@ export default function BookingsPage() {
                 ),
                 booking_tables(
                   table:restaurant_tables(*)
+                ),
+                special_offers!bookings_applied_offer_id_fkey(
+                  id,
+                  title,
+                  description,
+                  discount_percentage
                 )
               `)
               .eq('id', newBooking.id)
@@ -422,6 +434,12 @@ export default function BookingsPage() {
                 ),
                 booking_tables(
                   table:restaurant_tables(*)
+                ),
+                special_offers!bookings_applied_offer_id_fkey(
+                  id,
+                  title,
+                  description,
+                  discount_percentage
                 )
               `)
               .eq('id', updatedBooking.id)
@@ -599,6 +617,12 @@ export default function BookingsPage() {
                 ),
                 booking_tables(
                   table:restaurant_tables(*)
+                ),
+                special_offers!bookings_applied_offer_id_fkey(
+                  id,
+                  title,
+                  description,
+                  discount_percentage
                 )
               `)
               .eq('id', newBooking.id)
@@ -662,6 +686,12 @@ export default function BookingsPage() {
                 ),
                 booking_tables(
                   table:restaurant_tables(*)
+                ),
+                special_offers!bookings_applied_offer_id_fkey(
+                  id,
+                  title,
+                  description,
+                  discount_percentage
                 )
               `)
               .eq('id', updatedBooking.id)
@@ -790,15 +820,52 @@ export default function BookingsPage() {
   // Update booking status
   const updateBookingMutation = useMutation({
     mutationFn: async ({ bookingId, updates }: { bookingId: string; updates: Partial<Booking> }) => {
-      const { error } = await supabase
-        .from("bookings")
-        .update({ 
-          ...updates,
-          updated_at: new Date().toISOString() 
-        })
-        .eq("id", bookingId)
+      // For cancellation/decline statuses, handle offer deletion
+      if (updates.status === 'cancelled_by_restaurant' || updates.status === 'declined_by_restaurant') {
+        // Get booking data to check for applied offers
+        const { data: booking } = await supabase
+          .from('bookings')
+          .select('applied_offer_id')
+          .eq('id', bookingId)
+          .single()
 
-      if (error) throw error
+        // Update booking status
+        const { error } = await supabase
+          .from("bookings")
+          .update({ 
+            ...updates,
+            updated_at: new Date().toISOString() 
+          })
+          .eq("id", bookingId)
+
+        if (error) throw error
+
+        // Delete user_offers record if there was an applied offer
+        if (booking?.applied_offer_id) {
+          await supabase
+            .from('user_offers')
+            .delete()
+            .eq('booking_id', bookingId)
+            .eq('offer_id', booking.applied_offer_id)
+
+          // Clear the applied_offer_id from the booking
+          await supabase
+            .from('bookings')
+            .update({ applied_offer_id: null })
+            .eq('id', bookingId)
+        }
+      } else {
+        // For other status updates, use the normal flow
+        const { error } = await supabase
+          .from("bookings")
+          .update({ 
+            ...updates,
+            updated_at: new Date().toISOString() 
+          })
+          .eq("id", bookingId)
+
+        if (error) throw error
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["all-bookings"] })
@@ -814,18 +881,62 @@ export default function BookingsPage() {
   // Bulk actions for selected bookings
   const bulkUpdateMutation = useMutation({
     mutationFn: async ({ bookingIds, updates }: { bookingIds: string[]; updates: Partial<Booking> }) => {
-      const promises = bookingIds.map(id => 
-        supabase
-          .from("bookings")
-          .update({ ...updates, updated_at: new Date().toISOString() })
-          .eq("id", id)
-      )
-      
-      const results = await Promise.all(promises)
-      const errors = results.filter(r => r.error)
-      
-      if (errors.length > 0) {
-        throw new Error(`Failed to update ${errors.length} booking(s)`)
+      // For cancellation/decline statuses, handle offer deletion for each booking
+      if (updates.status === 'cancelled_by_restaurant' || updates.status === 'declined_by_restaurant') {
+        // Process each booking individually to handle offer deletion
+        const promises = bookingIds.map(async (id) => {
+          // Get booking data to check for applied offers
+          const { data: booking } = await supabase
+            .from('bookings')
+            .select('applied_offer_id')
+            .eq('id', id)
+            .single()
+
+          // Update booking status
+          const updateResult = await supabase
+            .from("bookings")
+            .update({ ...updates, updated_at: new Date().toISOString() })
+            .eq("id", id)
+
+          // Delete user_offers record if there was an applied offer
+          if (booking?.applied_offer_id) {
+            await supabase
+              .from('user_offers')
+              .delete()
+              .eq('booking_id', id)
+              .eq('offer_id', booking.applied_offer_id)
+
+            // Clear the applied_offer_id from the booking
+            await supabase
+              .from('bookings')
+              .update({ applied_offer_id: null })
+              .eq('id', id)
+          }
+
+          return updateResult
+        })
+        
+        const results = await Promise.all(promises)
+        const errors = results.filter(r => r.error)
+        
+        if (errors.length > 0) {
+          throw new Error(`Failed to update ${errors.length} booking(s)`)
+        }
+      } else {
+        // For other status updates, use the normal bulk flow
+        const promises = bookingIds.map(id => 
+          supabase
+            .from("bookings")
+            .update({ ...updates, updated_at: new Date().toISOString() })
+            .eq("id", id)
+        )
+        
+        const results = await Promise.all(promises)
+        const errors = results.filter(r => r.error)
+        
+        if (errors.length > 0) {
+          throw new Error(`Failed to update ${errors.length} booking(s)`)
+        }
       }
     },
     onSuccess: (_, { bookingIds }) => {

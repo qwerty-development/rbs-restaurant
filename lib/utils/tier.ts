@@ -84,7 +84,7 @@ export const TIER_FEATURES = {
     review_management: true,
     profile_management: true,
     settings_basic: true,
-    section_management: true, // Pro tier has advanced section management via tables
+    section_management: false, // Pro tier uses advanced section management via tables page
     notifications_advanced: true,
   }
 } as const

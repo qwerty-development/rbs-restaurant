@@ -632,6 +632,33 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                   )}
                 </div>
 
+                {/* Applied Offer */}
+                {booking.special_offers && (
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Applied Offer</Label>
+                    <div className="mt-2 p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <Gift className="h-5 w-5 mt-0.5 text-green-600 flex-shrink-0" />
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-green-800 mb-1">
+                            {booking.special_offers.title}
+                          </h4>
+                          {booking.special_offers.description && (
+                            <p className="text-sm text-green-700 mb-2">
+                              {booking.special_offers.description}
+                            </p>
+                          )}
+                          {booking.special_offers.discount_percentage && (
+                            <Badge variant="secondary" className="bg-green-100 text-green-800">
+                              {booking.special_offers.discount_percentage}% OFF
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Preferred Section */}
                 {booking.preferred_section && (
                   <div>

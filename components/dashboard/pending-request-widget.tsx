@@ -28,7 +28,8 @@ import {
   Table2,
   RefreshCw,
   AlertTriangle,
-  ArrowRight
+  ArrowRight,
+  Star
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { BookingRequestService } from "@/lib/booking-request-service"
@@ -487,6 +488,26 @@ export function PendingRequestsWidget({
                         <div className="flex items-start gap-2">
                           <MessageSquare className="h-4 w-4 text-muted-foreground mt-0.5" />
                           <p>{booking.special_requests}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Applied offers */}
+                    {booking.special_offers && (
+                      <div className="mb-3 p-2 bg-green-50 rounded text-sm border border-green-200">
+                        <div className="flex items-start gap-2">
+                          <Star className="h-4 w-4 text-green-600 mt-0.5" />
+                          <div>
+                            <p className="font-medium text-green-800">{booking.special_offers.title}</p>
+                            {booking.special_offers.description && (
+                              <p className="text-xs text-green-600 mt-1">{booking.special_offers.description}</p>
+                            )}
+                            {booking.special_offers.discount_percentage && (
+                              <Badge variant="secondary" className="mt-1 text-xs bg-green-100 text-green-800">
+                                {booking.special_offers.discount_percentage}% OFF
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}

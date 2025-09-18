@@ -25,6 +25,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { toast } from "react-hot-toast"
 import { Loader2, UserPlus } from "lucide-react"
 import { RegistrationTermsCheckbox } from "@/components/ui/terms-checkbox"
@@ -239,8 +240,7 @@ export default function SignUpPage() {
                         <FormItem>
                           <FormLabel>Password</FormLabel>
                           <FormControl>
-                            <Input
-                              type="password"
+                            <PasswordInput
                               placeholder="••••••••"
                               disabled={isLoading}
                               {...field}
@@ -258,8 +258,7 @@ export default function SignUpPage() {
                         <FormItem>
                           <FormLabel>Confirm Password</FormLabel>
                           <FormControl>
-                            <Input
-                              type="password"
+                            <PasswordInput
                               placeholder="••••••••"
                               disabled={isLoading}
                               {...field}

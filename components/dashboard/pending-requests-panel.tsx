@@ -512,6 +512,26 @@ export function PendingRequestsPanel({
                     </div>
                   )}
 
+                  {/* Applied offers */}
+                  {booking.special_offers && (
+                    <div className="mb-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                      <p className="text-sm text-green-900 flex items-start gap-1.5">
+                        <Star className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-600" />
+                        <div>
+                          <span className="font-medium">Offer:</span> {booking.special_offers.title}
+                          {booking.special_offers.discount_percentage && (
+                            <Badge variant="secondary" className="ml-2 text-xs bg-green-100 text-green-800">
+                              {booking.special_offers.discount_percentage}% OFF
+                            </Badge>
+                          )}
+                          {booking.special_offers.description && (
+                            <p className="text-xs text-green-700 mt-1">{booking.special_offers.description}</p>
+                          )}
+                        </div>
+                      </p>
+                    </div>
+                  )}
+
                   {/* Table availability summary - compact */}
                   {hasAvailableTables && (
                     <div className="mb-3 p-2 bg-green-50 rounded border border-green-200">

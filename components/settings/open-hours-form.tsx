@@ -45,6 +45,7 @@ import { RestaurantOpenHours } from "@/types"
 import { useOpenHours, useBulkUpdateOpenHours } from "@/lib/hooks/use-open-hours"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
+import { TimeInput12H } from "@/components/ui/time-input-12h"
 
 // Service type configurations with better UX
 const SERVICE_TYPES = [
@@ -76,14 +77,6 @@ const shiftSchema = z.object({
   close_time: z.string().optional(),
   name: z.string().optional(),
   accepts_walkins: z.boolean(),
-}).refine((data) => {
-  if (data.is_open) {
-    return data.open_time && data.close_time
-  }
-  return true
-}, {
-  message: "Open and close times are required when service is open",
-  path: ["open_time"]
 })
 
 // Main form schema
@@ -139,7 +132,7 @@ export function OpenHoursForm({ restaurantId, onSuccess }: OpenHoursFormProps) {
           service_type: 'general',
           is_open: true,
           open_time: '08:00',
-          close_time: '22:00',
+          close_time: '21:00',
           name: 'All Day Service',
           accepts_walkins: true,
         })
@@ -177,10 +170,10 @@ export function OpenHoursForm({ restaurantId, onSuccess }: OpenHoursFormProps) {
     const defaultTimes = {
       breakfast: { open: '07:00', close: '11:00' },
       lunch: { open: '11:30', close: '15:00' },
-      dinner: { open: '17:00', close: '22:00' },
-      bar: { open: '16:00', close: '01:00' },
+      dinner: { open: '17:00', close: '21:00' },
+      bar: { open: '16:00', close: '23:00' },
       kitchen: { open: '08:00', close: '21:00' },
-      general: { open: '08:00', close: '22:00' },
+      general: { open: '08:00', close: '21:00' },
     }
 
     const times = defaultTimes[serviceType as keyof typeof defaultTimes] || defaultTimes.general
@@ -371,10 +364,12 @@ export function OpenHoursForm({ restaurantId, onSuccess }: OpenHoursFormProps) {
                                     render={({ field }) => (
                                       <FormItem>
                                         <FormControl>
-                                          <Input
-                                            type="time"
-                                            {...field}
-                                            className="w-32"
+                                          <TimeInput12H
+                                            value={field.value || ""}
+                                            onChange={field.onChange}
+                                            className="w-auto"
+                                            name={field.name}
+                                            placeholder="9:00 AM"
                                           />
                                         </FormControl>
                                         <FormMessage />
@@ -390,10 +385,12 @@ export function OpenHoursForm({ restaurantId, onSuccess }: OpenHoursFormProps) {
                                     render={({ field }) => (
                                       <FormItem>
                                         <FormControl>
-                                          <Input
-                                            type="time"
-                                            {...field}
-                                            className="w-32"
+                                          <TimeInput12H
+                                            value={field.value || ""}
+                                            onChange={field.onChange}
+                                            className="w-auto"
+                                            name={field.name}
+                                            placeholder="5:00 PM"
                                           />
                                         </FormControl>
                                         <FormMessage />

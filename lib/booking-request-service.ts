@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/client"
 import { addHours, format } from "date-fns"
 import { TableAvailabilityService } from "./table-availability"
 import { RestaurantAvailability } from "./restaurant-availability"
+import { reverseOfferRedemption } from "./services/booking-operations"
 
 interface AcceptanceValidation {
   valid: boolean
@@ -408,6 +409,9 @@ export class BookingRequestService {
         throw new Error("Failed to decline request")
       }
 
+      // Reverse offer redemption if applicable
+      await reverseOfferRedemption(this.supabase, bookingId, booking.applied_offer_id)
+
       // Log status change
       await this.supabase
         .from("booking_status_history")
@@ -632,6 +636,18 @@ export class BookingRequestService {
     userId: string,
     metadata?: any
   ): Promise<void> {
+    // Get booking data for offer reversal if needed
+    let appliedOfferId = null
+    if (['auto_declined', 'cancelled_by_restaurant', 'declined_by_restaurant'].includes(status)) {
+      const { data: booking } = await this.supabase
+        .from("bookings")
+        .select('applied_offer_id')
+        .eq("id", bookingId)
+        .single()
+      
+      appliedOfferId = booking?.applied_offer_id
+    }
+
     await this.supabase
       .from("bookings")
       .update({
@@ -639,6 +655,11 @@ export class BookingRequestService {
         updated_at: new Date().toISOString()
       })
       .eq("id", bookingId)
+
+    // Reverse offer redemption for cancellation/decline statuses (except user cancellations)
+    if (['auto_declined', 'cancelled_by_restaurant', 'declined_by_restaurant'].includes(status)) {
+      await reverseOfferRedemption(this.supabase, bookingId, appliedOfferId)
+    }
 
     await this.supabase
       .from("booking_status_history")
@@ -733,6 +754,9 @@ export class BookingRequestService {
             continue
           }
 
+          // Reverse offer redemption if applicable
+          await reverseOfferRedemption(this.supabase, booking.id, booking.applied_offer_id)
+
           // Log status change in history
           await this.supabase
             .from("booking_status_history")
@@ -743,7 +767,7 @@ export class BookingRequestService {
               changed_by: userId || "system",
               changed_at: new Date().toISOString(),
               reason: "Request expired automatically",
-              metadata: { 
+              metadata: {
                 action: "auto_decline_expired",
                 expired_at: booking.request_expires_at,
                 auto_processed: true

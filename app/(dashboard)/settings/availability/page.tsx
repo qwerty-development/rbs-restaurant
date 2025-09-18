@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { TimeInput12H } from "@/components/ui/time-input-12h"
 import {
   Form,
   FormControl,
@@ -45,6 +46,7 @@ import {
   AlertTriangle,
 } from "lucide-react"
 import { OpenHoursForm } from "@/components/settings/open-hours-form"
+import { formatTimeRange12Hour } from "@/lib/utils/time-utils"
 
 // Types
 interface SpecialHours {
@@ -168,13 +170,13 @@ export default function EnhancedAvailabilitySettingsPage() {
   const regularHoursForm = useForm<RegularHoursFormData>({
     resolver: zodResolver(regularHoursSchema),
     defaultValues: {
-      monday: [{ name: "", is_open: true, open_time: "09:00", close_time: "22:00" }],
-      tuesday: [{ name: "", is_open: true, open_time: "09:00", close_time: "22:00" }],
-      wednesday: [{ name: "", is_open: true, open_time: "09:00", close_time: "22:00" }],
-      thursday: [{ name: "", is_open: true, open_time: "09:00", close_time: "22:00" }],
-      friday: [{ name: "", is_open: true, open_time: "09:00", close_time: "22:00" }],
-      saturday: [{ name: "", is_open: true, open_time: "09:00", close_time: "22:00" }],
-      sunday: [{ name: "", is_open: true, open_time: "09:00", close_time: "22:00" }],
+      monday: [{ name: "", is_open: true, open_time: "09:00", close_time: "21:00" }],
+      tuesday: [{ name: "", is_open: true, open_time: "09:00", close_time: "21:00" }],
+      wednesday: [{ name: "", is_open: true, open_time: "09:00", close_time: "21:00" }],
+      thursday: [{ name: "", is_open: true, open_time: "09:00", close_time: "21:00" }],
+      friday: [{ name: "", is_open: true, open_time: "09:00", close_time: "21:00" }],
+      saturday: [{ name: "", is_open: true, open_time: "09:00", close_time: "21:00" }],
+      sunday: [{ name: "", is_open: true, open_time: "09:00", close_time: "21:00" }],
     },
   })
 
@@ -185,7 +187,7 @@ export default function EnhancedAvailabilitySettingsPage() {
       dates: [],
       is_closed: false,
       open_time: "09:00",
-      close_time: "22:00",
+      close_time: "21:00",
     },
   })
 
@@ -420,7 +422,7 @@ export default function EnhancedAvailabilitySettingsPage() {
                               const currentShifts = regularHoursForm.getValues(day)
                               regularHoursForm.setValue(day, [
                                 ...currentShifts,
-                                { name: "", is_open: true, open_time: "17:00", close_time: "23:00" }
+                                { name: "", is_open: true, open_time: "17:00", close_time: "21:00" }
                               ])
                             }}
                           >
@@ -479,10 +481,12 @@ export default function EnhancedAvailabilitySettingsPage() {
                                     render={({ field }) => (
                                       <FormItem>
                                         <FormControl>
-                                          <Input
-                                            type="time"
-                                            {...field}
-                                            className="w-32"
+                                          <TimeInput12H
+                                            value={field.value || ""}
+                                            onChange={field.onChange}
+                                            className="w-auto"
+                                            name={field.name}
+                                            placeholder="9:00 AM"
                                           />
                                         </FormControl>
                                         <FormMessage />
@@ -498,10 +502,12 @@ export default function EnhancedAvailabilitySettingsPage() {
                                     render={({ field }) => (
                                       <FormItem>
                                         <FormControl>
-                                          <Input
-                                            type="time"
-                                            {...field}
-                                            className="w-32"
+                                          <TimeInput12H
+                                            value={field.value || ""}
+                                            onChange={field.onChange}
+                                            className="w-auto"
+                                            name={field.name}
+                                            placeholder="5:00 PM"
                                           />
                                         </FormControl>
                                         <FormMessage />
@@ -592,7 +598,7 @@ export default function EnhancedAvailabilitySettingsPage() {
                           <p className="text-sm text-red-600">Closed</p>
                         ) : (
                           <p className="text-sm text-muted-foreground">
-                            {special.open_time} - {special.close_time}
+                            {formatTimeRange12Hour(special.open_time, special.close_time)}
                           </p>
                         )}
                         {special.reason && (
@@ -725,7 +731,12 @@ export default function EnhancedAvailabilitySettingsPage() {
                       <FormItem>
                         <FormLabel>Opening Time</FormLabel>
                         <FormControl>
-                          <Input type="time" {...field} />
+                          <TimeInput12H
+                            value={field.value || ""}
+                            onChange={field.onChange}
+                            name={field.name}
+                            placeholder="9:00 AM"
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -739,7 +750,12 @@ export default function EnhancedAvailabilitySettingsPage() {
                       <FormItem>
                         <FormLabel>Closing Time</FormLabel>
                         <FormControl>
-                          <Input type="time" {...field} />
+                          <TimeInput12H
+                            value={field.value || ""}
+                            onChange={field.onChange}
+                            name={field.name}
+                            placeholder="5:00 PM"
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

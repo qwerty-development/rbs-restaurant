@@ -1,6 +1,7 @@
 // app/api/basic-booking-update/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { reverseOfferRedemption } from '@/lib/services/booking-operations'
 
 export async function POST(request: NextRequest) {
   try {
@@ -59,10 +60,10 @@ export async function POST(request: NextRequest) {
       }, { status: 403 })
     }
 
-    // Get the current booking to verify it belongs to this restaurant and is pending
+    // Get the current booking to verify it belongs to this restaurant and get applied offer info
     const { data: currentBooking, error: bookingError } = await supabase
       .from('bookings')
-      .select('id, status, restaurant_id')
+      .select('id, status, restaurant_id, applied_offer_id')
       .eq('id', bookingId)
       .single()
 
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest) {
     // Update the booking status
     const { error: updateError } = await supabase
       .from('bookings')
-      .update({ 
+      .update({
         status,
         updated_at: new Date().toISOString()
       })
@@ -105,6 +106,11 @@ export async function POST(request: NextRequest) {
     if (updateError) {
       console.error('Error updating booking:', updateError)
       return NextResponse.json({ error: 'Failed to update booking' }, { status: 500 })
+    }
+
+    // Reverse offer redemption for cancellation/decline statuses (except user cancellations)
+    if (['cancelled_by_restaurant', 'declined_by_restaurant'].includes(status)) {
+      await reverseOfferRedemption(supabase, bookingId, currentBooking.applied_offer_id)
     }
 
     // Add to status history

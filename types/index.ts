@@ -141,6 +141,12 @@ export interface Restaurant {
     booking_tables?: {
       table: RestaurantTable
     }[]
+    special_offers?: {
+      id: string
+      title: string
+      description?: string
+      discount_percentage: number
+    } | null
   }
   
   export interface Profile {

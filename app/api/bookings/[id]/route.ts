@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
+import { reverseOfferRedemption } from "@/lib/services/booking-operations"
 
 // GET /api/bookings/[id] - Get booking details
 export async function GET(
@@ -297,6 +298,21 @@ export async function DELETE(
 
     const { reason } = await request.json().catch(() => ({ reason: null }))
 
+    // First get the booking to check for applied offers
+    const { data: bookingToCancel, error: fetchError } = await supabase
+      .from('bookings')
+      .select('applied_offer_id')
+      .eq('id', resolvedParams.id)
+      .eq('restaurant_id', staff.restaurant_id)
+      .single()
+
+    if (fetchError || !bookingToCancel) {
+      return NextResponse.json(
+        { error: "Booking not found" },
+        { status: 404 }
+      )
+    }
+
     // Update booking status to cancelled
     const { data: cancelledBooking, error } = await supabase
       .from('bookings')
@@ -322,6 +338,9 @@ export async function DELETE(
         { status: 500 }
       )
     }
+
+    // Reverse offer redemption if applicable
+    await reverseOfferRedemption(supabase, resolvedParams.id, bookingToCancel.applied_offer_id)
 
     // Log cancellation
     await supabase

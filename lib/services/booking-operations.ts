@@ -97,6 +97,9 @@ export async function declineBooking(bookingId: string, staffId: string, reason?
       return { success: false, error: 'Booking not found or already processed' }
     }
 
+    // Reverse offer redemption if applicable
+    await reverseOfferRedemption(supabase, bookingId, booking.applied_offer_id)
+
     // Create booking history record
     await supabase
       .from('booking_history')
@@ -219,6 +222,58 @@ export async function checkInBooking(bookingId: string, staffId: string): Promis
 }
 
 /**
+ * Reverse offer redemption when a booking is cancelled/declined
+ * Completely deletes the user_offers record instead of marking as cancelled
+ */
+export async function reverseOfferRedemption(supabase: any, bookingId: string, appliedOfferId?: string): Promise<void> {
+  try {
+    // If applied offer ID is not provided, get it from the booking
+    let offerId = appliedOfferId
+    if (!offerId) {
+      const { data: booking } = await supabase
+        .from('bookings')
+        .select('applied_offer_id')
+        .eq('id', bookingId)
+        .single()
+
+      offerId = booking?.applied_offer_id
+    }
+
+    // If no offer was applied, nothing to reverse
+    if (!offerId) {
+      return
+    }
+
+    // Completely delete the user_offers entry instead of marking as cancelled
+    const { error: deleteError } = await supabase
+      .from('user_offers')
+      .delete()
+      .eq('booking_id', bookingId)
+      .eq('offer_id', offerId)
+
+    if (deleteError) {
+      console.error('Error deleting user offer record:', deleteError)
+      // Don't throw here to avoid breaking the booking cancellation
+    } else {
+      console.log(`User offer record completely deleted for booking ${bookingId}, offer ${offerId}`)
+    }
+
+    // Clear the applied_offer_id from the booking
+    await supabase
+      .from('bookings')
+      .update({
+        applied_offer_id: null
+      })
+      .eq('id', bookingId)
+
+    console.log(`Offer redemption reversed for booking ${bookingId}, offer ${offerId}`)
+  } catch (error) {
+    console.error('Error in reverseOfferRedemption:', error)
+    // Don't throw to avoid breaking the main operation
+  }
+}
+
+/**
  * Cancel a booking (by restaurant)
  */
 export async function cancelBooking(bookingId: string, staffId: string, reason?: string): Promise<BookingActionResult> {
@@ -248,6 +303,9 @@ export async function cancelBooking(bookingId: string, staffId: string, reason?:
     if (!booking) {
       return { success: false, error: 'Booking not found or cannot be cancelled' }
     }
+
+    // Reverse offer redemption if applicable
+    await reverseOfferRedemption(supabase, bookingId, booking.applied_offer_id)
 
     // Create booking history record
     await supabase
