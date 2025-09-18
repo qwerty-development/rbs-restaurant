@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { toast } from 'react-hot-toast'
-import { Users, RefreshCw, Plus, Mail } from 'lucide-react'
+import { Users, RefreshCw, Plus, Mail, Unlink, Trash2 } from 'lucide-react'
 
 type StaffRow = {
   id: string
@@ -42,6 +42,11 @@ export default function AdminRestaurantStaffPage() {
   const [linkRole, setLinkRole] = useState<'owner' | 'manager' | 'staff' | 'viewer'>('staff')
   const [linkPermissions, setLinkPermissions] = useState<string[]>([])
   const [linkLoading, setLinkLoading] = useState(false)
+
+  // Unlink account modal
+  const [showUnlinkDialog, setShowUnlinkDialog] = useState(false)
+  const [staffToUnlink, setStaffToUnlink] = useState<StaffRow | null>(null)
+  const [unlinkLoading, setUnlinkLoading] = useState(false)
 
   const loadRestaurants = async () => {
     const { data } = await supabase.from('restaurants').select('id, name').order('name')
@@ -102,6 +107,36 @@ export default function AdminRestaurantStaffPage() {
     } finally {
       setLinkLoading(false)
     }
+  }
+
+  const unlinkAccount = async () => {
+    if (!staffToUnlink) return
+    
+    try {
+      setUnlinkLoading(true)
+      const { error } = await supabase
+        .from('restaurant_staff')
+        .delete()
+        .eq('id', staffToUnlink.id)
+        .eq('restaurant_id', staffToUnlink.restaurant_id)
+
+      if (error) throw error
+
+      toast.success('Staff account unlinked successfully')
+      setShowUnlinkDialog(false)
+      setStaffToUnlink(null)
+      loadStaff()
+    } catch (e: any) {
+      console.error(e)
+      toast.error(e.message || 'Failed to unlink account')
+    } finally {
+      setUnlinkLoading(false)
+    }
+  }
+
+  const handleUnlinkClick = (staff: StaffRow) => {
+    setStaffToUnlink(staff)
+    setShowUnlinkDialog(true)
   }
 
   return (
@@ -183,10 +218,21 @@ export default function AdminRestaurantStaffPage() {
             <div className="space-y-2">
               {list.map(row => (
                 <div key={row.id} className="border rounded-lg p-3 bg-white flex items-center justify-between gap-3">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="font-medium truncate">{row.profiles?.full_name || 'Unknown'}</div>
                     <div className="text-xs text-muted-foreground truncate">{row.profiles?.email}</div>
                     <div className="text-xs text-muted-foreground">{row.restaurants?.name} • {row.role} • {row.is_active ? 'Active' : 'Inactive'}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleUnlinkClick(row)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Unlink className="h-4 w-4 mr-1" />
+                      Unlink
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -249,6 +295,49 @@ export default function AdminRestaurantStaffPage() {
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={()=>setShowLinkDialog(false)}>Cancel</Button>
               <Button onClick={linkAccount} disabled={linkLoading}>{linkLoading ? 'Linking...' : 'Link'}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unlink Confirmation Dialog */}
+      <Dialog open={showUnlinkDialog} onOpenChange={setShowUnlinkDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Unlink className="h-5 w-5 text-red-600" />
+              Unlink Staff Account
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {staffToUnlink && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="font-medium">{staffToUnlink.profiles?.full_name || 'Unknown'}</div>
+                <div className="text-sm text-muted-foreground">{staffToUnlink.profiles?.email}</div>
+                <div className="text-sm text-muted-foreground">
+                  {staffToUnlink.restaurants?.name} • {staffToUnlink.role}
+                </div>
+              </div>
+            )}
+            <div className="text-sm text-gray-600">
+              Are you sure you want to unlink this staff account from the restaurant? 
+              This action will remove their access to the restaurant and cannot be undone.
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowUnlinkDialog(false)}
+                disabled={unlinkLoading}
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={unlinkAccount}
+                disabled={unlinkLoading}
+              >
+                {unlinkLoading ? 'Unlinking...' : 'Unlink Account'}
+              </Button>
             </div>
           </div>
         </DialogContent>
