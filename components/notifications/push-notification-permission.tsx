@@ -20,8 +20,9 @@ export function PushNotificationPermission() {
   useEffect(() => {
     // Check current permission status
     const currentPermission = pushNotificationManager.getCurrentPermission()
+    const hasVapid = !!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
     
-    if (!isPushEnabled) {
+    if (!isPushEnabled && hasVapid) {
       const hasShownPrompt = localStorage.getItem('push-notification-prompt-shown')
       if (!hasShownPrompt || currentPermission === 'denied') {
         setShowPrompt(true)
@@ -54,7 +55,7 @@ export function PushNotificationPermission() {
     localStorage.setItem('push-notification-prompt-shown', 'true')
   }
 
-  if (!showPrompt || !requestPushPermission) return null
+  if (!showPrompt || !requestPushPermission || !process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY) return null
 
   return (
     <Alert className={cn(

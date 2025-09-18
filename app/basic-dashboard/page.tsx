@@ -219,7 +219,7 @@ export default function BasicDashboardPage() {
         console.log('📊 All dates bookings result:', { count: dateBookings.length, fromDate: today.toISOString() })
       } else if (effectiveDates) {
         // For specific date modes (today, select, week, month)
-        for (const date of effectiveDates) {
+        for (const date of (effectiveDates || [])) {
           const startOfSelectedDay = startOfDay(date)
           const endOfSelectedDay = endOfDay(date)
 
@@ -556,9 +556,9 @@ export default function BasicDashboardPage() {
       const noShow = allAnalyticsData.filter(b => b.status === 'no_show').length
       const cancelledByRestaurant = allAnalyticsData.filter(b => b.status === 'cancelled_by_restaurant').length
 
-      console.log('📊 Analytics data:', {
+        console.log('📊 Analytics data:', {
         total, pending, cancelled, confirmed, declined, completed, noShow, cancelledByRestaurant,
-        dateCount: effectiveDates.length
+        dateCount: (effectiveDates || []).length
       })
 
       return {

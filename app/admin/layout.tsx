@@ -116,7 +116,8 @@ export default function AdminLayout({
       items: [
         { name: 'Restaurants', href: '/admin/restaurants', icon: Building, current: false },
         { name: 'Users', href: '/admin/users', icon: Users, current: false },
-        { name: 'Staff', href: '/admin/staff', icon: UserCheck, current: false },
+        { name: 'Restaurant Staff', href: '/admin/restaurants/staff', icon: UserCheck, current: false },
+        { name: 'Banners', href: '/admin/banners', icon: CreditCard, current: false },
       ]
     },
     {

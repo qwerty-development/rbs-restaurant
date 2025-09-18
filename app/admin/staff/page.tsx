@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { useRestaurantContext } from '@/lib/contexts/restaurant-context'
-import { restaurantAuth } from '@/lib/restaurant-auth'
+// Admin page should not rely on RestaurantContext
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -118,8 +117,7 @@ const PERMISSION_GROUPS = [
 
 export default function StaffManagement() {
   const router = useRouter()
-  const { currentRestaurant, isLoading: contextLoading, hasFeature } = useRestaurantContext()
-  const restaurantId = currentRestaurant?.restaurant.id
+  const [isAuthorized, setIsAuthorized] = useState<boolean>(false)
   const [staff, setStaff] = useState<Staff[]>([])
   const [restaurants, setRestaurants] = useState<any[]>([])
   const [stats, setStats] = useState<StaffStats>({
@@ -151,22 +149,28 @@ export default function StaffManagement() {
 
   const supabase = createClient()
 
-  // Check permissions on mount
+  // Admin access check on mount
   useEffect(() => {
-    if (!contextLoading && currentRestaurant && !restaurantAuth.hasPermission(
-      currentRestaurant.permissions, 
-      'staff.manage', 
-      currentRestaurant.role
-    )) {
-      router.push('/dashboard')
+    const checkAdmin = async () => {
+      const supa = createClient()
+      const { data: { user } } = await supa.auth.getUser()
+      if (!user) { router.push('/login'); return }
+      const { data: admin } = await supa
+        .from('rbs_admins')
+        .select('id')
+        .eq('user_id', user.id)
+        .single()
+      if (!admin) { router.push('/login?error=admin_access_required'); return }
+      setIsAuthorized(true)
     }
-  }, [contextLoading, currentRestaurant, router])
+    checkAdmin()
+  }, [router])
 
   useEffect(() => {
-    if (restaurantId) {
+    if (restaurantFilter !== 'all') {
       fetchData()
     }
-  }, [restaurantId])
+  }, [restaurantFilter])
 
   const fetchData = async () => {
     setLoading(true)
@@ -185,7 +189,8 @@ export default function StaffManagement() {
   }
 
   const fetchStaff = async () => {
-    if (!restaurantId) return
+    if (!restaurants || restaurantFilter === 'all') return
+    const restaurantId = restaurantFilter
     
     const { data: staffData, error } = await supabase
       .from('restaurant_staff')
@@ -230,7 +235,8 @@ export default function StaffManagement() {
   }
 
   const fetchStats = async () => {
-    if (!restaurantId) return
+    if (restaurantFilter === 'all') return
+    const restaurantId = restaurantFilter
     
     try {
       const { data: staffStats, error } = await supabase
@@ -527,7 +533,7 @@ export default function StaffManagement() {
     return 'bg-red-100 text-red-800'
   }
 
-  if (contextLoading || loading) {
+  if (!isAuthorized || loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -538,11 +544,11 @@ export default function StaffManagement() {
     )
   }
 
-  if (!restaurantId) {
+  if (restaurantFilter === 'all') {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <p className="text-gray-600">No restaurant access found.</p>
+          <p className="text-gray-600">Select a restaurant to manage staff.</p>
         </div>
       </div>
     )
