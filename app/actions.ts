@@ -151,9 +151,10 @@ export async function sendBookingNotification(
   let body: string
   let url = '/bookings'
 
-  const safeName = (bookingDetails.customerName && bookingDetails.customerName.trim().length > 0)
-    ? bookingDetails.customerName
+  const fullName = (bookingDetails.customerName && bookingDetails.customerName.trim().length > 0)
+    ? bookingDetails.customerName.trim()
     : 'Guest'
+  const safeName = fullName.split(/\s+/)[0]
 
   switch (type) {
     case 'new_booking':

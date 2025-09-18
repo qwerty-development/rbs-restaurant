@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -36,6 +37,7 @@ export default function AdminLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+  const pathname = usePathname()
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -107,7 +109,7 @@ export default function AdminLayout({
     { 
       section: 'Overview',
       items: [
-        { name: 'Dashboard', href: '/admin', icon: BarChart3, current: true },
+        { name: 'Dashboard', href: '/admin', icon: BarChart3, current: false },
         
       ]
     },
@@ -131,12 +133,20 @@ export default function AdminLayout({
     {
       section: 'System',
       items: [
-        { name: 'Data Management', href: '/admin/data', icon: Database, current: false },
         { name: 'Reports', href: '/admin/reports', icon: FileText, current: false },
-        { name: 'Settings', href: '/admin/settings', icon: Settings, current: false },
       ]
     }
   ]
+
+  const navigationWithActive = navigationItems.map(section => ({
+    ...section,
+    items: section.items.map(item => ({
+      ...item,
+      current: item.href === '/admin'
+        ? pathname === '/admin'
+        : (pathname === item.href || pathname.startsWith(item.href + '/'))
+    }))
+  }))
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -158,14 +168,14 @@ export default function AdminLayout({
             </Button>
           </div>
           <nav className="flex-1 px-4 py-4 space-y-4">
-            {navigationItems.map((section) => (
+            {navigationWithActive.map((section) => (
               <div key={section.section} className="space-y-2">
                 <h3 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   {section.section}
                 </h3>
                 <div className="space-y-1">
                   {section.items.map((item) => (
-                    <a
+                    <Link
                       key={item.name}
                       href={item.href}
                       className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation ${
@@ -177,7 +187,7 @@ export default function AdminLayout({
                     >
                       <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
                       {item.name}
-                    </a>
+                    </Link>
                   ))}
                 </div>
               </div>
@@ -217,14 +227,14 @@ export default function AdminLayout({
           </div>
           
           <nav className="flex-1 px-4 py-6 space-y-6">
-            {navigationItems.map((section) => (
+            {navigationWithActive.map((section) => (
               <div key={section.section} className="space-y-3">
                 <h3 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   {section.section}
                 </h3>
                 <div className="space-y-1">
                   {section.items.map((item) => (
-                    <a
+                    <Link
                       key={item.name}
                       href={item.href}
                       className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation ${
@@ -236,7 +246,7 @@ export default function AdminLayout({
                     >
                       <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
                       {item.name}
-                    </a>
+                    </Link>
                   ))}
                 </div>
               </div>

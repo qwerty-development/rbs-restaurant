@@ -69,6 +69,8 @@ export default function RootLayout({
               <AppVisibilityHandler />
               <GlobalLayoutNotifications />
               {children}
+              {/* Hide notification container on admin routes to avoid showing toasts in admin */}
+              {/* This is a client layout; NotificationContainer internally reads context. We'll conditionally render in a thin client wrapper */}
               <NotificationContainer />
               
               <div className="fixed bottom-3 left-3 right-3 z-40 sm:max-w-sm sm:left-auto sm:right-3">

@@ -35,3 +35,18 @@ export function getBookingDisplayName(entity: any): string {
   const trimmed = typeof nameCandidate === 'string' ? nameCandidate.trim() : String(nameCandidate || '')
   return trimmed && trimmed.length > 0 ? trimmed : 'Guest'
 }
+
+// Extract the first name from a displayable name string.
+// Falls back to the entire string if it cannot split.
+export function getFirstName(nameOrEntity: any): string {
+  const display = typeof nameOrEntity === 'string'
+    ? nameOrEntity
+    : getBookingDisplayName(nameOrEntity)
+
+  const safe = (display || '').trim()
+  if (!safe) return 'Guest'
+
+  // Split by whitespace and return the first non-empty token
+  const parts = safe.split(/\s+/)
+  return parts[0] || 'Guest'
+}

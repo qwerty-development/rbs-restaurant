@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useNotifications } from '@/lib/contexts/notification-context'
 import { RealtimeChannel } from '@supabase/supabase-js'
 import { Booking } from '@/types'
-import { getBookingDisplayName } from '@/lib/utils'
+import { getBookingDisplayName, getFirstName } from '@/lib/utils'
 import { usePathname, useSearchParams } from 'next/navigation'
 
 export function useGlobalLayoutNotifications() {
@@ -95,8 +95,8 @@ export function useGlobalLayoutNotifications() {
 
   useEffect(() => {
     const setupNotifications = async () => {
-      // Skip global notifications on basic dashboard - it has its own notification system
-      if (pathname.startsWith('/basic-dashboard')) {
+      // Skip notifications on admin and basic-dashboard routes
+      if (pathname.startsWith('/admin') || pathname.startsWith('/basic-dashboard')) {
         return
       }
 
@@ -198,12 +198,12 @@ export function useGlobalLayoutNotifications() {
           queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
           
           // Add global notification with sound
-          const guestName = await resolveGuestName(newBooking)
+          const guestName = getFirstName(await resolveGuestName(newBooking))
          
           addNotification({
             type: 'booking',
             title: 'New Booking',
-            message: `New booking request from ${guestName} for ${newBooking.party_size} guests`,
+            message: `New booking from ${guestName} for ${newBooking.party_size} guests`,
             data: newBooking
           })
         }
@@ -272,7 +272,7 @@ export function useGlobalLayoutNotifications() {
           
           // Add global notification for status changes
           if (previousBooking.status !== updatedBooking.status) {
-            const guestName = await resolveGuestName(updatedBooking)
+            const guestName = getFirstName(await resolveGuestName(updatedBooking))
             const statusMap: Record<string, { title: string; message: string }> = {
               confirmed: { title: 'Booking Confirmed', message: `Booking for ${guestName} confirmed` },
               declined_by_restaurant: { title: 'Booking Declined', message: `Booking for ${guestName} declined by restaurant` },

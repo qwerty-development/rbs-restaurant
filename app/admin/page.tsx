@@ -614,9 +614,7 @@ export default function AdminPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
-              <p className="text-blue-100">
-                Welcome to the RBS Restaurant Management System Admin Panel
-              </p>
+              
               <p className="text-blue-200 text-sm mt-1">
                 Manage restaurants, users, and system-wide settings
               </p>
