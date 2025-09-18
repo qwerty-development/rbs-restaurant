@@ -38,7 +38,8 @@
       "mcp__supabase__apply_migration",
       "Bash(echo:*)",
       "Bash(npm run migrate:open-hours:dry-run:*)",
-      "Bash(npm run setup:open-hours:*)"
+      "Bash(npm run setup:open-hours:*)",
+      "Read(//c/Users/charb/AppData/Roaming/Code/User/workspaceStorage/vscode-chat-images/**)"
     ],
     "deny": []
   },

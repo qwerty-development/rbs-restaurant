@@ -6,10 +6,19 @@ export async function POST(request: NextRequest) {
   try {
     const { bookingId, status } = await request.json()
     
-    // Validate that status is only confirmed or declined_by_restaurant
-    if (!['confirmed', 'declined_by_restaurant'].includes(status)) {
-      return NextResponse.json({ 
-        error: 'Invalid status. Basic tier can only set status to confirmed or declined_by_restaurant' 
+    // Validate that status is one of the allowed booking statuses
+    const allowedStatuses = [
+      'confirmed',
+      'declined_by_restaurant',
+      'completed',
+      'cancelled_by_restaurant',
+      'cancelled_by_user',
+      'no_show'
+    ]
+
+    if (!allowedStatuses.includes(status)) {
+      return NextResponse.json({
+        error: `Invalid status. Allowed statuses: ${allowedStatuses.join(', ')}`
       }, { status: 400 })
     }
 
@@ -66,10 +75,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Booking does not belong to your restaurant' }, { status: 403 })
     }
 
-    // Verify booking is currently pending (Basic tier can only update pending bookings)
-    if (currentBooking.status !== 'pending') {
-      return NextResponse.json({ 
-        error: `Cannot update booking. Current status is '${currentBooking.status}', but Basic tier can only update 'pending' bookings.` 
+    // Allow status transitions based on current status
+    const validTransitions: Record<string, string[]> = {
+      'pending': ['confirmed', 'declined_by_restaurant'],
+      'confirmed': ['completed', 'cancelled_by_restaurant', 'cancelled_by_user', 'no_show'],
+      'declined_by_restaurant': [],
+      'completed': [],
+      'cancelled_by_restaurant': [],
+      'cancelled_by_user': [],
+      'no_show': []
+    }
+
+    const allowedNextStatuses = validTransitions[currentBooking.status] || []
+    if (!allowedNextStatuses.includes(status)) {
+      return NextResponse.json({
+        error: `Cannot update booking from '${currentBooking.status}' to '${status}'. Allowed transitions: ${allowedNextStatuses.join(', ') || 'none'}`
       }, { status: 400 })
     }
 
@@ -92,10 +112,10 @@ export async function POST(request: NextRequest) {
       .from('booking_status_history')
       .insert({
         booking_id: bookingId,
-        old_status: 'pending',
+        old_status: currentBooking.status,
         new_status: status,
         changed_by: user.id,
-        reason: `${status === 'confirmed' ? 'Accepted' : 'Declined'} via Basic Dashboard`,
+        reason: `Status changed to ${status} via Basic Dashboard`,
         metadata: {
           tier: 'basic',
           endpoint: 'basic-booking-update'
@@ -109,7 +129,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ 
       success: true, 
-      message: `Booking ${status === 'confirmed' ? 'accepted' : 'declined'} successfully`,
+      message: `Booking status updated to ${status} successfully`,
       booking: {
         id: bookingId,
         status,

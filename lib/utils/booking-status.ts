@@ -18,12 +18,16 @@ export function isValidStatusTransition(
     }
   }
 
-  // For Basic tier, only allow these transitions
+  // For Basic tier, allow same transitions as Pro tier
   if (tier === 'basic') {
     const validTransitions: Record<string, string[]> = {
       'pending': ['confirmed', 'declined_by_restaurant'],
-      'confirmed': [], // No further transitions for Basic tier
-      'declined_by_restaurant': [] // Final state
+      'confirmed': ['no_show', 'cancelled_by_restaurant', 'cancelled_by_user', 'completed'],
+      'declined_by_restaurant': [],
+      'no_show': [],
+      'cancelled_by_restaurant': [],
+      'cancelled_by_user': [],
+      'completed': []
     }
 
     const allowedNext = validTransitions[currentStatus] || []
@@ -55,8 +59,12 @@ export function getNextAllowedStatuses(
   if (tier === 'basic') {
     const transitions: Record<string, string[]> = {
       'pending': ['confirmed', 'declined_by_restaurant'],
-      'confirmed': [],
-      'declined_by_restaurant': []
+      'confirmed': ['no_show', 'cancelled_by_restaurant', 'cancelled_by_user', 'completed'],
+      'declined_by_restaurant': [],
+      'no_show': [],
+      'cancelled_by_restaurant': [],
+      'cancelled_by_user': [],
+      'completed': []
     }
     return transitions[currentStatus] || []
   }
@@ -85,7 +93,11 @@ export function formatStatusForTier(tier: RestaurantTier, status: string): strin
     const basicStatuses: Record<string, string> = {
       'pending': 'Needs Review',
       'confirmed': 'Confirmed',
-      'declined_by_restaurant': 'Declined'
+      'declined_by_restaurant': 'Declined',
+      'no_show': 'No Show',
+      'cancelled_by_user': 'Cancelled by Customer',
+      'cancelled_by_restaurant': 'Cancelled by Restaurant',
+      'completed': 'Completed'
     }
     return basicStatuses[status] || status
   }
@@ -122,7 +134,12 @@ export function getStatusVariant(tier: RestaurantTier, status: string): 'default
         return 'outline'
       case 'confirmed':
         return 'default'
+      case 'completed':
+        return 'default'
       case 'declined_by_restaurant':
+      case 'cancelled_by_user':
+      case 'cancelled_by_restaurant':
+      case 'no_show':
         return 'destructive'
       default:
         return 'secondary'

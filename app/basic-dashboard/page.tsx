@@ -6,24 +6,27 @@ import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { format, startOfDay, endOfDay, parseISO } from "date-fns"
+import { format, startOfDay, endOfDay, parseISO, startOfMonth, endOfMonth } from "date-fns"
 import { toast } from "react-hot-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { MultiDayCalendar } from "@/components/ui/multi-day-calendar"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { useNotifications } from "@/lib/contexts/notification-context"
 import { PushNotificationPermission } from "@/components/notifications/push-notification-permission"
-import { 
-  Calendar as CalendarIcon, 
-  Search, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
+import {
+  Calendar as CalendarIcon,
+  Search,
+  CheckCircle,
+  XCircle,
+  Clock,
   AlertCircle,
   RefreshCw,
   Users,
@@ -32,14 +35,65 @@ import {
   MessageSquare,
   TrendingUp,
   TrendingDown,
-  Bell
+  Bell,
+  Star,
+  MoreHorizontal
 } from "lucide-react"
 
 export default function BasicDashboardPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [selectedDates, setSelectedDates] = useState<Date[]>([new Date()])
+  const [dateViewMode, setDateViewMode] = useState<"today" | "select" | "week" | "month" | "all">("today")
   const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState<string>("pending")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
   const [userId, setUserId] = useState<string>("")
+
+  // Debug logging for date changes
+  useEffect(() => {
+    console.log('📅 Date mode changed:', {
+      dateViewMode,
+      selectedDate: format(selectedDate, 'yyyy-MM-dd'),
+      selectedDates: selectedDates.map(d => format(d, 'yyyy-MM-dd'))
+    })
+  }, [dateViewMode, selectedDate, selectedDates])
+
+  // Get date range based on view mode
+  const getEffectiveDates = () => {
+    switch (dateViewMode) {
+      case 'today':
+        return [new Date()]
+      case 'select':
+        return selectedDates
+      case 'week': {
+        const today = new Date()
+        const startOfWeek = startOfDay(today)
+        startOfWeek.setDate(today.getDate() - today.getDay()) // Start from Sunday
+        const endOfWeek = new Date(startOfWeek)
+        endOfWeek.setDate(startOfWeek.getDate() + 6) // End on Saturday
+
+        const weekDates = []
+        for (let date = new Date(startOfWeek); date <= endOfWeek; date.setDate(date.getDate() + 1)) {
+          weekDates.push(new Date(date))
+        }
+        return weekDates
+      }
+      case 'month': {
+        const today = new Date()
+        const monthStart = startOfMonth(today)
+        const monthEnd = endOfMonth(today)
+
+        const monthDates = []
+        for (let date = new Date(monthStart); date <= monthEnd; date.setDate(date.getDate() + 1)) {
+          monthDates.push(new Date(date))
+        }
+        return monthDates
+      }
+      case 'all':
+        return null // null means all dates from today onward
+      default:
+        return [new Date()]
+    }
+  }
   
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -63,16 +117,16 @@ export default function BasicDashboardPage() {
 
   // Fetch bookings - combines date-specific bookings with ALL pending requests
   const { data: bookings = [], isLoading, refetch } = useQuery({
-    queryKey: ['basic-bookings', restaurantId, selectedDate],
+    queryKey: ['basic-bookings', restaurantId, dateViewMode, selectedDates],
     queryFn: async () => {
       if (!restaurantId) return []
-      
-      console.log('🔍 Fetching bookings for:', { restaurantId, selectedDate })
-      
-      const startOfSelectedDay = startOfDay(selectedDate)
-      const endOfSelectedDay = endOfDay(selectedDate)
 
-      // First, get ALL pending bookings for this restaurant (regardless of date)
+      // Get effective dates based on current mode
+      const effectiveDates = getEffectiveDates()
+
+      console.log('🔍 Fetching bookings for:', { restaurantId, effectiveDates, mode: dateViewMode })
+
+      // Always get ALL pending bookings first (regardless of dates)
       const { data: pendingBookings, error: pendingError } = await supabase
         .from('bookings')
         .select(`
@@ -92,7 +146,8 @@ export default function BasicDashboardPage() {
             id,
             full_name,
             phone_number,
-            email
+            email,
+            user_rating
           )
         `)
         .eq('restaurant_id', restaurantId)
@@ -104,47 +159,98 @@ export default function BasicDashboardPage() {
       }
 
       console.log('⏳ Found pending bookings:', pendingBookings?.length || 0)
-      
-      // Then get date-specific bookings (non-pending)
-      const { data, error } = await supabase
-        .from('bookings')
-        .select(`
-          id,
-          booking_time,
-          party_size,
-          status,
-          special_requests,
-          preferred_section,
-          occasion,
-          dietary_notes,
-          guest_name,
-          guest_email,
-          created_at,
-          user_id,
-          profiles!bookings_user_id_fkey (
+
+      // Then get date-specific bookings
+      const dateBookings = []
+
+      if (dateViewMode === 'all') {
+        // For "all dates" mode, get all bookings from today onward
+        const today = startOfDay(new Date())
+
+        const { data: allBookings, error } = await supabase
+          .from('bookings')
+          .select(`
             id,
-            full_name,
-            phone_number,
-            email
-          )
-        `)
-        .eq('restaurant_id', restaurantId)
-        .gte('booking_time', startOfSelectedDay.toISOString())
-        .lte('booking_time', endOfSelectedDay.toISOString())
-        .neq('status', 'pending') // Exclude pending since we already got them
-        .order('created_at', { ascending: false })
-      
-      console.log('📊 Date-specific bookings result:', { data, error, count: data?.length })
-      
-      if (error) {
-        console.error('❌ Error fetching date-specific bookings:', error)
-        throw error
+            booking_time,
+            party_size,
+            status,
+            special_requests,
+            preferred_section,
+            occasion,
+            dietary_notes,
+            guest_name,
+            guest_email,
+            created_at,
+            user_id,
+            profiles!bookings_user_id_fkey (
+              id,
+              full_name,
+              phone_number,
+              email,
+              user_rating
+            )
+          `)
+          .eq('restaurant_id', restaurantId)
+          .gte('booking_time', today.toISOString())
+          .neq('status', 'pending') // Exclude pending since we already got them
+          .order('booking_time', { ascending: true }) // Sort by booking time for all dates view
+
+        if (error) {
+          console.error('❌ Error fetching all bookings from today onward:', error)
+        } else {
+          dateBookings.push(...(allBookings || []))
+        }
+
+        console.log('📊 All dates bookings result:', { count: dateBookings.length, fromDate: today.toISOString() })
+      } else if (effectiveDates) {
+        // For specific date modes (today, select, week, month)
+        for (const date of effectiveDates) {
+          const startOfSelectedDay = startOfDay(date)
+          const endOfSelectedDay = endOfDay(date)
+
+          const { data: dayBookings, error } = await supabase
+            .from('bookings')
+            .select(`
+              id,
+              booking_time,
+              party_size,
+              status,
+              special_requests,
+              preferred_section,
+              occasion,
+              dietary_notes,
+              guest_name,
+              guest_email,
+              created_at,
+              user_id,
+              profiles!bookings_user_id_fkey (
+                id,
+                full_name,
+                phone_number,
+                email,
+                user_rating
+              )
+            `)
+            .eq('restaurant_id', restaurantId)
+            .gte('booking_time', startOfSelectedDay.toISOString())
+            .lte('booking_time', endOfSelectedDay.toISOString())
+            .neq('status', 'pending') // Exclude pending since we already got them
+            .order('created_at', { ascending: false })
+
+          if (error) {
+            console.error('❌ Error fetching date-specific bookings for', date, ':', error)
+          } else {
+            dateBookings.push(...(dayBookings || []))
+          }
+        }
+
+        console.log('📊 Date-specific bookings result:', { count: dateBookings.length, dates: effectiveDates.length, mode: dateViewMode })
       }
-      
+
       // Combine pending bookings with date-specific bookings
       const allBookings = [
         ...(pendingBookings || []),
-        ...(data || [])
+        ...dateBookings
       ]
       
       // Remove duplicates (in case a pending booking is also in the date range)
@@ -223,7 +329,8 @@ export default function BasicDashboardPage() {
                   id,
                   full_name,
                   phone_number,
-                  email
+                  email,
+                  user_rating
                 )
               `)
               .eq('id', newBooking.id)
@@ -236,7 +343,7 @@ export default function BasicDashboardPage() {
             
             // Update query cache with complete data
             queryClient.setQueryData(
-              ['basic-bookings', restaurantId, selectedDate],
+              ['basic-bookings', restaurantId, dateViewMode, selectedDates],
               (oldData: any[] | undefined) => {
                 if (!oldData) return [completeBooking]
                 
@@ -321,7 +428,8 @@ export default function BasicDashboardPage() {
                   id,
                   full_name,
                   phone_number,
-                  email
+                  email,
+                  user_rating
                 )
               `)
               .eq('id', updatedBooking.id)
@@ -334,7 +442,7 @@ export default function BasicDashboardPage() {
             
             // Update query cache with complete data
             queryClient.setQueryData(
-              ['basic-bookings', restaurantId, selectedDate],
+              ['basic-bookings', restaurantId, dateViewMode, selectedDates],
               (oldData: any[] | undefined) => {
                 if (!oldData) return [completeBooking]
                 
@@ -358,34 +466,79 @@ export default function BasicDashboardPage() {
       console.log('🔌 Cleaning up basic dashboard subscription')
       supabase.removeChannel(channel)
     }
-  }, [restaurantId, selectedDate, queryClient, supabase])
+  }, [restaurantId, selectedDate, selectedDates, dateViewMode, queryClient, supabase])
 
-  // Analytics query - today's data
+  // Analytics query - for selected date(s)
   const { data: analytics } = useQuery({
-    queryKey: ['basic-analytics', restaurantId, selectedDate],
+    queryKey: ['basic-analytics', restaurantId, dateViewMode, selectedDates],
     queryFn: async () => {
       if (!restaurantId) return null
-      
-      console.log('📈 Fetching analytics for:', { restaurantId, date: format(selectedDate, 'yyyy-MM-dd') })
-      
-      const { data, error } = await supabase
+
+      const effectiveDates = getEffectiveDates()
+
+      console.log('📈 Fetching analytics for:', { restaurantId, effectiveDates, mode: dateViewMode })
+
+      // Get analytics data
+      const allAnalyticsData = []
+
+      if (dateViewMode === 'all') {
+        // For "all dates" mode, get all bookings from today onward
+        const today = startOfDay(new Date())
+
+        const { data, error } = await supabase
+          .from('bookings')
+          .select('status, created_at, booking_time')
+          .eq('restaurant_id', restaurantId)
+          .gte('booking_time', today.toISOString())
+
+        if (error) {
+          console.error('❌ Error fetching analytics for all dates:', error)
+        } else {
+          allAnalyticsData.push(...(data || []))
+        }
+      } else if (effectiveDates) {
+        // For specific date modes (today, select, week, month)
+        for (const date of effectiveDates) {
+          const { data, error } = await supabase
+            .from('bookings')
+            .select('status, created_at, booking_time')
+            .eq('restaurant_id', restaurantId)
+            .gte('booking_time', startOfDay(date).toISOString())
+            .lte('booking_time', endOfDay(date).toISOString())
+
+          if (error) {
+            console.error('❌ Error fetching analytics for', date, ':', error)
+          } else {
+            allAnalyticsData.push(...(data || []))
+          }
+        }
+      }
+
+      // Also get all pending bookings for the analytics (they don't have specific dates)
+      const { data: pendingData, error: pendingError } = await supabase
         .from('bookings')
-        .select('status, created_at')
+        .select('status, created_at, booking_time')
         .eq('restaurant_id', restaurantId)
-        .gte('created_at', startOfDay(selectedDate).toISOString())
-        .lte('created_at', endOfDay(selectedDate).toISOString())
-      
-      if (error) throw error
-      
-      const total = data.length
-      const pending = data.filter(b => b.status === 'pending').length
-      const cancelled = data.filter(b => b.status === 'cancelled_by_user').length
-      const confirmed = data.filter(b => b.status === 'confirmed').length
-      const declined = data.filter(b => b.status === 'declined_by_restaurant').length
-      const completed = data.filter(b => b.status === 'completed').length
-      
-      console.log('📊 Analytics data:', { total, pending, cancelled, confirmed, declined, completed })
-      
+        .eq('status', 'pending')
+
+      if (!pendingError && pendingData) {
+        allAnalyticsData.push(...pendingData)
+      }
+
+      const total = allAnalyticsData.length
+      const pending = allAnalyticsData.filter(b => b.status === 'pending').length
+      const cancelled = allAnalyticsData.filter(b => b.status === 'cancelled_by_user').length
+      const confirmed = allAnalyticsData.filter(b => b.status === 'confirmed').length
+      const declined = allAnalyticsData.filter(b => b.status === 'declined_by_restaurant').length
+      const completed = allAnalyticsData.filter(b => b.status === 'completed').length
+      const noShow = allAnalyticsData.filter(b => b.status === 'no_show').length
+      const cancelledByRestaurant = allAnalyticsData.filter(b => b.status === 'cancelled_by_restaurant').length
+
+      console.log('📊 Analytics data:', {
+        total, pending, cancelled, confirmed, declined, completed, noShow, cancelledByRestaurant,
+        dateCount: effectiveDates.length
+      })
+
       return {
         total,
         pending,
@@ -393,6 +546,8 @@ export default function BasicDashboardPage() {
         confirmed,
         declined,
         completed,
+        noShow,
+        cancelledByRestaurant,
         acceptanceRate: (confirmed + declined) > 0 ? Math.round((confirmed / (confirmed + declined)) * 100) : 0,
         rejectionRate: (confirmed + declined) > 0 ? Math.round((declined / (confirmed + declined)) * 100) : 0
       }
@@ -422,7 +577,7 @@ export default function BasicDashboardPage() {
     },
     onSuccess: (data, { status }) => {
       console.log('✅ Booking updated successfully:', data)
-      toast.success(`Booking ${status === 'confirmed' ? 'accepted' : 'declined'} successfully`)
+      toast.success(`Booking ${status === 'confirmed' ? 'accepted' : formatStatus(status)} successfully`)
       queryClient.invalidateQueries({ queryKey: ['basic-bookings'] })
       queryClient.invalidateQueries({ queryKey: ['basic-analytics'] })
     },
@@ -448,7 +603,9 @@ export default function BasicDashboardPage() {
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case 'pending': return 'outline'
-      case 'cancelled_by_user': return 'secondary'
+      case 'cancelled_by_user':
+      case 'cancelled_by_restaurant':
+      case 'no_show': return 'destructive'
       case 'confirmed': return 'default'
       case 'declined_by_restaurant': return 'destructive'
       case 'completed': return 'default'
@@ -459,10 +616,12 @@ export default function BasicDashboardPage() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending': return <AlertCircle className="h-4 w-4" />
-      case 'cancelled_by_user': return <XCircle className="h-4 w-4 text-gray-500" />
+      case 'cancelled_by_user':
+      case 'cancelled_by_restaurant': return <XCircle className="h-4 w-4 text-gray-500" />
       case 'confirmed': return <CheckCircle className="h-4 w-4" />
       case 'declined_by_restaurant': return <XCircle className="h-4 w-4" />
       case 'completed': return <CheckCircle className="h-4 w-4 text-green-600" />
+      case 'no_show': return <XCircle className="h-4 w-4 text-red-600" />
       default: return <Clock className="h-4 w-4" />
     }
   }
@@ -470,10 +629,12 @@ export default function BasicDashboardPage() {
   const formatStatus = (status: string) => {
     switch (status) {
       case 'pending': return 'Pending'
-      case 'cancelled_by_user': return 'Cancelled by User'
+      case 'cancelled_by_user': return 'Cancelled by Customer'
+      case 'cancelled_by_restaurant': return 'Cancelled by Restaurant'
       case 'confirmed': return 'Accepted'
       case 'declined_by_restaurant': return 'Declined'
       case 'completed': return 'Completed'
+      case 'no_show': return 'No Show'
       default: return status
     }
   }
@@ -490,6 +651,30 @@ export default function BasicDashboardPage() {
       bookingId: booking.id,
       status: 'declined_by_restaurant'
     })
+  }
+
+  const handleStatusChange = (booking: any, newStatus: string) => {
+    updateBookingMutation.mutate({
+      bookingId: booking.id,
+      status: newStatus
+    })
+  }
+
+  // Rating display component
+  const CustomerRating = ({ rating }: { rating?: number }) => {
+    if (!rating || rating === 5.0) return null
+
+    return (
+      <div className="flex items-center gap-1 text-xs">
+        <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+        <span className={cn(
+          "font-medium",
+          rating < 3 ? "text-red-600" : rating < 4 ? "text-yellow-600" : "text-gray-600"
+        )}>
+          {rating.toFixed(1)}
+        </span>
+      </div>
+    )
   }
 
   // Show loading while context is loading or no restaurant selected
@@ -510,14 +695,27 @@ export default function BasicDashboardPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold">Booking Requests</h1>
-          <p className="text-muted-foreground">
-            {(() => {
-              const pendingCount = bookings.filter(b => b.status === 'pending').length
-              if (pendingCount === 0) return "All caught up! No pending requests."
-              if (pendingCount === 1) return "1 request needs your attention"
-              return `${pendingCount} requests need your attention`
-            })()}
-          </p>
+          <div className="space-y-1">
+            <p className="text-muted-foreground">
+              {(() => {
+                const pendingCount = bookings.filter(b => b.status === 'pending').length
+                if (pendingCount === 0) return "All caught up! No pending requests."
+                if (pendingCount === 1) return "1 request needs your attention"
+                return `${pendingCount} requests need your attention`
+              })()}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {dateViewMode === 'today'
+                ? `Viewing today (${format(new Date(), "MMMM d, yyyy")})`
+                : dateViewMode === 'select'
+                  ? `Viewing ${selectedDates.length} selected dates`
+                  : dateViewMode === 'week'
+                    ? `Viewing this week (${format(new Date(), "MMM d")} - ${format(new Date(new Date().getTime() + 6 * 24 * 60 * 60 * 1000), "MMM d")})`
+                    : dateViewMode === 'month'
+                      ? `Viewing this month (${format(new Date(), "MMMM yyyy")})`
+                      : `Viewing all bookings from ${format(new Date(), "MMMM d, yyyy")} onward`}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button 
@@ -625,39 +823,100 @@ export default function BasicDashboardPage() {
           />
         </div>
 
-        {/* Right side container for Date Picker and Status */}
-        <div className="flex gap-4 sm:flex-[2]">
-          {/* Date Picker */}
+        {/* Date Filter Buttons */}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={dateViewMode === 'today' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setDateViewMode('today')}
+          >
+            Today
+          </Button>
+
           <Popover>
             <PopoverTrigger asChild>
               <Button
-                variant="outline"
-                className={cn("w-[240px] justify-start text-left font-normal")}
+                variant={dateViewMode === 'select' ? 'default' : 'outline'}
+                size="sm"
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {format(selectedDate, "PPP")}
+                Select Dates
+                {dateViewMode === 'select' && selectedDates.length > 0 && (
+                  <Badge variant="secondary" className="ml-2 h-5">
+                    {selectedDates.length}
+                  </Badge>
+                )}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={(date) => date && setSelectedDate(date)}
-              />
+              <div className="p-3">
+                <div className="mb-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setDateViewMode('select')
+                      if (selectedDates.length === 0) {
+                        setSelectedDates([new Date()])
+                      }
+                    }}
+                    className="w-full mb-2"
+                  >
+                    Use Selected Dates
+                  </Button>
+                </div>
+                <MultiDayCalendar
+                  selectedDates={selectedDates}
+                  onDatesChange={setSelectedDates}
+                  placeholder="Select multiple dates"
+                  className="w-[280px]"
+                />
+              </div>
             </PopoverContent>
           </Popover>
 
-          {/* Status Filter */}
+          <Button
+            variant={dateViewMode === 'week' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setDateViewMode('week')}
+          >
+            This Week
+          </Button>
+
+          <Button
+            variant={dateViewMode === 'month' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setDateViewMode('month')}
+          >
+            This Month
+          </Button>
+
+          <Button
+            variant={dateViewMode === 'all' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setDateViewMode('all')}
+          >
+            All Dates
+          </Button>
+        </div>
+
+        {/* Status Filter */}
+        <div className="flex gap-2 items-center">
+          <span className="text-sm text-muted-foreground">Status:</span>
+
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="cancelled_by_user">Cancelled by User</SelectItem>
               <SelectItem value="confirmed">Accepted</SelectItem>
-              <SelectItem value="declined_by_restaurant">Declined</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="cancelled_by_user">Cancelled by Customer</SelectItem>
+              <SelectItem value="cancelled_by_restaurant">Cancelled by Restaurant</SelectItem>
+              <SelectItem value="declined_by_restaurant">Declined</SelectItem>
+              <SelectItem value="no_show">No Show</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -680,7 +939,15 @@ export default function BasicDashboardPage() {
               <p className="text-muted-foreground text-center">
                 {searchQuery || statusFilter !== "all"
                   ? "Try adjusting your search or filters"
-                  : `No booking requests for ${format(selectedDate, "MMMM d, yyyy")}`}
+                  : dateViewMode === 'today'
+                    ? `No booking requests for today`
+                    : dateViewMode === 'select'
+                      ? `No booking requests for the selected ${selectedDates.length} dates`
+                      : dateViewMode === 'week'
+                        ? `No booking requests for this week`
+                        : dateViewMode === 'month'
+                          ? `No booking requests for this month`
+                          : `No booking requests from ${format(new Date(), "MMMM d, yyyy")} onward`}
               </p>
             </CardContent>
           </Card>
@@ -702,8 +969,15 @@ export default function BasicDashboardPage() {
                         {formatStatus(booking.status)}
                       </Badge>
                       <span className="text-sm text-muted-foreground">
-                        {format(parseISO(booking.created_at), "MMM d, h:mm a")}
+                        {(dateViewMode === 'all' || dateViewMode === 'week' || dateViewMode === 'month')
+                          ? `Created: ${format(parseISO(booking.created_at), "MMM d, h:mm a")}`
+                          : format(parseISO(booking.created_at), "MMM d, h:mm a")}
                       </span>
+                      {(dateViewMode === 'all' || dateViewMode === 'week' || dateViewMode === 'month' || dateViewMode === 'select') && (
+                        <Badge variant="secondary" className="text-xs">
+                          For {format(parseISO(booking.booking_time), "MMM d")}
+                        </Badge>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -714,9 +988,12 @@ export default function BasicDashboardPage() {
                           const guestEmail = booking.guest_email || customer?.email
                           return (
                             <>
-                              <h3 className="font-semibold text-lg mb-1">
-                                {guestName || 'Unknown Customer'}
-                              </h3>
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3 className="font-semibold text-lg">
+                                  {guestName || 'Unknown Customer'}
+                                </h3>
+                                <CustomerRating rating={customer?.user_rating} />
+                              </div>
                               <div className="flex flex-col gap-1 text-sm text-muted-foreground">
                                 {customer?.phone_number && (
                                   <div className="flex items-center gap-1">
@@ -796,29 +1073,76 @@ export default function BasicDashboardPage() {
                   </div>
 
                   {/* Action Buttons */}
-                  {booking.status === 'pending' && (
-                    <div className="flex flex-col gap-2 ml-6">
-                      <Button
-                        size="sm"
-                        onClick={() => handleAccept(booking)}
-                        disabled={updateBookingMutation.isPending}
-                        className="min-w-[80px]"
-                      >
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Accept
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => handleDecline(booking)}
-                        disabled={updateBookingMutation.isPending}
-                        className="min-w-[80px]"
-                      >
-                        <XCircle className="h-4 w-4 mr-1" />
-                        Decline
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex flex-col gap-2 ml-6">
+                    {booking.status === 'pending' && (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => handleAccept(booking)}
+                          disabled={updateBookingMutation.isPending}
+                          className="min-w-[80px]"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleDecline(booking)}
+                          disabled={updateBookingMutation.isPending}
+                          className="min-w-[80px]"
+                        >
+                          <XCircle className="h-4 w-4 mr-1" />
+                          Decline
+                        </Button>
+                      </>
+                    )}
+
+                    {booking.status === 'confirmed' && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleStatusChange(booking, 'completed')}
+                          disabled={updateBookingMutation.isPending}
+                          className="min-w-[80px]"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Complete
+                        </Button>
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={updateBookingMutation.isPending}
+                              className="min-w-[80px]"
+                            >
+                              <MoreHorizontal className="h-4 w-4 mr-1" />
+                              More
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => handleStatusChange(booking, 'no_show')}
+                              className="text-red-600"
+                            >
+                              <XCircle className="h-4 w-4 mr-2" />
+                              Mark No Show
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleStatusChange(booking, 'cancelled_by_restaurant')}
+                              className="text-red-600"
+                            >
+                              <XCircle className="h-4 w-4 mr-2" />
+                              Cancel Booking
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
