@@ -29,9 +29,8 @@ import { toast } from "react-hot-toast"
 import { Loader2, UserPlus } from "lucide-react"
 import { RegistrationTermsCheckbox } from "@/components/ui/terms-checkbox"
 
-// Lebanese phone number validation regex
-// Supports formats: +961 3 XXXXXX, +961 7X XXXXX, +961 81 XXXXX, 03 XXXXXX, 07X XXXXX, 081 XXXXX
-const lebanesePhoneRegex = /^(\+961|961)?(0?)([37]0?|7[0-9]|81)\d{5,6}$|^0?([37]0?|7[0-9]|81)\d{5,6}$/
+// Lebanese phone number validation regex - just check for 8 digits
+const lebanesePhoneRegex = /^\d{8}$/
 
 const formSchema = z.object({
   // Staff details
@@ -49,30 +48,15 @@ const formSchema = z.object({
     .toLowerCase(),
   phoneNumber: z
     .string()
-    .regex(lebanesePhoneRegex, "Please enter a valid Lebanese phone number.")
+    .regex(lebanesePhoneRegex, "Please enter a valid 8-digit Lebanese phone number.")
     .transform((val) => {
-      // Normalize phone number format
+      // Normalize phone number format - always add +961 prefix
       const cleaned = val.trim()
-      // Remove all non-digit characters first
+      // Remove all non-digit characters
       const digits = cleaned.replace(/\D/g, '')
-
-      // If it starts with 0 and is 8 digits (like 03762324), remove 0 and add +961
-      if (digits.startsWith('0') && digits.length === 8) {
-        return `+961${digits.slice(1)}`
-      }
-      // If it starts with 0 and is 9 digits (like 070123456), remove 0 and add +961
-      if (digits.startsWith('0') && digits.length === 9) {
-        return `+961${digits.slice(1)}`
-      }
-      // If it starts with 961, add +
-      if (digits.startsWith('961')) {
-        return `+${digits}`
-      }
-      // If it's 7-8 digits starting with 3, 7, or 8, add +961
-      if (digits.length >= 7 && digits.length <= 8 && /^[378]/.test(digits)) {
-        return `+961${digits}`
-      }
-      return cleaned
+      
+      // Should be exactly 8 digits after validation
+      return `+961${digits}`
     }),
   password: z
     .string()
