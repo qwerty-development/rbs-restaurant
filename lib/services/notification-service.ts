@@ -1,6 +1,7 @@
 // lib/services/notification-service.ts
 import { SupabaseClient, createClient as createSupabaseClient } from '@supabase/supabase-js'
 import webpush, { SendResult } from 'web-push'
+import { getFirstName } from '@/lib/utils'
 
 // Types
 export interface NotificationPayload {
@@ -474,7 +475,7 @@ export class NotificationService {
 
     return this.sendToRestaurant(booking.restaurant_id, {
       title: 'New Booking Request 📅',
-      body: `${booking.guest_name || 'Guest'} wants to book for ${booking.party_size} people at ${time}`,
+      body: `${getFirstName(booking.guest_name || 'Guest')} wants to book for ${booking.party_size} people at ${time}`,
       type: 'new_booking',
       priority: 'high',
       url: `/bookings/${booking.id}`,
@@ -498,7 +499,7 @@ export class NotificationService {
 
     return this.sendToRestaurant(booking.restaurant_id, {
       title: 'Booking Cancelled ❌',
-      body: `${booking.guest_name || 'Guest'} cancelled their booking for ${booking.party_size} people at ${time}`,
+      body: `${getFirstName(booking.guest_name || 'Guest')} cancelled their booking for ${booking.party_size} people at ${time}`,
       type: 'booking_cancelled',
       priority: 'normal',
       url: `/bookings/${booking.id}`,
@@ -511,7 +512,7 @@ export class NotificationService {
   async notifyWaitlistUpdate(waitlistEntry: any) {
     return this.sendToRestaurant(waitlistEntry.restaurant_id, {
       title: 'New Waitlist Entry 📋',
-      body: `${waitlistEntry.guest_name || 'Guest'} joined the waitlist for ${waitlistEntry.party_size} people`,
+      body: `${getFirstName(waitlistEntry.guest_name || 'Guest')} joined the waitlist for ${waitlistEntry.party_size} people`,
       type: 'waitlist_update',
       priority: 'normal',
       url: `/waitlist`,

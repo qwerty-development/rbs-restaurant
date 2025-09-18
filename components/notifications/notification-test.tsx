@@ -11,7 +11,7 @@ export function NotificationTest() {
     addNotification({
       type: 'booking',
       title: 'New Booking',
-      message: 'Test booking from John Doe for 4 guests',
+      message: 'New booking from John for 4 guests',
       data: { id: 'test-123', guest_name: 'John Doe', party_size: 4 }
     })
   }

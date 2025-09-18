@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { MultiDayCalendar } from "@/components/ui/multi-day-calendar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import { getFirstName } from "@/lib/utils"
 import { useNotifications } from "@/lib/contexts/notification-context"
 import { PushNotificationPermission } from "@/components/notifications/push-notification-permission"
 import {
@@ -102,6 +103,26 @@ export default function BasicDashboardPage() {
   const restaurantId = currentRestaurant?.restaurant.id
   const notificationContext = useNotifications()
   const { addNotification, requestPushPermission, isPushEnabled } = notificationContext || {}
+  
+  // Resolve guest first name: prefer explicit guest_name, else lookup profile by user_id
+  const resolveGuestFirstName = async (booking: any): Promise<string> => {
+    const explicit = booking?.guest_name?.trim()
+    if (explicit) return getFirstName(explicit)
+    const userId = booking?.user_id
+    if (userId) {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', userId)
+          .single()
+        if (!error && data?.full_name) {
+          return getFirstName(data.full_name)
+        }
+      } catch {}
+    }
+    return 'Guest'
+  }
   
   // Debug logging
  
@@ -321,12 +342,12 @@ export default function BasicDashboardPage() {
           if (!newBooking) return
           
           // Trigger notification for new booking
-          const guestName = newBooking.guest_name || newBooking.user?.full_name || 'Guest'
+          const guestName = await resolveGuestFirstName(newBooking)
         
           addNotification({
             type: 'booking',
             title: 'New Booking Request',
-            message: `New booking request from ${guestName} for ${newBooking.party_size} guests`,
+            message: `New booking from ${guestName} for ${newBooking.party_size} guests`,
             data: newBooking
           })
           
@@ -403,7 +424,7 @@ export default function BasicDashboardPage() {
           
           // Trigger notification for status changes
           if (previousBooking && previousBooking.status !== updatedBooking.status) {
-            const guestName = updatedBooking.guest_name || updatedBooking.user?.full_name || 'Guest'
+            const guestName = await resolveGuestFirstName(updatedBooking)
           
             
             const statusMap: Record<string, { title: string; message: string; variant?: 'success' | 'error' }> = {
@@ -659,6 +680,25 @@ export default function BasicDashboardPage() {
       case 'no_show': return 'No Show'
       default: return status
     }
+  }
+  // Global ticking timestamp to compute elapsed times without per-item hooks
+  const [nowTs, setNowTs] = useState<number>(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNowTs(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const formatElapsed = (isoDate?: string, nowMillis?: number) => {
+    if (!isoDate) return ''
+    const start = new Date(isoDate).getTime()
+    const reference = nowMillis ?? Date.now()
+    const diffMs = Math.max(0, reference - start)
+    const totalSeconds = Math.floor(diffMs / 1000)
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = totalSeconds % 60
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
+    if (minutes > 0) return `${minutes}m ${seconds}s`
+    return `${seconds}s`
   }
 
   const handleAccept = (booking: any) => {
@@ -995,6 +1035,11 @@ export default function BasicDashboardPage() {
                           ? `Created: ${format(parseISO(booking.created_at), "MMM d, h:mm a")}`
                           : format(parseISO(booking.created_at), "MMM d, h:mm a")}
                       </span>
+                      {booking.status === 'pending' && (
+                        <Badge variant="secondary" className="text-xs">
+                          {`Elapsed: ${formatElapsed(booking.created_at, nowTs)}`}
+                        </Badge>
+                      )}
                       {(dateViewMode === 'all' || dateViewMode === 'week' || dateViewMode === 'month' || dateViewMode === 'select') && (
                         <Badge variant="secondary" className="text-xs">
                           For {format(parseISO(booking.booking_time), "MMM d")}
