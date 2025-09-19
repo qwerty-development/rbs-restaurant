@@ -171,13 +171,16 @@ export function TableGrid({ tables, isLoading, onEdit, onDeactivate }: TableGrid
                   )}>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
-                        <CardTitle 
+                        <CardTitle
                           className="text-lg"
                           title={`Table ${table.table_number} - ${table.table_type} (${table.min_capacity}-${table.max_capacity} guests)${table.section ? ` in ${table.section.name}` : ''}`}
                         >
-                          Table {table.table_number}
+                          Table {table.table_number} 
                         </CardTitle>
-                        <ShapeIcon className="h-4 w-4 text-muted-foreground" />
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          Shape:
+                          <ShapeIcon className="h-4 w-4" />
+                        </div>
                       </div>
                       {table.section && (
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
