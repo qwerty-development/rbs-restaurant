@@ -8,6 +8,11 @@ import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { format, startOfDay, endOfDay, parseISO, startOfMonth, endOfMonth } from "date-fns"
 import { toast } from "react-hot-toast"
+import { useRealtimeHealth } from "@/hooks/use-realtime-health"
+import { useConnectionRecovery } from "@/hooks/use-connection-recovery"
+import { useAdaptiveBookingConfig } from "@/hooks/use-adaptive-refetch"
+import { useBackgroundSync } from "@/hooks/use-background-sync"
+import { ConnectionStatusIndicator } from "@/components/dashboard/connection-status-indicator"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -49,6 +54,34 @@ export default function BasicDashboardPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [userId, setUserId] = useState<string>("")
+
+  const supabase = createClient()
+  const queryClient = useQueryClient()
+  const { currentRestaurant, isLoading: contextLoading } = useRestaurantContext()
+  const restaurantId = currentRestaurant?.restaurant.id
+
+  // Initialize connection health monitoring
+  const { healthStatus, registerChannel, unregisterChannel, forceReconnect } = useRealtimeHealth()
+
+  // Setup connection recovery
+  useConnectionRecovery({
+    onForceReconnect: forceReconnect,
+    enableVisibilityRecovery: true,
+    enableFocusRecovery: true,
+    enableOnlineRecovery: true
+  })
+
+  // Get adaptive query configuration based on connection health
+  const adaptiveConfig = useAdaptiveBookingConfig(healthStatus)
+
+  // Setup background sync for when real-time fails
+  const { forceSyncNow, isAggressivePolling, unhealthyDurationMinutes } = useBackgroundSync({
+    restaurantId: restaurantId || '',
+    healthStatus,
+    onForceReconnect: forceReconnect,
+    enableServiceWorkerSync: true,
+    aggressivePollingThreshold: 2 // Start aggressive polling after 2 minutes
+  })
 
   // Debug logging for date changes
   useEffect(() => {
@@ -96,11 +129,7 @@ export default function BasicDashboardPage() {
         return [new Date()]
     }
   }
-  
-  const supabase = createClient()
-  const queryClient = useQueryClient()
-  const { currentRestaurant, isLoading: contextLoading } = useRestaurantContext()
-  const restaurantId = currentRestaurant?.restaurant.id
+
   const notificationContext = useNotifications()
   const { addNotification, requestPushPermission, isPushEnabled } = notificationContext || {}
   
@@ -318,6 +347,9 @@ export default function BasicDashboardPage() {
       return uniqueBookings
     },
     enabled: !!restaurantId,
+    refetchInterval: adaptiveConfig.refetchInterval,
+    staleTime: adaptiveConfig.staleTime,
+    gcTime: adaptiveConfig.gcTime,
   })
 
   // Real-time subscription for immediate updates
@@ -325,7 +357,7 @@ export default function BasicDashboardPage() {
     if (!restaurantId) return
 
     console.log('🔗 Setting up real-time subscription for basic dashboard')
-    
+
     const channel = supabase
       .channel(`basic-dashboard-bookings:${restaurantId}`)
       .on(
@@ -505,11 +537,15 @@ export default function BasicDashboardPage() {
       )
       .subscribe()
 
+    // Register channel for health monitoring
+    registerChannel(channel, `basic-dashboard-bookings:${restaurantId}`)
+
     return () => {
       console.log('🔌 Cleaning up basic dashboard subscription')
+      unregisterChannel(`basic-dashboard-bookings:${restaurantId}`)
       supabase.removeChannel(channel)
     }
-  }, [restaurantId, selectedDate, selectedDates, dateViewMode, queryClient, supabase])
+  }, [restaurantId, selectedDate, selectedDates, dateViewMode, queryClient, supabase, registerChannel, unregisterChannel])
 
   // Analytics query - for selected date(s)
   const { data: analytics } = useQuery({
@@ -595,7 +631,10 @@ export default function BasicDashboardPage() {
         rejectionRate: (confirmed + declined) > 0 ? Math.round((declined / (confirmed + declined)) * 100) : 0
       }
     },
-    enabled: !!restaurantId
+    enabled: !!restaurantId,
+    refetchInterval: adaptiveConfig.refetchInterval,
+    staleTime: adaptiveConfig.staleTime,
+    gcTime: adaptiveConfig.gcTime,
   })
 
   // Update booking status using Basic tier API
@@ -780,16 +819,23 @@ export default function BasicDashboardPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <ConnectionStatusIndicator
+            healthStatus={healthStatus}
+            onForceReconnect={forceReconnect}
+            compact={true}
+            isAggressivePolling={isAggressivePolling}
+            unhealthyDurationMinutes={unhealthyDurationMinutes}
+          />
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => refetch()}
             disabled={isLoading}
           >
             <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
             Refresh
           </Button>
-          
+
         </div>
       </div>
 

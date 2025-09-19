@@ -6,6 +6,11 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { format, startOfDay, endOfDay, addMinutes, differenceInMinutes, addDays } from "date-fns"
+import { useRealtimeHealth } from "@/hooks/use-realtime-health"
+import { useConnectionRecovery } from "@/hooks/use-connection-recovery"
+import { useAdaptiveQueryConfig, useAdaptiveBookingConfig } from "@/hooks/use-adaptive-refetch"
+import { useBackgroundSync } from "@/hooks/use-background-sync"
+import { ConnectionStatusIndicator } from "@/components/dashboard/connection-status-indicator"
 import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { useNotifications } from "@/lib/contexts/notification-context"
 import { PushNotificationPermission } from "@/components/notifications/push-notification-permission"
@@ -86,6 +91,30 @@ export default function DashboardPage() {
   const tableService = new TableAvailabilityService()
   const statusService = new TableStatusService()
   const requestService = new BookingRequestService()
+
+  // Initialize connection health monitoring
+  const { healthStatus, registerChannel, unregisterChannel, forceReconnect } = useRealtimeHealth()
+
+  // Setup connection recovery
+  useConnectionRecovery({
+    onForceReconnect: forceReconnect,
+    enableVisibilityRecovery: true,
+    enableFocusRecovery: true,
+    enableOnlineRecovery: true
+  })
+
+  // Get adaptive query configurations based on connection health
+  const adaptiveBookingConfig = useAdaptiveBookingConfig(healthStatus)
+  const adaptiveQueryConfig = useAdaptiveQueryConfig(healthStatus)
+
+  // Setup background sync for when real-time fails
+  const { forceSyncNow, isAggressivePolling, unhealthyDurationMinutes } = useBackgroundSync({
+    restaurantId: restaurantId || '',
+    healthStatus,
+    onForceReconnect: forceReconnect,
+    enableServiceWorkerSync: true,
+    aggressivePollingThreshold: 2 // Start aggressive polling after 2 minutes
+  })
 
   // Redirect Basic tier users to their dedicated dashboard - MUST be before any conditional returns
   useEffect(() => {
@@ -358,7 +387,9 @@ export default function DashboardPage() {
       return transformedData
     },
     enabled: !!restaurantId,
-    refetchInterval: 30000,
+    refetchInterval: adaptiveBookingConfig.refetchInterval,
+    staleTime: adaptiveBookingConfig.staleTime,
+    gcTime: adaptiveBookingConfig.gcTime,
   })
 
   // Fetch waitlist count
@@ -387,7 +418,9 @@ export default function DashboardPage() {
       return stats
     },
     enabled: !!restaurantId,
-    refetchInterval: 30000,
+    refetchInterval: adaptiveQueryConfig.refetchInterval,
+    staleTime: adaptiveQueryConfig.staleTime,
+    gcTime: adaptiveQueryConfig.gcTime,
   })
 
   // Fetch all tables with section information
@@ -454,6 +487,8 @@ export default function DashboardPage() {
       return customerMap
     },
     enabled: !!restaurantId && todaysBookings.length > 0,
+    staleTime: adaptiveQueryConfig.staleTime,
+    gcTime: adaptiveQueryConfig.gcTime,
   })
 
   // Update booking status
@@ -1116,7 +1151,15 @@ export default function DashboardPage() {
               <UserPlus className="h-3 w-3 mr-1" />
               <span className="hidden sm:inline">New</span>
             </Button>
-            
+
+            <ConnectionStatusIndicator
+              healthStatus={healthStatus}
+              onForceReconnect={forceReconnect}
+              compact={true}
+              isAggressivePolling={isAggressivePolling}
+              unhealthyDurationMinutes={unhealthyDurationMinutes}
+            />
+
             <InstallPrompt />
             
 

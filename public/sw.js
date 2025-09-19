@@ -350,5 +350,215 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
+// Connection Health Tracking
+let connectionHealthData = {};
+let lastHealthUpdate = 0;
+let connectionRecoveryInterval = null;
+
+// Handle connection health updates from main thread
+function handleConnectionHealthUpdate(data) {
+  connectionHealthData = data;
+  lastHealthUpdate = Date.now();
+
+  console.log('[SW] Connection health update:', {
+    healthy: data.healthStatus?.isHealthy,
+    unhealthyMinutes: data.unhealthyMinutes,
+    restaurantId: data.restaurantId
+  });
+
+  // If connection is unhealthy for more than 3 minutes, start aggressive background sync
+  if (data.unhealthyMinutes >= 3) {
+    startConnectionRecovery(data.restaurantId);
+  } else {
+    stopConnectionRecovery();
+  }
+}
+
+// Start aggressive connection recovery
+function startConnectionRecovery(restaurantId) {
+  if (connectionRecoveryInterval) return; // Already running
+
+  console.log('[SW] Starting connection recovery mode');
+
+  connectionRecoveryInterval = setInterval(async () => {
+    console.log('[SW] Attempting background data sync...');
+
+    try {
+      // Fetch critical booking data directly
+      const response = await fetch(`/api/background-sync/bookings?restaurantId=${restaurantId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        // Notify main thread of new data
+        broadcastToClients({
+          type: 'BACKGROUND_SYNC_COMPLETE',
+          data: {
+            bookings: data.bookings,
+            timestamp: Date.now()
+          }
+        });
+
+        console.log('[SW] Background sync successful');
+      }
+    } catch (error) {
+      console.error('[SW] Background sync failed:', error);
+    }
+
+    // Force main thread to attempt reconnection
+    broadcastToClients({
+      type: 'FORCE_DATA_REFRESH',
+      reason: 'connection_recovery'
+    });
+
+  }, 10000); // Every 10 seconds in recovery mode
+}
+
+// Stop connection recovery
+function stopConnectionRecovery() {
+  if (connectionRecoveryInterval) {
+    clearInterval(connectionRecoveryInterval);
+    connectionRecoveryInterval = null;
+    console.log('[SW] Stopped connection recovery mode');
+  }
+}
+
+// Broadcast message to all clients
+async function broadcastToClients(message) {
+  try {
+    const clients = await self.clients.matchAll({
+      includeUncontrolled: true,
+      type: 'window'
+    });
+
+    for (const client of clients) {
+      client.postMessage(message);
+    }
+  } catch (error) {
+    console.error('[SW] Error broadcasting to clients:', error);
+  }
+}
+
+// Enhanced background sync for bookings
+async function syncBookingsData(restaurantId) {
+  try {
+    console.log('[SW] Syncing bookings data for restaurant:', restaurantId);
+
+    const response = await fetch(`/api/background-sync/bookings?restaurantId=${restaurantId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+
+      // Check for new bookings since last sync
+      if (data.newBookingsCount > 0) {
+        console.log(`[SW] Found ${data.newBookingsCount} new bookings`);
+
+        // Show notification for new bookings
+        await showNotification({
+          title: 'New Booking Request',
+          body: `${data.newBookingsCount} new booking${data.newBookingsCount > 1 ? 's' : ''} require your attention`,
+          tag: 'new-bookings',
+          data: { bookings: data.newBookings },
+          requireInteraction: true
+        });
+      }
+
+      // Notify main thread
+      broadcastToClients({
+        type: 'BACKGROUND_SYNC_COMPLETE',
+        data: {
+          bookings: data.bookings,
+          newBookingsCount: data.newBookingsCount,
+          timestamp: Date.now()
+        }
+      });
+
+      return true;
+    }
+  } catch (error) {
+    console.error('[SW] Error syncing bookings:', error);
+  }
+
+  return false;
+}
+
+// Enhanced message handling
+self.addEventListener('message', async (event) => {
+  console.log('[SW] Message received:', event.data?.type);
+
+  const { type, data } = event.data || {};
+
+  switch (type) {
+    case 'CHECK_NOTIFICATIONS':
+      await checkForPendingNotifications();
+      break;
+
+    case 'START_BACKGROUND_TASKS':
+      await startBackgroundTasks();
+      break;
+
+    case 'REFRESH_SUBSCRIPTION':
+      await refreshSubscription();
+      break;
+
+    case 'CONNECTION_HEALTH_UPDATE':
+      handleConnectionHealthUpdate(data);
+      break;
+
+    case 'FORCE_BACKGROUND_SYNC':
+      if (data?.restaurantId) {
+        await syncBookingsData(data.restaurantId);
+      }
+      break;
+
+    case 'STOP_CONNECTION_RECOVERY':
+      stopConnectionRecovery();
+      break;
+
+    default:
+      console.log('[SW] Unknown message type:', type);
+  }
+});
+
+// Enhanced background sync event
+self.addEventListener('sync', async (event) => {
+  console.log('[SW] Background sync triggered:', event.tag);
+
+  if (event.tag === 'check-notifications') {
+    event.waitUntil(checkForPendingNotifications());
+  } else if (event.tag.startsWith('sync-bookings-')) {
+    const restaurantId = event.tag.replace('sync-bookings-', '');
+    event.waitUntil(syncBookingsData(restaurantId));
+  }
+});
+
+// Periodic check for stale connections
+setInterval(() => {
+  const now = Date.now();
+  const timeSinceLastUpdate = now - lastHealthUpdate;
+
+  // If no health updates for 2 minutes and we have connection data
+  if (timeSinceLastUpdate > 120000 && connectionHealthData.restaurantId) {
+    console.log('[SW] No health updates for 2 minutes, forcing recovery');
+    startConnectionRecovery(connectionHealthData.restaurantId);
+
+    // Wake up main thread
+    broadcastToClients({
+      type: 'FORCE_DATA_REFRESH',
+      reason: 'stale_connection_check'
+    });
+  }
+}, 60000); // Check every minute
+
 // Start background tasks immediately
 startBackgroundTasks();
