@@ -238,109 +238,56 @@ export function TodaysTimeline({
       <Card 
         key={booking.id}
         className={cn(
-          "cursor-pointer transition-all duration-200 hover:shadow-md",
+          "cursor-pointer transition-all duration-200 hover:shadow-lg active:scale-[0.98]",
+          "min-h-[120px] tablet:min-h-[140px]",
           statusConfig.bgColor,
           statusConfig.urgent && "ring-2 ring-orange-200"
         )}
         onClick={() => onSelectBooking(booking)}
       >
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3 flex-1 min-w-0">
-              <div className={cn("p-2 rounded-full bg-white shadow-sm", statusConfig.iconColor)}>
-                <StatusIcon className="h-4 w-4" />
+        <CardContent className="p-4 tablet:p-6">
+          {/* Header with guest name and status */}
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className={cn("p-2 tablet:p-3 rounded-full bg-white shadow-sm", statusConfig.iconColor)}>
+                <StatusIcon className="h-4 w-4 tablet:h-5 tablet:w-5" />
               </div>
               
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2">
-                  <h3 className="text-lg font-semibold text-gray-900 truncate">
-                    {guestName}
-                  </h3>
-                  <Badge className={cn("text-xs font-medium", statusConfig.badge)}>
+                <h3 className="text-lg tablet:text-xl font-bold text-gray-900 truncate mb-1">
+                  {guestName}
+                </h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge className={cn("text-xs tablet:text-sm font-semibold px-2 py-1", statusConfig.badge)}>
                     {statusConfig.badgeText}
                   </Badge>
                   {customerData?.vip_status && (
-                    <Badge variant="secondary" className="text-xs bg-yellow-100 text-yellow-800">
+                    <Badge variant="secondary" className="text-xs tablet:text-sm bg-yellow-100 text-yellow-800 px-2 py-1">
                       <Star className="h-3 w-3 mr-1" />
                       VIP
                     </Badge>
                   )}
                   {customerData?.blacklisted && (
-                    <Badge variant="destructive" className="text-xs">
+                    <Badge variant="destructive" className="text-xs tablet:text-sm px-2 py-1">
                       Alert
                     </Badge>
                   )}
                 </div>
-
-                <div className="grid grid-cols-2 gap-3 text-sm text-gray-600">
-                  <div className="space-y-1">
-                    {showTime && (
-                      <>
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4" />
-                          <span className="font-medium">
-                            {format(bookingTime, 'h:mm a')}
-                          </span>
-                        </div>
-                        <div className="text-xs text-muted-foreground pl-6">
-                          {getTimeDisplay()}
-                        </div>
-                      </>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4" />
-                      <span>{booking.party_size} guests</span>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-1">
-                    {booking.tables && booking.tables.length > 0 ? (
-                      <div className="flex items-center gap-2">
-                        <Table2 className="h-4 w-4" />
-                        <span>Table {booking.tables.map((t: any) => t.table_number).join(", ")}</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Table2 className="h-4 w-4 text-red-500" />
-                        <Badge variant="destructive" className="text-xs">
-                          No table assigned
-                        </Badge>
-                      </div>
-                    )}
-                    
-                    {guestPhone && (
-                      <div className="flex items-center gap-2">
-                        <Phone className="h-4 w-4" />
-                        <span className="text-sm">{guestPhone}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {booking.special_requests && (
-                  <div className="mt-3 p-2 bg-white/50 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <MessageSquare className="h-4 w-4 text-gray-500 mt-0.5 flex-shrink-0" />
-                      <p className="text-sm text-gray-700 leading-relaxed line-clamp-2">
-                        {booking.special_requests}
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 flex-shrink-0 min-w-[80px]">
+            {/* Action buttons */}
+            <div className="flex flex-col gap-2 flex-shrink-0">
               {booking.status === 'pending' && (
                 <Button
                   size="sm"
-                  className="h-8 px-2 bg-green-600 hover:bg-green-700 text-xs whitespace-nowrap"
+                  className="h-8 tablet:h-10 px-3 bg-green-600 hover:bg-green-700 text-xs tablet:text-sm whitespace-nowrap min-w-[80px]"
                   onClick={(e) => {
                     e.stopPropagation()
                     onUpdateStatus(booking.id, 'confirmed')
                   }}
                 >
-                  <CheckCircle className="h-3 w-3 mr-1 flex-shrink-0" />
+                  <CheckCircle className="h-3 w-3 tablet:h-4 tablet:w-4 mr-1 flex-shrink-0" />
                   Confirm
                 </Button>
               )}
@@ -348,13 +295,13 @@ export function TodaysTimeline({
               {booking.status === 'arrived' && (
                 <Button
                   size="sm"
-                  className="h-8 px-2 bg-blue-600 hover:bg-blue-700 text-xs whitespace-nowrap"
+                  className="h-8 tablet:h-10 px-3 bg-blue-600 hover:bg-blue-700 text-xs tablet:text-sm whitespace-nowrap min-w-[80px]"
                   onClick={(e) => {
                     e.stopPropagation()
                     onSelectBooking(booking)
                   }}
                 >
-                  <Utensils className="h-3 w-3 mr-1 flex-shrink-0" />
+                  <Utensils className="h-3 w-3 tablet:h-4 tablet:w-4 mr-1 flex-shrink-0" />
                   Seat
                 </Button>
               )}
@@ -362,16 +309,94 @@ export function TodaysTimeline({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 w-8 p-0 flex items-center justify-center"
+                className="h-8 tablet:h-10 w-8 tablet:w-10 p-0 flex items-center justify-center"
                 onClick={(e) => {
                   e.stopPropagation()
                   onSelectBooking(booking)
                 }}
               >
-                <Eye className="h-4 w-4" />
+                <Eye className="h-4 w-4 tablet:h-5 tablet:w-5" />
               </Button>
             </div>
           </div>
+
+          {/* Key booking details - more prominent */}
+          <div className="grid grid-cols-1 tablet:grid-cols-3 gap-4 tablet:gap-6">
+            {/* Date & Time - Most important */}
+            {showTime && (
+              <div className="bg-white/70 rounded-lg p-3 tablet:p-4 border border-gray-200">
+                <div className="flex items-center gap-2 mb-1">
+                  <Clock className="h-5 w-5 tablet:h-6 tablet:w-6 text-primary" />
+                  <span className="font-bold text-lg tablet:text-xl text-gray-900">
+                    {format(bookingTime, 'h:mm a')}
+                  </span>
+                </div>
+                <div className="text-sm tablet:text-base text-gray-600 font-medium">
+                  {format(bookingTime, 'MMM d, yyyy')}
+                </div>
+                <div className="text-xs tablet:text-sm text-muted-foreground mt-1">
+                  {getTimeDisplay()}
+                </div>
+              </div>
+            )}
+
+            {/* Party Size - Second most important */}
+            <div className="bg-white/70 rounded-lg p-3 tablet:p-4 border border-gray-200">
+              <div className="flex items-center gap-2 mb-1">
+                <Users className="h-5 w-5 tablet:h-6 tablet:w-6 text-primary" />
+                <span className="font-bold text-lg tablet:text-xl text-gray-900">
+                  {booking.party_size}
+                </span>
+                <span className="text-sm tablet:text-base text-gray-600 font-medium">
+                  guest{booking.party_size !== 1 ? 's' : ''}
+                </span>
+              </div>
+              {/* Indoor/Outdoor preference */}
+              {booking.preferred_section && (
+                <div className="text-xs tablet:text-sm text-gray-600 mt-1">
+                  <span className="font-medium">Preferred:</span> {booking.preferred_section}
+                </div>
+              )}
+            </div>
+
+            {/* Table & Contact - Third most important */}
+            <div className="bg-white/70 rounded-lg p-3 tablet:p-4 border border-gray-200">
+              {booking.tables && booking.tables.length > 0 ? (
+                <div className="flex items-center gap-2 mb-1">
+                  <Table2 className="h-5 w-5 tablet:h-6 tablet:w-6 text-green-600" />
+                  <span className="font-bold text-lg tablet:text-xl text-gray-900">
+                    Table {booking.tables.map((t: any) => t.table_number).join(", ")}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 mb-1">
+                  <Table2 className="h-5 w-5 tablet:h-6 tablet:w-6 text-red-500" />
+                  <Badge variant="destructive" className="text-xs tablet:text-sm font-semibold px-2 py-1">
+                    No table assigned
+                  </Badge>
+                </div>
+              )}
+              
+              {guestPhone && (
+                <div className="flex items-center gap-2 mt-1">
+                  <Phone className="h-4 w-4 tablet:h-5 tablet:w-5 text-gray-500" />
+                  <span className="text-sm tablet:text-base text-gray-600 font-medium">{guestPhone}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Special requests */}
+          {booking.special_requests && (
+            <div className="mt-4 p-3 tablet:p-4 bg-white/50 rounded-lg border border-gray-200">
+              <div className="flex items-start gap-2">
+                <MessageSquare className="h-4 w-4 tablet:h-5 tablet:w-5 text-gray-500 mt-0.5 flex-shrink-0" />
+                <p className="text-sm tablet:text-base text-gray-700 leading-relaxed line-clamp-2">
+                  {booking.special_requests}
+                </p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     )

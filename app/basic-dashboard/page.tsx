@@ -1018,158 +1018,140 @@ export default function BasicDashboardPage() {
             <Card 
               key={booking.id} 
               className={cn(
-                "hover:shadow-md transition-shadow",
-                booking.status === 'pending' && "border-orange-200 bg-orange-50/50"
+                "hover:shadow-md transition-all duration-200 active:scale-[0.98]",
+                "min-h-[100px]",
+                booking.status === 'pending' && "border-orange-200 bg-orange-50/30 ring-1 ring-orange-200"
               )}
             >
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-3">
-                      <Badge variant={getStatusBadgeVariant(booking.status)} className="gap-1">
+              <CardContent className="p-4">
+                {/* Header with customer name and status */}
+                <div className="flex items-start justify-between gap-4 mb-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-2">
+                      <Badge variant={getStatusBadgeVariant(booking.status)} className="gap-1 px-3 py-1 text-sm tablet:text-base font-semibold">
                         {getStatusIcon(booking.status)}
                         {formatStatus(booking.status)}
                       </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {(dateViewMode === 'all' || dateViewMode === 'week' || dateViewMode === 'month')
-                          ? `Created: ${format(parseISO(booking.created_at), "MMM d, h:mm a")}`
-                          : format(parseISO(booking.created_at), "MMM d, h:mm a")}
-                      </span>
                       {booking.status === 'pending' && (
-                        <Badge variant="secondary" className="text-xs">
+                        <Badge variant="secondary" className="text-xs tablet:text-sm px-2 py-1 animate-pulse">
                           {`Elapsed: ${formatElapsed(booking.created_at, nowTs)}`}
                         </Badge>
                       )}
-                      {(dateViewMode === 'all' || dateViewMode === 'week' || dateViewMode === 'month' || dateViewMode === 'select') && (
-                        <Badge variant="secondary" className="text-xs">
-                          For {format(parseISO(booking.booking_time), "MMM d")}
-                        </Badge>
-                      )}
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      <div>
-                        {(() => {
-                          const customer = Array.isArray(booking.profiles) ? booking.profiles[0] : booking.profiles
-                          const guestName = booking.guest_name || customer?.full_name
-                          const guestEmail = booking.guest_email || customer?.email
-                          return (
-                            <>
-                              <div className="flex items-center gap-2 mb-1">
-                                <h3 className="font-semibold text-lg">
-                                  {guestName || 'Unknown Customer'}
-                                </h3>
-                                <CustomerRating rating={customer?.user_rating} />
+                    
+                    {(() => {
+                      const customer = Array.isArray(booking.profiles) ? booking.profiles[0] : booking.profiles
+                      const guestName = booking.guest_name || customer?.full_name
+                      const guestEmail = booking.guest_email || customer?.email
+                      return (
+                        <>
+                          <h3 className="font-bold text-xl tablet:text-2xl text-foreground truncate mb-2">
+                            {guestName || 'Unknown Customer'}
+                            <CustomerRating rating={customer?.user_rating} />
+                          </h3>
+                          
+                          {/* Phone and Email - stacked vertically */}
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            {customer?.phone_number && (
+                              <div className="flex items-center gap-1">
+                                <Phone className="h-3 w-3" />
+                                <span className="font-medium">{customer.phone_number}</span>
                               </div>
-                              <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-                                {customer?.phone_number && (
-                                  <div className="flex items-center gap-1">
-                                    <Phone className="h-3 w-3" />
-                                    {customer.phone_number}
+                            )}
+                            {guestEmail && (
+                              <div className="flex items-center gap-1">
+                                <Mail className="h-3 w-3" />
+                                <span className="font-medium">{guestEmail}</span>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )
+                    })()}
+                  </div>
+
+                  {/* Special Offer - Top Right */}
+                  {(() => {
+                    const hasAppliedOfferId = !!booking.applied_offer_id
+                    const hasSpecialOfferData = booking.special_offers && 
+                      (Array.isArray(booking.special_offers) ? booking.special_offers.length > 0 : booking.special_offers.title)
+                    
+                    const hasSpecialOffer = hasAppliedOfferId || hasSpecialOfferData
+                    
+                    return hasSpecialOffer ? (
+                      <>
+                        {/* Mobile: Simple tag with popover */}
+                        <div className="tablet:hidden flex-shrink-0">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Badge 
+                                variant="secondary" 
+                                className="bg-blue-100 text-blue-800 border-blue-200 cursor-pointer hover:bg-blue-200 transition-colors"
+                              >
+                                <Gift className="h-3 w-3 mr-1" />
+                                Offer
+                              </Badge>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-80 p-4" align="end">
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                  <Gift className="h-4 w-4 text-blue-600" />
+                                  <span className="font-bold text-blue-800">Special Offer</span>
+                                </div>
+                                <div className="text-sm text-foreground">
+                                  {hasSpecialOfferData 
+                                    ? (Array.isArray(booking.special_offers) ? booking.special_offers[0] : booking.special_offers).title
+                                    : 'Special Offer Applied'
+                                  }
+                                </div>
+                                {hasSpecialOfferData && (Array.isArray(booking.special_offers) ? booking.special_offers[0] : booking.special_offers).description && (
+                                  <div className="text-xs text-muted-foreground">
+                                    {(Array.isArray(booking.special_offers) ? booking.special_offers[0] : booking.special_offers).description}
                                   </div>
                                 )}
-                                {guestEmail && (
-                                  <div className="flex items-center gap-1">
-                                    <Mail className="h-3 w-3" />
-                                    {guestEmail}
-                                  </div>
-                                )}
-                              </div>
-                            </>
-                          )
-                        })()}
-                      </div>
-
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-1">Booking Details</p>
-                        <p className="font-medium">
-                          {format(parseISO(booking.booking_time), "MMM d, yyyy 'at' h:mm a")}
-                        </p>
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Users className="h-3 w-3" />
-                          {booking.party_size} guests
-                        </div>
-                        {booking.preferred_section && (
-                          <div className="flex items-center gap-1 text-sm mt-1">
-                            <Badge 
-                              variant="secondary" 
-                              className="text-xs"
-                              style={{
-                                backgroundColor: '#f1f5f9',
-                                color: '#1e293b'
-                              }}
-                            >
-                              {booking.preferred_section}
-                            </Badge>
-                          </div>
-                        )}
-                        {booking.occasion && (
-                          <div className="mt-2">
-                            <p className="text-xs text-muted-foreground">Occasion</p>
-                            <p className="text-sm font-medium">{booking.occasion}</p>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="space-y-3">
-                        {booking.special_requests && (
-                          <div>
-                            <p className="text-sm text-muted-foreground mb-1">Special Requests</p>
-                            <div className="flex items-start gap-1">
-                              <MessageSquare className="h-3 w-3 mt-0.5 text-muted-foreground" />
-                              <p className="text-sm line-clamp-2">{booking.special_requests}</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {booking.dietary_notes && booking.dietary_notes.length > 0 && (
-                          <div>
-                            <p className="text-sm text-muted-foreground mb-1">Dietary Notes</p>
-                            <div className="flex flex-wrap gap-1">
-                              {booking.dietary_notes.map((note: string, index: number) => (
-                                <Badge key={index} variant="outline" className="text-xs">
-                                  {note}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {booking.special_offers && (
-                          <div>
-                            <p className="text-sm text-muted-foreground mb-1">Applied Offer</p>
-                            <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                              <Gift className="h-4 w-4 mt-0.5 text-green-600" />
-                              <div>
-                                <p className="text-sm font-medium text-green-800">{booking.special_offers.title}</p>
-                                {booking.special_offers.description && (
-                                  <p className="text-xs text-green-700 mt-1">{booking.special_offers.description}</p>
-                                )}
-                                {booking.special_offers.discount_percentage && (
-                                  <Badge variant="secondary" className="mt-1 bg-green-100 text-green-800 text-xs">
-                                    {booking.special_offers.discount_percentage}% OFF
+                                {hasSpecialOfferData && (Array.isArray(booking.special_offers) ? booking.special_offers[0] : booking.special_offers).discount_percentage && (
+                                  <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800">
+                                    {(Array.isArray(booking.special_offers) ? booking.special_offers[0] : booking.special_offers).discount_percentage}% OFF
                                   </Badge>
                                 )}
                               </div>
-                            </div>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                        
+                        {/* Tablet+: Full box */}
+                        <div className="hidden tablet:block bg-blue-50 border border-blue-200 rounded-md p-3 flex-shrink-0">
+                          <div className="text-xs text-blue-600 font-medium mb-1">Special Offer</div>
+                          <div className="flex items-center gap-2">
+                            <Gift className="h-4 w-4 text-blue-600" />
+                            <span className="font-bold text-sm text-blue-800">
+                              {hasSpecialOfferData 
+                                ? (Array.isArray(booking.special_offers) ? booking.special_offers[0] : booking.special_offers).title
+                                : 'Special Offer Applied'
+                              }
+                            </span>
                           </div>
-                        )}
+                          {hasSpecialOfferData && (Array.isArray(booking.special_offers) ? booking.special_offers[0] : booking.special_offers).discount_percentage && (
+                            <Badge variant="secondary" className="mt-1 text-xs bg-blue-100 text-blue-800">
+                              {(Array.isArray(booking.special_offers) ? booking.special_offers[0] : booking.special_offers).discount_percentage}% OFF
+                            </Badge>
+                          )}
+                        </div>
+                      </>
+                    ) : null
+                  })()}
 
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex flex-col gap-2 ml-6">
+                  {/* Action Buttons - Hidden on mobile, shown on tablet+ */}
+                  <div className="hidden tablet:flex flex-col gap-2 flex-shrink-0">
                     {booking.status === 'pending' && (
                       <>
                         <Button
                           size="sm"
                           onClick={() => handleAccept(booking)}
                           disabled={updateBookingMutation.isPending}
-                          className="min-w-[80px]"
+                          className="h-8 tablet:h-10 px-4 bg-green-600 hover:bg-green-700 text-sm tablet:text-base min-w-[90px]"
                         >
-                          <CheckCircle className="h-4 w-4 mr-1" />
+                          <CheckCircle className="h-4 w-4 tablet:h-5 tablet:w-5 mr-2" />
                           Accept
                         </Button>
                         <Button
@@ -1177,9 +1159,9 @@ export default function BasicDashboardPage() {
                           variant="destructive"
                           onClick={() => handleDecline(booking)}
                           disabled={updateBookingMutation.isPending}
-                          className="min-w-[80px]"
+                          className="h-8 tablet:h-10 px-4 text-sm tablet:text-base min-w-[90px]"
                         >
-                          <XCircle className="h-4 w-4 mr-1" />
+                          <XCircle className="h-4 w-4 tablet:h-5 tablet:w-5 mr-2" />
                           Decline
                         </Button>
                       </>
@@ -1192,9 +1174,9 @@ export default function BasicDashboardPage() {
                           variant="outline"
                           onClick={() => handleStatusChange(booking, 'completed')}
                           disabled={updateBookingMutation.isPending}
-                          className="min-w-[80px]"
+                          className="h-8 tablet:h-10 px-4 text-sm tablet:text-base min-w-[90px]"
                         >
-                          <CheckCircle className="h-4 w-4 mr-1" />
+                          <CheckCircle className="h-4 w-4 tablet:h-5 tablet:w-5 mr-2" />
                           Complete
                         </Button>
 
@@ -1204,9 +1186,9 @@ export default function BasicDashboardPage() {
                               size="sm"
                               variant="outline"
                               disabled={updateBookingMutation.isPending}
-                              className="min-w-[80px]"
+                              className="h-8 tablet:h-10 px-4 text-sm tablet:text-base min-w-[90px]"
                             >
-                              <MoreHorizontal className="h-4 w-4 mr-1" />
+                              <MoreHorizontal className="h-4 w-4 tablet:h-5 tablet:w-5 mr-2" />
                               More
                             </Button>
                           </DropdownMenuTrigger>
@@ -1230,6 +1212,168 @@ export default function BasicDashboardPage() {
                       </>
                     )}
                   </div>
+                </div>
+
+                {/* Key booking details - separate boxes */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 tablet:gap-4">
+                  {/* Date Box */}
+                  <div className="bg-muted/50 rounded-md p-3 border">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground font-medium">Date</span>
+                    </div>
+                    <div className="font-bold text-lg tablet:text-xl text-foreground">
+                      {format(parseISO(booking.booking_time), "MMM d, yyyy")}
+                    </div>
+                  </div>
+
+                  {/* Time Box */}
+                  <div className="bg-muted/50 rounded-md p-3 border">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground font-medium">Time</span>
+                    </div>
+                    <div className="font-bold text-lg tablet:text-xl text-foreground">
+                      {format(parseISO(booking.booking_time), "h:mm a")}
+                    </div>
+                  </div>
+
+                  {/* Guests Box */}
+                  <div className="bg-muted/50 rounded-md p-3 border">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground font-medium">Guests</span>
+                    </div>
+                    <div className="font-bold text-lg tablet:text-xl text-foreground">
+                      {booking.party_size}
+                    </div>
+                  </div>
+
+                  {/* Preference Box */}
+                  <div className="bg-muted/50 rounded-md p-3 border">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs text-muted-foreground font-medium">Preference</span>
+                    </div>
+                    {booking.preferred_section ? (
+                      <div className="font-bold text-base tablet:text-lg text-foreground">
+                        {booking.preferred_section}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        No preference
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Occasion - above special requests */}
+                {booking.occasion && (
+                  <div className="mt-3">
+                    <div className="p-2 bg-muted/30 rounded-md border">
+                      <div className="flex items-center gap-2">
+                        <Gift className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                        <span className="text-xs tablet:text-sm text-muted-foreground">Occasion:</span>
+                        <span className="text-xs tablet:text-sm text-foreground font-medium">{booking.occasion}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Special requests and dietary notes - compact */}
+                {(booking.special_requests || booking.dietary_notes?.length > 0) && (
+                  <div className="mt-3">
+                    {booking.special_requests && (
+                      <div className="p-2 bg-muted/30 rounded-md border">
+                        <div className="flex items-start gap-2">
+                          <MessageSquare className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+                          <p className="text-xs tablet:text-sm text-foreground leading-relaxed line-clamp-2">{booking.special_requests}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {booking.dietary_notes && booking.dietary_notes.length > 0 && (
+                      <div className="mt-2">
+                        <div className="flex flex-wrap gap-1">
+                          {booking.dietary_notes.map((note: string, index: number) => (
+                            <Badge key={index} variant="outline" className="text-xs px-2 py-0.5">
+                              {note}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Mobile Action Buttons - Bottom of card */}
+                <div className="tablet:hidden mt-4 pt-3 border-t">
+                  {booking.status === 'pending' && (
+                    <div className="flex gap-3">
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleDecline(booking)}
+                        disabled={updateBookingMutation.isPending}
+                        className="flex-1 h-10"
+                      >
+                        <XCircle className="h-4 w-4 mr-2" />
+                        Decline
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleAccept(booking)}
+                        disabled={updateBookingMutation.isPending}
+                        className="flex-1 h-10 bg-green-600 hover:bg-green-700"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Accept
+                      </Button>
+                    </div>
+                  )}
+
+                  {booking.status === 'confirmed' && (
+                    <div className="flex gap-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleStatusChange(booking, 'completed')}
+                        disabled={updateBookingMutation.isPending}
+                        className="flex-1 h-10"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Complete
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={updateBookingMutation.isPending}
+                            className="h-10 px-4"
+                          >
+                            <MoreHorizontal className="h-4 w-4 mr-2" />
+                            More
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => handleStatusChange(booking, 'no_show')}
+                            className="text-red-600"
+                          >
+                            <XCircle className="h-4 w-4 mr-2" />
+                            Mark No Show
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleStatusChange(booking, 'cancelled_by_restaurant')}
+                            className="text-red-600"
+                          >
+                            <XCircle className="h-4 w-4 mr-2" />
+                            Cancel Booking
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

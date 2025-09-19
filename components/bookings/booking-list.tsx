@@ -413,68 +413,73 @@ export function BookingList({
           >
             <CardHeader className="pb-4 tablet:pb-6">
               <div className="flex items-start justify-between gap-4">
-                <div className="space-y-2 flex-1">
-                  <div className="flex items-center gap-3 tablet:gap-4">
-                    <StatusIcon className={cn("h-5 w-5 tablet:h-6 tablet:w-6", statusConfig.color)} />
-                    <h3 className="font-semibold text-lg tablet:text-xl">
-                      {formatGuestName(booking)}
-                    </h3>
-                    
-                    {/* Customer Indicators */}
-                    {customerData[booking.id] && (
-                      <div className="flex items-center gap-1">
-                        {customerData[booking.id].isVip && (
-                          <Badge variant="default" className="text-xs bg-gold text-gold-foreground">
-                            <Star className="h-3 w-3 mr-1" />
-                            VIP
+                <div className="space-y-3 flex-1">
+                  <div className="flex items-start gap-3 tablet:gap-4">
+                    <StatusIcon className={cn("h-6 w-6 tablet:h-7 tablet:w-7 flex-shrink-0", statusConfig.color)} />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-xl tablet:text-2xl text-gray-900 truncate mb-2">
+                        {formatGuestName(booking)}
+                      </h3>
+                      
+                      <div className="flex items-center gap-2 flex-wrap mb-2">
+                        <Badge 
+                          variant={getStatusBadgeVariant(booking.status)}
+                          className={cn(statusConfig.bgColor, statusConfig.color, "px-3 py-1 text-sm tablet:text-base font-semibold")}
+                        >
+                          {statusConfig.label}
+                        </Badge>
+                        {isLate && (
+                          <Badge variant="destructive" className="px-3 py-1 text-sm tablet:text-base font-semibold">
+                            <span suppressHydrationWarning>Late ({elapsedMinutes}m)</span>
                           </Badge>
                         )}
-                        {customerData[booking.id].isBlacklisted && (
-                          <Badge variant="destructive" className="text-xs">
-                            <Ban className="h-3 w-3 mr-1" />
-                            Blacklisted
-                          </Badge>
-                        )}
-                        {customerData[booking.id].hasImportantNotes && (
-                          <Badge variant="secondary" className="text-xs">
-                            <StickyNote className="h-3 w-3 mr-1" />
-                            Notes
-                          </Badge>
-                        )}
-                        {customerData[booking.id].hasDietaryRestrictions && (
-                          <Badge variant="outline" className="text-xs border-orange-300 text-orange-700">
-                            <AlertTriangle className="h-3 w-3 mr-1" />
-                            Dietary
-                          </Badge>
-                        )}
-                        {customerData[booking.id]?.userRating && customerData[booking.id].userRating! <= 2 && (
-                          <LowRatingFlag 
-                            rating={customerData[booking.id].userRating!}
-                            size="sm"
-                          />
+                        
+                        {/* Customer Indicators */}
+                        {customerData[booking.id] && (
+                          <>
+                            {customerData[booking.id].isVip && (
+                              <Badge variant="default" className="text-xs tablet:text-sm bg-gold text-gold-foreground px-2 py-1">
+                                <Star className="h-3 w-3 mr-1" />
+                                VIP
+                              </Badge>
+                            )}
+                            {customerData[booking.id].isBlacklisted && (
+                              <Badge variant="destructive" className="text-xs tablet:text-sm px-2 py-1">
+                                <Ban className="h-3 w-3 mr-1" />
+                                Blacklisted
+                              </Badge>
+                            )}
+                            {customerData[booking.id].hasImportantNotes && (
+                              <Badge variant="secondary" className="text-xs tablet:text-sm px-2 py-1">
+                                <StickyNote className="h-3 w-3 mr-1" />
+                                Notes
+                              </Badge>
+                            )}
+                            {customerData[booking.id].hasDietaryRestrictions && (
+                              <Badge variant="outline" className="text-xs tablet:text-sm border-orange-300 text-orange-700 px-2 py-1">
+                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                Dietary
+                              </Badge>
+                            )}
+                            {customerData[booking.id]?.userRating && customerData[booking.id].userRating! <= 2 && (
+                              <LowRatingFlag 
+                                rating={customerData[booking.id].userRating!}
+                                size="sm"
+                              />
+                            )}
+                          </>
                         )}
                       </div>
-                    )}
-                    
-                    <Badge 
-                      variant={getStatusBadgeVariant(booking.status)}
-                      className={cn(statusConfig.bgColor, statusConfig.color, "px-3 py-1 text-sm tablet:text-base font-medium")}
-                    >
-                      {statusConfig.label}
-                    </Badge>
-                    {isLate && (
-                      <Badge variant="destructive" className="px-3 py-1 text-sm tablet:text-base font-medium">
-                        <span suppressHydrationWarning>Late ({elapsedMinutes}m)</span>
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-4 text-sm tablet:text-base text-muted-foreground">
-                    <span className="font-mono font-medium">#{booking.confirmation_code}</span>
-                    {booking.occasion && (
-                      <Badge variant="secondary" className="px-3 py-1 text-sm">
-                        🎉 {booking.occasion}
-                      </Badge>
-                    )}
+                      
+                      <div className="flex items-center gap-4 text-sm tablet:text-base text-muted-foreground">
+                        <span className="font-mono font-semibold text-gray-700">#{booking.confirmation_code}</span>
+                        {booking.occasion && (
+                          <Badge variant="secondary" className="px-3 py-1 text-sm tablet:text-base">
+                            🎉 {booking.occasion}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
                 
@@ -662,88 +667,100 @@ export function BookingList({
             </CardHeader>
             
             <CardContent className="pt-0">
-              <div className="grid grid-cols-1 tablet:grid-cols-2 lg:grid-cols-4 gap-4 tablet:gap-6 text-sm tablet:text-base">
-                <div className="flex items-center gap-3">
-                  <Clock className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  <div>
-                    <span className="font-medium">{format(bookingTime, compact ? 'h:mm a' : 'MMM d, h:mm a')}</span>
-                    {isDining && (
-                      <p className="text-xs tablet:text-sm text-muted-foreground">
-                        <span suppressHydrationWarning>{elapsedMinutes}m elapsed</span>
-                      </p>
-                    )}
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                  <Users className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  <span className="font-medium">{booking.party_size} guests</span>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                  <Phone className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  <span className="truncate font-medium">{formatGuestPhone(booking)}</span>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <Table2 className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  <div className="flex items-center gap-2 flex-1">
-                    {hasAssignedTables ? (
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">
-                          Table {booking.tables.map((t: { table_number: any }) => t.table_number).join(", ")}
-                        </span>
-                        {onAssignTable && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onAssignTable(booking.id)
-                            }}
-                            className="h-6 px-2 text-xs"
-                          >
-                            Switch
-                          </Button>
-                        )}
+              {/* Enhanced booking details with better visual hierarchy */}
+              <div className="grid grid-cols-1 tablet:grid-cols-2 lg:grid-cols-3 gap-4 tablet:gap-6">
+                {/* Date & Time - Most prominent */}
+                <div className="bg-gray-50 rounded-lg p-4 tablet:p-5 border border-gray-200">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Clock className="h-6 w-6 tablet:h-7 tablet:w-7 text-primary flex-shrink-0" />
+                    <div>
+                      <div className="font-bold text-lg tablet:text-xl text-gray-900">
+                        {format(bookingTime, compact ? 'h:mm a' : 'MMM d, h:mm a')}
                       </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Badge variant="destructive" className="px-3 py-1 text-sm font-medium">
-                          No table
-                        </Badge>
-                        {onAssignTable && ['confirmed', 'pending', 'arrived'].includes(booking.status) && (
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onAssignTable(booking.id)
-                            }}
-                            className="h-6 px-2 text-xs bg-primary hover:bg-primary/90"
-                          >
-                            Assign
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Preferred Section */}
-                {booking.preferred_section && (
-                  <div className="flex items-center gap-3">
-                    <div className="h-5 w-5 flex-shrink-0 flex items-center justify-center">
-                      <div className="h-3 w-3 rounded-full bg-primary/20"></div>
+                      {isDining && (
+                        <div className="text-sm tablet:text-base text-muted-foreground font-medium">
+                          <span suppressHydrationWarning>{elapsedMinutes}m elapsed</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">Preferred:</span>
-                      <Badge variant="outline" className="px-2 py-1 text-xs">
+                  </div>
+                </div>
+                
+                {/* Party Size & Preferences - Second most prominent */}
+                <div className="bg-gray-50 rounded-lg p-4 tablet:p-5 border border-gray-200">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Users className="h-6 w-6 tablet:h-7 tablet:w-7 text-primary flex-shrink-0" />
+                    <div>
+                      <div className="font-bold text-lg tablet:text-xl text-gray-900">
+                        {booking.party_size} guest{booking.party_size !== 1 ? 's' : ''}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Indoor/Outdoor preference */}
+                  {booking.preferred_section && (
+                    <div className="mt-2">
+                      <Badge variant="outline" className="px-3 py-1 text-sm tablet:text-base font-medium border-primary text-primary">
                         {booking.preferred_section}
                       </Badge>
                     </div>
+                  )}
+                </div>
+
+                {/* Table Assignment & Contact - Third most prominent */}
+                <div className="bg-gray-50 rounded-lg p-4 tablet:p-5 border border-gray-200">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Table2 className="h-6 w-6 tablet:h-7 tablet:w-7 flex-shrink-0" />
+                    <div className="flex-1">
+                      {hasAssignedTables ? (
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-lg tablet:text-xl text-green-600">
+                            Table {booking.tables.map((t: { table_number: any }) => t.table_number).join(", ")}
+                          </span>
+                          {onAssignTable && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onAssignTable(booking.id)
+                              }}
+                              className="h-7 tablet:h-8 px-2 text-xs tablet:text-sm"
+                            >
+                              Switch
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="destructive" className="px-3 py-1 text-sm tablet:text-base font-semibold">
+                            No table assigned
+                          </Badge>
+                          {onAssignTable && ['confirmed', 'pending', 'arrived'].includes(booking.status) && (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onAssignTable(booking.id)
+                              }}
+                              className="h-7 tablet:h-8 px-3 text-xs tablet:text-sm bg-primary hover:bg-primary/90"
+                            >
+                              Assign
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
+                  
+                  {/* Contact info */}
+                  <div className="flex items-center gap-3 mt-2">
+                    <Phone className="h-4 w-4 tablet:h-5 tablet:w-5 text-gray-500 flex-shrink-0" />
+                    <span className="text-sm tablet:text-base text-gray-600 font-medium truncate">
+                      {formatGuestPhone(booking)}
+                    </span>
+                  </div>
+                </div>
               </div>
 
               {/* Request expiry timer - Enhanced visibility */}
