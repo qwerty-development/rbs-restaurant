@@ -1,29 +1,35 @@
-// Service Worker v3.0 - Enhanced with keep-alive and recovery mechanisms
-const CACHE_NAME = 'restaurant-pwa-v3';
-const NOTIFICATION_CHECK_INTERVAL = 30000; // Check every 30 seconds
-const HEARTBEAT_INTERVAL = 25000; // Send heartbeat every 25 seconds
+// Service Worker v3.1 - Enhanced with aggressive keep-alive to prevent numb state
+const CACHE_NAME = 'restaurant-pwa-v3.1';
+const NOTIFICATION_CHECK_INTERVAL = 15000; // Check every 15 seconds (more frequent)
+const HEARTBEAT_INTERVAL = 10000; // Send heartbeat every 10 seconds (more aggressive)
 const SUBSCRIPTION_REFRESH_INTERVAL = 3600000; // Refresh subscription every hour
+const KEEP_ALIVE_INTERVAL = 5000; // Ultra aggressive keep-alive every 5 seconds
+const CRITICAL_SYNC_INTERVAL = 8000; // Critical data sync every 8 seconds
 
 // Keep track of active intervals
 let notificationCheckInterval = null;
 let heartbeatInterval = null;
 let subscriptionRefreshInterval = null;
+let keepAliveInterval = null;
+let criticalSyncInterval = null;
 let lastNotificationCheck = Date.now();
 let isCheckingNotifications = false;
+let lastActivity = Date.now();
+let isAppVisible = true;
 
 // Install event
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker v3.0...');
+  console.log('[SW] Installing service worker v3.1 with aggressive keep-alive...');
   self.skipWaiting(); // Force immediate activation
 });
 
 // Activate event
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker v3.0...');
+  console.log('[SW] Activating service worker v3.1 with aggressive keep-alive...');
   event.waitUntil(
     Promise.all([
       self.clients.claim(), // Take control immediately
-      startBackgroundTasks(), // Start background tasks
+      startBackgroundTasks(), // Start aggressive background tasks
       checkForPendingNotifications() // Check for any pending notifications
     ])
   );
@@ -31,31 +37,42 @@ self.addEventListener('activate', (event) => {
 
 // Start all background tasks
 async function startBackgroundTasks() {
-  console.log('[SW] Starting background tasks...');
-  
+  console.log('[SW] Starting aggressive background tasks to prevent numb state...');
+
   // Clear any existing intervals
   stopBackgroundTasks();
-  
+
   // Start notification checking
   notificationCheckInterval = setInterval(async () => {
     if (!isCheckingNotifications) {
       await checkForPendingNotifications();
     }
   }, NOTIFICATION_CHECK_INTERVAL);
-  
+
   // Start heartbeat
   heartbeatInterval = setInterval(async () => {
     await sendHeartbeat();
   }, HEARTBEAT_INTERVAL);
-  
+
   // Start subscription refresh
   subscriptionRefreshInterval = setInterval(async () => {
     await refreshSubscription();
   }, SUBSCRIPTION_REFRESH_INTERVAL);
-  
+
+  // AGGRESSIVE KEEP-ALIVE: Ultra frequent pings to prevent service worker termination
+  keepAliveInterval = setInterval(async () => {
+    await keepServiceWorkerAlive();
+  }, KEEP_ALIVE_INTERVAL);
+
+  // CRITICAL DATA SYNC: Frequent syncing of essential restaurant data
+  criticalSyncInterval = setInterval(async () => {
+    await performCriticalDataSync();
+  }, CRITICAL_SYNC_INTERVAL);
+
   // Initial checks
   await checkForPendingNotifications();
   await sendHeartbeat();
+  await keepServiceWorkerAlive();
 }
 
 // Stop all background tasks
@@ -63,49 +80,35 @@ function stopBackgroundTasks() {
   if (notificationCheckInterval) clearInterval(notificationCheckInterval);
   if (heartbeatInterval) clearInterval(heartbeatInterval);
   if (subscriptionRefreshInterval) clearInterval(subscriptionRefreshInterval);
+  if (keepAliveInterval) clearInterval(keepAliveInterval);
+  if (criticalSyncInterval) clearInterval(criticalSyncInterval);
 }
 
 // Check for pending notifications from server
 async function checkForPendingNotifications() {
   if (isCheckingNotifications) return;
-  
+
   isCheckingNotifications = true;
   const now = Date.now();
-  
+
   // Don't check too frequently
   if (now - lastNotificationCheck < 10000) {
     isCheckingNotifications = false;
     return;
   }
-  
+
   lastNotificationCheck = now;
-  
+
   try {
     console.log('[SW] Checking for pending notifications...');
-    
-    const response = await fetch('/api/notifications/check-pending', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        timestamp: now,
-        source: 'service-worker'
-      })
+
+    // TODO: Implement notification checking endpoint when available
+    // For now, just wake up the main thread to check for updates
+    broadcastToClients({
+      type: 'FORCE_DATA_REFRESH',
+      reason: 'notification_check'
     });
-    
-    if (response.ok) {
-      const data = await response.json();
-      
-      if (data.notifications && data.notifications.length > 0) {
-        console.log(`[SW] Found ${data.notifications.length} pending notifications`);
-        
-        // Display each notification
-        for (const notif of data.notifications) {
-          await showNotification(notif);
-        }
-      }
-    }
+
   } catch (error) {
     console.error('[SW] Error checking notifications:', error);
   } finally {
@@ -116,27 +119,21 @@ async function checkForPendingNotifications() {
 // Send heartbeat to keep connection alive
 async function sendHeartbeat() {
   try {
-    const response = await fetch('/api/notifications/heartbeat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        timestamp: Date.now(),
-        sw_version: '3.0'
-      })
+    console.log('[SW] Heartbeat - keeping service worker alive');
+
+    // Wake up main thread to ensure it's responsive
+    broadcastToClients({
+      type: 'SERVICE_WORKER_HEARTBEAT',
+      timestamp: Date.now(),
+      sw_version: '3.0'
     });
-    
-    if (response.ok) {
-      const data = await response.json();
-      
-      // Process any commands from server
-      if (data.command === 'check_notifications') {
-        await checkForPendingNotifications();
-      } else if (data.command === 'refresh_subscription') {
-        await refreshSubscription();
-      }
-    }
+
+    // Force data refresh to ensure real-time connection is active
+    broadcastToClients({
+      type: 'FORCE_DATA_REFRESH',
+      reason: 'heartbeat_keepalive'
+    });
+
   } catch (error) {
     console.error('[SW] Heartbeat error:', error);
   }
@@ -146,40 +143,107 @@ async function sendHeartbeat() {
 async function refreshSubscription() {
   try {
     console.log('[SW] Refreshing push subscription...');
-    
+
     const subscription = await self.registration.pushManager.getSubscription();
-    
+
     if (subscription) {
-      // Unsubscribe and resubscribe to refresh
-      await subscription.unsubscribe();
-      
-      // Wait a bit before resubscribing
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Resubscribe
-      const newSubscription = await self.registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(
-          'BKxvEr8wqJRJCN0mKfOCiT4VkCEo4VVmeATKUUGMEQ0E4H0ciBvRiWtMsJHxFmwVIdqy6ii9kwNgC7y7eoQXLzw'
-        )
+      console.log('[SW] Current subscription exists, notifying main thread');
+
+      // Notify main thread about subscription status
+      broadcastToClients({
+        type: 'PUSH_SUBSCRIPTION_STATUS',
+        hasSubscription: true,
+        timestamp: Date.now()
       });
-      
-      // Send to server
-      await fetch('/api/notifications/refresh-subscription', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          subscription: newSubscription.toJSON(),
-          timestamp: Date.now()
-        })
+
+      // TODO: Implement subscription refresh endpoint when available
+      // For now, just ensure the subscription is active
+      console.log('[SW] Subscription appears active');
+    } else {
+      console.log('[SW] No active subscription found');
+
+      // Notify main thread that subscription is missing
+      broadcastToClients({
+        type: 'PUSH_SUBSCRIPTION_STATUS',
+        hasSubscription: false,
+        timestamp: Date.now()
       });
-      
-      console.log('[SW] Subscription refreshed successfully');
     }
   } catch (error) {
     console.error('[SW] Failed to refresh subscription:', error);
+  }
+}
+
+// AGGRESSIVE KEEP-ALIVE: Prevent service worker termination
+async function keepServiceWorkerAlive() {
+  try {
+    lastActivity = Date.now();
+
+    // Ultra-aggressive approach: multiple methods to stay alive
+
+    // 1. Broadcast to all clients to ensure bidirectional communication
+    broadcastToClients({
+      type: 'SERVICE_WORKER_KEEP_ALIVE',
+      timestamp: lastActivity,
+      sw_version: '3.1'
+    });
+
+    // 2. Force main thread to respond (ping-pong mechanism)
+    broadcastToClients({
+      type: 'PING_RESPONSE_REQUIRED',
+      timestamp: lastActivity
+    });
+
+    // 3. Dummy fetch to keep network stack active (prevents iOS killing)
+    try {
+      await fetch('/favicon.ico', {
+        method: 'HEAD',
+        cache: 'no-cache',
+        signal: AbortSignal.timeout(2000)
+      });
+    } catch (e) {
+      // Ignore fetch errors, this is just to keep network active
+    }
+
+    // 4. Console activity to show service worker is alive
+    console.log(`[SW] KEEP-ALIVE: ${new Date().toISOString()} - SW Active`);
+
+  } catch (error) {
+    console.error('[SW] Keep-alive error:', error);
+  }
+}
+
+// CRITICAL DATA SYNC: Essential restaurant operations data
+async function performCriticalDataSync() {
+  try {
+    const now = Date.now();
+
+    // Only sync if we have restaurant data
+    if (!connectionHealthData.restaurantId) {
+      console.log('[SW] No restaurant ID for critical sync');
+      return;
+    }
+
+    console.log('[SW] CRITICAL SYNC: Checking for urgent updates...');
+
+    // Force main thread to refresh critical data
+    broadcastToClients({
+      type: 'CRITICAL_DATA_SYNC',
+      timestamp: now,
+      reason: 'prevent_numb_state',
+      priority: 'HIGH'
+    });
+
+    // If connection has been unhealthy, trigger booking sync
+    if (connectionHealthData.unhealthyMinutes >= 1) {
+      await syncBookingsData(connectionHealthData.restaurantId);
+    }
+
+    // Update activity timestamp
+    lastActivity = now;
+
+  } catch (error) {
+    console.error('[SW] Critical sync error:', error);
   }
 }
 
@@ -213,17 +277,9 @@ async function showNotification(data) {
       data.title || 'New Notification',
       options
     );
-    
-    // Mark as delivered
-    await fetch('/api/notifications/mark-delivered', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        notification_id: data.notification_id
-      })
-    });
+
+    // TODO: Implement mark-delivered endpoint when available
+    console.log('[SW] Notification shown:', data.title || 'New Notification');
   } catch (error) {
     console.error('[SW] Error showing notification:', error);
   }
@@ -312,18 +368,7 @@ self.addEventListener('periodicsync', (event) => {
   }
 });
 
-// Message event for client communication
-self.addEventListener('message', async (event) => {
-  console.log('[SW] Message received:', event.data);
-  
-  if (event.data?.type === 'CHECK_NOTIFICATIONS') {
-    await checkForPendingNotifications();
-  } else if (event.data?.type === 'START_BACKGROUND_TASKS') {
-    await startBackgroundTasks();
-  } else if (event.data?.type === 'REFRESH_SUBSCRIPTION') {
-    await refreshSubscription();
-  }
-});
+// Message event for client communication - removed duplicate, using enhanced version below
 
 // Fetch event - keep service worker alive
 self.addEventListener('fetch', (event) => {
@@ -341,7 +386,7 @@ function urlBase64ToUint8Array(base64String) {
     .replace(/-/g, '+')
     .replace(/_/g, '/');
   
-  const rawData = window.atob(base64);
+  const rawData = self.atob(base64);
   const outputArray = new Uint8Array(rawData.length);
   
   for (let i = 0; i < rawData.length; ++i) {
@@ -525,6 +570,38 @@ self.addEventListener('message', async (event) => {
       stopConnectionRecovery();
       break;
 
+    // ANTI-NUMB MECHANISMS
+    case 'PING_REQUEST':
+      // Respond to ping to prove service worker is alive
+      broadcastToClients({
+        type: 'PONG_RESPONSE',
+        timestamp: Date.now(),
+        originalPing: data?.timestamp
+      });
+      lastActivity = Date.now();
+      break;
+
+    case 'APP_VISIBILITY_CHANGE':
+      // Track app visibility to adjust sync frequency
+      isAppVisible = data?.isVisible || false;
+      console.log('[SW] App visibility changed:', isAppVisible ? 'visible' : 'hidden');
+
+      if (isAppVisible) {
+        // App became visible - restart all tasks aggressively
+        await startBackgroundTasks();
+        await keepServiceWorkerAlive();
+        await performCriticalDataSync();
+      }
+      break;
+
+    case 'EMERGENCY_WAKE_UP':
+      // Emergency wake-up call from main thread
+      console.log('[SW] EMERGENCY WAKE-UP received');
+      lastActivity = Date.now();
+      await startBackgroundTasks();
+      await keepServiceWorkerAlive();
+      break;
+
     default:
       console.log('[SW] Unknown message type:', type);
   }
@@ -562,3 +639,44 @@ setInterval(() => {
 
 // Start background tasks immediately
 startBackgroundTasks();
+
+// FINAL SAFETY NET: Ultra-aggressive fallback interval that cannot be stopped
+// This is the last line of defense against the service worker going numb
+setInterval(async () => {
+  try {
+    const now = Date.now();
+    const timeSinceLastActivity = now - lastActivity;
+
+    // If no activity for 30 seconds, trigger emergency procedures
+    if (timeSinceLastActivity > 30000) {
+      console.log('[SW] EMERGENCY: No activity for 30s, triggering revival procedures');
+
+      // Force all intervals to restart
+      await startBackgroundTasks();
+
+      // Emergency wake-up call to main thread
+      broadcastToClients({
+        type: 'SERVICE_WORKER_EMERGENCY_REVIVAL',
+        timeSinceLastActivity,
+        timestamp: now,
+        message: 'Service worker was dormant for 30+ seconds'
+      });
+
+      // Force data refresh
+      broadcastToClients({
+        type: 'EMERGENCY_DATA_REFRESH',
+        reason: 'service_worker_revival'
+      });
+
+      lastActivity = now;
+    }
+
+    // Always keep some activity going
+    await keepServiceWorkerAlive();
+
+  } catch (error) {
+    console.error('[SW] Emergency interval error:', error);
+  }
+}, 15000); // Every 15 seconds - emergency fallback
+
+console.log('[SW] Service Worker v3.1 fully loaded with aggressive anti-numb protection');
