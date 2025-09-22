@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils"
 import { getFirstName } from "@/lib/utils"
 import { useNotifications } from "@/lib/contexts/notification-context"
 import { PushNotificationPermission } from "@/components/notifications/push-notification-permission"
+import { BookingActionDialog } from "@/components/bookings/booking-action-dialog"
 import {
   Calendar as CalendarIcon,
   Search,
@@ -54,6 +55,17 @@ export default function BasicDashboardPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [userId, setUserId] = useState<string>("")
+  const [actionDialog, setActionDialog] = useState<{
+    isOpen: boolean
+    action: "decline" | "cancel"
+    bookingId: string | null
+    booking: any | null
+  }>({
+    isOpen: false,
+    action: "decline",
+    bookingId: null,
+    booking: null
+  })
 
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -639,15 +651,15 @@ export default function BasicDashboardPage() {
 
   // Update booking status using Basic tier API
   const updateBookingMutation = useMutation({
-    mutationFn: async ({ bookingId, status }: { bookingId: string, status: string }) => {
-      console.log('🔄 Updating booking:', { bookingId, status })
-      
+    mutationFn: async ({ bookingId, status, note }: { bookingId: string, status: string, note?: string }) => {
+      console.log('🔄 Updating booking:', { bookingId, status, note })
+
       const response = await fetch('/api/basic-booking-update', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ bookingId, status })
+        body: JSON.stringify({ bookingId, status, note })
       })
 
       if (!response.ok) {
@@ -748,9 +760,50 @@ export default function BasicDashboardPage() {
   }
 
   const handleDecline = (booking: any) => {
-    updateBookingMutation.mutate({
+    setActionDialog({
+      isOpen: true,
+      action: "decline",
       bookingId: booking.id,
-      status: 'declined_by_restaurant'
+      booking: booking
+    })
+  }
+
+  const handleCancelBooking = (booking: any) => {
+    setActionDialog({
+      isOpen: true,
+      action: "cancel",
+      bookingId: booking.id,
+      booking: booking
+    })
+  }
+
+  const handleActionConfirm = (note: string) => {
+    if (!actionDialog.bookingId) return
+
+    const status = actionDialog.action === "decline"
+      ? "declined_by_restaurant"
+      : "cancelled_by_restaurant"
+
+    updateBookingMutation.mutate({
+      bookingId: actionDialog.bookingId,
+      status,
+      note
+    })
+
+    setActionDialog({
+      isOpen: false,
+      action: "decline",
+      bookingId: null,
+      booking: null
+    })
+  }
+
+  const handleActionCancel = () => {
+    setActionDialog({
+      isOpen: false,
+      action: "decline",
+      bookingId: null,
+      booking: null
     })
   }
 
@@ -1247,7 +1300,7 @@ export default function BasicDashboardPage() {
                               Mark No Show
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => handleStatusChange(booking, 'cancelled_by_restaurant')}
+                              onClick={() => handleCancelBooking(booking)}
                               className="text-red-600"
                             >
                               <XCircle className="h-4 w-4 mr-2" />
@@ -1410,7 +1463,7 @@ export default function BasicDashboardPage() {
                             Mark No Show
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => handleStatusChange(booking, 'cancelled_by_restaurant')}
+                            onClick={() => handleCancelBooking(booking)}
                             className="text-red-600"
                           >
                             <XCircle className="h-4 w-4 mr-2" />
@@ -1426,6 +1479,23 @@ export default function BasicDashboardPage() {
           ))
         )}
       </div>
+
+      {/* Booking Action Dialog */}
+      <BookingActionDialog
+        open={actionDialog.isOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleActionCancel()
+          }
+        }}
+        onConfirm={handleActionConfirm}
+        onCancel={handleActionCancel}
+        action={actionDialog.action}
+        guestName={actionDialog.booking ? (actionDialog.booking.guest_name || actionDialog.booking.profiles?.full_name) : undefined}
+        bookingTime={actionDialog.booking ? format(parseISO(actionDialog.booking.booking_time), "MMM d, yyyy 'at' h:mm a") : undefined}
+        partySize={actionDialog.booking?.party_size}
+        isLoading={updateBookingMutation.isPending}
+      />
     </div>
   )
 }

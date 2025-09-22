@@ -5,7 +5,7 @@ import { reverseOfferRedemption } from '@/lib/services/booking-operations'
 
 export async function POST(request: NextRequest) {
   try {
-    const { bookingId, status } = await request.json()
+    const { bookingId, status, note } = await request.json()
     
     // Validate that status is one of the allowed booking statuses
     const allowedStatuses = [
@@ -94,13 +94,33 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // Prepare update data with appropriate note fields
+    const updateData: any = {
+      status,
+      updated_at: new Date().toISOString()
+    }
+
+    // Add note to appropriate field based on status
+    if (status === 'declined_by_restaurant') {
+      updateData.declined_at = new Date().toISOString()
+      updateData.declined_by_staff = user.id
+      updateData.declined_reason = 'Declined by restaurant'
+      if (note) {
+        updateData.decline_note = note
+      }
+    } else if (status === 'cancelled_by_restaurant') {
+      updateData.cancelled_at = new Date().toISOString()
+      updateData.cancelled_by_staff = user.id
+      updateData.cancellation_reason = 'Cancelled by restaurant'
+      if (note) {
+        updateData.cancellation_note = note
+      }
+    }
+
     // Update the booking status
     const { error: updateError } = await supabase
       .from('bookings')
-      .update({
-        status,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', bookingId)
 
     if (updateError) {
