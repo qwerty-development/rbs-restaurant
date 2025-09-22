@@ -116,6 +116,17 @@ export interface Restaurant {
     is_shared_booking: boolean
     decline_note: string | null
     preferred_section: string | null
+
+    // Cancellation fields
+    cancelled_at: string | null
+    cancelled_by_staff: string | null
+    cancellation_reason: string | null
+    cancellation_note: string | null
+
+    // Decline fields
+    declined_at: string | null
+    declined_by_staff: string | null
+    declined_reason: string | null
     
     // Relations
     user?: {

@@ -1,4 +1,4 @@
-// components/bookings/decline-note-dialog.tsx
+// components/bookings/booking-action-dialog.tsx
 "use client"
 
 import { useState } from "react"
@@ -14,9 +14,9 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { AlertTriangle, MessageSquare } from "lucide-react"
+import { AlertTriangle, MessageSquare, XCircle, Ban } from "lucide-react"
 
-// Predefined decline/cancellation reasons
+// Predefined decline reasons
 const DECLINE_REASONS = [
   { value: "fully_booked", label: "Fully booked at that time" },
   { value: "staff_shortage", label: "Staff shortage" },
@@ -30,35 +30,55 @@ const DECLINE_REASONS = [
   { value: "other", label: "Other (specify below)" },
 ]
 
-interface DeclineNoteDialogProps {
+// Predefined cancellation reasons
+const CANCELLATION_REASONS = [
+  { value: "emergency_closure", label: "Emergency closure" },
+  { value: "staff_emergency", label: "Staff emergency" },
+  { value: "equipment_failure", label: "Equipment failure" },
+  { value: "power_outage", label: "Power outage" },
+  { value: "water_issue", label: "Water/plumbing issue" },
+  { value: "health_department", label: "Health department closure" },
+  { value: "fire_department", label: "Fire department closure" },
+  { value: "severe_weather", label: "Severe weather conditions" },
+  { value: "supplier_issue", label: "Critical supplier issue" },
+  { value: "double_booking", label: "Double booking error" },
+  { value: "other", label: "Other (specify below)" },
+]
+
+interface BookingActionDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: (note: string) => void
   onCancel: () => void
+  action: "decline" | "cancel"
   guestName?: string
   isLoading?: boolean
   bookingTime?: string
   partySize?: number
 }
 
-export function DeclineNoteDialog({
+export function BookingActionDialog({
   open,
   onOpenChange,
   onConfirm,
   onCancel,
+  action,
   guestName,
   isLoading = false,
   bookingTime,
   partySize
-}: DeclineNoteDialogProps) {
+}: BookingActionDialogProps) {
   const [selectedReason, setSelectedReason] = useState("")
   const [customNote, setCustomNote] = useState("")
+
+  const reasons = action === "decline" ? DECLINE_REASONS : CANCELLATION_REASONS
+  const isDecline = action === "decline"
 
   const handleConfirm = () => {
     let finalNote = ""
 
     if (selectedReason && selectedReason !== "other") {
-      const reasonLabel = DECLINE_REASONS.find(r => r.value === selectedReason)?.label
+      const reasonLabel = reasons.find(r => r.value === selectedReason)?.label
       finalNote = reasonLabel || ""
 
       // Add custom note if provided
@@ -95,12 +115,18 @@ export function DeclineNoteDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader className="space-y-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-              <AlertTriangle className="h-6 w-6 text-red-600" />
+            <div className={`flex h-12 w-12 items-center justify-center rounded-full ${
+              isDecline ? "bg-red-100" : "bg-orange-100"
+            }`}>
+              {isDecline ? (
+                <XCircle className={`h-6 w-6 ${isDecline ? "text-red-600" : "text-orange-600"}`} />
+              ) : (
+                <Ban className="h-6 w-6 text-orange-600" />
+              )}
             </div>
             <div>
               <DialogTitle className="text-lg font-semibold">
-                Decline Booking Request
+                {isDecline ? "Decline Booking Request" : "Cancel Booking"}
               </DialogTitle>
               <DialogDescription className="text-sm text-muted-foreground">
                 {guestName && (
@@ -116,17 +142,25 @@ export function DeclineNoteDialog({
             </div>
           </div>
         </DialogHeader>
-        
+
         <div className="space-y-4">
-          <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
+          <div className={`rounded-lg border p-3 ${
+            isDecline ? "border-red-200 bg-red-50" : "border-orange-200 bg-orange-50"
+          }`}>
             <div className="flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />
+              <AlertTriangle className={`h-4 w-4 mt-0.5 flex-shrink-0 ${
+                isDecline ? "text-red-600" : "text-orange-600"
+              }`} />
               <div className="text-sm">
-                <p className="font-medium text-orange-800">
+                <p className={`font-medium ${
+                  isDecline ? "text-red-800" : "text-orange-800"
+                }`}>
                   This action cannot be undone
                 </p>
-                <p className="text-orange-700 mt-1">
-                  The guest will be automatically notified of the decline. You can optionally add a note explaining the reason.
+                <p className={`mt-1 ${
+                  isDecline ? "text-red-700" : "text-orange-700"
+                }`}>
+                  The guest will be automatically notified of the {action}. You can optionally add a note explaining the reason.
                 </p>
               </div>
             </div>
@@ -134,9 +168,9 @@ export function DeclineNoteDialog({
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="decline-reason" className="flex items-center gap-2">
+              <Label htmlFor="reason-select" className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
-                Reason for Decline
+                Reason for {isDecline ? "Decline" : "Cancellation"}
               </Label>
               <Select
                 value={selectedReason}
@@ -147,7 +181,7 @@ export function DeclineNoteDialog({
                   <SelectValue placeholder="Select a reason..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {DECLINE_REASONS.map((reason) => (
+                  {reasons.map((reason) => (
                     <SelectItem key={reason.value} value={reason.value}>
                       {reason.label}
                     </SelectItem>
@@ -158,15 +192,15 @@ export function DeclineNoteDialog({
 
             {(selectedReason === "other" || selectedReason) && (
               <div className="space-y-2">
-                <Label htmlFor="decline-note" className="flex items-center gap-2">
+                <Label htmlFor="custom-note" className="flex items-center gap-2">
                   <MessageSquare className="h-4 w-4" />
                   {selectedReason === "other" ? "Custom Reason" : "Additional Notes (Optional)"}
                 </Label>
                 <Textarea
-                  id="decline-note"
+                  id="custom-note"
                   placeholder={
                     selectedReason === "other"
-                      ? "Please specify the reason for declining..."
+                      ? `Please specify the reason for ${action}...`
                       : "Add any additional context or alternative suggestions..."
                   }
                   value={customNote}
@@ -198,7 +232,7 @@ export function DeclineNoteDialog({
             disabled={isLoading}
             className="w-full sm:w-auto"
           >
-            {isLoading ? "Declining..." : "Decline Booking"}
+            {isLoading ? `${isDecline ? "Declining" : "Cancelling"}...` : `${isDecline ? "Decline" : "Cancel"} Booking`}
           </Button>
         </DialogFooter>
       </DialogContent>

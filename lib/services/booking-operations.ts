@@ -76,7 +76,7 @@ export async function declineBooking(bookingId: string, staffId: string, reason?
     const { data: booking, error: updateError } = await supabase
       .from('bookings')
       .update({
-        status: 'declined',
+        status: 'declined_by_restaurant',
         declined_at: new Date().toISOString(),
         declined_by_staff: staffId,
         declined_reason: reason || 'Declined by restaurant',
@@ -276,7 +276,7 @@ export async function reverseOfferRedemption(supabase: any, bookingId: string, a
 /**
  * Cancel a booking (by restaurant)
  */
-export async function cancelBooking(bookingId: string, staffId: string, reason?: string): Promise<BookingActionResult> {
+export async function cancelBooking(bookingId: string, staffId: string, reason?: string, cancellation_note?: string): Promise<BookingActionResult> {
   try {
     const supabase = createClient()
 
@@ -287,6 +287,7 @@ export async function cancelBooking(bookingId: string, staffId: string, reason?:
         cancelled_at: new Date().toISOString(),
         cancelled_by_staff: staffId,
         cancellation_reason: reason || 'Cancelled by restaurant',
+        cancellation_note,
         updated_at: new Date().toISOString()
       })
       .eq('id', bookingId)

@@ -267,12 +267,13 @@ export function useDeclineBooking() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ bookingId, staffId, reason }: { 
-      bookingId: string; 
-      staffId: string; 
-      reason?: string 
+    mutationFn: async ({ bookingId, staffId, reason, decline_note }: {
+      bookingId: string;
+      staffId: string;
+      reason?: string;
+      decline_note?: string;
     }) => {
-      return await declineBooking(bookingId, staffId, reason)
+      return await declineBooking(bookingId, staffId, reason, decline_note)
     },
     onSuccess: (result, { bookingId }) => {
       if (result.success) {
@@ -312,12 +313,13 @@ export function useCancelBooking() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ bookingId, staffId, reason }: { 
-      bookingId: string; 
-      staffId: string; 
-      reason?: string 
+    mutationFn: async ({ bookingId, staffId, reason, cancellation_note }: {
+      bookingId: string;
+      staffId: string;
+      reason?: string;
+      cancellation_note?: string;
     }) => {
-      return await cancelBooking(bookingId, staffId, reason)
+      return await cancelBooking(bookingId, staffId, reason, cancellation_note)
     },
     onSuccess: (result, { bookingId }) => {
       if (result.success) {
