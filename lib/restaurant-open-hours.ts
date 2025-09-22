@@ -1,7 +1,7 @@
 // lib/restaurant-open-hours.ts
 import { createClient } from '@/lib/supabase/client'
-import { format, addDays, isSameDay, parse, isAfter, isBefore } from 'date-fns'
-import type { RestaurantOpenHours, RestaurantStatus, RestaurantHours } from '@/types'
+import { format, addDays, isSameDay } from 'date-fns'
+import type { RestaurantOpenHours, RestaurantStatus } from '@/types'
 
 export class RestaurantOpenHoursManager {
   private supabase = createClient()
@@ -44,13 +44,33 @@ export class RestaurantOpenHoursManager {
         .maybeSingle()
 
       if (closures) {
-        const result = {
-          isOpen: false,
-          reason: closures.reason || 'Temporarily closed',
-          acceptsWalkins: false
+        // If closure has time fields, check if current time falls within closure hours
+        if (closures.start_time && closures.end_time) {
+          const isWithinClosureHours = this.isTimeWithinRange(
+            timeStr,
+            closures.start_time,
+            closures.end_time
+          )
+
+          if (isWithinClosureHours) {
+            const result = {
+              isOpen: false,
+              reason: closures.reason || 'Temporarily closed',
+              acceptsWalkins: false
+            }
+            this.cache.set(cacheKey, { data: result, timestamp: Date.now() })
+            return result
+          }
+        } else {
+          // Full-day closure (original behavior)
+          const result = {
+            isOpen: false,
+            reason: closures.reason || 'Temporarily closed',
+            acceptsWalkins: false
+          }
+          this.cache.set(cacheKey, { data: result, timestamp: Date.now() })
+          return result
         }
-        this.cache.set(cacheKey, { data: result, timestamp: Date.now() })
-        return result
       }
 
       // Get open hours for today
@@ -179,7 +199,6 @@ export class RestaurantOpenHoursManager {
   } | null> {
     try {
       const startTime = fromTime || new Date()
-      const daysToCheck = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
 
       // Check the next 7 days
       for (let i = 0; i < 7; i++) {
@@ -196,7 +215,10 @@ export class RestaurantOpenHoursManager {
           .gte('end_date', dateStr)
           .maybeSingle()
 
-        if (closures) continue // Skip closed days
+        // Skip days that are fully closed
+        if (closures && !closures.start_time && !closures.end_time) {
+          continue // Full-day closure
+        }
 
         // Get open hours for this day
         const { data: openHours } = await this.supabase

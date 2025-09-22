@@ -16,8 +16,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea"
 import { TimeInput12H } from "@/components/ui/time-input-12h"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Form,
   FormControl,
@@ -63,6 +69,9 @@ interface Closure {
   start_date: Date
   end_date: Date
   reason: string
+  is_all_day: boolean
+  start_time?: string
+  end_time?: string
 }
 
 // Schema for a single shift
@@ -99,7 +108,22 @@ const closureSchema = z.object({
   start_date: z.date(),
   end_date: z.date(),
   reason: z.string().min(1, "Reason is required"),
-})
+  is_all_day: z.boolean().default(true),
+  start_time: z.string().optional(),
+  end_time: z.string().optional(),
+}).refine(
+  (data) => {
+    // If it's not an all-day closure, start_time and end_time are required
+    if (!data.is_all_day) {
+      return data.start_time && data.end_time
+    }
+    return true
+  },
+  {
+    message: "Start time and end time are required for partial-day closures",
+    path: ["start_time"],
+  }
+)
 
 type RegularHoursFormData = z.infer<typeof regularHoursSchema>
 type SpecialHoursFormData = z.infer<typeof specialHoursSchema>
@@ -107,12 +131,20 @@ type ClosureFormData = z.infer<typeof closureSchema>
 
 const DAYS_OF_WEEK = [
   "monday",
-  "tuesday", 
+  "tuesday",
   "wednesday",
   "thursday",
   "friday",
   "saturday",
   "sunday",
+] as const
+
+const CLOSURE_REASONS = [
+  "Sold Out",
+  "Maintenance",
+  "Renovation",
+  "Vacation",
+  "Temporarily Closed",
 ] as const
 
 export default function EnhancedAvailabilitySettingsPage() {
@@ -194,6 +226,11 @@ export default function EnhancedAvailabilitySettingsPage() {
   // Closure form
   const closureForm = useForm<ClosureFormData>({
     resolver: zodResolver(closureSchema),
+    defaultValues: {
+      is_all_day: true,
+      start_time: "09:00",
+      end_time: "17:00",
+    },
   })
 
   // Update forms when data loads
@@ -320,6 +357,8 @@ export default function EnhancedAvailabilitySettingsPage() {
           start_date: format(data.start_date, 'yyyy-MM-dd'),
           end_date: format(data.end_date, 'yyyy-MM-dd'),
           reason: data.reason,
+          start_time: data.is_all_day ? null : data.start_time,
+          end_time: data.is_all_day ? null : data.end_time,
           created_by: user.id,
         })
 
@@ -432,9 +471,7 @@ export default function EnhancedAvailabilitySettingsPage() {
                         </div>
                         
                         <div className="space-y-3">
-                          {shifts.map((_, shiftIndex) => {
-                            const shiftName = shifts[shiftIndex]?.name
-                            return (
+                          {shifts.map((_, shiftIndex) => (
                             <div key={shiftIndex} className="flex items-center gap-4 p-4 border rounded-lg">
                               <div className="flex items-center space-x-2">
                                 <FormField
@@ -532,8 +569,7 @@ export default function EnhancedAvailabilitySettingsPage() {
                                 </Button>
                               )}
                             </div>
-                          )
-                          })}
+                          ))}
                         </div>
                       </div>
                     )
@@ -652,10 +688,20 @@ export default function EnhancedAvailabilitySettingsPage() {
                         <p className="font-medium flex items-center gap-2">
                           <AlertTriangle className="h-4 w-4 text-red-600" />
                           Closed: {format(new Date(closure.start_date), 'MMM d, yyyy')} - {format(new Date(closure.end_date), 'MMM d, yyyy')}
+                          {closure.start_time && closure.end_time && (
+                            <span className="text-sm font-normal">
+                              ({formatTimeRange12Hour(closure.start_time, closure.end_time)})
+                            </span>
+                          )}
                         </p>
                         <p className="text-sm text-muted-foreground">
                           Reason: {closure.reason}
                         </p>
+                        {closure.start_time && closure.end_time && (
+                          <p className="text-xs text-muted-foreground">
+                            Partial closure: {formatTimeRange12Hour(closure.start_time, closure.end_time)} daily
+                          </p>
+                        )}
                       </div>
                       <Button
                         variant="ghost"
@@ -850,16 +896,84 @@ export default function EnhancedAvailabilitySettingsPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Reason</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="e.g., Renovations, Staff vacation"
-                        {...field}
-                      />
-                    </FormControl>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select a reason for closure" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {CLOSURE_REASONS.map((reason) => (
+                          <SelectItem key={reason} value={reason}>
+                            {reason}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={closureForm.control}
+                name="is_all_day"
+                render={({ field }) => (
+                  <FormItem className="flex items-center space-x-2">
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <FormLabel className="!mt-0">
+                      All day closure
+                    </FormLabel>
+                  </FormItem>
+                )}
+              />
+
+              {!closureForm.watch("is_all_day") && (
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={closureForm.control}
+                    name="start_time"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Start Time</FormLabel>
+                        <FormControl>
+                          <TimeInput12H
+                            value={field.value || ""}
+                            onChange={field.onChange}
+                            name={field.name}
+                            placeholder="9:00 AM"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={closureForm.control}
+                    name="end_time"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>End Time</FormLabel>
+                        <FormControl>
+                          <TimeInput12H
+                            value={field.value || ""}
+                            onChange={field.onChange}
+                            name={field.name}
+                            placeholder="5:00 PM"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
 
               <Button
                 type="submit"

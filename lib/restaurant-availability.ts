@@ -27,6 +27,8 @@ export interface Closure {
   start_date: string
   end_date: string
   reason: string
+  start_time?: string | null
+  end_time?: string | null
 }
 
 export class RestaurantAvailability {
@@ -72,12 +74,31 @@ export class RestaurantAvailability {
       }
 
       if (closures) {
-        const result = {
-          isOpen: false,
-          reason: closures.reason || 'Temporarily closed'
+        // If closure has time fields, check if current time falls within closure hours
+        if (closures.start_time && closures.end_time && time) {
+          const isWithinClosureHours = this.isTimeWithinRange(
+            time,
+            closures.start_time,
+            closures.end_time
+          )
+
+          if (isWithinClosureHours) {
+            const result = {
+              isOpen: false,
+              reason: closures.reason || 'Temporarily closed'
+            }
+            this.cache.set(cacheKey, { data: result, timestamp: Date.now() })
+            return result
+          }
+        } else if (!closures.start_time && !closures.end_time) {
+          // Full-day closure (original behavior)
+          const result = {
+            isOpen: false,
+            reason: closures.reason || 'Temporarily closed'
+          }
+          this.cache.set(cacheKey, { data: result, timestamp: Date.now() })
+          return result
         }
-        this.cache.set(cacheKey, { data: result, timestamp: Date.now() })
-        return result
       }
 
       // Check for special hours

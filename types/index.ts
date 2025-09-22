@@ -398,6 +398,8 @@ export interface RestaurantSection {
     start_date: string
     end_date: string
     reason: string
+    start_time?: string | null
+    end_time?: string | null
     created_at: string
     created_by: string
     // Relations
