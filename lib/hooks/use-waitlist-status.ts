@@ -186,18 +186,24 @@ export function useWaitlistSchedules(restaurantId: string | undefined) {
 
 // Helper function to format schedule for display
 export function formatScheduleDisplay(schedule: WaitlistSchedule): string {
-  const date = new Date(schedule.waitlist_date)
-  const dayName = date.toLocaleDateString('en', { weekday: 'long' })
-  const dateFormatted = date.toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })
-  
+  // Format date in Lebanon timezone
+  const date = new Date(schedule.waitlist_date + 'T00:00:00')
+  const dayName = date.toLocaleDateString('en', { weekday: 'long', timeZone: 'Asia/Beirut' })
+  const dateFormatted = date.toLocaleDateString('en', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'Asia/Beirut'
+  })
+
   // Handle both HH:MM and HH:MM:SS formats
-  const startTimeFormatted = schedule.start_time.length === 5 
-    ? `${schedule.start_time}:00` 
+  const startTimeFormatted = schedule.start_time.length === 5
+    ? `${schedule.start_time}:00`
     : schedule.start_time
-  const endTimeFormatted = schedule.end_time.length === 5 
-    ? `${schedule.end_time}:00` 
+  const endTimeFormatted = schedule.end_time.length === 5
+    ? `${schedule.end_time}:00`
     : schedule.end_time
-    
+
   const startTime = new Date(`2000-01-01T${startTimeFormatted}`).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
@@ -209,7 +215,7 @@ export function formatScheduleDisplay(schedule: WaitlistSchedule): string {
     hour12: true
   })
 
-  const timeRange = `${startTime} - ${endTime}`
+  const timeRange = `${startTime} - ${endTime} (Lebanon time)`
   const name = schedule.name ? ` (${schedule.name})` : ''
 
   return `${dayName}, ${dateFormatted} ${timeRange}${name}`

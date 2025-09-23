@@ -73,7 +73,7 @@ export function WaitlistManager({
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState<string>("active")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
 
   // Dialog states
   const [showConvertDialog, setShowConvertDialog] = useState(false)
@@ -463,17 +463,31 @@ export function WaitlistManager({
                       )}
 
                       {entry.status === 'notified' && (
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            setSelectedEntry(entry)
-                            setShowConvertDialog(true)
-                          }}
-                          className="bg-green-600 hover:bg-green-700"
-                        >
-                          <CheckCircle className="h-4 w-4 mr-1" />
-                          Accept
-                        </Button>
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setSelectedEntry(entry)
+                              setShowConvertDialog(true)
+                            }}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Accept
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateStatusMutation.mutate({
+                              entryId: entry.id,
+                              newStatus: 'expired'
+                            })}
+                            disabled={updateStatusMutation.isPending}
+                          >
+                            <XCircle className="h-4 w-4 mr-1" />
+                            Reject
+                          </Button>
+                        </>
                       )}
                     </div>
                   </div>

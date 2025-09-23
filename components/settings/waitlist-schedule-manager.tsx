@@ -46,6 +46,30 @@ import {
 import { toast } from 'react-hot-toast'
 import { getRestaurantTier, isBasicTier } from '@/lib/utils/tier'
 
+// Lebanon timezone helper functions
+const LEBANON_TIMEZONE = 'Asia/Beirut'
+
+const getTodayInLebanon = () => {
+  return new Date().toLocaleDateString('en-CA', { timeZone: LEBANON_TIMEZONE })
+}
+
+const getTomorrowInLebanon = () => {
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  return tomorrow.toLocaleDateString('en-CA', { timeZone: LEBANON_TIMEZONE })
+}
+
+const formatDateForLebanon = (dateString: string) => {
+  const date = new Date(dateString + 'T00:00:00')
+  return date.toLocaleDateString('en', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: LEBANON_TIMEZONE
+  })
+}
+
 // Types
 interface WaitlistSchedule {
   id: string
@@ -65,12 +89,12 @@ interface WaitlistSchedule {
 // Form schema
 const waitlistScheduleSchema = z.object({
   waitlist_date: z.string().min(1, 'Date is required').refine((date) => {
-    const selectedDate = new Date(date)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    return selectedDate >= today
+    // Compare with Lebanon timezone date
+    const selectedDate = new Date(date + 'T00:00:00')
+    const todayInLebanon = getTodayInLebanon()
+    return date >= todayInLebanon
   }, {
-    message: "Date must be today or in the future"
+    message: "Date must be today or in the future (Lebanon time)"
   }),
   start_time: z.string().min(1, 'Start time is required'),
   end_time: z.string().min(1, 'End time is required'),
@@ -112,7 +136,7 @@ export function WaitlistScheduleManager({ restaurantId, tier }: WaitlistSchedule
   const form = useForm<WaitlistScheduleFormData>({
     resolver: zodResolver(waitlistScheduleSchema),
     defaultValues: {
-      waitlist_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Tomorrow
+      waitlist_date: getTomorrowInLebanon(), // Tomorrow in Lebanon time
       start_time: '18:00',
       end_time: '21:00',
       name: '',
@@ -253,12 +277,7 @@ export function WaitlistScheduleManager({ restaurantId, tier }: WaitlistSchedule
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString([], {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
+    return formatDateForLebanon(dateString)
   }
 
   if (isLoading) {
@@ -312,7 +331,7 @@ export function WaitlistScheduleManager({ restaurantId, tier }: WaitlistSchedule
                     {editingSchedule ? 'Edit Waitlist Schedule' : 'Add Waitlist Schedule'}
                   </DialogTitle>
                   <DialogDescription>
-                    Configure when booking requests should join the waitlist.
+                    Configure when booking requests should join the waitlist (times shown in Lebanon timezone).
                   </DialogDescription>
                 </DialogHeader>
 
@@ -328,12 +347,12 @@ export function WaitlistScheduleManager({ restaurantId, tier }: WaitlistSchedule
                           <FormControl>
                             <Input
                               type="date"
-                              min={new Date().toISOString().split('T')[0]}
+                              min={getTodayInLebanon()}
                               {...field}
                             />
                           </FormControl>
                           <FormDescription>
-                            Select the specific date when bookings should go to waitlist
+                            Select the specific date when bookings should go to waitlist (Lebanon timezone)
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -346,7 +365,7 @@ export function WaitlistScheduleManager({ restaurantId, tier }: WaitlistSchedule
                         name="start_time"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Start Time</FormLabel>
+                            <FormLabel>Start Time (Lebanon Time)</FormLabel>
                             <FormControl>
                               <Input type="time" {...field} />
                             </FormControl>
@@ -360,7 +379,7 @@ export function WaitlistScheduleManager({ restaurantId, tier }: WaitlistSchedule
                         name="end_time"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>End Time</FormLabel>
+                            <FormLabel>End Time (Lebanon Time)</FormLabel>
                             <FormControl>
                               <Input type="time" {...field} />
                             </FormControl>
