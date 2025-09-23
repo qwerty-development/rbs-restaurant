@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { Calendar } from "@/components/ui/calendar"
+
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { MultiDayCalendar } from "@/components/ui/multi-day-calendar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -28,6 +28,7 @@ import { getFirstName } from "@/lib/utils"
 import { useNotifications } from "@/lib/contexts/notification-context"
 import { PushNotificationPermission } from "@/components/notifications/push-notification-permission"
 import { BookingActionDialog } from "@/components/bookings/booking-action-dialog"
+import { WaitlistManager } from "@/components/basic/waitlist-manager"
 import {
   Calendar as CalendarIcon,
   Search,
@@ -66,6 +67,8 @@ export default function BasicDashboardPage() {
     bookingId: null,
     booking: null
   })
+
+  const [activeTab, setActiveTab] = useState<"bookings" | "waitlist">("bookings")
 
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -848,27 +851,29 @@ export default function BasicDashboardPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Booking Requests</h1>
+          <h1 className="text-3xl font-bold">Restaurant Dashboard</h1>
           <div className="space-y-1">
             <p className="text-muted-foreground">
-              {(() => {
+              {activeTab === 'bookings' ? (() => {
                 const pendingCount = bookings.filter(b => b.status === 'pending').length
                 if (pendingCount === 0) return "All caught up! No pending requests."
                 if (pendingCount === 1) return "1 request needs your attention"
                 return `${pendingCount} requests need your attention`
-              })()}
+              })() : "Manage your waitlist entries"}
             </p>
-            <p className="text-sm text-muted-foreground">
-              {dateViewMode === 'today'
-                ? `Viewing today (${format(new Date(), "MMMM d, yyyy")})`
-                : dateViewMode === 'select'
-                  ? `Viewing ${selectedDates.length} selected dates`
-                  : dateViewMode === 'week'
-                    ? `Viewing this week (${format(new Date(), "MMM d")} - ${format(new Date(new Date().getTime() + 6 * 24 * 60 * 60 * 1000), "MMM d")})`
-                    : dateViewMode === 'month'
-                      ? `Viewing this month (${format(new Date(), "MMMM yyyy")})`
-                      : `Viewing all bookings from ${format(new Date(), "MMMM d, yyyy")} onward`}
-            </p>
+            {activeTab === 'bookings' && (
+              <p className="text-sm text-muted-foreground">
+                {dateViewMode === 'today'
+                  ? `Viewing today (${format(new Date(), "MMMM d, yyyy")})`
+                  : dateViewMode === 'select'
+                    ? `Viewing ${selectedDates.length} selected dates`
+                    : dateViewMode === 'week'
+                      ? `Viewing this week (${format(new Date(), "MMM d")} - ${format(new Date(new Date().getTime() + 6 * 24 * 60 * 60 * 1000), "MMM d")})`
+                      : dateViewMode === 'month'
+                        ? `Viewing this month (${format(new Date(), "MMMM yyyy")})`
+                        : `Viewing all bookings from ${format(new Date(), "MMMM d, yyyy")} onward`}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -971,7 +976,28 @@ export default function BasicDashboardPage() {
         </div>
       )}
 
-      {/* Filters */}
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "bookings" | "waitlist")} className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="bookings" className="flex items-center gap-2">
+            <CalendarIcon className="h-4 w-4" />
+            Booking Requests
+            {(() => {
+              const pendingCount = bookings.filter(b => b.status === 'pending').length
+              if (pendingCount > 0) {
+                return <Badge className="ml-1 h-4 px-1 text-xs">{pendingCount}</Badge>
+              }
+              return null
+            })()}
+          </TabsTrigger>
+          <TabsTrigger value="waitlist" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Waitlist
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="bookings" className="space-y-6">
+          {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
         {/* Search - takes 1/2 width */}
         <div className="relative flex-1 sm:flex-[2]">
@@ -1479,6 +1505,15 @@ export default function BasicDashboardPage() {
           ))
         )}
       </div>
+        </TabsContent>
+
+        <TabsContent value="waitlist" className="space-y-6">
+          <WaitlistManager
+            restaurantId={restaurantId}
+            currentTime={new Date()}
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Booking Action Dialog */}
       <BookingActionDialog

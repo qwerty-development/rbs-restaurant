@@ -55,6 +55,7 @@ import { PushNotificationManager } from "@/components/pwa/push-notification-mana
 import { InstallPrompt } from "@/components/pwa/install-prompt"
 import { LocationManager } from "@/components/location/location-manager"
 import { MigrationWidget } from "@/components/migration/migration-widget"
+import { WaitlistScheduleManager } from "@/components/settings/waitlist-schedule-manager"
 import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 
 // Type definitions
@@ -687,6 +688,12 @@ export default function SettingsPage() {
               </Form>
             </CardContent>
           </Card>
+
+          {/* Waitlist Schedule Management - Basic Tier Only */}
+          <WaitlistScheduleManager
+            restaurantId={restaurant?.id || ''}
+            tier={tier}
+          />
         </TabsContent>
 
         <TabsContent value="features" className="space-y-4">

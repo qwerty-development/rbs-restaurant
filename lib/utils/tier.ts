@@ -50,7 +50,7 @@ export const TIER_FEATURES = {
     staff_management: false,
     advanced_analytics: false,
     kitchen_management: false,
-    waitlist: false,
+    waitlist: true, // Enable waitlist for basic tier
     loyalty_management: false,
     offers_management: false,
     orders_management: false,
@@ -135,6 +135,7 @@ export function getNavigationItems(tier: RestaurantTier) {
   const baseItems = [
     { href: '/dashboard', label: 'Dashboard', feature: 'booking_management' },
     { href: '/menu', label: 'Menu', feature: 'menu_management' },
+    { href: '/waitlist', label: 'Waiting List', feature: 'waitlist' },
     { href: '/reviews', label: 'Reviews', feature: 'review_management' },
     { href: '/profile', label: 'Profile', feature: 'profile_management' },
     { href: '/settings', label: 'Settings', feature: 'settings_basic' },
@@ -149,7 +150,6 @@ export function getNavigationItems(tier: RestaurantTier) {
     { href: '/vip', label: 'VIP Customers', feature: 'customer_management' },
     { href: '/tables', label: 'Tables', feature: 'table_management' },
     { href: '/analytics', label: 'Analytics', feature: 'advanced_analytics' },
-    { href: '/waitlist', label: 'Waiting List', feature: 'waitlist' },
     { href: '/loyalty', label: 'Loyalty', feature: 'loyalty_management' },
     { href: '/offers', label: 'Offers', feature: 'offers_management' },
     { href: '/staff', label: 'Staff', feature: 'staff_management' },

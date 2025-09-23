@@ -787,3 +787,19 @@ export interface RestaurantSection {
     require_approval_for_shared_bookings: boolean
     social_dining_discount_percentage?: number
   }
+
+    // Waitlist Schedule for Basic Tier Date-Based Scheduling
+  export interface RestaurantWaitlistSchedule {
+    id: string
+    restaurant_id: string
+    waitlist_date: string // ISO date format (YYYY-MM-DD)
+    start_time: string    // HH:MM:SS format
+    end_time: string      // HH:MM:SS format
+    is_active: boolean
+    name?: string         // Optional field (defaults to empty string in DB)
+    notes?: string        // Optional notes
+    max_entries_per_hour?: number // Optional entry limit
+    created_by?: string   // UUID of staff who created schedule
+    created_at: string
+    updated_at: string
+  }

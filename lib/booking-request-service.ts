@@ -4,6 +4,7 @@ import { addHours, format } from "date-fns"
 import { TableAvailabilityService } from "./table-availability"
 import { RestaurantAvailability } from "./restaurant-availability"
 import { reverseOfferRedemption } from "./services/booking-operations"
+import { getRestaurantTier, isBasicTier } from "./utils/tier"
 
 interface AcceptanceValidation {
   valid: boolean
@@ -61,7 +62,8 @@ export class BookingRequestService {
           max_party_size,
           min_party_size,
           table_turnover_minutes,
-          status
+          status,
+          tier
         `)
         .eq("id", data.restaurantId)
         .single()
@@ -103,6 +105,22 @@ export class BookingRequestService {
       
       if (!availability.isOpen) {
         throw new Error(availability.reason || "Restaurant is not available at this time")
+      }
+
+      // Check if this should be a waitlist entry for basic tier restaurants
+      const restaurantTier = getRestaurantTier(restaurant)
+      if (isBasicTier(restaurantTier) && !data.preApproved && !data.isWalkIn) {
+        // Check if booking time falls within waitlist schedule
+        const { data: isWaitlistTime } = await this.supabase
+          .rpc('is_waitlist_time', {
+            restaurant_id_param: data.restaurantId,
+            booking_time_param: data.bookingTime.toISOString()
+          })
+
+        if (isWaitlistTime) {
+          // Create waitlist entry instead of booking
+          return await this.createWaitlistEntry(data)
+        }
       }
 
       // Calculate expiry time for requests
@@ -820,6 +838,59 @@ export class BookingRequestService {
     } catch (error) {
       console.error("Error in findExpiredRequests:", error)
       return []
+    }
+  }
+
+  /**
+   * Create waitlist entry instead of booking for basic tier restaurants
+   * during scheduled waitlist times
+   */
+  private async createWaitlistEntry(data: {
+    restaurantId: string
+    userId: string
+    bookingTime: Date
+    partySize: number
+    specialRequests?: string
+    occasion?: string
+    guestName?: string
+    guestEmail?: string
+    guestPhone?: string
+  }) {
+    try {
+      // Create waitlist entry
+      const { data: waitlistEntry, error } = await this.supabase
+        .from("waitlist")
+        .insert({
+          restaurant_id: data.restaurantId,
+          user_id: data.userId,
+          guest_name: data.guestName,
+          guest_email: data.guestEmail,
+          guest_phone: data.guestPhone,
+          desired_date: format(data.bookingTime, 'yyyy-MM-dd'),
+          desired_time_range: `${format(data.bookingTime, 'HH:mm')}-${format(addHours(data.bookingTime, 2), 'HH:mm')}`,
+          party_size: data.partySize,
+          table_type: 'any',
+          special_requests: data.specialRequests,
+          status: 'active',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error("Waitlist entry creation error:", error)
+        throw new Error("Failed to create waitlist entry")
+      }
+
+      return {
+        waitlistEntry,
+        isWaitlist: true,
+        message: "Your request has been added to the waitlist. The restaurant will contact you when a table becomes available."
+      }
+    } catch (error) {
+      console.error("Create waitlist entry error:", error)
+      throw error
     }
   }
 }
