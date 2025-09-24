@@ -19,31 +19,23 @@ function VerifyEmailContent() {
   const type = searchParams.get('type')
 
   useEffect(() => {
-    async function verifyEmail() {
-      if (!token) {
-        setStatus('error')
-        setErrorMessage('No verification token found')
-        return
-      }
-
+    async function checkVerificationStatus() {
       const supabase = createClient()
 
       try {
-        // Handle PKCE tokens from custom domains
-        const { data, error } = await supabase.auth.verifyOtp({
-          token_hash: token,
-          type: type === 'signup' ? 'signup' : 'email'
-        })
+        // Check if user is now authenticated (meaning verification succeeded)
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
 
-        if (error) {
-          console.error('Verification error:', error)
+        if (userError) {
+          console.error('Auth error:', userError)
           setStatus('error')
-          setErrorMessage(error.message || 'Failed to verify email')
+          setErrorMessage('Failed to check authentication status')
           return
         }
 
-        if (data.user) {
-          console.log('Email verified successfully:', data.user.email)
+        if (user) {
+          // User is authenticated - verification was successful!
+          console.log('Email verification successful:', user.email)
           setStatus('success')
 
           // Small delay to show success state, then redirect
@@ -52,18 +44,47 @@ function VerifyEmailContent() {
             window.location.href = '/dashboard'
           }, 2000)
         } else {
-          setStatus('error')
-          setErrorMessage('Verification completed but no user found')
+          // If we have a token, try to verify it directly (fallback)
+          if (token) {
+            console.log('Attempting direct token verification...')
+
+            const { data, error } = await supabase.auth.verifyOtp({
+              token_hash: token,
+              type: type === 'signup' ? 'signup' : 'email'
+            })
+
+            if (error) {
+              console.error('Direct verification error:', error)
+              setStatus('error')
+              setErrorMessage(error.message || 'Failed to verify email')
+              return
+            }
+
+            if (data.user) {
+              console.log('Direct verification successful:', data.user.email)
+              setStatus('success')
+              setTimeout(() => {
+                window.location.href = '/dashboard'
+              }, 2000)
+            } else {
+              setStatus('error')
+              setErrorMessage('Verification completed but no user found')
+            }
+          } else {
+            // No token and no authenticated user - likely an error case
+            setStatus('error')
+            setErrorMessage('Email verification failed. The link may be expired or invalid.')
+          }
         }
 
       } catch (error: any) {
-        console.error('Verification error:', error)
+        console.error('Verification check error:', error)
         setStatus('error')
         setErrorMessage(error.message || 'Unexpected error during verification')
       }
     }
 
-    verifyEmail()
+    checkVerificationStatus()
   }, [token, type])
 
   if (status === 'loading') {
