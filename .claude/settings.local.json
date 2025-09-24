@@ -41,7 +41,8 @@
       "Bash(npm run setup:open-hours:*)",
       "Read(//c/Users/charb/AppData/Roaming/Code/User/workspaceStorage/vscode-chat-images/**)",
       "Bash(node:*)",
-      "mcp__filesystem__directory_tree"
+      "mcp__filesystem__directory_tree",
+      "mcp__supabase__get_project"
     ],
     "deny": []
   },
