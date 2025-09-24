@@ -209,6 +209,7 @@ export default function BasicDashboardPage() {
           created_at,
           user_id,
           applied_offer_id,
+          confirmation_code,
           special_offers!bookings_applied_offer_id_fkey (
             id,
             title,
@@ -256,6 +257,7 @@ export default function BasicDashboardPage() {
             created_at,
             user_id,
             applied_offer_id,
+            confirmation_code,
             special_offers!bookings_applied_offer_id_fkey (
               id,
               title,
@@ -304,6 +306,7 @@ export default function BasicDashboardPage() {
               created_at,
               user_id,
               applied_offer_id,
+              confirmation_code,
               special_offers!bookings_applied_offer_id_fkey (
                 id,
                 title,
@@ -411,10 +414,11 @@ export default function BasicDashboardPage() {
                 preferred_section,
                 occasion,
                 dietary_notes,
-                      guest_name,
+                guest_name,
                 guest_email,
                 created_at,
                 user_id,
+                confirmation_code,
                 profiles!bookings_user_id_fkey (
                   id,
                   full_name,
@@ -510,10 +514,11 @@ export default function BasicDashboardPage() {
                 preferred_section,
                 occasion,
                 dietary_notes,
-                      guest_name,
+                guest_name,
                 guest_email,
                 created_at,
                 user_id,
+                confirmation_code,
                 profiles!bookings_user_id_fkey (
                   id,
                   full_name,
@@ -688,12 +693,16 @@ export default function BasicDashboardPage() {
   const filteredBookings = bookings.filter(booking => {
     // Handle profiles field which might be an object or array
     const customer = Array.isArray(booking.profiles) ? booking.profiles[0] : booking.profiles
-    const matchesSearch = searchQuery === "" || 
-      customer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer?.phone_number?.includes(searchQuery)
-    
+    const query = searchQuery.toLowerCase().trim()
+    const matchesSearch = searchQuery === "" ||
+      customer?.full_name?.toLowerCase().includes(query) ||
+      customer?.phone_number?.includes(searchQuery) ||
+      booking.guest_name?.toLowerCase().includes(query) ||
+      booking.guest_email?.toLowerCase().includes(query) ||
+      booking.confirmation_code?.toLowerCase().includes(query)
+
     const matchesStatus = statusFilter === "all" || booking.status === statusFilter
-    
+
     return matchesSearch && matchesStatus
   })
 
@@ -1003,7 +1012,7 @@ export default function BasicDashboardPage() {
         <div className="relative flex-1 sm:flex-[2]">
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by customer name or phone..."
+            placeholder="Search by customer name, phone, email, or confirmation code..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -1170,10 +1179,17 @@ export default function BasicDashboardPage() {
                       const guestEmail = booking.guest_email || customer?.email
                       return (
                         <>
-                          <h3 className="font-bold text-xl tablet:text-2xl text-foreground truncate mb-2">
-                            {guestName || 'Unknown Customer'}
-                            <CustomerRating rating={customer?.user_rating} />
-                          </h3>
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="font-bold text-xl tablet:text-2xl text-foreground truncate">
+                              {guestName || 'Unknown Customer'}
+                              <CustomerRating rating={customer?.user_rating} />
+                            </h3>
+                            {booking.confirmation_code && (
+                              <span className="font-mono font-semibold text-gray-700 text-sm tablet:text-base">
+                                #{booking.confirmation_code}
+                              </span>
+                            )}
+                          </div>
                           
                           {/* Phone and Email - stacked vertically */}
                           <div className="text-sm text-muted-foreground space-y-1">
