@@ -22,7 +22,7 @@ plugins {
 
 def twaManifest = [
     applicationId: 'app.vercel.rbs_restaurant.twa',
-    hostName: 'rbs-restaurant.vercel.app', // The domain being opened in the TWA.
+    hostName: 'plate-app.co', // The domain being opened in the TWA.
     launchUrl: '/dashboard', // The start path for the TWA. Must be relative to the domain.
     name: 'Plate Management', // The application name.
     launcherName: 'RBS Rest', // The name shown on the Android Launcher.
@@ -78,12 +78,12 @@ android {
             // The URL the Web Manifest for the Progressive Web App that the TWA points to. This
             // is used by Chrome OS and Meta Quest to open the Web version of the PWA instead of
             // the TWA, as it will probably give a better user experience for non-mobile devices.
-            resValue "string", "webManifestUrl", 'https://rbs-restaurant.vercel.app/manifest.json'
+            resValue "string", "webManifestUrl", 'https://plate-app.co/manifest.json'
         
 
         
             // This is used by Meta Quest.
-            resValue "string", "fullScopeUrl", 'https://rbs-restaurant.vercel.app/'
+            resValue "string", "fullScopeUrl", 'https://plate-app.co/'
         
 
         
