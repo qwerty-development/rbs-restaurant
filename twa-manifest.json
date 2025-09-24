@@ -1,6 +1,6 @@
 {
   "packageId": "app.vercel.rbs_restaurant.twa",
-  "host": "rbs-restaurant.vercel.app",
+  "host": "plate-app.co",
   "name": "Plate Management",
   "launcherName": "RBS Rest",
   "display": "standalone",
@@ -13,8 +13,8 @@
   "backgroundColor": "#FFFFFF",
   "enableNotifications": true,
   "startUrl": "/dashboard",
-  "iconUrl": "https://rbs-restaurant.vercel.app/icon-512x512.png",
-  "maskableIconUrl": "https://rbs-restaurant.vercel.app/icon-512x512.png",
+  "iconUrl": "https://plate-app.co/icon-512x512.png",
+  "maskableIconUrl": "https://plate-app.co/icon-512x512.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "/Users/asifalam/Desktop/work/rbs-restaurant/android.keystore",
@@ -24,7 +24,7 @@
   "appVersionCode": 1,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
-  "webManifestUrl": "https://rbs-restaurant.vercel.app/manifest.json",
+  "webManifestUrl": "https://plate-app.co/manifest.json",
   "fallbackType": "customtabs",
   "features": {},
   "alphaDependencies": {
@@ -33,7 +33,7 @@
   "enableSiteSettingsShortcut": true,
   "isChromeOSOnly": false,
   "isMetaQuest": false,
-  "fullScopeUrl": "https://rbs-restaurant.vercel.app/",
+  "fullScopeUrl": "https://plate-app.co/",
   "minSdkVersion": 21,
   "orientation": "landscape-primary",
   "fingerprints": [],

@@ -136,7 +136,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 NEXT_PUBLIC_VAPID_PUBLIC_KEY=    # Push notifications
 VAPID_PRIVATE_KEY=
-NEXT_PUBLIC_APP_URL=http://rbs-restaurant.vercel.app/
+NEXT_PUBLIC_APP_URL=https://plate-app.co
 ```
 
 ### MCP-Enhanced Workflow
