@@ -166,6 +166,30 @@ export default function LoginPage() {
             </AlertDescription>
           </Alert>
         )}
+        {error === 'auth_error' && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              There was an authentication error. Please try logging in again or request a new confirmation email if your account is unverified.
+            </AlertDescription>
+          </Alert>
+        )}
+        {error === 'expired' && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Your confirmation link has expired. Please use "Forgot Password" below to get a new confirmation email.
+            </AlertDescription>
+          </Alert>
+        )}
+        {error === 'invalid' && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              The confirmation link was invalid or already used. Try logging in or request a new confirmation email using "Forgot Password".
+            </AlertDescription>
+          </Alert>
+        )}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
