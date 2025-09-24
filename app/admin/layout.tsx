@@ -6,17 +6,18 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { 
-  LogOut, 
-  Settings, 
-  Users, 
-  Building, 
-  BarChart3, 
+import {
+  LogOut,
+  Settings,
+  Users,
+  Building,
+  BarChart3,
   Shield,
   Menu,
   X,
   UserCheck,
   Calendar,
+  Clock,
   Star,
   Database,
   TrendingUp,
@@ -126,6 +127,7 @@ export default function AdminLayout({
       section: 'Operations',
       items: [
         { name: 'Bookings', href: '/admin/bookings', icon: Calendar, current: false },
+        { name: 'Availability', href: '/admin/availability', icon: Clock, current: false },
         { name: 'Reviews', href: '/admin/reviews', icon: Star, current: false },
         { name: 'Notifications', href: '/admin/notifications', icon: Bell, current: false },
       ]
