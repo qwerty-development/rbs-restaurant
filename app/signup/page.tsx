@@ -117,31 +117,26 @@ export default function SignUpPage() {
       if (authError) throw authError
       if (!authData.user) throw new Error("Failed to create account")
 
-      // Create profile with staff information
+      // Upsert profile (update if exists, insert if doesn't)
       const { error: profileError } = await supabase
         .from("profiles")
-        .insert({
+        .upsert({
           id: authData.user.id,
           full_name: data.fullName,
           email: data.email,
           phone_number: data.phoneNumber,
-          user_type: "staff", // Mark as staff
-          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'id'
         })
 
       if (profileError) {
-        console.error("Profile creation error:", profileError)
+        console.error("Profile update error:", profileError)
         // Don't throw here as the user account was created successfully
-        // The profile might already exist or have constraints
       }
 
-      toast.success(
-        "Account created successfully! Please check your email to verify your account.",
-        { duration: 5000 }
-      )
-      
-      // Redirect to login page
-      router.push("/login")
+      // Redirect to confirmation page
+      router.push("/confirm-email")
     } catch (error: any) {
       console.error("Sign-up error:", error)
       
