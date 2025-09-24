@@ -110,7 +110,7 @@ export default function SignUpPage() {
             full_name: data.fullName,
             phone_number: data.phoneNumber,
           },
-          emailRedirectTo: `${typeof window !== 'undefined' ? window.location.origin : 'https://rbs-restaurant.vercel.app'}/api/auth/callback`,
+          emailRedirectTo: `${typeof window !== 'undefined' ? window.location.origin : 'https://rbs-restaurant.vercel.app'}/verify-email`,
         },
       })
 
