@@ -10,28 +10,8 @@ export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
   const type = requestUrl.searchParams.get('type')
-  const error_code = requestUrl.searchParams.get('error')
-  const error_description = requestUrl.searchParams.get('error_description')
 
-  // Handle OAuth errors (expired/invalid links, etc.)
-  if (error_code) {
-    console.error('OAuth error:', { error_code, error_description })
-
-    let errorType = 'auth_error'
-    if (error_description?.includes('expired')) {
-      errorType = 'expired'
-    } else if (error_description?.includes('invalid')) {
-      errorType = 'invalid'
-    }
-
-    if (type === 'signup' || type === 'email_confirm') {
-      return NextResponse.redirect(`${requestUrl.origin}/email-confirmation-error?error=${errorType}`)
-    }
-
-    return NextResponse.redirect(`${requestUrl.origin}/login?error=${errorType}`)
-  }
-
-  // Exchange code for session if code is present
+  // If we have a code, try to exchange it for a session
   if (code) {
     const supabase = createRouteHandlerClient<any>({ cookies })
 
@@ -41,31 +21,26 @@ export async function GET(request: NextRequest) {
       if (error) {
         console.error('Error exchanging code for session:', error)
 
-        // Determine error type for better user experience
-        let errorType = 'auth_error'
-        if (error.message.includes('expired')) {
-          errorType = 'expired'
-        } else if (error.message.includes('invalid') || error.message.includes('already')) {
-          errorType = 'invalid'
-        }
-
+        // Only redirect to error page for signup/confirmation flows
         if (type === 'signup' || type === 'email_confirm') {
-          return NextResponse.redirect(`${requestUrl.origin}/email-confirmation-error?error=${errorType}`)
+          return NextResponse.redirect(`${requestUrl.origin}/email-confirmation-error?error=auth_error`)
         }
 
-        return NextResponse.redirect(`${requestUrl.origin}/login?error=${errorType}`)
+        // For other flows, redirect to login with error
+        return NextResponse.redirect(`${requestUrl.origin}/login?error=auth_error`)
       }
 
-      // Success - log for debugging
-      console.log('Successfully exchanged code for session:', {
+      // Log successful authentication
+      console.log('Successfully authenticated user:', {
         userId: data.user?.id,
         email: data.user?.email,
-        type
+        type: type || 'login'
       })
 
     } catch (error) {
-      console.error('Unexpected error during code exchange:', error)
+      console.error('Unexpected error during authentication:', error)
 
+      // Handle unexpected errors
       if (type === 'signup' || type === 'email_confirm') {
         return NextResponse.redirect(`${requestUrl.origin}/email-confirmation-error?error=auth_error`)
       }
@@ -74,11 +49,11 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Successful redirect based on flow type
+  // Redirect based on flow type
   if (type === 'signup' || type === 'email_confirm') {
     return NextResponse.redirect(`${requestUrl.origin}/email-confirmed`)
   }
 
-  // Default: URL to redirect to after sign in process completes
+  // Default: redirect to dashboard after successful authentication
   return NextResponse.redirect(`${requestUrl.origin}/dashboard`)
 }
