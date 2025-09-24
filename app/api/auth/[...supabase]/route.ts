@@ -9,17 +9,36 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
+  const token = requestUrl.searchParams.get('token')
   const type = requestUrl.searchParams.get('type')
 
-  // If we have a code, try to exchange it for a session
-  if (code) {
+  // Handle both regular OAuth codes and PKCE tokens
+  const authToken = code || token
+
+  if (authToken) {
     const supabase = createRouteHandlerClient<any>({ cookies })
 
     try {
-      const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+      let authResult: any
+
+      // Handle PKCE tokens (from custom domains) vs regular OAuth codes
+      if (token && token.startsWith('pkce_')) {
+        // For PKCE tokens, use verifyOtp method
+        authResult = await supabase.auth.verifyOtp({
+          token_hash: token,
+          type: type === 'signup' ? 'signup' : 'email'
+        })
+      } else if (code) {
+        // For regular OAuth codes, use exchangeCodeForSession
+        authResult = await supabase.auth.exchangeCodeForSession(code)
+      } else {
+        throw new Error('Invalid token format')
+      }
+
+      const { data, error } = authResult
 
       if (error) {
-        console.error('Error exchanging code for session:', error)
+        console.error('Error during authentication:', error)
 
         // Only redirect to error page for signup/confirmation flows
         if (type === 'signup' || type === 'email_confirm') {
@@ -34,7 +53,8 @@ export async function GET(request: NextRequest) {
       console.log('Successfully authenticated user:', {
         userId: data.user?.id,
         email: data.user?.email,
-        type: type || 'login'
+        type: type || 'login',
+        tokenType: token?.startsWith('pkce_') ? 'PKCE' : 'OAuth'
       })
 
     } catch (error) {
