@@ -11,10 +11,7 @@ export default async function AuthLayout({
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // If user is already logged in, redirect to dashboard
-  if (user) {
-    redirect("/dashboard")
-  }
+  // Middleware handles redirecting authenticated users away from auth pages to avoid loops
 
   return (
     <div className="min-h-screen flex flex-col relative">

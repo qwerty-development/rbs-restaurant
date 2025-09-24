@@ -24,7 +24,7 @@ export default async function DashboardLayout({
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect("/login")
+    redirect("/login?redirectTo=/dashboard")
   }
 
   // Get all restaurants where user is staff
@@ -41,7 +41,7 @@ export default async function DashboardLayout({
     .eq("is_active", true)
 
   if (!staffData || staffData.length === 0) {
-    redirect("/login")
+    redirect("/login?error=no_access")
   }
 
   // Get the current restaurant ID for notifications

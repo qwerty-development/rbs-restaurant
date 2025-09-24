@@ -110,6 +110,7 @@ export default function SignUpPage() {
             full_name: data.fullName,
             phone_number: data.phoneNumber,
           },
+          emailRedirectTo: `${window.location.origin}/api/auth/callback`,
         },
       })
 

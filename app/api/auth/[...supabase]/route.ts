@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
+  const type = requestUrl.searchParams.get('type')
 
   if (code) {
     const supabase = createRouteHandlerClient<any>({ cookies })
@@ -22,6 +23,11 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // URL to redirect to after sign in process completes
+  // Redirect based on flow type
+  if (type === 'signup' || type === 'email_confirm') {
+    return NextResponse.redirect(`${requestUrl.origin}/email-confirmed`)
+  }
+
+  // Default: URL to redirect to after sign in process completes
   return NextResponse.redirect(`${requestUrl.origin}/dashboard`)
 }
