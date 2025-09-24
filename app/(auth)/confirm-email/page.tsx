@@ -16,7 +16,7 @@ export default function ConfirmEmailPage() {
           <CardTitle className="text-2xl font-bold">
             Check Your Email
           </CardTitle>
-          <CardDescription className="text-secondary-foreground">
+          <CardDescription className="text-white">
             We've sent you a confirmation link to verify your email address.
           </CardDescription>
         </CardHeader>
@@ -24,16 +24,16 @@ export default function ConfirmEmailPage() {
         <CardContent className="space-y-6">
           <div className="space-y-4">
             <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-lg">
-              <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-              <div className="text-sm">
+              <CheckCircle className="w-5 h-5 text-green-200 flex-shrink-0" />
+              <div className="text-sm text-white">
                 <p className="font-medium">Account Created Successfully</p>
-                <p className="text-muted-foreground">Your account has been created and is pending verification.</p>
+                <p className="text-white">Your account has been created and is pending verification.</p>
               </div>
             </div>
 
             <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
               <Clock className="w-5 h-5 text-blue-600 flex-shrink-0" />
-              <div className="text-sm">
+              <div className="text-sm text-primary">
                 <p className="font-medium">Restaurant Setup Pending</p>
                 <p className="text-muted-foreground">The Plate team will contact you within 24-48 hours to set up your restaurant account and provide access credentials.</p>
               </div>
@@ -42,7 +42,7 @@ export default function ConfirmEmailPage() {
 
           <div className="space-y-4 pt-4 border-t">
             <h3 className="font-semibold text-center">Next Steps:</h3>
-            <ol className="space-y-2 text-sm text-muted-foreground">
+            <ol className="space-y-2 text-sm text-white">
               <li className="flex items-start gap-2">
                 <span className="flex-shrink-0 w-5 h-5 bg-primary text-primary-foreground rounded-full text-xs flex items-center justify-center font-semibold">1</span>
                 <span>Check your email and click the verification link</span>
@@ -71,7 +71,7 @@ export default function ConfirmEmailPage() {
             </Button>
 
             <div className="text-center">
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-white">
                 Didn't receive an email?{" "}
                 <button className="text-primary hover:underline">
                   Check your spam folder
