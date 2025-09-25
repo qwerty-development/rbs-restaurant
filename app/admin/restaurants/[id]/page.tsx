@@ -21,6 +21,7 @@ interface Restaurant {
   address: string
   phone_number: string
   whatsapp_number?: string
+  instagram_handle?: string
   cuisine_type: string
   opening_time: string
   closing_time: string
@@ -45,6 +46,7 @@ export default function AdminRestaurantEditPage() {
     address: '',
     phone_number: '',
     whatsapp_number: '',
+    instagram_handle: '',
     cuisine_type: '',
     opening_time: '09:00',
     closing_time: '22:00',
@@ -74,6 +76,7 @@ export default function AdminRestaurantEditPage() {
           address: data.address || '',
           phone_number: data.phone_number || '',
           whatsapp_number: data.whatsapp_number || '',
+          instagram_handle: data.instagram_handle || '',
           cuisine_type: data.cuisine_type || '',
           opening_time: data.opening_time || '09:00',
           closing_time: data.closing_time || '22:00',
@@ -106,6 +109,7 @@ export default function AdminRestaurantEditPage() {
           address: formData.address.trim(),
           phone_number: formData.phone_number.trim(),
           whatsapp_number: formData.whatsapp_number.trim() || null,
+          instagram_handle: formData.instagram_handle.trim() || null,
           cuisine_type: formData.cuisine_type.trim(),
           opening_time: formData.opening_time,
           closing_time: formData.closing_time,
@@ -182,6 +186,10 @@ export default function AdminRestaurantEditPage() {
             <div>
               <Label htmlFor="whatsapp">WhatsApp Number</Label>
               <Input id="whatsapp" value={formData.whatsapp_number} onChange={(e) => setFormData({ ...formData, whatsapp_number: e.target.value })} placeholder="WhatsApp number (optional)" />
+            </div>
+            <div>
+              <Label htmlFor="instagram">Instagram Handle</Label>
+              <Input id="instagram" value={formData.instagram_handle} onChange={(e) => setFormData({ ...formData, instagram_handle: e.target.value })} placeholder="@restaurantname (optional)" />
             </div>
             <div>
               <Label>Price Range</Label>

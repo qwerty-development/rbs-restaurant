@@ -49,6 +49,7 @@ interface Restaurant {
   address: string
   phone_number: string
   whatsapp_number?: string
+  instagram_handle?: string
   cuisine_type: string
   opening_time: string
   closing_time: string
@@ -101,6 +102,7 @@ export default function RestaurantManagement() {
     address: '',
     phone_number: '',
     whatsapp_number: '',
+    instagram_handle: '',
     cuisine_type: '',
     opening_time: '09:00',
     closing_time: '22:00',
@@ -309,6 +311,7 @@ export default function RestaurantManagement() {
           address: formData.address.trim(),
           phone_number: formData.phone_number.trim(),
           whatsapp_number: formData.whatsapp_number.trim() || null,
+          instagram_handle: formData.instagram_handle.trim() || null,
           cuisine_type: formData.cuisine_type.trim(),
           opening_time: formData.opening_time,
           closing_time: formData.closing_time,
@@ -374,13 +377,14 @@ export default function RestaurantManagement() {
     setExporting(true)
     try {
       const csv = [
-        'Name,Description,Address,Phone,WhatsApp,Cuisine,Opening Time,Closing Time,Price Range,Status,Average Rating,Total Reviews,Featured',
+        'Name,Description,Address,Phone,WhatsApp,Instagram,Cuisine,Opening Time,Closing Time,Price Range,Status,Average Rating,Total Reviews,Featured',
         ...filteredRestaurants.map(restaurant => [
           `"${restaurant.name}"`,
           `"${restaurant.description}"`,
           `"${restaurant.address}"`,
           restaurant.phone_number,
           restaurant.whatsapp_number || '',
+          restaurant.instagram_handle || '',
           restaurant.cuisine_type,
           restaurant.opening_time,
           restaurant.closing_time,
@@ -418,6 +422,7 @@ export default function RestaurantManagement() {
       address: '',
       phone_number: '',
       whatsapp_number: '',
+      instagram_handle: '',
       cuisine_type: '',
       opening_time: '09:00',
       closing_time: '22:00',
@@ -434,6 +439,7 @@ export default function RestaurantManagement() {
       address: restaurant.address,
       phone_number: restaurant.phone_number,
       whatsapp_number: restaurant.whatsapp_number || '',
+      instagram_handle: restaurant.instagram_handle || '',
       cuisine_type: restaurant.cuisine_type,
       opening_time: restaurant.opening_time,
       closing_time: restaurant.closing_time,
@@ -805,6 +811,12 @@ export default function RestaurantManagement() {
                       <p className="text-gray-900 mt-1">{selectedRestaurant.whatsapp_number}</p>
                     </div>
                   )}
+                  {selectedRestaurant.instagram_handle && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Instagram</Label>
+                      <p className="text-gray-900 mt-1">{selectedRestaurant.instagram_handle}</p>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-4">
                   <div>
@@ -896,6 +908,15 @@ export default function RestaurantManagement() {
                   value={formData.whatsapp_number}
                   onChange={(e) => setFormData({...formData, whatsapp_number: e.target.value})}
                   placeholder="WhatsApp number (optional)"
+                />
+              </div>
+              <div>
+                <Label htmlFor="instagram_handle">Instagram Handle</Label>
+                <Input
+                  id="instagram_handle"
+                  value={formData.instagram_handle}
+                  onChange={(e) => setFormData({...formData, instagram_handle: e.target.value})}
+                  placeholder="@restaurantname (optional)"
                 />
               </div>
               <div>

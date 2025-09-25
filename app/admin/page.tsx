@@ -24,6 +24,7 @@ interface Restaurant {
   address: string
   phone_number: string
   whatsapp_number?: string
+  instagram_handle?: string
   cuisine_type: string
   price_range: number
   booking_policy: 'instant' | 'request'
@@ -61,6 +62,7 @@ const defaultRestaurant: Restaurant = {
   address: "",
   phone_number: "",
   whatsapp_number: "",
+  instagram_handle: "",
   cuisine_type: "",
   price_range: 2,
   booking_policy: "instant",
@@ -413,6 +415,7 @@ export default function AdminPage() {
           address: restaurant.address,
           phone_number: restaurant.phone_number,
           whatsapp_number: restaurant.whatsapp_number?.trim() || null,
+          instagram_handle: restaurant.instagram_handle?.trim() || null,
           cuisine_type: restaurant.cuisine_type,
           tier: restaurant.tier,
           price_range: restaurant.price_range,
@@ -801,6 +804,17 @@ export default function AdminPage() {
                       />
                       <p className="text-muted-foreground text-xs mt-1">
                         Optional WhatsApp number for restaurant communication
+                      </p>
+                    </div>
+                    <div>
+                      <Label>Instagram Handle</Label>
+                      <Input
+                        value={restaurant.instagram_handle || ''}
+                        onChange={(e) => updateRestaurant('instagram_handle', e.target.value)}
+                        placeholder="@restaurantname (optional)"
+                      />
+                      <p className="text-muted-foreground text-xs mt-1">
+                        Optional Instagram handle for social media presence
                       </p>
                     </div>
                     <div>
