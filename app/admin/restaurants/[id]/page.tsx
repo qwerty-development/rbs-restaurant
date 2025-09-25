@@ -20,6 +20,7 @@ interface Restaurant {
   description: string
   address: string
   phone_number: string
+  whatsapp_number?: string
   cuisine_type: string
   opening_time: string
   closing_time: string
@@ -43,6 +44,7 @@ export default function AdminRestaurantEditPage() {
     description: '',
     address: '',
     phone_number: '',
+    whatsapp_number: '',
     cuisine_type: '',
     opening_time: '09:00',
     closing_time: '22:00',
@@ -71,6 +73,7 @@ export default function AdminRestaurantEditPage() {
           description: data.description || '',
           address: data.address || '',
           phone_number: data.phone_number || '',
+          whatsapp_number: data.whatsapp_number || '',
           cuisine_type: data.cuisine_type || '',
           opening_time: data.opening_time || '09:00',
           closing_time: data.closing_time || '22:00',
@@ -102,6 +105,7 @@ export default function AdminRestaurantEditPage() {
           description: formData.description.trim(),
           address: formData.address.trim(),
           phone_number: formData.phone_number.trim(),
+          whatsapp_number: formData.whatsapp_number.trim() || null,
           cuisine_type: formData.cuisine_type.trim(),
           opening_time: formData.opening_time,
           closing_time: formData.closing_time,
@@ -174,6 +178,10 @@ export default function AdminRestaurantEditPage() {
             <div>
               <Label htmlFor="phone">Phone Number *</Label>
               <Input id="phone" value={formData.phone_number} onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })} />
+            </div>
+            <div>
+              <Label htmlFor="whatsapp">WhatsApp Number</Label>
+              <Input id="whatsapp" value={formData.whatsapp_number} onChange={(e) => setFormData({ ...formData, whatsapp_number: e.target.value })} placeholder="WhatsApp number (optional)" />
             </div>
             <div>
               <Label>Price Range</Label>

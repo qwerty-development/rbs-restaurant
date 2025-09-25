@@ -23,6 +23,7 @@ interface Restaurant {
   description: string
   address: string
   phone_number: string
+  whatsapp_number?: string
   cuisine_type: string
   price_range: number
   booking_policy: 'instant' | 'request'
@@ -59,6 +60,7 @@ const defaultRestaurant: Restaurant = {
   description: "",
   address: "",
   phone_number: "",
+  whatsapp_number: "",
   cuisine_type: "",
   price_range: 2,
   booking_policy: "instant",
@@ -410,6 +412,7 @@ export default function AdminPage() {
           description: restaurant.description,
           address: restaurant.address,
           phone_number: restaurant.phone_number,
+          whatsapp_number: restaurant.whatsapp_number?.trim() || null,
           cuisine_type: restaurant.cuisine_type,
           tier: restaurant.tier,
           price_range: restaurant.price_range,
@@ -787,6 +790,17 @@ export default function AdminPage() {
                       )}
                       <p className="text-muted-foreground text-xs mt-1">
                         Lebanese format: +961 X XXX XXX (mobile: 3/7/8/9, landline: 1-9)
+                      </p>
+                    </div>
+                    <div>
+                      <Label>WhatsApp Number</Label>
+                      <Input
+                        value={restaurant.whatsapp_number || ''}
+                        onChange={(e) => updateRestaurant('whatsapp_number', e.target.value)}
+                        placeholder="WhatsApp number (optional)"
+                      />
+                      <p className="text-muted-foreground text-xs mt-1">
+                        Optional WhatsApp number for restaurant communication
                       </p>
                     </div>
                     <div>
