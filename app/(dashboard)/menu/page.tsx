@@ -24,7 +24,8 @@ import { MenuItemForm } from "@/components/menu/menu-item-form"
 import { CategoryForm } from "@/components/menu/category-form"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { toast } from "react-hot-toast"
-import { Plus, Search, Filter, Upload, Download } from "lucide-react"
+import { Plus, Search, Filter, Upload, Download, ExternalLink, Copy, QrCode, MoreHorizontal } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { MenuItem, MenuCategory } from "@/types"
 
 export default function MenuPage() {
@@ -46,6 +47,7 @@ export default function MenuPage() {
 
   // Get restaurant ID from context
   const [restaurantId, setRestaurantId] = useState<string>("")
+  const [isQrOpen, setIsQrOpen] = useState(false)
   
   // Set restaurant ID from current restaurant context
   useEffect(() => {
@@ -55,6 +57,45 @@ export default function MenuPage() {
       setRestaurantId("")
     }
   }, [currentRestaurant])
+
+  const publicMenuUrl = restaurantId ? `https://www.plate-app.com/menu/${restaurantId}` : ""
+
+  const handleOpenLink = () => {
+    if (!publicMenuUrl) return
+    window.open(publicMenuUrl, "_blank")
+  }
+
+  const handleCopyLink = async () => {
+    if (!publicMenuUrl) return
+    try {
+      await navigator.clipboard.writeText(publicMenuUrl)
+      toast.success("Link copied")
+    } catch {
+      toast.error("Failed to copy link")
+    }
+  }
+
+  const qrPngUrl = publicMenuUrl
+    ? `https://quickchart.io/qr?text=${encodeURIComponent(publicMenuUrl)}&format=png&margin=1&size=280&backgroundColor=transparent&dark=000000`
+    : ""
+
+  const handleDownloadQr = async () => {
+    if (!qrPngUrl || !restaurantId) return
+    try {
+      const resp = await fetch(qrPngUrl)
+      const blob = await resp.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = objectUrl
+      link.download = `menu-qr-${restaurantId}.png`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(objectUrl)
+    } catch {
+      toast.error("Failed to download QR image")
+    }
+  }
 
   // Fetch categories
   const { data: categories, isLoading: categoriesLoading } = useQuery({
@@ -358,6 +399,28 @@ export default function MenuPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <MoreHorizontal className="mr-2 h-4 w-4" />
+                Link
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem disabled={!publicMenuUrl} onClick={handleOpenLink}>
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Open link
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!publicMenuUrl} onClick={handleCopyLink}>
+                <Copy className="mr-2 h-4 w-4" />
+                Copy link
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!publicMenuUrl} onClick={() => setIsQrOpen(true)}>
+                <QrCode className="mr-2 h-4 w-4" />
+                Generate QR code
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline">
             <Upload className="mr-2 h-4 w-4" />
             Import
@@ -579,6 +642,32 @@ export default function MenuPage() {
               }}
               isLoading={itemMutation.isPending}
             />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* QR Code Dialog */}
+      <Dialog open={isQrOpen} onOpenChange={setIsQrOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Menu QR Code</DialogTitle>
+            <DialogDescription>
+              Scan to open {publicMenuUrl}
+            </DialogDescription>
+          </DialogHeader>
+          {publicMenuUrl && (
+            <div className="w-full flex items-center justify-center py-4">
+              <img
+                alt="Menu QR"
+                className="h-56 w-56"
+                src={qrPngUrl}
+              />
+            </div>
+          )}
+          <div className="flex justify-end">
+            <Button onClick={handleDownloadQr} disabled={!qrPngUrl}>
+              Download PNG
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
