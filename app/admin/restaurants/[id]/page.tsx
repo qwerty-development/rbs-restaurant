@@ -189,7 +189,7 @@ export default function AdminRestaurantEditPage() {
             </div>
             <div>
               <Label htmlFor="instagram">Instagram Handle</Label>
-              <Input id="instagram" value={formData.instagram_handle} onChange={(e) => setFormData({ ...formData, instagram_handle: e.target.value })} placeholder="@restaurantname (optional)" />
+              <Input id="instagram" value={formData.instagram_handle} onChange={(e) => setFormData({ ...formData, instagram_handle: e.target.value })} placeholder="restaurantname (optional)" />
             </div>
             <div>
               <Label>Price Range</Label>

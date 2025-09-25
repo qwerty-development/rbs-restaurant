@@ -463,7 +463,7 @@ export default function SettingsPage() {
                               <Input
                                 {...field}
                                 disabled={updateRestaurantMutation.isPending}
-                                placeholder="@restaurant"
+                                placeholder="restaurant"
                               />
                             </div>
                           </FormControl>

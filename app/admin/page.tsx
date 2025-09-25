@@ -811,7 +811,7 @@ export default function AdminPage() {
                       <Input
                         value={restaurant.instagram_handle || ''}
                         onChange={(e) => updateRestaurant('instagram_handle', e.target.value)}
-                        placeholder="@restaurantname (optional)"
+                        placeholder="restaurantname (optional)"
                       />
                       <p className="text-muted-foreground text-xs mt-1">
                         Optional Instagram handle for social media presence

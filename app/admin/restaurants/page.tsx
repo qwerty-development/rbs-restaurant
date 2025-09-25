@@ -916,7 +916,7 @@ export default function RestaurantManagement() {
                   id="instagram_handle"
                   value={formData.instagram_handle}
                   onChange={(e) => setFormData({...formData, instagram_handle: e.target.value})}
-                  placeholder="@restaurantname (optional)"
+                  placeholder="restaurantname (optional)"
                 />
               </div>
               <div>

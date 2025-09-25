@@ -464,7 +464,7 @@ export default function EditProfilePage() {
                         <Input
                           {...field}
                           disabled={updateRestaurantMutation.isPending}
-                          placeholder="@restaurant"
+                          placeholder="restaurant"
                         />
                       </FormControl>
                       <FormMessage />
