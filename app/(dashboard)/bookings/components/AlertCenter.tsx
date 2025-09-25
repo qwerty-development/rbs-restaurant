@@ -77,15 +77,15 @@ export function AlertCenter({
       alerts.push({
         id: "no-tables",
         type: "critical",
-        title: `${bookingsWithoutTables.length} confirmed booking${bookingsWithoutTables.length > 1 ? 's' : ''} need${bookingsWithoutTables.length === 1 ? 's' : ''} table assignment`,
-        description: "Guests may arrive without tables ready!",
+        title: `🚨 URGENT: ${bookingsWithoutTables.length} confirmed booking${bookingsWithoutTables.length > 1 ? 's' : ''} need table assignment`,
+        description: "Guests may arrive without tables ready! Assign tables immediately.",
         count: bookingsWithoutTables.length,
         icon: Table2,
         bookings: bookingsWithoutTables.slice(0, 3),
         actions: [
           {
-            label: "Select All",
-            variant: "outline",
+            label: `🎯 Assign Tables (${bookingsWithoutTables.length})`,
+            variant: "default",
             onClick: () => onSelectBookings(bookingsWithoutTables.map(b => b.id))
           }
         ]
@@ -100,11 +100,12 @@ export function AlertCenter({
     )
 
     if (urgentBookings.length > 0) {
+      const nextBookingTime = format(new Date(urgentBookings[0].booking_time), "HH:mm")
       alerts.push({
         id: "urgent-bookings",
         type: "critical",
-        title: `${urgentBookings.length} URGENT booking${urgentBookings.length > 1 ? 's' : ''} starting within the next hour`,
-        description: "Final preparations needed",
+        title: `🔥 NEXT HOUR: ${urgentBookings.length} booking${urgentBookings.length > 1 ? 's' : ''} starting soon (first at ${nextBookingTime})`,
+        description: "Ensure tables are ready and staff is prepared",
         count: urgentBookings.length,
         icon: Clock,
         bookings: urgentBookings.slice(0, 3),
@@ -118,20 +119,20 @@ export function AlertCenter({
       alerts.push({
         id: "pending-bookings",
         type: "warning",
-        title: `${pendingBookings.length} booking${pendingBookings.length > 1 ? 's' : ''} awaiting confirmation`,
-        description: "Quick action needed before they expire",
+        title: `⏰ ${pendingBookings.length} booking request${pendingBookings.length > 1 ? 's' : ''} awaiting your response`,
+        description: "Accept or decline quickly to avoid automatic expiration",
         count: pendingBookings.length,
         icon: Timer,
         actions: [
           {
-            label: "Select All",
-            variant: "outline",
-            onClick: () => onSelectBookings(pendingBookings.map(b => b.id))
-          },
-          {
-            label: "Confirm All",
+            label: `⚡ Quick Accept All (${pendingBookings.length})`,
             variant: "default",
             onClick: () => onBulkConfirm(pendingBookings.map(b => b.id))
+          },
+          {
+            label: "Review Each",
+            variant: "outline",
+            onClick: () => onSelectBookings(pendingBookings.map(b => b.id))
           }
         ]
       })

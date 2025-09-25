@@ -3,13 +3,12 @@
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { format, startOfDay, endOfDay, addDays, addMinutes, differenceInMinutes } from "date-fns"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { format, startOfDay, endOfDay, addDays } from "date-fns"
 import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { Calendar } from "@/components/ui/calendar"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -20,25 +19,12 @@ import {
 import { BookingList } from "@/components/bookings/booking-list"
 import { BookingDetails } from "@/components/bookings/booking-details"
 import { ManualBookingForm } from "@/components/bookings/manual-booking-form"
-import { MinimumCapacityWarningDialog } from "@/components/bookings/minimum-capacity-warning-dialog"
-import { SharedTablesOverview } from "@/components/shared-tables"
 import { TableAvailabilityService } from "@/lib/table-availability"
 import { BookingRequestService } from "@/lib/booking-request-service"
-import { toast } from "react-hot-toast"
-import { cn } from "@/lib/utils"
 import {
   CalendarIcon,
-  Table2,
   Users,
-  RefreshCw,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Eye,
-  Timer,
-  Zap,
-  TrendingUp,
-  Clock
+  TrendingUp
 } from "lucide-react"
 import type { Booking } from "@/types"
 
@@ -56,30 +42,15 @@ export default function BookingsPage() {
   const now = useMemo(() => new Date(), [])
 
   // State management using our custom hooks
-  const { state, actions, dateHelpers, hasFiltersApplied, hasSelections } = useBookingsState()
+  const { state, actions } = useBookingsState()
 
   const supabase = createClient()
   const queryClient = useQueryClient()
-  const tableService = useMemo(() => new TableAvailabilityService(), [])
-  const requestService = useMemo(() => new BookingRequestService(), [])
 
   // Get restaurant and user IDs
   const [restaurantId, setRestaurantId] = useState<string>("")
   const [userId, setUserId] = useState<string>("")
   const [lastExpiredCheck, setLastExpiredCheck] = useState<Date>(new Date())
-
-  // Minimum capacity warning dialog state
-  const [showMinimumCapacityWarning, setShowMinimumCapacityWarning] = useState(false)
-  const [pendingAssignment, setPendingAssignment] = useState<{
-    bookingId: string
-    tableIds: string[]
-    booking: any
-    violatingTables: any[]
-  } | null>(null)
-
-  // Table assignment states
-  const [availableTablesForAssignment, setAvailableTablesForAssignment] = useState<any[]>([])
-  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false)
 
   // Initialize booking actions hook
   const bookingActions = useBookingsActions({ restaurantId, userId })
@@ -105,7 +76,7 @@ export default function BookingsPage() {
   }, [currentRestaurant])
 
   // Fetch all bookings
-  const { data: allBookings, isLoading: allBookingsLoading } = useQuery({
+  const { data: allBookings } = useQuery({
     queryKey: ["all-bookings", restaurantId],
     queryFn: async () => {
       if (!restaurantId) return []
@@ -234,13 +205,6 @@ export default function BookingsPage() {
             .gte("booking_time", startDate.toISOString())
             .lte("booking_time", endDate.toISOString())
         }
-      } else if (state.viewMode === "tables") {
-        // Tables view shows selected date
-        const dayStart = startOfDay(state.selectedDate)
-        const dayEnd = endOfDay(state.selectedDate)
-        query = query
-          .gte("booking_time", dayStart.toISOString())
-          .lte("booking_time", dayEnd.toISOString())
       }
 
       // Apply status filter
@@ -468,10 +432,6 @@ export default function BookingsPage() {
           e.preventDefault()
           actions.setViewMode("management")
           break
-        case '3':
-          e.preventDefault()
-          actions.setViewMode("tables")
-          break
         case 'Escape':
           actions.clearSelections()
           break
@@ -492,11 +452,16 @@ export default function BookingsPage() {
         actions.setViewMode("management")
         actions.setStatusFilter("pending")
         break
-      case "tables":
-        actions.setViewMode("tables")
-        break
       case "performance":
         actions.toggleAnalytics()
+        break
+      case "nexthour":
+        actions.setViewMode("today")
+        actions.setStatusFilter("confirmed")
+        break
+      case "guests":
+        actions.setViewMode("management")
+        actions.setStatusFilter("confirmed")
         break
       default:
         break
@@ -606,36 +571,32 @@ export default function BookingsPage() {
         </Card>
       )}
 
-      {/* Main Content - 3 View System */}
+      {/* Main Content - 2 View System */}
       <Tabs value={state.viewMode} onValueChange={(v) => actions.setViewMode(v as any)}>
         <div className="flex flex-col tablet:flex-row items-start tablet:items-center justify-between gap-4">
-          <TabsList className="grid w-full tablet:w-[400px] grid-cols-3 h-auto">
-            <TabsTrigger value="today" className="min-h-touch-lg px-4 py-3">
+          <TabsList className="grid w-full tablet:w-[300px] grid-cols-2 h-auto">
+            <TabsTrigger value="today" className="min-h-touch-lg px-6 py-3">
               <div className="flex items-center gap-2">
                 <CalendarIcon className="h-4 w-4" />
-                <span>Today</span>
+                <span>Today's Operations</span>
                 {bookingStats.upcoming > 0 && (
-                  <span className="bg-primary text-primary-foreground px-2 py-0.5 rounded-full text-xs">
+                  <span className="bg-primary text-primary-foreground px-2 py-0.5 rounded-full text-xs font-bold">
                     {bookingStats.upcoming}
                   </span>
                 )}
               </div>
             </TabsTrigger>
-            <TabsTrigger value="management" className="min-h-touch-lg px-4 py-3">
+            <TabsTrigger value="management" className="min-h-touch-lg px-6 py-3">
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
-                <span>Management</span>
+                <span>All Bookings</span>
                 {bookingStats.needingAttention > 0 && (
-                  <div className="h-2 w-2 bg-red-500 rounded-full animate-pulse" />
-                )}
-              </div>
-            </TabsTrigger>
-            <TabsTrigger value="tables" className="min-h-touch-lg px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Table2 className="h-4 w-4" />
-                <span>Tables</span>
-                {tableStats?.utilization && tableStats.utilization > 80 && (
-                  <div className="h-2 w-2 bg-yellow-500 rounded-full animate-pulse" />
+                  <div className="flex items-center gap-1">
+                    <div className="h-2 w-2 bg-red-500 rounded-full animate-pulse" />
+                    <span className="bg-red-500 text-white px-2 py-0.5 rounded-full text-xs font-bold">
+                      {bookingStats.needingAttention}
+                    </span>
+                  </div>
                 )}
               </div>
             </TabsTrigger>
@@ -728,42 +689,6 @@ export default function BookingsPage() {
           />
         </TabsContent>
 
-        {/* Tables View */}
-        <TabsContent value="tables" className="space-y-4">
-          <BookingsFilter
-            viewMode={state.viewMode}
-            searchQuery={state.searchQuery}
-            statusFilter={state.statusFilter}
-            timeFilter={state.timeFilter}
-            dateRange={state.dateRange}
-            selectedDate={state.selectedDate}
-            bookingStats={bookingStats}
-            onSearchChange={actions.setSearchQuery}
-            onStatusFilterChange={actions.setStatusFilter}
-            onTimeFilterChange={actions.setTimeFilter}
-            onDateRangeChange={actions.setDateRange}
-            onDatePickerOpen={actions.toggleDatePicker}
-            onResetFilters={actions.resetFilters}
-          />
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Table Status Overview</CardTitle>
-              <CardDescription>
-                Real-time table availability for {format(state.selectedDate, "MMMM d, yyyy")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-12">
-                <Table2 className="mx-auto h-16 w-16 mb-6 opacity-50" />
-                <div className="text-xl font-medium mb-3">Table view coming soon</div>
-                <p className="text-base text-muted-foreground">
-                  Advanced table management features will be available here
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
 
       {/* Modals and Dialogs */}

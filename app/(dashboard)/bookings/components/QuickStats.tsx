@@ -180,18 +180,21 @@ export function QuickStats({
 
   return (
     <div className={cn("grid gap-4 tablet:gap-6 grid-cols-2 tablet:grid-cols-3 xl:grid-cols-6", className)}>
-      {/* Today's Bookings */}
+      {/* Today's Operations */}
       <StatCard
-        title="Today's Bookings"
+        title="Today's Service"
         value={stats.upcoming}
-        description={`${stats.pending} pending confirmation`}
+        description={stats.pending > 0 ? `${stats.pending} need response` : "All confirmed"}
         icon={CalendarIcon}
         priority={stats.pending > 0 ? "high" : "normal"}
         onClick={() => onStatClick("today")}
         badge={stats.pending > 0 ? {
-          text: `${stats.pending} pending`,
-          variant: "outline"
-        } : undefined}
+          text: `${stats.pending} awaiting`,
+          variant: "destructive"
+        } : {
+          text: "Ready to serve",
+          variant: "default"
+        }}
       />
 
       {/* Needs Attention */}
@@ -222,12 +225,16 @@ export function QuickStats({
 
       {/* Next Hour */}
       <StatCard
-        title="Next Hour"
+        title="Next 60 Minutes"
         value={upcomingNextHour}
-        description="Bookings starting soon"
+        description={upcomingNextHour > 0 ? "Prepare tables & staff" : "No imminent arrivals"}
         icon={Clock}
         priority={upcomingNextHour > 3 ? "high" : "normal"}
         onClick={() => onStatClick("nexthour")}
+        badge={upcomingNextHour > 0 ? {
+          text: `${upcomingNextHour} arriving soon`,
+          variant: upcomingNextHour > 3 ? "destructive" : "default"
+        } : undefined}
       />
 
       {/* Total Guests */}

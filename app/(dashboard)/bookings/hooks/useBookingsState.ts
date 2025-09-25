@@ -2,7 +2,7 @@ import { useState, useReducer, useCallback, useMemo } from "react"
 import { addDays } from "date-fns"
 import type { Booking } from "@/types"
 
-export type ViewMode = "today" | "management" | "tables"
+export type ViewMode = "today" | "management"
 export type StatusFilter = "all" | "upcoming" | "pending" | "confirmed" | "completed" | "cancelled_by_user" | "no_show"
 export type TimeFilter = "all" | "lunch" | "dinner"
 export type DateRange = "today" | "tomorrow" | "week" | "all" | "custom"

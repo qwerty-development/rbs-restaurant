@@ -79,8 +79,6 @@ export function BookingsFilter({
         return ["search", "time", "status"] // Simplified for today view
       case "management":
         return ["search", "status", "time", "date"] // Full filters for management
-      case "tables":
-        return ["search", "date"] // Minimal for tables view
       default:
         return ["search"]
     }
@@ -207,44 +205,6 @@ export function BookingsFilter({
         </div>
       )}
 
-      {/* Date Filters for Tables View */}
-      {viewMode === "tables" && (
-        <div className="flex flex-wrap gap-3">
-          <Button
-            variant={dateRange === "today" ? "default" : "outline"}
-            size="default"
-            onClick={() => onDateRangeChange("today")}
-            className="min-h-touch-lg font-medium"
-          >
-            Today ({format(now, "MMM d")})
-          </Button>
-          <Button
-            variant={dateRange === "tomorrow" ? "default" : "outline"}
-            size="default"
-            onClick={() => onDateRangeChange("tomorrow")}
-            className="min-h-touch-lg font-medium"
-          >
-            Tomorrow ({format(addDays(now, 1), "MMM d")})
-          </Button>
-          <Button
-            variant={dateRange === "all" ? "default" : "outline"}
-            size="default"
-            onClick={() => onDateRangeChange("all")}
-            className="min-h-touch-lg font-medium"
-          >
-            All Dates
-          </Button>
-          <Button
-            variant="outline"
-            size="default"
-            onClick={onDatePickerOpen}
-            className="min-h-touch-lg font-medium"
-          >
-            <CalendarIcon className="h-4 w-4 mr-2" />
-            Pick a date
-          </Button>
-        </div>
-      )}
 
       {/* Active Filters Display & Clear */}
       {hasFilters && (
@@ -335,8 +295,6 @@ function getSearchPlaceholder(viewMode: ViewMode): string {
       return "Search today's bookings..."
     case "management":
       return "Search by name, code, phone, email, or table..."
-    case "tables":
-      return "Search table assignments..."
     default:
       return "Search bookings..."
   }
