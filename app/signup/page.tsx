@@ -110,7 +110,7 @@ export default function SignUpPage() {
             full_name: data.fullName,
             phone_number: data.phoneNumber,
           },
-          emailRedirectTo: `${typeof window !== 'undefined' ? window.location.origin : 'https://plate-app.com'}/verify-email`,
+          emailRedirectTo: `${typeof window !== 'undefined' ? window.location.origin : 'https://www.plate-app.com'}/verify-email`,
         },
       })
 
