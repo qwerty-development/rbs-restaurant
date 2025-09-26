@@ -410,7 +410,7 @@ export default function EnhancedAvailabilitySettingsPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4 sm:space-y-8 px-2 sm:px-0">
       {/* Header */}
       <div>
         <Button
@@ -421,18 +421,30 @@ export default function EnhancedAvailabilitySettingsPage() {
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Settings
         </Button>
-        <h1 className="text-3xl font-bold tracking-tight">Availability Settings</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Availability Settings</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">
           Manage your restaurant's operating hours, open hours, special occasions, and closures.
         </p>
       </div>
 
-      <Tabs defaultValue="regular" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="regular">Booking Hours</TabsTrigger>
-          <TabsTrigger value="open">Open Hours</TabsTrigger>
-          <TabsTrigger value="special">Special Hours</TabsTrigger>
-          <TabsTrigger value="closures">Closures</TabsTrigger>
+      <Tabs defaultValue="regular" className="space-y-4 sm:space-y-6">
+        <TabsList className="w-full sm:w-auto grid grid-cols-4 sm:flex gap-0 sm:gap-1 h-auto p-1">
+          <TabsTrigger value="regular" className="text-xs sm:text-sm px-2 sm:px-4 py-2">
+            <span className="hidden sm:inline">Booking Hours</span>
+            <span className="sm:hidden">Booking</span>
+          </TabsTrigger>
+          <TabsTrigger value="open" className="text-xs sm:text-sm px-2 sm:px-4 py-2">
+            <span className="hidden sm:inline">Open Hours</span>
+            <span className="sm:hidden">Open</span>
+          </TabsTrigger>
+          <TabsTrigger value="special" className="text-xs sm:text-sm px-2 sm:px-4 py-2">
+            <span className="hidden sm:inline">Special Hours</span>
+            <span className="sm:hidden">Special</span>
+          </TabsTrigger>
+          <TabsTrigger value="closures" className="text-xs sm:text-sm px-2 sm:px-4 py-2">
+            <span className="hidden sm:inline">Closures</span>
+            <span className="sm:hidden">Closures</span>
+          </TabsTrigger>
         </TabsList>
 
         {/* Regular Hours Tab */}
@@ -472,7 +484,7 @@ export default function EnhancedAvailabilitySettingsPage() {
                         
                         <div className="space-y-3">
                           {shifts.map((_, shiftIndex) => (
-                            <div key={shiftIndex} className="flex items-center gap-4 p-4 border rounded-lg">
+                            <div key={shiftIndex} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 border rounded-lg">
                               <div className="flex items-center space-x-2">
                                 <FormField
                                   control={regularHoursForm.control}
@@ -502,7 +514,7 @@ export default function EnhancedAvailabilitySettingsPage() {
                                       <Input
                                         placeholder="Shift name (e.g., Lunch, Dinner)"
                                         {...field}
-                                        className="w-44"
+                                        className="w-full sm:w-44"
                                       />
                                     </FormControl>
                                     <FormMessage />
@@ -511,17 +523,17 @@ export default function EnhancedAvailabilitySettingsPage() {
                               />
 
                               {shifts[shiftIndex]?.is_open && (
-                                <>
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
                                   <FormField
                                     control={regularHoursForm.control}
                                     name={`${day}.${shiftIndex}.open_time`}
                                     render={({ field }) => (
-                                      <FormItem>
+                                      <FormItem className="w-full sm:w-auto">
                                         <FormControl>
                                           <TimeInput12H
                                             value={field.value || ""}
                                             onChange={field.onChange}
-                                            className="w-auto"
+                                            className="w-full sm:w-auto"
                                             name={field.name}
                                             placeholder="9:00 AM"
                                           />
@@ -531,18 +543,18 @@ export default function EnhancedAvailabilitySettingsPage() {
                                     )}
                                   />
 
-                                  <span className="text-muted-foreground">to</span>
+                                  <span className="text-muted-foreground text-center sm:text-left">to</span>
 
                                   <FormField
                                     control={regularHoursForm.control}
                                     name={`${day}.${shiftIndex}.close_time`}
                                     render={({ field }) => (
-                                      <FormItem>
+                                      <FormItem className="w-full sm:w-auto">
                                         <FormControl>
                                           <TimeInput12H
                                             value={field.value || ""}
                                             onChange={field.onChange}
-                                            className="w-auto"
+                                            className="w-full sm:w-auto"
                                             name={field.name}
                                             placeholder="5:00 PM"
                                           />
@@ -551,7 +563,7 @@ export default function EnhancedAvailabilitySettingsPage() {
                                       </FormItem>
                                     )}
                                   />
-                                </>
+                                </div>
                               )}
 
                               {shifts.length > 1 && (
@@ -577,7 +589,7 @@ export default function EnhancedAvailabilitySettingsPage() {
 
                   <Button
                     type="submit"
-                    className="w-full"
+                    className="w-full mt-4"
                     disabled={updateRegularHoursMutation.isPending}
                   >
                     <Save className="mr-2 h-4 w-4" />
@@ -769,7 +781,7 @@ export default function EnhancedAvailabilitySettingsPage() {
               />
 
               {!specialHoursForm.watch("is_closed") && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FormField
                     control={specialHoursForm.control}
                     name="open_time"
@@ -934,7 +946,7 @@ export default function EnhancedAvailabilitySettingsPage() {
               />
 
               {!closureForm.watch("is_all_day") && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FormField
                     control={closureForm.control}
                     name="start_time"

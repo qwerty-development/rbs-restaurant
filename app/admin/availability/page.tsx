@@ -527,9 +527,9 @@ export default function AdminAvailabilityManagementPage() {
       {selectedRestaurant && (
         <Tabs defaultValue="regular" className="space-y-6">
           <TabsList>
-            <TabsTrigger value="regular">Booking Hours</TabsTrigger>
-            <TabsTrigger value="open">Open Hours</TabsTrigger>
-            <TabsTrigger value="special">Special Hours</TabsTrigger>
+            <TabsTrigger value="regular">Booking</TabsTrigger>
+            <TabsTrigger value="open">Open</TabsTrigger>
+            <TabsTrigger value="special">Special</TabsTrigger>
             <TabsTrigger value="closures">Closures</TabsTrigger>
           </TabsList>
 

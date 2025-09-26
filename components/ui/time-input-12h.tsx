@@ -130,11 +130,11 @@ export const TimeInput12H = forwardRef<HTMLInputElement, TimeInput12HProps>(
             </div>
           </PopoverTrigger>
 
-          <PopoverContent className="w-72 p-3" align="start">
+          <PopoverContent className="w-[90vw] sm:w-72 max-w-sm p-3" align="start">
             <div className="space-y-3">
               {/* Quick Common Times */}
               <div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {[
                     { label: "8:00 AM", value: "08:00" },
                     { label: "9:00 AM", value: "09:00" },
