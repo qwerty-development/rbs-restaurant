@@ -58,51 +58,44 @@ export function PushNotificationPermission() {
   if (!showPrompt || !requestPushPermission || !process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY) return null
 
   return (
-    <Alert className={cn(
-      "border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800",
+    <div className={cn(
+      "border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800 rounded-lg p-3",
       "animate-in slide-in-from-top-2 duration-300"
     )}>
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-3">
         <div className="flex-shrink-0">
-          {isPushEnabled ? (
-            <Bell className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-          ) : (
-            <BellOff className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-          )}
+          <BellOff className="h-4 w-4 text-blue-600 dark:text-blue-400" />
         </div>
-        
-        <div className="flex-1">
-          <AlertDescription className="text-blue-800 dark:text-blue-200">
-            <div className="font-medium mb-1">Enable Push Notifications</div>
-            <div className="text-sm">
-              Get notified about new bookings even when the app is closed or in the background.
-            </div>
-            <div className="text-xs mt-1 text-blue-600 dark:text-blue-300">
-              Current status: {pushNotificationManager.getCurrentPermission()}
-            </div>
-          </AlertDescription>
+
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium text-blue-800 dark:text-blue-200">
+            Enable Push Notifications
+          </div>
+          <div className="text-xs text-blue-600 dark:text-blue-300 truncate">
+            Get notified about new bookings instantly
+          </div>
         </div>
-        
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-1">
           <Button
             onClick={handleRequestPermission}
             disabled={isRequesting}
             size="sm"
-            className="bg-blue-600 hover:bg-blue-700 text-white"
+            className="bg-blue-600 hover:bg-blue-700 text-white h-7 px-3 text-xs"
           >
             {isRequesting ? 'Enabling...' : 'Enable'}
           </Button>
-          
+
           <Button
             onClick={handleDismiss}
             variant="ghost"
             size="sm"
-            className="h-8 w-8 p-0 hover:bg-blue-100 dark:hover:bg-blue-800"
+            className="h-7 w-7 p-0 hover:bg-blue-100 dark:hover:bg-blue-800"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3 w-3" />
           </Button>
         </div>
       </div>
-    </Alert>
+    </div>
   )
 }

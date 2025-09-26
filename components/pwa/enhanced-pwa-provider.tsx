@@ -3,10 +3,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Bell, BellOff, TestTube, Volume2 } from 'lucide-react'
+import { Bell, BellOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Switch } from '@/components/ui/switch'
 import { createClient } from '@/lib/supabase/client'
 
 // Convert VAPID key
@@ -297,30 +295,27 @@ export function EnhancedPWAProvider({
     if (!isSupported || !showPermissionBanner || isSubscribed) return null
 
     return (
-      <div className="fixed top-0 left-0 right-0 bg-blue-600 text-white p-3 z-50 shadow-lg">
+      <div className="fixed top-0 left-0 right-0 bg-blue-600 text-white p-2 z-50 shadow-lg">
         <div className="flex items-center justify-between max-w-4xl mx-auto">
-          <div className="flex items-center gap-3">
-            <Bell className="h-5 w-5" />
-            <div>
-              <p className="text-sm font-medium">Stay updated with notifications!</p>
-              <p className="text-xs opacity-90">Get notified about new bookings and important updates</p>
-            </div>
-          </div>
           <div className="flex items-center gap-2">
+            <Bell className="h-4 w-4" />
+            <span className="text-sm font-medium">Enable notifications</span>
+          </div>
+          <div className="flex items-center gap-1">
             <Button
               variant="secondary"
               size="sm"
               onClick={() => setShowPermissionBanner(false)}
-              className="bg-white/20 hover:bg-white/30 text-white"
+              className="bg-white/20 hover:bg-white/30 text-white h-6 px-2 text-xs"
             >
-              Maybe Later
+              Later
             </Button>
             <Button
               variant="default"
               size="sm"
               onClick={requestNotificationPermission}
               disabled={isLoading}
-              className="bg-white text-blue-600 hover:bg-gray-100"
+              className="bg-white text-blue-600 hover:bg-gray-100 h-6 px-2 text-xs"
             >
               {isLoading ? 'Enabling...' : 'Enable'}
             </Button>
@@ -330,62 +325,47 @@ export function EnhancedPWAProvider({
     )
   }
 
-  // Status indicator
+  // Status indicator - compact floating button
   const StatusIndicator = () => {
     if (!isSupported) return null
 
     return (
       <div className="fixed bottom-4 right-4 z-40">
-        <Card className="w-80">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              {isSubscribed ? (
-                <>
-                  <Bell className="h-4 w-4 text-green-600" />
-                  Notifications Active
-                </>
-              ) : (
-                <>
-                  <BellOff className="h-4 w-4 text-gray-500" />
-                  Notifications Disabled
-                </>
-              )}
-              <div className={`w-2 h-2 rounded-full ml-auto ${isOnline ? 'bg-green-500' : 'bg-red-500'}`} />
-            </CardTitle>
-            <CardDescription className="text-xs">
-              {isSubscribed 
-                ? 'You\'ll receive push notifications for important updates'
-                : 'Enable notifications to stay updated'
-              }
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
+        <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-2 min-w-[200px]">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              {!isSubscribed ? (
-                <Button
-                  size="sm"
-                  onClick={requestNotificationPermission}
-                  disabled={isLoading}
-                  className="flex-1"
-                >
-                  <Bell className="h-4 w-4 mr-1" />
-                  {isLoading ? 'Enabling...' : 'Enable Notifications'}
-                </Button>
+              {isSubscribed ? (
+                <Bell className="h-3 w-3 text-green-600" />
               ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={testNotification}
-                  disabled={isLoading}
-                  className="flex-1"
-                >
-                  <TestTube className="h-4 w-4 mr-1" />
-                  {isLoading ? 'Sending...' : 'Test'}
-                </Button>
+                <BellOff className="h-3 w-3 text-gray-500" />
               )}
+              <span className="text-xs font-medium">
+                {isSubscribed ? 'Notifications On' : 'Notifications Off'}
+              </span>
+              <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-green-500' : 'bg-red-500'}`} />
             </div>
-          </CardContent>
-        </Card>
+            {!isSubscribed ? (
+              <Button
+                size="sm"
+                onClick={requestNotificationPermission}
+                disabled={isLoading}
+                className="h-6 px-2 text-xs"
+              >
+                {isLoading ? 'Enabling...' : 'Enable'}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={testNotification}
+                disabled={isLoading}
+                className="h-6 px-2 text-xs"
+              >
+                Test
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     )
   }

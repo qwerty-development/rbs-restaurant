@@ -126,7 +126,7 @@ export function ConnectionStatusIndicator({
             />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-80" align="end">
+        <PopoverContent className="w-64" align="end">
           <ConnectionStatusDetails
             healthStatus={healthStatus}
             onForceReconnect={onForceReconnect}
@@ -193,17 +193,17 @@ function ConnectionStatusDetails({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <h4 className="font-semibold text-sm">Real-time Connection</h4>
-        <Badge variant={healthStatus.isHealthy ? "default" : "destructive"}>
+        <h4 className="font-medium text-sm">Connection</h4>
+        <Badge variant={healthStatus.isHealthy ? "default" : "destructive"} className="text-xs">
           {healthStatus.connectionState}
         </Badge>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 text-xs">
-        <div className="space-y-1">
-          <span className="text-muted-foreground">Status</span>
+      <div className="text-xs text-muted-foreground">
+        <div className="flex items-center justify-between">
+          <span>Status:</span>
           <div className="flex items-center gap-1">
             {healthStatus.isHealthy ? (
               <CheckCircle className="h-3 w-3 text-green-500" />
@@ -215,86 +215,35 @@ function ConnectionStatusDetails({
             </span>
           </div>
         </div>
-
-        <div className="space-y-1">
-          <span className="text-muted-foreground">Channels</span>
-          <div className="flex items-center gap-1">
-            <Activity className="h-3 w-3 text-blue-500" />
-            <span>{healthStatus.channelCount}</span>
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <span className="text-muted-foreground">Last Activity</span>
-          <div className="flex items-center gap-1">
-            <Clock className="h-3 w-3 text-gray-500" />
-            <span>
-              {healthStatus.lastActivity
-                ? format(healthStatus.lastActivity, 'HH:mm:ss')
-                : 'Never'
-              }
-            </span>
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <span className="text-muted-foreground">Attempts</span>
-          <div className="flex items-center gap-1">
-            <RefreshCw className="h-3 w-3 text-orange-500" />
-            <span>{healthStatus.reconnectAttempts}</span>
-          </div>
+        <div className="flex items-center justify-between mt-1">
+          <span>Channels:</span>
+          <span>{healthStatus.channelCount}</span>
         </div>
       </div>
 
       {!healthStatus.isHealthy && (
-        <Alert className="border-amber-200 bg-amber-50">
-          <AlertTriangle className="h-4 w-4 text-amber-600" />
-          <AlertDescription className="text-xs text-amber-800">
-            {isAggressivePolling
-              ? `Recovery mode active for ${Math.round(unhealthyDurationMinutes || 0)} minutes. Background sync running.`
-              : "Real-time updates may be delayed. Manual refresh recommended."
-            }
-          </AlertDescription>
-        </Alert>
+        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+          {isAggressivePolling
+            ? `Recovery mode (${Math.round(unhealthyDurationMinutes || 0)}m)`
+            : "Updates may be delayed"
+          }
+        </div>
       )}
 
-      {isAggressivePolling && (
-        <Alert className="border-blue-200 bg-blue-50">
-          <Zap className="h-4 w-4 text-blue-600" />
-          <AlertDescription className="text-xs text-blue-800">
-            Service worker is maintaining data freshness via background sync.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <div className="flex gap-2">
+      <div className="flex gap-1">
         <Button
           onClick={handleReconnect}
           size="sm"
           variant="outline"
-          className="flex-1 h-7 text-xs"
+          className="flex-1 h-6 text-xs px-2"
           disabled={healthStatus.connectionState === 'reconnecting'}
         >
           <RefreshCw className={cn(
             "h-3 w-3 mr-1",
             healthStatus.connectionState === 'reconnecting' && "animate-spin"
           )} />
-          {healthStatus.connectionState === 'reconnecting' ? 'Reconnecting...' : 'Reconnect'}
+          {healthStatus.connectionState === 'reconnecting' ? 'Reconnecting' : 'Reconnect'}
         </Button>
-
-        <Button
-          onClick={() => window.location.reload()}
-          size="sm"
-          variant="ghost"
-          className="h-7 text-xs"
-        >
-          <Zap className="h-3 w-3 mr-1" />
-          Refresh Page
-        </Button>
-      </div>
-
-      <div className="text-xs text-muted-foreground pt-1 border-t">
-        <p>Connection monitors real-time booking updates and notifications.</p>
       </div>
     </div>
   )
