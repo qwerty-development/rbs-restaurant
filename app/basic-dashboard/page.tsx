@@ -21,7 +21,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from "@/components/ui/input"
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { MultiDayCalendar } from "@/components/ui/multi-day-calendar"
+import { DateRangePicker } from "@/components/ui/date-range-picker"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { getFirstName } from "@/lib/utils"
@@ -1036,7 +1036,7 @@ export default function BasicDashboardPage() {
                 size="sm"
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                Select Dates
+                Select Range
                 {dateViewMode === 'select' && selectedDates.length > 0 && (
                   <Badge variant="secondary" className="ml-2 h-5">
                     {selectedDates.length}
@@ -1046,25 +1046,15 @@ export default function BasicDashboardPage() {
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
               <div className="p-3">
-                <div className="mb-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setDateViewMode('select')
-                      if (selectedDates.length === 0) {
-                        setSelectedDates([new Date()])
-                      }
-                    }}
-                    className="w-full mb-2"
-                  >
-                    Use Selected Dates
-                  </Button>
-                </div>
-                <MultiDayCalendar
+                <DateRangePicker
                   selectedDates={selectedDates}
-                  onDatesChange={setSelectedDates}
-                  placeholder="Select multiple dates"
+                  onDatesChange={(dates) => {
+                    setSelectedDates(dates)
+                    if (dates.length > 0) {
+                      setDateViewMode('select')
+                    }
+                  }}
+                  placeholder="Select date range"
                   className="w-[280px]"
                 />
               </div>
