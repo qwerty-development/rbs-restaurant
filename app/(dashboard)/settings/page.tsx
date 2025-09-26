@@ -330,9 +330,9 @@ export default function SettingsPage() {
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="location">Location</TabsTrigger>
-          <TabsTrigger value="operational">Operational</TabsTrigger>
-          <TabsTrigger value="features">Features & Pricing</TabsTrigger>
-          <TabsTrigger value="pwa">PWA & Mobile</TabsTrigger>
+          <TabsTrigger value="operational">Operation</TabsTrigger>
+          <TabsTrigger value="features">Features</TabsTrigger>
+          <TabsTrigger value="pwa">PWA</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-4">
@@ -699,7 +699,7 @@ export default function SettingsPage() {
         <TabsContent value="features" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Features & Pricing</CardTitle>
+              <CardTitle>Features</CardTitle>
               <CardDescription>
                 Configure your restaurant's features and pricing tier
               </CardDescription>
