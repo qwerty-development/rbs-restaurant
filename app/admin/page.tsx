@@ -33,7 +33,24 @@ interface Restaurant {
   coordinates?: Coordinates | null
   cancellation_window: number // in hours
   table_turnover: number // in minutes
-  min_age: number // minimum age requirement
+  min_age?: number // minimum age requirement
+  // Additional restaurant settings
+  website_url?: string
+  menu_url?: string
+  email?: string
+  dietary_options: string[]
+  ambiance_tags: string[]
+  parking_available: boolean
+  valet_parking: boolean
+  outdoor_seating: boolean
+  shisha_available: boolean
+  booking_window_days: number
+  max_party_size: number
+  min_party_size: number
+  featured: boolean
+  status: 'active' | 'inactive' | 'suspended'
+  auto_decline_enabled: boolean
+  request_expiry_hours: number
   availability: {
     [key: string]: Array<{
       name: string
@@ -75,6 +92,23 @@ const defaultRestaurant: Restaurant = {
   cancellation_window: 2, // 2 hours default
   table_turnover: 90, // 90 minutes default
   min_age: 0, // no age restriction by default
+  // Additional restaurant settings with defaults
+  website_url: "",
+  menu_url: "",
+  email: "",
+  dietary_options: [],
+  ambiance_tags: [],
+  parking_available: false,
+  valet_parking: false,
+  outdoor_seating: false,
+  shisha_available: false,
+  booking_window_days: 30,
+  max_party_size: 10,
+  min_party_size: 1,
+  featured: false,
+  status: 'active' as 'active' | 'inactive' | 'suspended',
+  auto_decline_enabled: true,
+  request_expiry_hours: 24,
   availability: {
     monday: [{ name: "", is_open: true, open_time: "11:00", close_time: "22:00" }],
     tuesday: [{ name: "", is_open: true, open_time: "11:00", close_time: "22:00" }],
@@ -428,14 +462,29 @@ export default function AdminPage() {
           booking_policy: restaurant.booking_policy,
           cancellation_window: restaurant.cancellation_window,
           table_turnover: restaurant.table_turnover,
-          min_age: restaurant.min_age,
+          minimum_age: restaurant.min_age || null,
+          // Additional restaurant settings
+          website_url: restaurant.website_url?.trim() || null,
+          menu_url: restaurant.menu_url?.trim() || null,
+          email: restaurant.email?.trim() || null,
+          dietary_options: restaurant.dietary_options.length > 0 ? restaurant.dietary_options : null,
+          ambiance_tags: restaurant.ambiance_tags.length > 0 ? restaurant.ambiance_tags : null,
+          parking_available: restaurant.parking_available,
+          valet_parking: restaurant.valet_parking,
+          outdoor_seating: restaurant.outdoor_seating,
+          shisha_available: restaurant.shisha_available,
+          booking_window_days: restaurant.booking_window_days,
+          max_party_size: restaurant.max_party_size,
+          min_party_size: restaurant.min_party_size,
+          featured: restaurant.featured,
+          status: restaurant.status,
+          auto_decline_enabled: restaurant.auto_decline_enabled,
+          request_expiry_hours: restaurant.request_expiry_hours,
           location: locationValue,
           main_image_url: mainImageUrl || null,
           image_urls: imageUrls.length > 0 ? imageUrls : null,
           average_rating: 0,
-          total_reviews: 0,
-          featured: false,
-          status: 'active'
+          total_reviews: 0
         })
         .select()
         .single()
@@ -907,22 +956,19 @@ export default function AdminPage() {
                     </div>
                     <div>
                       <Label>Minimum Age</Label>
-                      <Select
-                        value={restaurant.min_age.toString()}
-                        onValueChange={(value) => updateRestaurant('min_age', parseInt(value))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="0">No age restriction</SelectItem>
-                          <SelectItem value="16">16+ years</SelectItem>
-                          <SelectItem value="18">18+ years</SelectItem>
-                          <SelectItem value="21">21+ years</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="99"
+                        value={restaurant.min_age || ''}
+                        onChange={(e) => {
+                          const value = e.target.value
+                          updateRestaurant('min_age', value === '' ? 0 : parseInt(value) || 0)
+                        }}
+                        placeholder="Enter minimum age (leave empty for no restriction)"
+                      />
                       <p className="text-muted-foreground text-xs mt-1">
-                        Minimum age requirement for bookings
+                        Minimum age requirement for bookings (0 or empty = no restriction)
                       </p>
                     </div>
                     {restaurant.tier === 'pro' && (
@@ -950,6 +996,302 @@ export default function AdminPage() {
                         rows={3}
                         placeholder="Describe the restaurant atmosphere, cuisine, and special features"
                       />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Miscellaneous Settings Section */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 text-blue-800 border-b border-blue-200 pb-2">
+                    Additional Settings
+                  </h3>
+
+                  {/* Contact & Links */}
+                  <div className="space-y-6">
+                    <div>
+                      <h4 className="font-medium text-gray-700 mb-3">Contact & Links</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label>Restaurant Email</Label>
+                          <Input
+                            type="email"
+                            value={restaurant.email || ''}
+                            onChange={(e) => updateRestaurant('email', e.target.value)}
+                            placeholder="contact@restaurant.com"
+                          />
+                          <p className="text-muted-foreground text-xs mt-1">
+                            Primary email contact for the restaurant
+                          </p>
+                        </div>
+                        <div>
+                          <Label>Website URL</Label>
+                          <Input
+                            type="url"
+                            value={restaurant.website_url || ''}
+                            onChange={(e) => updateRestaurant('website_url', e.target.value)}
+                            placeholder="https://www.restaurant.com"
+                          />
+                          <p className="text-muted-foreground text-xs mt-1">
+                            Restaurant's official website
+                          </p>
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label>Online Menu URL</Label>
+                          <Input
+                            type="url"
+                            value={restaurant.menu_url || ''}
+                            onChange={(e) => updateRestaurant('menu_url', e.target.value)}
+                            placeholder="https://menu.restaurant.com"
+                          />
+                          <p className="text-muted-foreground text-xs mt-1">
+                            Link to online menu or PDF
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Features & Amenities */}
+                    <div>
+                      <h4 className="font-medium text-gray-700 mb-3">Features & Amenities</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="flex items-center space-x-2 rounded-lg border p-3">
+                          <Checkbox
+                            id="parking_available"
+                            checked={restaurant.parking_available}
+                            onCheckedChange={(checked) => updateRestaurant('parking_available', checked)}
+                          />
+                          <Label htmlFor="parking_available" className="text-sm">
+                            Parking Available
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2 rounded-lg border p-3">
+                          <Checkbox
+                            id="valet_parking"
+                            checked={restaurant.valet_parking}
+                            onCheckedChange={(checked) => updateRestaurant('valet_parking', checked)}
+                          />
+                          <Label htmlFor="valet_parking" className="text-sm">
+                            Valet Parking
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2 rounded-lg border p-3">
+                          <Checkbox
+                            id="outdoor_seating"
+                            checked={restaurant.outdoor_seating}
+                            onCheckedChange={(checked) => updateRestaurant('outdoor_seating', checked)}
+                          />
+                          <Label htmlFor="outdoor_seating" className="text-sm">
+                            Outdoor Seating
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2 rounded-lg border p-3">
+                          <Checkbox
+                            id="shisha_available"
+                            checked={restaurant.shisha_available}
+                            onCheckedChange={(checked) => updateRestaurant('shisha_available', checked)}
+                          />
+                          <Label htmlFor="shisha_available" className="text-sm">
+                            Shisha Available
+                          </Label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Booking Settings */}
+                    <div>
+                      <h4 className="font-medium text-gray-700 mb-3">Advanced Booking Settings</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div>
+                          <Label>Booking Window (days ahead)</Label>
+                          <Select
+                            value={restaurant.booking_window_days.toString()}
+                            onValueChange={(value) => updateRestaurant('booking_window_days', parseInt(value))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="7">7 days</SelectItem>
+                              <SelectItem value="14">14 days</SelectItem>
+                              <SelectItem value="30">30 days</SelectItem>
+                              <SelectItem value="60">60 days</SelectItem>
+                              <SelectItem value="90">90 days</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-muted-foreground text-xs mt-1">
+                            How far in advance customers can book
+                          </p>
+                        </div>
+                        <div>
+                          <Label>Request Expiry (hours)</Label>
+                          <Select
+                            value={restaurant.request_expiry_hours.toString()}
+                            onValueChange={(value) => updateRestaurant('request_expiry_hours', parseInt(value))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="1">1 hour</SelectItem>
+                              <SelectItem value="2">2 hours</SelectItem>
+                              <SelectItem value="4">4 hours</SelectItem>
+                              <SelectItem value="8">8 hours</SelectItem>
+                              <SelectItem value="12">12 hours</SelectItem>
+                              <SelectItem value="24">24 hours</SelectItem>
+                              <SelectItem value="48">48 hours</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-muted-foreground text-xs mt-1">
+                            How long booking requests stay valid
+                          </p>
+                        </div>
+                        <div>
+                          <Label>Maximum Party Size</Label>
+                          <Select
+                            value={restaurant.max_party_size.toString()}
+                            onValueChange={(value) => updateRestaurant('max_party_size', parseInt(value))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="2">2 people</SelectItem>
+                              <SelectItem value="4">4 people</SelectItem>
+                              <SelectItem value="6">6 people</SelectItem>
+                              <SelectItem value="8">8 people</SelectItem>
+                              <SelectItem value="10">10 people</SelectItem>
+                              <SelectItem value="12">12 people</SelectItem>
+                              <SelectItem value="15">15 people</SelectItem>
+                              <SelectItem value="20">20 people</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Minimum Party Size</Label>
+                          <Select
+                            value={restaurant.min_party_size.toString()}
+                            onValueChange={(value) => updateRestaurant('min_party_size', parseInt(value))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="1">1 person</SelectItem>
+                              <SelectItem value="2">2 people</SelectItem>
+                              <SelectItem value="3">3 people</SelectItem>
+                              <SelectItem value="4">4 people</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex items-center space-x-2 rounded-lg border p-3">
+                          <Checkbox
+                            id="auto_decline_enabled"
+                            checked={restaurant.auto_decline_enabled}
+                            onCheckedChange={(checked) => updateRestaurant('auto_decline_enabled', checked)}
+                          />
+                          <div className="space-y-0.5">
+                            <Label htmlFor="auto_decline_enabled" className="text-sm font-medium">
+                              Auto-decline Requests
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              Automatically decline expired requests
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2 rounded-lg border p-3">
+                          <Checkbox
+                            id="featured"
+                            checked={restaurant.featured}
+                            onCheckedChange={(checked) => updateRestaurant('featured', checked)}
+                          />
+                          <div className="space-y-0.5">
+                            <Label htmlFor="featured" className="text-sm font-medium">
+                              Featured Restaurant
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              Show in featured listings
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Status & Tags */}
+                    <div>
+                      <h4 className="font-medium text-gray-700 mb-3">Status & Classification</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <Label>Restaurant Status</Label>
+                          <Select
+                            value={restaurant.status}
+                            onValueChange={(value: 'active' | 'inactive' | 'suspended') => updateRestaurant('status', value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="active">Active</SelectItem>
+                              <SelectItem value="inactive">Inactive</SelectItem>
+                              <SelectItem value="suspended">Suspended</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-muted-foreground text-xs mt-1">
+                            Current operational status
+                          </p>
+                        </div>
+                        <div>
+                          <Label>Dietary Options</Label>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {['Vegetarian', 'Vegan', 'Gluten-Free', 'Halal', 'Kosher', 'Dairy-Free', 'Nut-Free'].map((option) => (
+                              <Badge
+                                key={option}
+                                variant={restaurant.dietary_options.includes(option.toLowerCase()) ? "default" : "outline"}
+                                className="cursor-pointer"
+                                onClick={() => {
+                                  const lowerOption = option.toLowerCase()
+                                  const currentOptions = restaurant.dietary_options || []
+                                  if (currentOptions.includes(lowerOption)) {
+                                    updateRestaurant('dietary_options', currentOptions.filter(o => o !== lowerOption))
+                                  } else {
+                                    updateRestaurant('dietary_options', [...currentOptions, lowerOption])
+                                  }
+                                }}
+                              >
+                                {option}
+                              </Badge>
+                            ))}
+                          </div>
+                          <p className="text-muted-foreground text-xs mt-1">
+                            Available dietary accommodations
+                          </p>
+                        </div>
+                        <div>
+                          <Label>Ambiance Tags</Label>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {['Casual', 'Fine Dining', 'Family-Friendly', 'Romantic', 'Business', 'Trendy', 'Cozy', 'Lively'].map((tag) => (
+                              <Badge
+                                key={tag}
+                                variant={restaurant.ambiance_tags.includes(tag.toLowerCase()) ? "default" : "outline"}
+                                className="cursor-pointer"
+                                onClick={() => {
+                                  const lowerTag = tag.toLowerCase()
+                                  const currentTags = restaurant.ambiance_tags || []
+                                  if (currentTags.includes(lowerTag)) {
+                                    updateRestaurant('ambiance_tags', currentTags.filter(t => t !== lowerTag))
+                                  } else {
+                                    updateRestaurant('ambiance_tags', [...currentTags, lowerTag])
+                                  }
+                                }}
+                              >
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                          <p className="text-muted-foreground text-xs mt-1">
+                            Restaurant atmosphere and style
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
