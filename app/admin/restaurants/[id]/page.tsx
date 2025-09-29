@@ -30,6 +30,9 @@ interface Restaurant {
   featured: boolean
   main_image_url?: string | null
   image_urls?: string[] | null
+  cancellation_window?: number
+  table_turnover?: number
+  min_age?: number
 }
 
 export default function AdminRestaurantEditPage() {
@@ -55,6 +58,9 @@ export default function AdminRestaurantEditPage() {
     featured: false,
     main_image_url: '' as string,
     image_urls: [] as string[],
+    cancellation_window: 2,
+    table_turnover: 90,
+    min_age: 0,
   })
 
   useEffect(() => {
@@ -85,6 +91,9 @@ export default function AdminRestaurantEditPage() {
           featured: !!data.featured,
           main_image_url: data.main_image_url || '',
           image_urls: Array.isArray(data.image_urls) ? data.image_urls.filter(Boolean) : [],
+          cancellation_window: data.cancellation_window || 2,
+          table_turnover: data.table_turnover || 90,
+          min_age: data.min_age || 0,
         })
       } catch (e) {
         console.error('Failed to load restaurant', e)
@@ -118,6 +127,9 @@ export default function AdminRestaurantEditPage() {
           featured: formData.featured,
           main_image_url: formData.main_image_url || null,
           image_urls: formData.image_urls || [],
+          cancellation_window: formData.cancellation_window,
+          table_turnover: formData.table_turnover,
+          min_age: formData.min_age,
           updated_at: new Date().toISOString(),
         })
         .eq('id', restaurant.id)
@@ -225,7 +237,7 @@ export default function AdminRestaurantEditPage() {
             <Textarea rows={3} value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <Label>Booking Policy</Label>
               <Select value={formData.booking_policy} onValueChange={(v) => setFormData({ ...formData, booking_policy: v as 'instant' | 'request' })}>
@@ -235,6 +247,55 @@ export default function AdminRestaurantEditPage() {
                 <SelectContent>
                   <SelectItem value="instant">Instant Confirmation</SelectItem>
                   <SelectItem value="request">Request Based</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Cancellation Window (hours)</Label>
+              <Select value={formData.cancellation_window.toString()} onValueChange={(v) => setFormData({ ...formData, cancellation_window: parseInt(v) })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">No cancellation allowed</SelectItem>
+                  <SelectItem value="1">1 hour before</SelectItem>
+                  <SelectItem value="2">2 hours before</SelectItem>
+                  <SelectItem value="4">4 hours before</SelectItem>
+                  <SelectItem value="8">8 hours before</SelectItem>
+                  <SelectItem value="12">12 hours before</SelectItem>
+                  <SelectItem value="24">24 hours before</SelectItem>
+                  <SelectItem value="48">48 hours before</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Table Turnover (minutes)</Label>
+              <Select value={formData.table_turnover.toString()} onValueChange={(v) => setFormData({ ...formData, table_turnover: parseInt(v) })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="60">60 minutes</SelectItem>
+                  <SelectItem value="75">75 minutes</SelectItem>
+                  <SelectItem value="90">90 minutes</SelectItem>
+                  <SelectItem value="105">105 minutes</SelectItem>
+                  <SelectItem value="120">120 minutes</SelectItem>
+                  <SelectItem value="150">150 minutes</SelectItem>
+                  <SelectItem value="180">180 minutes</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Minimum Age</Label>
+              <Select value={formData.min_age.toString()} onValueChange={(v) => setFormData({ ...formData, min_age: parseInt(v) })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">No age restriction</SelectItem>
+                  <SelectItem value="16">16+ years</SelectItem>
+                  <SelectItem value="18">18+ years</SelectItem>
+                  <SelectItem value="21">21+ years</SelectItem>
                 </SelectContent>
               </Select>
             </div>

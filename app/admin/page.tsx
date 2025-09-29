@@ -31,6 +31,9 @@ interface Restaurant {
   owner_email: string
   tier: 'basic' | 'pro'
   coordinates?: Coordinates | null
+  cancellation_window: number // in hours
+  table_turnover: number // in minutes
+  min_age: number // minimum age requirement
   availability: {
     [key: string]: Array<{
       name: string
@@ -69,6 +72,9 @@ const defaultRestaurant: Restaurant = {
   owner_email: "",
   tier: "pro",
   coordinates: null,
+  cancellation_window: 2, // 2 hours default
+  table_turnover: 90, // 90 minutes default
+  min_age: 0, // no age restriction by default
   availability: {
     monday: [{ name: "", is_open: true, open_time: "11:00", close_time: "22:00" }],
     tuesday: [{ name: "", is_open: true, open_time: "11:00", close_time: "22:00" }],
@@ -420,6 +426,9 @@ export default function AdminPage() {
           tier: restaurant.tier,
           price_range: restaurant.price_range,
           booking_policy: restaurant.booking_policy,
+          cancellation_window: restaurant.cancellation_window,
+          table_turnover: restaurant.table_turnover,
+          min_age: restaurant.min_age,
           location: locationValue,
           main_image_url: mainImageUrl || null,
           image_urls: imageUrls.length > 0 ? imageUrls : null,
@@ -848,6 +857,73 @@ export default function AdminPage() {
                           <SelectItem value="pro">Pro Tier</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div>
+                      <Label>Cancellation Window (hours)</Label>
+                      <Select
+                        value={restaurant.cancellation_window.toString()}
+                        onValueChange={(value) => updateRestaurant('cancellation_window', parseInt(value))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">No cancellation allowed</SelectItem>
+                          <SelectItem value="1">1 hour before</SelectItem>
+                          <SelectItem value="2">2 hours before</SelectItem>
+                          <SelectItem value="4">4 hours before</SelectItem>
+                          <SelectItem value="8">8 hours before</SelectItem>
+                          <SelectItem value="12">12 hours before</SelectItem>
+                          <SelectItem value="24">24 hours before</SelectItem>
+                          <SelectItem value="48">48 hours before</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-muted-foreground text-xs mt-1">
+                        How long before booking time customers can cancel
+                      </p>
+                    </div>
+                    <div>
+                      <Label>Table Turnover (minutes)</Label>
+                      <Select
+                        value={restaurant.table_turnover.toString()}
+                        onValueChange={(value) => updateRestaurant('table_turnover', parseInt(value))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="60">60 minutes</SelectItem>
+                          <SelectItem value="75">75 minutes</SelectItem>
+                          <SelectItem value="90">90 minutes</SelectItem>
+                          <SelectItem value="105">105 minutes</SelectItem>
+                          <SelectItem value="120">120 minutes</SelectItem>
+                          <SelectItem value="150">150 minutes</SelectItem>
+                          <SelectItem value="180">180 minutes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-muted-foreground text-xs mt-1">
+                        Average time customers spend at tables
+                      </p>
+                    </div>
+                    <div>
+                      <Label>Minimum Age</Label>
+                      <Select
+                        value={restaurant.min_age.toString()}
+                        onValueChange={(value) => updateRestaurant('min_age', parseInt(value))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">No age restriction</SelectItem>
+                          <SelectItem value="16">16+ years</SelectItem>
+                          <SelectItem value="18">18+ years</SelectItem>
+                          <SelectItem value="21">21+ years</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-muted-foreground text-xs mt-1">
+                        Minimum age requirement for bookings
+                      </p>
                     </div>
                     {restaurant.tier === 'pro' && (
                       <div>

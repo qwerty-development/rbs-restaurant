@@ -23,7 +23,8 @@ import {
   TrendingUp,
   FileText,
   Bell,
-  CreditCard
+  CreditCard,
+  ChefHat
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 
@@ -120,6 +121,7 @@ export default function AdminLayout({
         { name: 'Restaurants', href: '/admin/restaurants', icon: Building, current: false },
         { name: 'Users', href: '/admin/users', icon: Users, current: false },
         { name: 'Restaurant Staff', href: '/admin/restaurants/staff', icon: UserCheck, current: false },
+        { name: 'Menu Management', href: '/admin/menu', icon: ChefHat, current: false },
         { name: 'Banners', href: '/admin/banners', icon: CreditCard, current: false },
       ]
     },

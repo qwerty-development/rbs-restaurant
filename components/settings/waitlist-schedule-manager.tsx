@@ -146,7 +146,7 @@ export function WaitlistScheduleManager({ restaurantId, tier }: WaitlistSchedule
   })
 
   // Fetch waitlist schedules
-  const { data: schedules, isLoading } = useQuery({
+  const { data: allSchedules, isLoading } = useQuery({
     queryKey: ['waitlist-schedules', restaurantId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -161,6 +161,19 @@ export function WaitlistScheduleManager({ restaurantId, tier }: WaitlistSchedule
     },
     enabled: !!restaurantId
   })
+
+  // Filter schedules to only show current and future dates (Lebanon timezone)
+  // Sort by date ascending (earliest upcoming dates first)
+  const schedules = allSchedules?.filter(schedule => {
+    const todayInLebanon = getTodayInLebanon()
+    return schedule.waitlist_date >= todayInLebanon
+  }).sort((a, b) => {
+    // Primary sort: by date (ascending)
+    const dateCompare = a.waitlist_date.localeCompare(b.waitlist_date)
+    if (dateCompare !== 0) return dateCompare
+    // Secondary sort: by start time (ascending)
+    return a.start_time.localeCompare(b.start_time)
+  }) || []
 
   // Create schedule mutation
   const createScheduleMutation = useMutation({
@@ -296,6 +309,7 @@ export function WaitlistScheduleManager({ restaurantId, tier }: WaitlistSchedule
         </CardTitle>
         <CardDescription>
           Configure when booking requests should automatically join the waitlist instead of being confirmed instantly.
+          Only current and future schedules are shown (past schedules are kept for historical records).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -538,7 +552,7 @@ export function WaitlistScheduleManager({ restaurantId, tier }: WaitlistSchedule
           ) : (
             <div className="text-center py-12 text-muted-foreground">
               <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium">No waitlist schedules configured</p>
+              <p className="text-lg font-medium">No upcoming waitlist schedules</p>
               <p className="text-sm mt-1">
                 Add your first schedule to start using time-based waitlisting
               </p>

@@ -95,12 +95,21 @@ CREATE TABLE public.bookings (
   is_shared_booking boolean DEFAULT false,
   decline_note text,
   preferred_section text,
+  cancelled_at timestamp with time zone,
+  cancelled_by_staff uuid,
+  cancellation_reason text,
+  cancellation_note text,
+  declined_at timestamp with time zone,
+  declined_by_staff uuid,
+  declined_reason text,
   CONSTRAINT bookings_pkey PRIMARY KEY (id),
   CONSTRAINT bookings_applied_loyalty_rule_id_fkey FOREIGN KEY (applied_loyalty_rule_id) REFERENCES public.restaurant_loyalty_rules(id),
   CONSTRAINT bookings_applied_offer_id_fkey FOREIGN KEY (applied_offer_id) REFERENCES public.special_offers(id),
   CONSTRAINT bookings_organizer_id_fkey FOREIGN KEY (organizer_id) REFERENCES public.profiles(id),
   CONSTRAINT bookings_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
-  CONSTRAINT bookings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+  CONSTRAINT bookings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
+  CONSTRAINT bookings_cancelled_by_staff_fkey FOREIGN KEY (cancelled_by_staff) REFERENCES public.profiles(id),
+  CONSTRAINT bookings_declined_by_staff_fkey FOREIGN KEY (declined_by_staff) REFERENCES public.profiles(id)
 );
 CREATE TABLE public.customer_notes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -372,7 +381,7 @@ CREATE TABLE public.notification_outbox (
   error text,
   created_at timestamp with time zone DEFAULT now(),
   sent_at timestamp with time zone,
-  type text CHECK (type = ANY (ARRAY['new_booking'::text, 'booking_cancelled'::text, 'booking_modified'::text, 'waitlist_update'::text, 'table_ready'::text, 'order_update'::text, 'general'::text])),
+  type text CHECK (type = ANY (ARRAY['new_booking'::text, 'booking_cancelled'::text, 'booking_modified'::text, 'waitlist_update'::text, 'table_ready'::text, 'order_update'::text, 'general'::text, 'review_reminder'::text, 'booking_completed'::text])),
   title text,
   body text,
   priority text DEFAULT 'normal'::text CHECK (priority = ANY (ARRAY['high'::text, 'normal'::text, 'low'::text])),
@@ -596,6 +605,8 @@ CREATE TABLE public.profiles (
   email text UNIQUE CHECK (email IS NULL OR email ~ '.+@.+'::text),
   date_of_birth date,
   onboarded boolean DEFAULT false,
+  first_name text DEFAULT ''::text,
+  last_name text DEFAULT ''::text,
   CONSTRAINT profiles_pkey PRIMARY KEY (id),
   CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
 );
@@ -643,6 +654,8 @@ CREATE TABLE public.restaurant_closures (
   reason text NOT NULL,
   created_at timestamp with time zone DEFAULT now(),
   created_by uuid NOT NULL,
+  start_time time without time zone,
+  end_time time without time zone,
   CONSTRAINT restaurant_closures_pkey PRIMARY KEY (id),
   CONSTRAINT restaurant_closures_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id),
   CONSTRAINT restaurant_closures_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id)
@@ -887,6 +900,23 @@ CREATE TABLE public.restaurant_vip_users (
   CONSTRAINT restaurant_vip_users_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
   CONSTRAINT restaurant_vip_users_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
 );
+CREATE TABLE public.restaurant_waitlist_schedules (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  restaurant_id uuid NOT NULL,
+  start_time time without time zone NOT NULL,
+  end_time time without time zone NOT NULL,
+  is_active boolean NOT NULL DEFAULT true,
+  name text DEFAULT ''::text,
+  notes text,
+  max_entries_per_hour integer CHECK (max_entries_per_hour > 0),
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  waitlist_date date NOT NULL DEFAULT CURRENT_DATE CHECK (waitlist_date >= CURRENT_DATE),
+  CONSTRAINT restaurant_waitlist_schedules_pkey PRIMARY KEY (id),
+  CONSTRAINT restaurant_waitlist_schedules_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
+  CONSTRAINT restaurant_waitlist_schedules_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
+);
 CREATE TABLE public.restaurants (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   name text NOT NULL,
@@ -931,6 +961,7 @@ CREATE TABLE public.restaurants (
   min_party_size integer DEFAULT 1,
   tier USER-DEFINED NOT NULL DEFAULT 'pro'::tier,
   minimum_age integer CHECK (minimum_age >= 13 AND minimum_age <= 25),
+  email text CHECK (email IS NULL OR email ~ '.+@.+'::text),
   CONSTRAINT restaurants_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.review_replies (
@@ -984,6 +1015,20 @@ CREATE TABLE public.reviews (
   CONSTRAINT reviews_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id),
   CONSTRAINT reviews_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
   CONSTRAINT reviews_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.security_audit_log (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  restaurant_id uuid,
+  activity_type text NOT NULL,
+  risk_score integer NOT NULL DEFAULT 0,
+  details jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ip_address inet,
+  user_agent text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT security_audit_log_pkey PRIMARY KEY (id),
+  CONSTRAINT security_audit_log_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
+  CONSTRAINT security_audit_log_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id)
 );
 CREATE TABLE public.spatial_ref_sys (
   srid integer NOT NULL CHECK (srid > 0 AND srid <= 998999),
@@ -1283,6 +1328,7 @@ CREATE TABLE public.waitlist (
   converted_booking_id uuid,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  is_scheduled_entry boolean DEFAULT false,
   CONSTRAINT waitlist_pkey PRIMARY KEY (id),
   CONSTRAINT waitlist_converted_booking_id_fkey FOREIGN KEY (converted_booking_id) REFERENCES public.bookings(id),
   CONSTRAINT waitlist_restaurant_id_fkey FOREIGN KEY (restaurant_id) REFERENCES public.restaurants(id),
