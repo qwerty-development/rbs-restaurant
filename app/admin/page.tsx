@@ -31,9 +31,9 @@ interface Restaurant {
   owner_email: string
   tier: 'basic' | 'pro'
   coordinates?: Coordinates | null
-  cancellation_window: number // in hours
-  table_turnover: number // in minutes
+  table_turnover_minutes: number // in minutes
   min_age?: number // minimum age requirement
+  cancellation_window_hours: number // in hours
   // Additional restaurant settings
   website_url?: string
   menu_url?: string
@@ -89,9 +89,9 @@ const defaultRestaurant: Restaurant = {
   owner_email: "",
   tier: "pro",
   coordinates: null,
-  cancellation_window: 2, // 2 hours default
-  table_turnover: 90, // 90 minutes default
+  table_turnover_minutes: 90, // 90 minutes default
   min_age: 0, // no age restriction by default
+  cancellation_window_hours: 2, // 2 hours default
   // Additional restaurant settings with defaults
   website_url: "",
   menu_url: "",
@@ -460,8 +460,8 @@ export default function AdminPage() {
           tier: restaurant.tier,
           price_range: restaurant.price_range,
           booking_policy: restaurant.booking_policy,
-          cancellation_window: restaurant.cancellation_window,
-          table_turnover: restaurant.table_turnover,
+          cancellation_window_hours: restaurant.cancellation_window_hours,
+          table_turnover_minutes: restaurant.table_turnover_minutes,
           minimum_age: restaurant.min_age || null,
           // Additional restaurant settings
           website_url: restaurant.website_url?.trim() || null,
@@ -910,8 +910,8 @@ export default function AdminPage() {
                     <div>
                       <Label>Cancellation Window (hours)</Label>
                       <Select
-                        value={restaurant.cancellation_window.toString()}
-                        onValueChange={(value) => updateRestaurant('cancellation_window', parseInt(value))}
+                        value={restaurant.cancellation_window_hours.toString()}
+                        onValueChange={(value) => updateRestaurant('cancellation_window_hours', parseInt(value))}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -934,8 +934,8 @@ export default function AdminPage() {
                     <div>
                       <Label>Table Turnover (minutes)</Label>
                       <Select
-                        value={restaurant.table_turnover.toString()}
-                        onValueChange={(value) => updateRestaurant('table_turnover', parseInt(value))}
+                        value={restaurant.table_turnover_minutes.toString()}
+                        onValueChange={(value) => updateRestaurant('table_turnover_minutes', parseInt(value))}
                       >
                         <SelectTrigger>
                           <SelectValue />
