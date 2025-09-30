@@ -53,6 +53,7 @@ import {
 import Link from "next/link"
 import { PushNotificationManager } from "@/components/pwa/push-notification-manager"
 import { InstallPrompt } from "@/components/pwa/install-prompt"
+import { PersistentNotificationSettings } from "@/components/notifications/persistent-notification-settings"
 import { LocationManager } from "@/components/location/location-manager"
 import { MigrationWidget } from "@/components/migration/migration-widget"
 import { WaitlistScheduleManager } from "@/components/settings/waitlist-schedule-manager"
@@ -909,6 +910,9 @@ export default function SettingsPage() {
             
             {/* Push Notifications */}
             <PushNotificationManager />
+            
+            {/* Persistent Notification Settings */}
+            <PersistentNotificationSettings />
             
             {/* PWA Status Card */}
             <Card>
