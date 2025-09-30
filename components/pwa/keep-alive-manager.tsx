@@ -133,19 +133,11 @@ export function KeepAliveManager({
     setIsVisible(visible)
     
     if (visible) {
-      console.log('📱 App became visible - checking connection and subscription')
+      console.log('📱 App became visible - checking connection')
       lastActivityRef.current = Date.now()
       
       // Check connection when app becomes visible
       sendHeartbeat()
-      
-      // CRITICAL: Validate push subscription when app becomes visible
-      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'VALIDATE_SUBSCRIPTION',
-          timestamp: Date.now()
-        })
-      }
       
       // Reacquire wake lock if needed
       if (!wakeLockRef.current) {
@@ -172,21 +164,13 @@ export function KeepAliveManager({
 
   // Handle page focus/blur
   const handleFocus = () => {
-    console.log('🎯 Page focused - validating subscription')
+    console.log('🎯 Page focused')
     lastActivityRef.current = Date.now()
     
     if (!isVisible) {
       setIsVisible(true)
       sendHeartbeat()
       requestWakeLock()
-    }
-    
-    // CRITICAL: Validate subscription on focus
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({
-        type: 'VALIDATE_SUBSCRIPTION',
-        timestamp: Date.now()
-      })
     }
   }
 

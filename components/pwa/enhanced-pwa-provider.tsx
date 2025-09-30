@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation'
 import { Bell, BellOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
-import { SubscriptionWatchdog } from './subscription-watchdog'
 
 // Convert VAPID key
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -38,92 +37,6 @@ export function EnhancedPWAProvider({
   const [showPermissionBanner, setShowPermissionBanner] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const subscriptionRefreshInProgress = useRef(false)
-
-  // CRITICAL: Force resubscribe to push notifications
-  const forceResubscribe = useCallback(async () => {
-    if (!swRegistration || !process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY) {
-      console.log('[PWA] Cannot resubscribe - SW or VAPID key missing')
-      return
-    }
-
-    if (subscriptionRefreshInProgress.current) {
-      console.log('[PWA] Subscription refresh already in progress')
-      return
-    }
-
-    subscriptionRefreshInProgress.current = true
-    console.log('[PWA] 🔄 Force resubscribing to push notifications...')
-
-    try {
-      // First, unsubscribe from existing subscription if any
-      const existingSubscription = await swRegistration.pushManager.getSubscription()
-      if (existingSubscription) {
-        console.log('[PWA] Unsubscribing from old subscription')
-        await existingSubscription.unsubscribe()
-      }
-
-      // Create fresh subscription
-      const newSubscription = await swRegistration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(
-          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-        ) as any
-      })
-
-      console.log('[PWA] ✅ New subscription created')
-
-      // Subscribe via API
-      const response = await fetch('/api/notifications/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          subscription: newSubscription.toJSON(),
-          deviceInfo: {
-            browser: detectBrowser(),
-            device: detectDevice()
-          }
-        })
-      })
-
-      const result = await response.json()
-
-      if (response.ok && result.success) {
-        setIsSubscribed(true)
-        console.log('[PWA] ✅ Force resubscribe successful')
-        
-        // Notify service worker
-        if (navigator.serviceWorker.controller) {
-          navigator.serviceWorker.controller.postMessage({
-            type: 'SUBSCRIPTION_REFRESHED',
-            timestamp: Date.now()
-          })
-        }
-        
-        toast.success('🔔 Notifications reconnected!')
-      } else {
-        throw new Error(result.error || 'Failed to subscribe')
-      }
-    } catch (error: any) {
-      console.error('[PWA] Force resubscribe failed:', error)
-      toast.error('Failed to reconnect notifications')
-    } finally {
-      subscriptionRefreshInProgress.current = false
-    }
-  }, [swRegistration])
-
-  // Handle subscription issues from watchdog
-  const handleSubscriptionStale = useCallback(() => {
-    console.log('[PWA] 🚨 Subscription is stale - forcing resubscribe')
-    forceResubscribe()
-  }, [forceResubscribe])
-
-  const handleSubscriptionMissing = useCallback(() => {
-    console.log('[PWA] 🚨 Subscription is missing - forcing resubscribe')
-    forceResubscribe()
-  }, [forceResubscribe])
 
   // Check if notifications are supported and permission status
   const checkNotificationSupport = useCallback(async () => {
@@ -266,25 +179,8 @@ export function EnhancedPWAProvider({
 
           // Listen for messages from service worker
           navigator.serviceWorker.addEventListener('message', (event) => {
-            const { type, data } = event.data || {}
-            
-            switch (type) {
-              case 'NAVIGATE_TO':
-                router.push(event.data.url)
-                break
-                
-              case 'PUSH_SUBSCRIPTION_MISSING':
-              case 'PUSH_SUBSCRIPTION_STALE':
-              case 'PUSH_CONNECTION_DEAD':
-                console.log(`[PWA] 🚨 Service worker reports: ${type}`)
-                forceResubscribe()
-                break
-                
-              case 'VALIDATE_PUSH_SUBSCRIPTION':
-              case 'REFRESH_SUBSCRIPTION_ON_SERVER':
-                console.log('[PWA] Service worker requesting subscription validation')
-                // Watchdog will handle this
-                break
+            if (event.data?.type === 'NAVIGATE_TO') {
+              router.push(event.data.url)
             }
           })
 
@@ -477,12 +373,6 @@ export function EnhancedPWAProvider({
   return (
     <>
       <PermissionBanner />
-      {/* CRITICAL: Subscription Watchdog to prevent numb state */}
-      <SubscriptionWatchdog
-        enabled={isSubscribed}
-        onSubscriptionStale={handleSubscriptionStale}
-        onSubscriptionMissing={handleSubscriptionMissing}
-      />
       {children}
       {process.env.NODE_ENV === 'development' && <StatusIndicator />}
       

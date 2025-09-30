@@ -1,27 +1,21 @@
-// Service Worker v4.0 - ANTI-NUMB: Aggressive subscription validation and auto-refresh
-const CACHE_NAME = 'restaurant-pwa-v4.0';
+// Service Worker v3.1 - Enhanced with aggressive keep-alive to prevent numb state
+const CACHE_NAME = 'restaurant-pwa-v3.1';
 const NOTIFICATION_CHECK_INTERVAL = 15000; // Check every 15 seconds (more frequent)
 const HEARTBEAT_INTERVAL = 10000; // Send heartbeat every 10 seconds (more aggressive)
-const SUBSCRIPTION_REFRESH_INTERVAL = 120000; // Validate subscription every 2 minutes (CRITICAL!)
-const SUBSCRIPTION_HEALTH_CHECK_INTERVAL = 60000; // Deep health check every 1 minute
+const SUBSCRIPTION_REFRESH_INTERVAL = 3600000; // Refresh subscription every hour
 const KEEP_ALIVE_INTERVAL = 5000; // Ultra aggressive keep-alive every 5 seconds
 const CRITICAL_SYNC_INTERVAL = 8000; // Critical data sync every 8 seconds
-const SUBSCRIPTION_TIMEOUT = 30000; // 30 seconds to validate subscription is alive
 
 // Keep track of active intervals
 let notificationCheckInterval = null;
 let heartbeatInterval = null;
 let subscriptionRefreshInterval = null;
-let subscriptionHealthCheckInterval = null;
 let keepAliveInterval = null;
 let criticalSyncInterval = null;
 let lastNotificationCheck = Date.now();
 let isCheckingNotifications = false;
 let lastActivity = Date.now();
 let isAppVisible = true;
-let lastSubscriptionValidation = 0;
-let subscriptionValidationInProgress = false;
-let pushTestTimeout = null;
 
 // Install event
 self.addEventListener('install', (event) => {
@@ -31,11 +25,10 @@ self.addEventListener('install', (event) => {
 
 // Activate event
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker v4.0 with subscription validation...');
+  console.log('[SW] Activating service worker v3.1 with aggressive keep-alive...');
   event.waitUntil(
     Promise.all([
       self.clients.claim(), // Take control immediately
-      validatePushSubscriptionOnActivate(), // CRITICAL: Validate subscription on activation
       startBackgroundTasks(), // Start aggressive background tasks
       checkForPendingNotifications() // Check for any pending notifications
     ])
@@ -61,15 +54,10 @@ async function startBackgroundTasks() {
     await sendHeartbeat();
   }, HEARTBEAT_INTERVAL);
 
-  // CRITICAL: Subscription validation every 2 minutes
+  // Start subscription refresh
   subscriptionRefreshInterval = setInterval(async () => {
-    await validateAndRefreshSubscription();
+    await refreshSubscription();
   }, SUBSCRIPTION_REFRESH_INTERVAL);
-
-  // DEEP subscription health check every minute
-  subscriptionHealthCheckInterval = setInterval(async () => {
-    await performSubscriptionHealthCheck();
-  }, SUBSCRIPTION_HEALTH_CHECK_INTERVAL);
 
   // AGGRESSIVE KEEP-ALIVE: Ultra frequent pings to prevent service worker termination
   keepAliveInterval = setInterval(async () => {
@@ -84,7 +72,6 @@ async function startBackgroundTasks() {
   // Initial checks
   await checkForPendingNotifications();
   await sendHeartbeat();
-  await validateAndRefreshSubscription(); // CRITICAL: Validate subscription immediately
   await keepServiceWorkerAlive();
 }
 
@@ -93,10 +80,8 @@ function stopBackgroundTasks() {
   if (notificationCheckInterval) clearInterval(notificationCheckInterval);
   if (heartbeatInterval) clearInterval(heartbeatInterval);
   if (subscriptionRefreshInterval) clearInterval(subscriptionRefreshInterval);
-  if (subscriptionHealthCheckInterval) clearInterval(subscriptionHealthCheckInterval);
   if (keepAliveInterval) clearInterval(keepAliveInterval);
   if (criticalSyncInterval) clearInterval(criticalSyncInterval);
-  if (pushTestTimeout) clearTimeout(pushTestTimeout);
 }
 
 // Check for pending notifications from server
@@ -131,180 +116,6 @@ async function checkForPendingNotifications() {
   }
 }
 
-// CRITICAL: Validate push subscription on service worker activation
-async function validatePushSubscriptionOnActivate() {
-  try {
-    console.log('[SW] Validating push subscription on activation...');
-    
-    const subscription = await self.registration.pushManager.getSubscription();
-    
-    if (subscription) {
-      console.log('[SW] Push subscription exists, validating connection...');
-      
-      // Notify client that we have a subscription and need to validate it
-      broadcastToClients({
-        type: 'VALIDATE_PUSH_SUBSCRIPTION',
-        subscription: subscription.toJSON(),
-        timestamp: Date.now()
-      });
-      
-      // Set up a test to ensure subscription is actually working
-      await testPushSubscriptionConnection();
-    } else {
-      console.log('[SW] No push subscription found on activation');
-      
-      // Notify client to create new subscription
-      broadcastToClients({
-        type: 'PUSH_SUBSCRIPTION_MISSING',
-        reason: 'sw_activation',
-        timestamp: Date.now()
-      });
-    }
-  } catch (error) {
-    console.error('[SW] Error validating subscription on activate:', error);
-  }
-}
-
-// CRITICAL: Validate and refresh subscription
-async function validateAndRefreshSubscription() {
-  if (subscriptionValidationInProgress) return;
-  
-  subscriptionValidationInProgress = true;
-  const now = Date.now();
-  
-  try {
-    console.log('[SW] Validating push subscription...');
-    
-    const subscription = await self.registration.pushManager.getSubscription();
-    
-    if (!subscription) {
-      console.log('[SW] ⚠️ No subscription found - notifying client to resubscribe');
-      
-      broadcastToClients({
-        type: 'PUSH_SUBSCRIPTION_MISSING',
-        reason: 'validation_check',
-        timestamp: now
-      });
-      
-      lastSubscriptionValidation = now;
-      subscriptionValidationInProgress = false;
-      return;
-    }
-    
-    // Check if subscription appears stale (older than 24 hours or expirationTime passed)
-    const isStale = subscription.expirationTime && subscription.expirationTime < now;
-    
-    if (isStale) {
-      console.log('[SW] ⚠️ Subscription is STALE - forcing refresh');
-      
-      // Unsubscribe the old one
-      await subscription.unsubscribe();
-      
-      // Notify client to create fresh subscription
-      broadcastToClients({
-        type: 'PUSH_SUBSCRIPTION_STALE',
-        reason: 'expiration_time_passed',
-        timestamp: now
-      });
-    } else {
-      // Subscription exists and appears valid, but let's test the connection
-      console.log('[SW] Subscription appears valid, testing connection...');
-      
-      await testPushSubscriptionConnection();
-      
-      // Also notify client to refresh subscription data on server
-      broadcastToClients({
-        type: 'REFRESH_SUBSCRIPTION_ON_SERVER',
-        subscription: subscription.toJSON(),
-        timestamp: now
-      });
-    }
-    
-    lastSubscriptionValidation = now;
-    
-  } catch (error) {
-    console.error('[SW] Error validating subscription:', error);
-    
-    // On error, force client to resubscribe
-    broadcastToClients({
-      type: 'PUSH_SUBSCRIPTION_ERROR',
-      error: error.message,
-      timestamp: now
-    });
-  } finally {
-    subscriptionValidationInProgress = false;
-  }
-}
-
-// Test if push subscription connection is actually alive
-async function testPushSubscriptionConnection() {
-  try {
-    console.log('[SW] Testing push subscription connection...');
-    
-    // Clear any existing test timeout
-    if (pushTestTimeout) clearTimeout(pushTestTimeout);
-    
-    // Request client to send a test push
-    broadcastToClients({
-      type: 'REQUEST_PUSH_TEST',
-      timestamp: Date.now()
-    });
-    
-    // Set timeout to check if test push is received
-    // If not received within 30 seconds, subscription is dead
-    pushTestTimeout = setTimeout(() => {
-      console.log('[SW] ⚠️ Push test timeout - connection may be dead');
-      
-      broadcastToClients({
-        type: 'PUSH_CONNECTION_DEAD',
-        reason: 'test_push_timeout',
-        timestamp: Date.now()
-      });
-    }, SUBSCRIPTION_TIMEOUT);
-    
-  } catch (error) {
-    console.error('[SW] Error testing push connection:', error);
-  }
-}
-
-// DEEP subscription health check
-async function performSubscriptionHealthCheck() {
-  try {
-    const now = Date.now();
-    const timeSinceLastValidation = now - lastSubscriptionValidation;
-    
-    // If no validation in last 5 minutes, force one
-    if (timeSinceLastValidation > 300000) {
-      console.log('[SW] HEALTH CHECK: No subscription validation in 5 minutes - forcing check');
-      await validateAndRefreshSubscription();
-      return;
-    }
-    
-    const subscription = await self.registration.pushManager.getSubscription();
-    
-    if (!subscription) {
-      console.log('[SW] HEALTH CHECK: No subscription - alerting client');
-      
-      broadcastToClients({
-        type: 'PUSH_SUBSCRIPTION_MISSING',
-        reason: 'health_check',
-        timestamp: now
-      });
-    } else {
-      console.log('[SW] HEALTH CHECK: Subscription exists, connection status unknown');
-      
-      // Ping client to ensure it's aware of subscription status
-      broadcastToClients({
-        type: 'SUBSCRIPTION_HEALTH_PING',
-        hasSubscription: true,
-        timestamp: now
-      });
-    }
-  } catch (error) {
-    console.error('[SW] Subscription health check error:', error);
-  }
-}
-
 // Send heartbeat to keep connection alive
 async function sendHeartbeat() {
   try {
@@ -314,7 +125,7 @@ async function sendHeartbeat() {
     broadcastToClients({
       type: 'SERVICE_WORKER_HEARTBEAT',
       timestamp: Date.now(),
-      sw_version: '4.0'
+      sw_version: '3.0'
     });
 
     // Force data refresh to ensure real-time connection is active
@@ -328,9 +139,39 @@ async function sendHeartbeat() {
   }
 }
 
-// Refresh push subscription (DEPRECATED - use validateAndRefreshSubscription instead)
+// Refresh push subscription
 async function refreshSubscription() {
-  await validateAndRefreshSubscription();
+  try {
+    console.log('[SW] Refreshing push subscription...');
+
+    const subscription = await self.registration.pushManager.getSubscription();
+
+    if (subscription) {
+      console.log('[SW] Current subscription exists, notifying main thread');
+
+      // Notify main thread about subscription status
+      broadcastToClients({
+        type: 'PUSH_SUBSCRIPTION_STATUS',
+        hasSubscription: true,
+        timestamp: Date.now()
+      });
+
+      // TODO: Implement subscription refresh endpoint when available
+      // For now, just ensure the subscription is active
+      console.log('[SW] Subscription appears active');
+    } else {
+      console.log('[SW] No active subscription found');
+
+      // Notify main thread that subscription is missing
+      broadcastToClients({
+        type: 'PUSH_SUBSCRIPTION_STATUS',
+        hasSubscription: false,
+        timestamp: Date.now()
+      });
+    }
+  } catch (error) {
+    console.error('[SW] Failed to refresh subscription:', error);
+  }
 }
 
 // AGGRESSIVE KEEP-ALIVE: Prevent service worker termination
@@ -446,20 +287,9 @@ async function showNotification(data) {
 
 // Push event - handle incoming push notifications
 self.addEventListener('push', async (event) => {
-  console.log('[SW] Push notification received - CONNECTION IS ALIVE! ✅');
+  console.log('[SW] Push notification received');
   
-  // CRITICAL: Clear the push test timeout - we know connection is alive!
-  if (pushTestTimeout) {
-    clearTimeout(pushTestTimeout);
-    pushTestTimeout = null;
-    console.log('[SW] Push connection validated - test timeout cleared');
-  }
-  
-  // Update last activity
-  lastActivity = Date.now();
-  lastSubscriptionValidation = Date.now();
-  
-  // Reset background tasks on push to ensure we stay alive
+  // Reset background tasks on push
   startBackgroundTasks();
   
   let data = {};
@@ -484,13 +314,6 @@ self.addEventListener('push', async (event) => {
   event.waitUntil(
     checkForPendingNotifications()
   );
-  
-  // Notify client that push was received
-  broadcastToClients({
-    type: 'PUSH_RECEIVED',
-    timestamp: Date.now(),
-    data: data
-  });
 });
 
 // Notification click event
@@ -547,28 +370,12 @@ self.addEventListener('periodicsync', (event) => {
 
 // Message event for client communication - removed duplicate, using enhanced version below
 
-// Fetch event - keep service worker alive and validate subscription
+// Fetch event - keep service worker alive
 self.addEventListener('fetch', (event) => {
   // Keep alive by handling fetch
-  lastActivity = Date.now();
-  
   if (event.request.url.includes('/api/notifications/')) {
     // Reset timers on notification-related requests
     lastNotificationCheck = Date.now() - NOTIFICATION_CHECK_INTERVAL + 5000;
-    
-    // Also validate subscription on notification API calls
-    validateAndRefreshSubscription().catch(err => {
-      console.error('[SW] Subscription validation on fetch failed:', err);
-    });
-  }
-  
-  // On any fetch, if it's been more than 5 minutes since last subscription check, validate
-  const timeSinceLastValidation = Date.now() - lastSubscriptionValidation;
-  if (timeSinceLastValidation > 300000) {
-    console.log('[SW] Fetch event - overdue subscription validation');
-    validateAndRefreshSubscription().catch(err => {
-      console.error('[SW] Fetch-triggered validation failed:', err);
-    });
   }
 });
 
@@ -746,32 +553,7 @@ self.addEventListener('message', async (event) => {
       break;
 
     case 'REFRESH_SUBSCRIPTION':
-      await validateAndRefreshSubscription();
-      break;
-
-    case 'VALIDATE_SUBSCRIPTION':
-      // Force immediate subscription validation
-      await validateAndRefreshSubscription();
-      break;
-
-    case 'SUBSCRIPTION_REFRESHED':
-      // Client has refreshed subscription, clear any pending timeouts
-      if (pushTestTimeout) {
-        clearTimeout(pushTestTimeout);
-        pushTestTimeout = null;
-      }
-      lastSubscriptionValidation = Date.now();
-      console.log('[SW] Client confirmed subscription refresh');
-      break;
-
-    case 'PUSH_TEST_SUCCESSFUL':
-      // Client received test push, clear timeout
-      if (pushTestTimeout) {
-        clearTimeout(pushTestTimeout);
-        pushTestTimeout = null;
-      }
-      lastSubscriptionValidation = Date.now();
-      console.log('[SW] Push test successful - connection validated ✅');
+      await refreshSubscription();
       break;
 
     case 'CONNECTION_HEALTH_UPDATE':
@@ -794,8 +576,7 @@ self.addEventListener('message', async (event) => {
       broadcastToClients({
         type: 'PONG_RESPONSE',
         timestamp: Date.now(),
-        originalPing: data?.timestamp,
-        subscriptionValid: lastSubscriptionValidation > 0
+        originalPing: data?.timestamp
       });
       lastActivity = Date.now();
       break;
@@ -806,10 +587,8 @@ self.addEventListener('message', async (event) => {
       console.log('[SW] App visibility changed:', isAppVisible ? 'visible' : 'hidden');
 
       if (isAppVisible) {
-        // App became visible - CRITICAL: validate subscription immediately!
-        console.log('[SW] 🎯 App became VISIBLE - validating subscription NOW');
+        // App became visible - restart all tasks aggressively
         await startBackgroundTasks();
-        await validateAndRefreshSubscription(); // CRITICAL!
         await keepServiceWorkerAlive();
         await performCriticalDataSync();
       }
@@ -817,10 +596,9 @@ self.addEventListener('message', async (event) => {
 
     case 'EMERGENCY_WAKE_UP':
       // Emergency wake-up call from main thread
-      console.log('[SW] 🚨 EMERGENCY WAKE-UP received');
+      console.log('[SW] EMERGENCY WAKE-UP received');
       lastActivity = Date.now();
       await startBackgroundTasks();
-      await validateAndRefreshSubscription(); // CRITICAL: Check subscription!
       await keepServiceWorkerAlive();
       break;
 
@@ -868,23 +646,18 @@ setInterval(async () => {
   try {
     const now = Date.now();
     const timeSinceLastActivity = now - lastActivity;
-    const timeSinceLastValidation = now - lastSubscriptionValidation;
 
     // If no activity for 30 seconds, trigger emergency procedures
     if (timeSinceLastActivity > 30000) {
-      console.log('[SW] 🚨 EMERGENCY: No activity for 30s, triggering revival procedures');
+      console.log('[SW] EMERGENCY: No activity for 30s, triggering revival procedures');
 
       // Force all intervals to restart
       await startBackgroundTasks();
-
-      // CRITICAL: Validate subscription
-      await validateAndRefreshSubscription();
 
       // Emergency wake-up call to main thread
       broadcastToClients({
         type: 'SERVICE_WORKER_EMERGENCY_REVIVAL',
         timeSinceLastActivity,
-        timeSinceLastValidation,
         timestamp: now,
         message: 'Service worker was dormant for 30+ seconds'
       });
@@ -898,12 +671,6 @@ setInterval(async () => {
       lastActivity = now;
     }
 
-    // If no subscription validation for 3 minutes, force validation
-    if (timeSinceLastValidation > 180000 || lastSubscriptionValidation === 0) {
-      console.log('[SW] ⚠️ No subscription validation in 3+ minutes - forcing check');
-      await validateAndRefreshSubscription();
-    }
-
     // Always keep some activity going
     await keepServiceWorkerAlive();
 
@@ -912,4 +679,4 @@ setInterval(async () => {
   }
 }, 15000); // Every 15 seconds - emergency fallback
 
-console.log('[SW] Service Worker v4.0 fully loaded with aggressive anti-numb + subscription validation');
+console.log('[SW] Service Worker v3.1 fully loaded with aggressive anti-numb protection');
