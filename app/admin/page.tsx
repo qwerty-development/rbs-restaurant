@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -175,37 +176,38 @@ export default function AdminPage() {
       return { isValid: false, error: 'Phone number is required' }
     }
 
-    // Lebanese mobile number patterns:
-    // +961 + 8 digits starting with 3, 7, or 8
-    // Examples: +96181972024, +96171234567, +96131234567
+    // Lebanese number patterns:
+    // Mobile: +961 + 8 digits starting with 3, 7, or 8
+    // Landline: +961 + 8 digits starting with 1 (e.g., 01XXXXXX)
+    // Examples: +96181972024, +96171234567, +96131234567, +9611234567
 
     // If it starts with 0 and has 9 digits (0XXXXXXXX)
     if (cleanPhone.startsWith('0') && cleanPhone.length === 9) {
       const nationalNumber = cleanPhone.slice(1)
-      if (/^[378]/.test(nationalNumber)) {
+      if (/^[1378]/.test(nationalNumber)) {
         const formatted = `+961${nationalNumber}`
         return { isValid: true, formatted }
       }
-      return { isValid: false, error: 'Lebanese mobile numbers must start with 3, 7, or 8' }
+      return { isValid: false, error: 'Lebanese numbers must start with 1 (landline), 3, 7, or 8 (mobile)' }
     }
 
     // If it starts with 961 (with country code)
     if (cleanPhone.startsWith('961')) {
       const nationalNumber = cleanPhone.slice(3)
-      if (nationalNumber.length === 8 && /^[378]/.test(nationalNumber)) {
+      if (nationalNumber.length === 8 && /^[1378]/.test(nationalNumber)) {
         const formatted = `+961${nationalNumber}`
         return { isValid: true, formatted }
       }
-      return { isValid: false, error: 'Lebanese mobile numbers must be 8 digits starting with 3, 7, or 8' }
+      return { isValid: false, error: 'Lebanese numbers must be 8 digits starting with 1 (landline), 3, 7, or 8 (mobile)' }
     }
 
-    // If it's just 8 digits starting with 3, 7, or 8
-    if (cleanPhone.length === 8 && /^[378]/.test(cleanPhone)) {
+    // If it's just 8 digits starting with 1, 3, 7, or 8
+    if (cleanPhone.length === 8 && /^[1378]/.test(cleanPhone)) {
       const formatted = `+961${cleanPhone}`
       return { isValid: true, formatted }
     }
 
-    return { isValid: false, error: 'Please enter a valid Lebanese mobile number (+961XXXXXXXX)' }
+    return { isValid: false, error: 'Please enter a valid Lebanese number (+961XXXXXXXX)' }
   }
 
   // State for phone validation
@@ -843,14 +845,14 @@ export default function AdminPage() {
                       <Input
                         value={restaurant.phone_number}
                         onChange={(e) => handlePhoneChange(e.target.value)}
-                        placeholder="+961 3 123 456 or 03123456"
+                        placeholder="+961 3 123 456 or 01 234 567"
                         className={phoneError ? 'border-red-500' : ''}
                       />
                       {phoneError && (
                         <p className="text-red-500 text-sm mt-1">{phoneError}</p>
                       )}
                       <p className="text-muted-foreground text-xs mt-1">
-                        Lebanese format: +961 X XXX XXX (mobile: 3/7/8/9, landline: 1-9)
+                        Lebanese format: Mobile (3/7/8) or Landline (01-09)
                       </p>
                     </div>
                     <div>
