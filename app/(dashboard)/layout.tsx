@@ -13,7 +13,6 @@ import { RestaurantProvider } from "@/lib/contexts/restaurant-context"
 import { DashboardLayoutInner } from "@/components/layout/dashboard-layout-inner"
 import { EnhancedPWAProvider } from "@/components/pwa/enhanced-pwa-provider"
 import { NotificationManager } from "@/components/notification-manager"
-import { AggressiveWakeLock } from "@/components/pwa/aggressive-wake-lock"
 
 
 export default async function DashboardLayout({
@@ -54,7 +53,6 @@ export default async function DashboardLayout({
         <SidebarProvider>
           <DashboardLayoutInner staffData={staffData}>
           <NotificationManager />
-          <AggressiveWakeLock />
             {children}
           </DashboardLayoutInner>
         </SidebarProvider>

@@ -1,5 +1,5 @@
-// Service Worker v4.1.1 - Production Tablet Optimized - BULLETPROOF Persistent Notifications
-const CACHE_NAME = 'restaurant-pwa-v4.1.1';
+// Service Worker v4.1 - Production Tablet Optimized - BULLETPROOF Persistent Notifications
+const CACHE_NAME = 'restaurant-pwa-v4.1';
 const NOTIFICATION_CHECK_INTERVAL = 15000; // Check every 15 seconds (more frequent)
 const HEARTBEAT_INTERVAL = 10000; // Send heartbeat every 10 seconds (more aggressive)
 const SUBSCRIPTION_REFRESH_INTERVAL = 3600000; // Refresh subscription every hour
@@ -51,20 +51,24 @@ let lastNotificationCheck = Date.now();
 let isCheckingNotifications = false;
 let lastActivity = Date.now();
 let isAppVisible = true;
-let lastPingFromApp = Date.now(); // Track when we last heard from the main app
 
 // Track pending notifications that need re-pinging
 let persistentNotificationTimers = new Map(); // notificationId -> timerId
 
 // Install event
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker v4.1.1 - PRODUCTION TABLET OPTIMIZED...');
-  self.skipWaiting(); // Force immediate activation
+  console.log('[SW] Installing service worker v4.1 - PRODUCTION TABLET OPTIMIZED...');
+  event.waitUntil(
+    Promise.all([
+      initPersistentNotificationDB(),
+      self.skipWaiting() // Force immediate activation
+    ])
+  );
 });
 
 // Activate event
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker v4.1.1 - BULLETPROOF PERSISTENT NOTIFICATIONS (IndexedDB Fix)...');
+  console.log('[SW] Activating service worker v4.1 - BULLETPROOF PERSISTENT NOTIFICATIONS...');
   event.waitUntil(
     Promise.all([
       self.clients.claim(), // Take control immediately
@@ -118,12 +122,12 @@ async function startBackgroundTasks() {
 // ==================== PERSISTENT NOTIFICATION SYSTEM ====================
 
 // Initialize IndexedDB for persistent notifications
-function initDB() {
+async function initPersistentNotificationDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('PersistentNotifications', 2); // Bumped to v2 for index fix
+    const request = indexedDB.open('PersistentNotifications', 1);
     
     request.onerror = () => {
-      console.error('[SW] IndexedDB error:', request.error);
+      console.error('[SW] Failed to open IndexedDB:', request.error);
       reject(request.error);
     };
     
@@ -135,34 +139,23 @@ function initDB() {
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
       
-      // Create object store if it doesn't exist
       if (!db.objectStoreNames.contains('notifications')) {
         const store = db.createObjectStore('notifications', { keyPath: 'id' });
         store.createIndex('acknowledged', 'acknowledged', { unique: false });
         store.createIndex('timestamp', 'timestamp', { unique: false });
-        console.log('[SW] Created notifications object store with indexes');
-      } else {
-        // If store exists but indexes don't, recreate them
-        const transaction = event.target.transaction;
-        const store = transaction.objectStore('notifications');
-        
-        if (!store.indexNames.contains('acknowledged')) {
-          store.createIndex('acknowledged', 'acknowledged', { unique: false });
-          console.log('[SW] Added acknowledged index');
-        }
-        
-        if (!store.indexNames.contains('timestamp')) {
-          store.createIndex('timestamp', 'timestamp', { unique: false });
-          console.log('[SW] Added timestamp index');
-        }
+        console.log('[SW] Created notifications object store');
       }
     };
   });
 }
 
-// Get IndexedDB instance (delegates to initDB for consistency)
+// Get IndexedDB instance
 async function getDB() {
-  return await initDB();
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('PersistentNotifications', 1);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
 }
 
 // Store notification for persistent tracking
@@ -226,21 +219,17 @@ async function markNotificationAcknowledged(notificationId) {
   return false;
 }
 
-// Get all unacknowledged notifications from IndexedDB
+// Get all unacknowledged notifications
 async function getUnacknowledgedNotifications() {
   try {
     const db = await getDB();
     const transaction = db.transaction(['notifications'], 'readonly');
     const store = transaction.objectStore('notifications');
+    const index = store.index('acknowledged');
     
     return new Promise((resolve, reject) => {
-      const request = store.getAll();
-      request.onsuccess = () => {
-        const allNotifications = request.result || [];
-        // Filter in memory instead of using index (more compatible)
-        const unacknowledged = allNotifications.filter(n => n.acknowledged === false);
-        resolve(unacknowledged);
-      };
+      const request = index.getAll(false);
+      request.onsuccess = () => resolve(request.result || []);
       request.onerror = () => reject(request.error);
     });
   } catch (error) {
@@ -499,27 +488,6 @@ async function refreshSubscription() {
 async function keepServiceWorkerAlive() {
   try {
     lastActivity = Date.now();
-
-    // Check if main app has gone silent (no pings for 60 seconds)
-    const timeSinceLastPing = Date.now() - lastPingFromApp;
-    if (timeSinceLastPing > 60000) {
-      console.warn(`⚠️ Main app silent for ${Math.round(timeSinceLastPing / 1000)}s - triggering wake-up`);
-      
-      // Send emergency wake-up call to main app
-      broadcastToClients({
-        type: 'SERVICE_WORKER_WAKE_UP_CALL',
-        silentDuration: timeSinceLastPing,
-        timestamp: Date.now(),
-        message: 'Main app appears unresponsive - please reinitialize'
-      });
-      
-      // Force data refresh
-      broadcastToClients({
-        type: 'FORCE_REINITIALIZE',
-        reason: 'main_app_silent',
-        silentDuration: timeSinceLastPing
-      });
-    }
 
     // Ultra-aggressive approach: multiple methods to stay alive
 
@@ -999,13 +967,6 @@ self.addEventListener('message', async (event) => {
         originalPing: data?.timestamp
       });
       lastActivity = Date.now();
-      lastPingFromApp = Date.now(); // Update last ping time
-      break;
-
-    case 'CONNECTION_HEALTH_UPDATE':
-      // Track connection health from main app
-      handleConnectionHealthUpdate(data);
-      lastPingFromApp = Date.now(); // Update when we get health updates
       break;
 
     case 'APP_VISIBILITY_CHANGE':
@@ -1112,4 +1073,4 @@ setInterval(async () => {
   }
 }, 15000); // Every 15 seconds - emergency fallback
 
-console.log('[SW] 🚨 Service Worker v4.1.1 PRODUCTION TABLET OPTIMIZED - Bulletproof Persistent Notifications ACTIVE (IndexedDB Fix)');
+console.log('[SW] 🚨 Service Worker v4.1 PRODUCTION TABLET OPTIMIZED - Bulletproof Persistent Notifications ACTIVE');
