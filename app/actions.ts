@@ -21,9 +21,6 @@ export interface NotificationPayload {
   icon?: string
   url?: string
   id?: string
-  type?: 'booking' | 'cancellation' | 'waitlist' | 'general'
-  requiresAcknowledgment?: boolean // NEW: Enable persistent notifications for this notification
-  tag?: string
 }
 
 export async function subscribeUser(subscription: PushSubscription) {
@@ -98,10 +95,7 @@ export async function sendNotification(payload: NotificationPayload) {
       body: payload.body,
       icon: payload.icon || '/icon-192x192.png',
       url: payload.url || '/dashboard',
-      id: payload.id || Date.now().toString(),
-      type: payload.type || 'general',
-      requiresAcknowledgment: payload.requiresAcknowledgment !== false, // Default true
-      tag: payload.tag || `notification-${Date.now()}`
+      id: payload.id || Date.now().toString()
     })
 
     // Send notification to all subscribed users
@@ -182,10 +176,7 @@ export async function sendBookingNotification(
     title,
     body,
     url,
-    id: `booking_${type}_${Date.now()}`,
-    type: type === 'new_booking' ? 'booking' : type === 'booking_cancelled' ? 'cancellation' : 'booking',
-    requiresAcknowledgment: true, // All booking notifications require acknowledgment
-    tag: `booking_${type}`
+    id: `booking_${type}_${Date.now()}`
   })
 }
 
@@ -203,9 +194,6 @@ export async function sendWaitlistNotification(
     title,
     body,
     url: '/waitlist',
-    id: `waitlist_${Date.now()}`,
-    type: 'waitlist',
-    requiresAcknowledgment: true, // Waitlist notifications require acknowledgment
-    tag: 'waitlist_update'
+    id: `waitlist_${Date.now()}`
   })
 }
