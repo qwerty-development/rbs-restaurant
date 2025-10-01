@@ -31,36 +31,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    // Get user's restaurant and verify it's Basic tier
-    const { data: staffData, error: staffError } = await supabase
-      .from('restaurant_staff')
-      .select(`
-        restaurant_id,
-        restaurant:restaurants(
-          id,
-          tier
-        )
-      `)
-      .eq('user_id', user.id)
-      .single()
-
-    if (staffError || !staffData) {
-      return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 })
-    }
-
-    // Handle both array and object formats from Supabase
-    const restaurant = Array.isArray(staffData.restaurant) 
-      ? staffData.restaurant[0] 
-      : staffData.restaurant
-
-    // Verify this is a Basic tier restaurant
-    if (restaurant?.tier !== 'basic') {
-      return NextResponse.json({ 
-        error: 'This endpoint is only for Basic tier restaurants' 
-      }, { status: 403 })
-    }
-
-    // Get the current booking to verify it belongs to this restaurant and get applied offer info
+    // FIXED: First get the booking to know which restaurant it belongs to
     const { data: currentBooking, error: bookingError } = await supabase
       .from('bookings')
       .select('id, status, restaurant_id, applied_offer_id')
@@ -71,9 +42,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
     }
 
-    // Verify booking belongs to this restaurant
-    if (currentBooking.restaurant_id !== staffData.restaurant_id) {
-      return NextResponse.json({ error: 'Booking does not belong to your restaurant' }, { status: 403 })
+
+    // FIXED: Now get the specific restaurant staff record for THIS restaurant
+    // This works correctly for multi-restaurant users because we filter by BOTH user_id AND restaurant_id
+    const { data: staffData, error: staffError } = await supabase
+      .from('restaurant_staff')
+      .select(`
+        restaurant_id,
+        role,
+        is_active,
+        restaurant:restaurants(
+          id,
+          tier,
+          name
+        )
+      `)
+      .eq('user_id', user.id)
+      .eq('restaurant_id', currentBooking.restaurant_id)
+      .eq('is_active', true)
+      .single()
+
+    if (staffError || !staffData) {
+      return NextResponse.json({ 
+        error: 'You do not have access to this restaurant' 
+      }, { status: 403 })
+    }
+
+
+    // Handle both array and object formats from Supabase
+    const restaurant = Array.isArray(staffData.restaurant) 
+      ? staffData.restaurant[0] 
+      : staffData.restaurant
+
+
+    // Verify this is a Basic tier restaurant
+    if (restaurant?.tier !== 'basic') {
+      console.warn('⚠️ [basic-booking-update] Wrong tier:', restaurant?.tier)
+      return NextResponse.json({ 
+        error: 'This endpoint is only for Basic tier restaurants' 
+      }, { status: 403 })
     }
 
     // Allow status transitions based on current status
@@ -89,10 +96,12 @@ export async function POST(request: NextRequest) {
 
     const allowedNextStatuses = validTransitions[currentBooking.status] || []
     if (!allowedNextStatuses.includes(status)) {
+      console.warn('⚠️ [basic-booking-update] Invalid transition:', currentBooking.status, '→', status)
       return NextResponse.json({
         error: `Cannot update booking from '${currentBooking.status}' to '${status}'. Allowed transitions: ${allowedNextStatuses.join(', ') || 'none'}`
       }, { status: 400 })
     }
+
 
     // Prepare update data with appropriate note fields
     const updateData: any = {
@@ -124,9 +133,9 @@ export async function POST(request: NextRequest) {
       .eq('id', bookingId)
 
     if (updateError) {
-      console.error('Error updating booking:', updateError)
       return NextResponse.json({ error: 'Failed to update booking' }, { status: 500 })
     }
+
 
     // Reverse offer redemption for cancellation/decline statuses (except user cancellations)
     if (['cancelled_by_restaurant', 'declined_by_restaurant'].includes(status)) {
@@ -153,6 +162,7 @@ export async function POST(request: NextRequest) {
       // Don't fail the request if history creation fails
     }
 
+
     return NextResponse.json({ 
       success: true, 
       message: `Booking status updated to ${status} successfully`,
@@ -164,7 +174,6 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error in basic booking update:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
