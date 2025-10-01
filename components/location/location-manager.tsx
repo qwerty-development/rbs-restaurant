@@ -37,13 +37,14 @@ interface LocationData {
   coordinates: Coordinates | null;
 }
 
-export function LocationManager({ 
-  restaurantId, 
+export function LocationManager({
+  restaurantId,
   currentAddress = '',
-  className = '' 
+  className = ''
 }: LocationManagerProps) {
   const [selectedCoordinates, setSelectedCoordinates] = useState<Coordinates | null>(null);
   const [selectedAddress, setSelectedAddress] = useState<string>(currentAddress);
+  const [displayAddress, setDisplayAddress] = useState<string>(currentAddress); // For showing in input
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -98,6 +99,7 @@ export function LocationManager({
       setSelectedCoordinates(locationData.coordinates);
       if (locationData.address) {
         setSelectedAddress(locationData.address);
+        setDisplayAddress(locationData.address); // Initially same as full address
       }
     }
   }, [locationData]);
@@ -106,6 +108,7 @@ export function LocationManager({
   useEffect(() => {
     if (currentAddress && currentAddress !== selectedAddress) {
       setSelectedAddress(currentAddress);
+      setDisplayAddress(currentAddress);
     }
   }, [currentAddress, selectedAddress]);
 
@@ -114,13 +117,18 @@ export function LocationManager({
     setSelectedCoordinates(coordinates);
     if (address) {
       setSelectedAddress(address);
+      setDisplayAddress(address); // Picker provides full address
     }
     setHasChanges(true);
   };
 
   // Handle address changes from search
-  const handleAddressChange = (address: string, coordinates?: Coordinates) => {
+  const handleAddressChange = (address: string, coordinates?: Coordinates, result?: any) => {
+    // Store full address for saving to database
     setSelectedAddress(address);
+    // Store display text (business name or displayName) for showing in UI
+    const displayText = result?.name || result?.displayName || address;
+    setDisplayAddress(displayText);
     if (coordinates) {
       setSelectedCoordinates(coordinates);
     }
@@ -132,6 +140,7 @@ export function LocationManager({
     setSelectedCoordinates(coordinates);
     if (address) {
       setSelectedAddress(address);
+      setDisplayAddress(address);
     }
     setHasChanges(true);
     setShowLocationPicker(true); // Show picker to confirm location
@@ -155,9 +164,11 @@ export function LocationManager({
     if (locationData) {
       setSelectedCoordinates(locationData.coordinates);
       setSelectedAddress(locationData.address || currentAddress);
+      setDisplayAddress(locationData.address || currentAddress);
     } else {
       setSelectedCoordinates(null);
       setSelectedAddress(currentAddress);
+      setDisplayAddress(currentAddress);
     }
     setHasChanges(false);
   };
@@ -198,8 +209,8 @@ export function LocationManager({
                     {formatCoordinates(selectedCoordinates, 4)}
                   </Badge>
                 </div>
-                {selectedAddress && (
-                  <p className="text-sm text-muted-foreground">{selectedAddress}</p>
+                {displayAddress && (
+                  <p className="text-sm text-muted-foreground">{displayAddress}</p>
                 )}
               </div>
             ) : (
@@ -221,7 +232,7 @@ export function LocationManager({
       {/* Quick Actions */}
       <div className="flex flex-wrap gap-3">
         <AddressSearch
-          value={selectedAddress}
+          value={displayAddress}
           onChange={handleAddressChange}
           placeholder="Search for your restaurant address..."
           className="flex-1 min-w-64"

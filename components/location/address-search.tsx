@@ -5,23 +5,25 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Search, 
-  Loader2, 
-  MapPin, 
-  Navigation, 
+import {
+  Search,
+  Loader2,
+  MapPin,
+  Navigation,
   X,
-  Check
+  Check,
+  Star,
+  Building
 } from 'lucide-react';
 import { useLocationRequest } from '@/lib/hooks/useGeolocation';
-import { geocodingService, type GeocodingResult } from '@/lib/services/geocoding';
+import { enhancedGeocodingService, type EnhancedGeocodingResult } from '@/lib/services/enhanced-geocoding';
 import { formatCoordinates, type Coordinates } from '@/lib/utils/location';
 import { toast } from 'react-hot-toast';
 import { cn } from '@/lib/utils';
 
 export interface AddressSearchProps {
   value?: string;
-  onChange: (address: string, coordinates?: Coordinates) => void;
+  onChange: (address: string, coordinates?: Coordinates, result?: EnhancedGeocodingResult) => void;
   placeholder?: string;
   className?: string;
   disabled?: boolean;
@@ -32,7 +34,7 @@ export interface AddressSearchProps {
 
 interface AddressSearchState {
   query: string;
-  results: GeocodingResult[];
+  results: EnhancedGeocodingResult[];
   isSearching: boolean;
   showDropdown: boolean;
   selectedIndex: number;
@@ -63,27 +65,27 @@ export function AddressSearch({
 
   // Search for addresses
   const searchAddresses = useCallback(async (query: string) => {
-    if (query.length < 3) {
-      setState(prev => ({ 
-        ...prev, 
-        results: [], 
+    if (query.length < 2) {
+      setState(prev => ({
+        ...prev,
+        results: [],
         showDropdown: false,
-        selectedIndex: -1 
+        selectedIndex: -1
       }));
       return;
     }
 
     setState(prev => ({ ...prev, isSearching: true }));
-    
+
     try {
-      const results = await geocodingService.getAddressSuggestions(
+      const results = await enhancedGeocodingService.searchAddresses(
         query,
         userLocation,
         maxResults
       );
-      
-      setState(prev => ({ 
-        ...prev, 
+
+      setState(prev => ({
+        ...prev,
         results,
         isSearching: false,
         showDropdown: results.length > 0,
@@ -91,8 +93,8 @@ export function AddressSearch({
       }));
     } catch (error) {
       console.error('Address search failed:', error);
-      setState(prev => ({ 
-        ...prev, 
+      setState(prev => ({
+        ...prev,
         results: [],
         isSearching: false,
         showDropdown: false,
@@ -117,15 +119,18 @@ export function AddressSearch({
   }, [searchAddresses]);
 
   // Handle result selection
-  const handleResultSelect = useCallback((result: GeocodingResult) => {
-    setState(prev => ({ 
-      ...prev, 
-      query: result.address,
+  const handleResultSelect = useCallback((result: EnhancedGeocodingResult) => {
+    // Prefer business name, then displayName for showing in input
+    const displayText = result.name || result.displayName;
+
+    setState(prev => ({
+      ...prev,
+      query: displayText,
       showDropdown: false,
       selectedIndex: -1
     }));
-    
-    onChange(result.address, result.coordinates);
+
+    onChange(result.address, result.coordinates, result);
     inputRef.current?.blur();
   }, [onChange]);
 
@@ -136,22 +141,22 @@ export function AddressSearch({
         enableHighAccuracy: true,
         timeout: 10000
       });
-      
+
       setState(prev => ({ ...prev, isSearching: true }));
-      
-      const result = await geocodingService.reverseGeocode(coordinates);
-      const address = result?.address || `${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}`;
-      
-      setState(prev => ({ 
-        ...prev, 
-        query: address,
+
+      const address = await enhancedGeocodingService.reverseGeocode(coordinates);
+      const displayAddress = address || `${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}`;
+
+      setState(prev => ({
+        ...prev,
+        query: displayAddress,
         isSearching: false,
         showDropdown: false
       }));
-      
-      onChange(address, coordinates);
+
+      onChange(displayAddress, coordinates);
       toast.success('Current location detected');
-      
+
     } catch (error) {
       console.error('Failed to get current location:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -297,7 +302,7 @@ export function AddressSearch({
       {state.showDropdown && state.results.length > 0 && (
         <div
           ref={dropdownRef}
-          className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-50 max-h-64 overflow-y-auto"
+          className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-50 max-h-96 overflow-y-auto"
         >
           {state.results.map((result, index) => (
             <button
@@ -305,21 +310,61 @@ export function AddressSearch({
               onClick={() => handleResultSelect(result)}
               disabled={disabled}
               className={cn(
-                'w-full text-left p-3 hover:bg-accent hover:text-accent-foreground border-b border-border last:border-b-0 disabled:opacity-50 transition-colors',
+                'w-full text-left p-4 hover:bg-accent hover:text-accent-foreground border-b border-border last:border-b-0 disabled:opacity-50 transition-colors',
                 index === state.selectedIndex && 'bg-accent text-accent-foreground'
               )}
             >
               <div className="flex items-start gap-3">
-                <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                {result.type === 'restaurant' || result.type === 'cafe' ? (
+                  <Building className="h-4 w-4 text-orange-500" />
+                ) : (
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                )}
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm truncate">{result.displayName}</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {formatCoordinates(result.coordinates)}
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="font-medium text-sm truncate">
+                      {result.name || result.displayName}
+                    </div>
+                    {result.source === 'google' && (
+                      <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800">
+                        Google
+                      </Badge>
+                    )}
+                    {result.businessStatus === 'CLOSED_TEMPORARILY' && (
+                      <Badge variant="destructive" className="text-xs">
+                        Temp. Closed
+                      </Badge>
+                    )}
                   </div>
-                  {result.type && (
-                    <Badge variant="secondary" className="text-xs mt-1">
-                      {result.type}
-                    </Badge>
+
+                  <div className="text-xs text-muted-foreground mb-1">
+                    {result.address}
+                  </div>
+
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span>{formatCoordinates(result.coordinates)}</span>
+                    {result.type && (
+                      <Badge variant="outline" className="text-xs">
+                        {result.type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Business details */}
+                  {(result.rating || result.userRatingCount) && (
+                    <div className="flex items-center gap-2 mt-2">
+                      {result.rating && (
+                        <div className="flex items-center gap-1">
+                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                          <span className="text-xs font-medium">{result.rating.toFixed(1)}</span>
+                        </div>
+                      )}
+                      {result.userRatingCount && (
+                        <span className="text-xs text-muted-foreground">
+                          ({result.userRatingCount} reviews)
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -329,10 +374,14 @@ export function AddressSearch({
       )}
 
       {/* No results message */}
-      {state.showDropdown && state.results.length === 0 && state.query.length >= 3 && !state.isSearching && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-50 p-3">
+      {state.showDropdown && state.results.length === 0 && state.query.length >= 2 && !state.isSearching && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-50 p-4">
           <div className="text-sm text-muted-foreground text-center">
-            No addresses found for "{state.query}"
+            <MapPin className="h-4 w-4 mx-auto mb-2" />
+            No results found for "{state.query}"
+            <div className="text-xs mt-1">
+              Try searching for a specific business name or address in Lebanon
+            </div>
           </div>
         </div>
       )}
