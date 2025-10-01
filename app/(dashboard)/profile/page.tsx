@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -63,12 +64,13 @@ type PasswordFormData = z.infer<typeof passwordSchema>
 export default function ProfilePage() {
   const router = useRouter()
   const supabase = createClient()
+  const { currentRestaurant } = useRestaurantContext()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [changingPassword, setChangingPassword] = useState(false)
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
   const [userData, setUserData] = useState<any>(null)
-  const [staffData, setStaffData] = useState<any>(null)
+  const [allStaffData, setAllStaffData] = useState<any[]>([])
   const [profileData, setProfileData] = useState<any>(null)
 
   const profileForm = useForm<ProfileFormData>({
@@ -115,17 +117,17 @@ export default function ProfilePage() {
         })
       }
 
-      // Get staff data with restaurant info
-      const { data: staff } = await supabase
+      // Get all staff data with restaurant info (for multi-restaurant users)
+      const { data: staffRecords } = await supabase
         .from("restaurant_staff")
         .select(`
           *,
-          restaurant:restaurants(name, main_image_url)
+          restaurant:restaurants(*)
         `)
         .eq("user_id", user.id)
-        .single()
+        .eq("is_active", true)
 
-      setStaffData(staff)
+      setAllStaffData(staffRecords || [])
     } catch (error) {
       console.error("Error fetching user data:", error)
     } finally {
@@ -136,6 +138,11 @@ export default function ProfilePage() {
   useEffect(() => {
     fetchUserData()
   }, [fetchUserData])
+
+  // Compute current staff data based on selected restaurant
+  const staffData = currentRestaurant
+    ? allStaffData.find(staff => staff.restaurant_id === currentRestaurant.restaurant.id)
+    : allStaffData[0] // Fallback to first restaurant if no restaurant selected
 
   const handleProfileUpdate = async (data: ProfileFormData) => {
     try {

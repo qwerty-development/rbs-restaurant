@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
+import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -149,33 +150,21 @@ export default function EditProfilePage() {
   const router = useRouter()
   const supabase = createClient()
   const queryClient = useQueryClient()
-  const [restaurantId, setRestaurantId] = useState<string>("")
+  const { currentRestaurant } = useRestaurantContext()
   const [mainImageUrl, setMainImageUrl] = useState<string>("")
   const [imageUrls, setImageUrls] = useState<string[]>([])
 
+  // Get restaurant ID from context
+  const restaurantId = currentRestaurant?.restaurant.id || ""
+  const userRole = currentRestaurant?.role
+
+  // Check permissions
   useEffect(() => {
-    async function getRestaurantId() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: staffData } = await supabase
-          .from("restaurant_staff")
-          .select("restaurant_id, role")
-          .eq("user_id", user.id)
-          .single()
-        
-        if (staffData) {
-          // Check if user has permission to edit
-          if (staffData.role !== 'owner' && staffData.role !== 'manager') {
-            toast.error("You don't have permission to edit restaurant profile")
-            router.push("/profile")
-            return
-          }
-          setRestaurantId(staffData.restaurant_id)
-        }
-      }
+    if (currentRestaurant && userRole !== 'owner' && userRole !== 'manager') {
+      toast.error("You don't have permission to edit restaurant profile")
+      router.push("/profile")
     }
-    getRestaurantId()
-  }, [supabase, router])
+  }, [currentRestaurant, userRole, router])
 
   // Fetch restaurant data
   const { data: restaurant, isLoading } = useQuery({
