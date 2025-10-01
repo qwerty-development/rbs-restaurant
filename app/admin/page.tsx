@@ -146,6 +146,12 @@ export default function AdminPage() {
   const [selectedOwner, setSelectedOwner] = useState<SearchedUser | null>(null)
   const [isSearchingUsers, setIsSearchingUsers] = useState(false)
   
+  // Staff user search state
+  const [staffUserSearch, setStaffUserSearch] = useState("")
+  const [searchedStaffUsers, setSearchedStaffUsers] = useState<SearchedUser[]>([])
+  const [selectedStaffUser, setSelectedStaffUser] = useState<SearchedUser | null>(null)
+  const [isSearchingStaffUsers, setIsSearchingStaffUsers] = useState(false)
+  
   const supabase = createClient()
 
   // Predefined cuisine types for consistency
@@ -247,6 +253,20 @@ export default function AdminPage() {
 
     return () => clearTimeout(timer)
   }, [ownerSearch, selectedOwner])
+
+  // Search users when staff user search changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (staffUserSearch && staffUserSearch.length >= 3 && !selectedStaffUser) {
+        console.log('Searching for staff users with email:', staffUserSearch)
+        searchStaffUsers(staffUserSearch)
+      } else if (staffUserSearch.length < 3) {
+        setSearchedStaffUsers([])
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [staffUserSearch, selectedStaffUser])
 
   // Set default booking policy based on tier
   useEffect(() => {
@@ -354,6 +374,104 @@ export default function AdminPage() {
     setOwnerSearch('')
     setRestaurant(prev => ({ ...prev, owner_email: '' }))
     setSearchedUsers([])
+  }
+
+  // Search for staff users by email
+  const searchStaffUsers = async (email: string) => {
+    if (!email || email.length < 3) {
+      setSearchedStaffUsers([])
+      return
+    }
+
+    try {
+      setIsSearchingStaffUsers(true)
+
+      // Clean and normalize the search email
+      const cleanEmail = email.trim().toLowerCase()
+      console.log('Searching for staff users with cleaned email:', cleanEmail)
+
+      // First try to search in profiles table by email
+      const { data: profileUsers, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, full_name, phone_number, avatar_url, email')
+        .or(`email.ilike.%${cleanEmail}%,email.eq.${cleanEmail}`)
+        .limit(20)
+
+      console.log('Profile search results:', profileUsers, 'Error:', profileError)
+
+      let users: SearchedUser[] = []
+
+      // If we found users in profiles, use them
+      if (profileUsers && profileUsers.length > 0) {
+        users = profileUsers.filter(u => u.email && u.full_name) as any
+      }
+
+      // If no users found by email, try searching by name (in case they typed a name instead of email)
+      if (users.length === 0) {
+        console.log('No email matches, trying name search...')
+        const { data: nameSearch, error: nameError } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone_number, avatar_url, email')
+          .ilike('full_name', `%${cleanEmail}%`)
+          .limit(10)
+
+        console.log('Name search results:', nameSearch, 'Error:', nameError)
+
+        if (nameSearch && nameSearch.length > 0) {
+          users = nameSearch.filter(u => u.email && u.full_name) as any
+        }
+      }
+
+      // If still no results, try a broader search
+      if (users.length === 0) {
+        console.log('No name matches, trying broader search...')
+        const emailParts = cleanEmail.includes('@') ? cleanEmail.split('@') : [cleanEmail]
+        const { data: broadSearch, error: broadError } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone_number, avatar_url, email')
+          .or(`full_name.ilike.%${emailParts[0]}%,email.ilike.%${emailParts[0]}%`)
+          .limit(15)
+
+        console.log('Broad search results:', broadSearch, 'Error:', broadError)
+
+        if (broadSearch && broadSearch.length > 0) {
+          users = broadSearch.filter(u => u.email && u.full_name) as any
+        }
+      }
+
+      // Filter out users with null/empty emails and ensure they have the required fields
+      const validUsers = users.filter(u => 
+        u.email && 
+        u.full_name && 
+        u.id
+      )
+
+      console.log('Final valid staff users:', validUsers)
+      setSearchedStaffUsers(validUsers)
+
+    } catch (error: any) {
+      console.error('Error searching staff users:', error)
+      toast.error(error.message || 'Failed to search users')
+      setSearchedStaffUsers([])
+    } finally {
+      setIsSearchingStaffUsers(false)
+    }
+  }
+
+  // Handle staff user selection
+  const handleStaffUserSelect = (user: SearchedUser) => {
+    setSelectedStaffUser(user)
+    setStaffUserSearch(user.email)
+    setNewStaff(prev => ({ ...prev, email: user.email }))
+    setSearchedStaffUsers([])
+  }
+
+  // Clear staff user selection
+  const clearStaffUserSelection = () => {
+    setSelectedStaffUser(null)
+    setStaffUserSearch('')
+    setNewStaff(prev => ({ ...prev, email: '' }))
+    setSearchedStaffUsers([])
   }
 
   // Handle opening/closing pre-upload image section
@@ -574,32 +692,22 @@ export default function AdminPage() {
   }
 
   const handleAddStaff = async () => {
-    if (!newStaff.email || !newStaff.restaurantId) {
-      toast.error('Please fill in all fields')
+    if (!selectedStaffUser || !newStaff.restaurantId) {
+      toast.error('Please select a user and restaurant')
       return
     }
 
     setLoading(true)
     try {
-      // First, check if user exists in profiles
-      const { data: userProfile, error: userError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', newStaff.email)
-        .single()
-
-      if (userError || !userProfile) {
-        toast.error('User not found. User must be registered first.')
-        setLoading(false)
-        return
-      }
+      // Use selected staff user's data
+      const staffProfile = selectedStaffUser
 
       // Add to restaurant_staff
       const { error: staffError } = await supabase
         .from('restaurant_staff')
         .insert({
           restaurant_id: newStaff.restaurantId,
-          user_id: userProfile.id,
+          user_id: staffProfile.id,
           role: newStaff.role,
           permissions: getPermissionsByRole(newStaff.role),
           is_active: true
@@ -611,8 +719,9 @@ export default function AdminPage() {
         return
       }
 
-      toast.success('Staff member added successfully!')
+      toast.success(`Successfully added ${staffProfile.full_name} (${staffProfile.email}) as ${newStaff.role}!`)
       setNewStaff({ email: '', role: 'manager', restaurantId: '' })
+      clearStaffUserSelection()
     } catch (error) {
       console.error('Error adding staff:', error)
       toast.error('Failed to add staff member')
@@ -1736,14 +1845,93 @@ export default function AdminPage() {
             <CardContent>
               <div className="grid gap-4">
                 <div>
-                  <Label>User Email</Label>
-                  <Input
-                    type="email"
-                    placeholder="user@example.com"
-                    value={newStaff.email}
-                    onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
-                  />
+                  <Label>User Search *</Label>
+                  <div className="relative">
+                    <Input
+                      type="email"
+                      placeholder="Enter email or name to search for user..."
+                      value={staffUserSearch}
+                      onChange={(e) => setStaffUserSearch(e.target.value)}
+                      className="pr-20"
+                    />
+                    {isSearchingStaffUsers && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    )}
+                    {selectedStaffUser && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearStaffUserSelection}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 h-7 px-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {/* User suggestions dropdown */}
+                  {searchedStaffUsers.length > 0 && !selectedStaffUser && (
+                    <div className="mt-2 border rounded-lg shadow-lg bg-white max-h-64 overflow-y-auto">
+                      {searchedStaffUsers.map((user) => (
+                        <button
+                          key={user.id}
+                          type="button"
+                          onClick={() => handleStaffUserSelect(user)}
+                          className="w-full p-3 hover:bg-muted/50 text-left border-b last:border-b-0 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold">
+                              {user.full_name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium">{user.full_name}</div>
+                              <div className="text-sm text-muted-foreground">{user.email}</div>
+                              {user.phone_number && (
+                                <div className="text-xs text-muted-foreground">{user.phone_number}</div>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* No results message */}
+                  {staffUserSearch && staffUserSearch.length >= 3 && !isSearchingStaffUsers && searchedStaffUsers.length === 0 && !selectedStaffUser && (
+                    <div className="mt-2 p-3 border rounded-lg bg-muted/30">
+                      <p className="text-sm text-muted-foreground">
+                        No users found matching "{staffUserSearch}". Try a different email or name.
+                      </p>
+                    </div>
+                  )}
+                  {staffUserSearch && staffUserSearch.length < 3 && (
+                    <p className="text-muted-foreground text-xs mt-1">
+                      Type at least 3 characters to search for users
+                    </p>
+                  )}
                 </div>
+
+                {/* Selected Staff User Display */}
+                {selectedStaffUser && (
+                  <div className="p-4 border rounded-lg bg-muted/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-lg">
+                        {selectedStaffUser.full_name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-semibold">{selectedStaffUser.full_name}</div>
+                        <div className="text-sm text-muted-foreground">{selectedStaffUser.email}</div>
+                        {selectedStaffUser.phone_number && (
+                          <div className="text-xs text-muted-foreground">{selectedStaffUser.phone_number}</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <Label>Role</Label>
                   <Select
@@ -1781,7 +1969,7 @@ export default function AdminPage() {
                 </div>
                 <Button
                   onClick={handleAddStaff}
-                  disabled={loading || !newStaff.email || !newStaff.restaurantId}
+                  disabled={loading || !selectedStaffUser || !newStaff.restaurantId}
                 >
                   {loading ? 'Adding Staff...' : 'Add Staff Member'}
                 </Button>
