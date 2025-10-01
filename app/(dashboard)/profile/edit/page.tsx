@@ -97,7 +97,6 @@ const profileFormSchema = z.object({
   booking_window_days: z.number().min(1).max(365),
   max_party_size: z.number().min(1).max(50),
   min_party_size: z.number().min(1).max(10),
-  featured: z.boolean(),
   status: z.enum(["active", "inactive", "suspended"]),
   auto_decline_enabled: z.boolean(),
   request_expiry_hours: z.number().min(1).max(168),
@@ -220,7 +219,6 @@ export default function EditProfilePage() {
       booking_window_days: 30,
       max_party_size: 10,
       min_party_size: 1,
-      featured: false,
       status: "active",
       auto_decline_enabled: true,
       request_expiry_hours: 24,
@@ -254,7 +252,6 @@ export default function EditProfilePage() {
         booking_window_days: restaurant.booking_window_days || 30,
         max_party_size: restaurant.max_party_size || 10,
         min_party_size: restaurant.min_party_size || 1,
-        featured: Boolean(restaurant.featured),
         status: (restaurant.status as "active" | "inactive" | "suspended") || "active",
         auto_decline_enabled: Boolean(restaurant.auto_decline_enabled),
         request_expiry_hours: restaurant.request_expiry_hours || 24,
@@ -968,27 +965,6 @@ export default function EditProfilePage() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="featured"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel className="text-base">Featured Restaurant</FormLabel>
-                        <FormDescription>
-                          Show in featured listings and promotions
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                          disabled={updateRestaurantMutation.isPending}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
               </div>
             </CardContent>
           </Card>
