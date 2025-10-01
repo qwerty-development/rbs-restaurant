@@ -224,7 +224,7 @@ export default function EnhancedAvailabilitySettingsPage() {
   })
 
   // Closure form
-  const closureForm = useForm<ClosureFormData>({
+  const closureForm:any = useForm<any>({
     resolver: zodResolver(closureSchema),
     defaultValues: {
       is_all_day: true,

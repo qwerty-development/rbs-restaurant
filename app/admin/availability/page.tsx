@@ -51,6 +51,7 @@ import {
   Settings,
   ChefHat,
   Eye,
+  Copy,
 } from "lucide-react"
 import { OpenHoursForm } from "@/components/settings/open-hours-form"
 import { formatTimeRange12Hour } from "@/lib/utils/time-utils"
@@ -236,9 +237,12 @@ export default function AdminAvailabilityManagementPage() {
   })
 
   // Closure form
-  const closureForm = useForm<ClosureFormData>({
+  const closureForm = useForm<any>({
     resolver: zodResolver(closureSchema),
     defaultValues: {
+      start_date: new Date(),
+      end_date: new Date(),
+      reason: "",
       is_all_day: true,
       start_time: "09:00",
       end_time: "17:00",
@@ -268,6 +272,26 @@ export default function AdminAvailabilityManagementPage() {
       regularHoursForm.reset(formData)
     }
   }, [availabilityData, regularHoursForm])
+
+  // Copy day's shifts to all other days
+  const handleCopyToAllDays = (sourceDay: typeof DAYS_OF_WEEK[number]) => {
+    const shiftsToClone = regularHoursForm.getValues(sourceDay)
+
+    // Deep clone to avoid reference issues
+    const clonedShifts = JSON.parse(JSON.stringify(shiftsToClone)).map((shift: any) => ({
+      ...shift,
+      id: undefined, // Remove IDs so new records are created
+    }))
+
+    // Apply to all other days
+    DAYS_OF_WEEK.forEach(day => {
+      if (day !== sourceDay) {
+        regularHoursForm.setValue(day, clonedShifts)
+      }
+    })
+
+    toast.success(`Copied ${sourceDay}'s hours to all other days`)
+  }
 
   // Update regular hours mutation
   const updateRegularHoursMutation = useMutation({
@@ -557,21 +581,33 @@ export default function AdminAvailabilityManagementPage() {
                           <div key={day} className="space-y-4">
                             <div className="flex items-center justify-between">
                               <h3 className="text-lg font-medium capitalize">{day}</h3>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  const currentShifts = regularHoursForm.getValues(day)
-                                  regularHoursForm.setValue(day, [
-                                    ...currentShifts,
-                                    { name: "", is_open: true, open_time: "17:00", close_time: "21:00" }
-                                  ])
-                                }}
-                              >
-                                <Plus className="mr-2 h-4 w-4" />
-                                Add Shift
-                              </Button>
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleCopyToAllDays(day)}
+                                  title={`Copy ${day}'s hours to all other days`}
+                                >
+                                  <Copy className="mr-2 h-4 w-4" />
+                                  Copy to All Days
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const currentShifts = regularHoursForm.getValues(day)
+                                    regularHoursForm.setValue(day, [
+                                      ...currentShifts,
+                                      { name: "", is_open: true, open_time: "17:00", close_time: "21:00" }
+                                    ])
+                                  }}
+                                >
+                                  <Plus className="mr-2 h-4 w-4" />
+                                  Add Shift
+                                </Button>
+                              </div>
                             </div>
 
                             <div className="space-y-3">
