@@ -30,7 +30,6 @@ import {
   X,
   Clock,
   Save,
-  Copy,
   Coffee,
   Utensils,
   Wine,
@@ -102,7 +101,7 @@ export function OpenHoursForm({ restaurantId, onSuccess }: OpenHoursFormProps) {
     }
   })
 
-  const { fields, append, remove, update } = useFieldArray({
+  const { fields, append, remove, update, replace } = useFieldArray({
     control: form.control,
     name: "shifts"
   })
@@ -190,36 +189,6 @@ export function OpenHoursForm({ restaurantId, onSuccess }: OpenHoursFormProps) {
     append(newShift)
   }
 
-  const copyShiftToAllDays = (shiftIndex: number) => {
-    const shift = fields[shiftIndex]
-    if (!shift) return
-
-    DAYS_OF_WEEK.forEach(day => {
-      if (day.value === shift.day_of_week) return // Skip source day
-
-      const existingIndex = fields.findIndex(f =>
-        f.day_of_week === day.value && f.service_type === shift.service_type
-      )
-
-      const newShift = {
-        day_of_week: day.value as any,
-        service_type: shift.service_type,
-        is_open: shift.is_open,
-        open_time: shift.open_time,
-        close_time: shift.close_time,
-        name: shift.name,
-        accepts_walkins: shift.accepts_walkins,
-      }
-
-      if (existingIndex >= 0) {
-        update(existingIndex, newShift)
-      } else {
-        append(newShift)
-      }
-    })
-
-    toast.success(`Copied ${shift.service_type} shift to all days`)
-  }
 
   const getShiftsForDay = (day: string) => {
     return fields.filter(f => f.day_of_week === day)
@@ -421,15 +390,6 @@ export function OpenHoursForm({ restaurantId, onSuccess }: OpenHoursFormProps) {
 
                               {/* Action Buttons */}
                               <div className="flex items-center gap-1">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => copyShiftToAllDays(actualIndex)}
-                                  title="Copy to all days"
-                                >
-                                  <Copy className="h-4 w-4" />
-                                </Button>
                                 <Button
                                   type="button"
                                   variant="ghost"
