@@ -311,12 +311,18 @@ export default function StaffPage() {
   // Check permissions on mount
   useEffect(() => {
     if (!contextLoading && currentRestaurant) {
+      // For basic tier, allow staff with schedules.view permission to access staff page
+      // For pro tier, require staff.manage permission
+      const requiredPermission = currentRestaurant.restaurant.tier === 'basic'
+        ? 'schedules.view'
+        : 'staff.manage'
+
       const hasPermission = restaurantAuth.hasPermission(
         currentRestaurant.permissions,
-        'staff.manage',
+        requiredPermission,
         currentRestaurant.role
       )
-      
+
       if (!hasPermission) {
         toast.error("You don't have permission to manage staff")
         router.push('/dashboard')

@@ -319,10 +319,20 @@ export default function SchedulesPage() {
   const currentStaffMember = staffMembers.find(staff => staff.user_id === currentUser?.id)
 
   // Permission checks
-  const canManageSchedules = !!(currentRestaurant && restaurantAuth.hasPermission(
-    currentRestaurant.permissions,
-    'schedules.manage',
-    currentRestaurant.role
+  // For basic tier, allow staff with schedules.view permission to manage schedules
+  // For pro tier, require schedules.manage permission
+  const canManageSchedules = !!(currentRestaurant && (
+    currentRestaurant.restaurant.tier === 'basic'
+      ? restaurantAuth.hasPermission(
+          currentRestaurant.permissions,
+          'schedules.view',
+          currentRestaurant.role
+        )
+      : restaurantAuth.hasPermission(
+          currentRestaurant.permissions,
+          'schedules.manage',
+          currentRestaurant.role
+        )
   ))
 
   // Statistics

@@ -47,14 +47,14 @@ export const TIER_FEATURES = {
     floor_plan: false,
     table_assignment: false,
     customer_management: false,
-    staff_management: false,
+    staff_management: true, // Enable staff management for basic tier
     advanced_analytics: false,
     kitchen_management: false,
     waitlist: true, // Enable waitlist for basic tier
     loyalty_management: false,
     offers_management: false,
     orders_management: false,
-    schedules_management: false,
+    schedules_management: true, // Enable schedules management for basic tier
     complex_booking_status: false,
     manual_booking_creation: false,
     notifications_advanced: false,
@@ -137,6 +137,8 @@ export function getNavigationItems(tier: RestaurantTier) {
     { href: '/menu', label: 'Menu', feature: 'menu_management' },
     { href: '/waitlist', label: 'Waiting List', feature: 'waitlist' },
     { href: '/reviews', label: 'Reviews', feature: 'review_management' },
+    { href: '/staff', label: 'Staff', feature: 'staff_management' },
+    { href: '/schedules', label: 'Schedules', feature: 'schedules_management' },
     { href: '/profile', label: 'Profile', feature: 'profile_management' },
     { href: '/settings', label: 'Settings', feature: 'settings_basic' },
   ]
@@ -152,8 +154,6 @@ export function getNavigationItems(tier: RestaurantTier) {
     { href: '/analytics', label: 'Analytics', feature: 'advanced_analytics' },
     { href: '/loyalty', label: 'Loyalty', feature: 'loyalty_management' },
     { href: '/offers', label: 'Offers', feature: 'offers_management' },
-    { href: '/staff', label: 'Staff', feature: 'staff_management' },
-    { href: '/schedules', label: 'Schedules', feature: 'schedules_management' },
     { href: '/orders', label: 'Orders', feature: 'orders_management' },
     { href: '/kitchen', label: 'Kitchen', feature: 'kitchen_management' },
     { href: '/notifications', label: 'Notifications', feature: 'notifications_advanced' },
