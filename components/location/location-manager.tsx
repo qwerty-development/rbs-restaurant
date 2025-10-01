@@ -232,7 +232,6 @@ export function LocationManager({
       {/* Quick Actions */}
       <div className="flex flex-wrap gap-3">
         <AddressSearch
-          value={displayAddress}
           onChange={handleAddressChange}
           placeholder="Search for your restaurant address..."
           className="flex-1 min-w-64"
