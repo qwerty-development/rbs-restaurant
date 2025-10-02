@@ -91,9 +91,9 @@ export default function AdminRestaurantEditPage() {
           featured: !!data.featured,
           main_image_url: data.main_image_url || '',
           image_urls: Array.isArray(data.image_urls) ? data.image_urls.filter(Boolean) : [],
-          cancellation_window: data.cancellation_window || 2,
-          table_turnover: data.table_turnover || 90,
-          min_age: data.min_age || 0,
+          cancellation_window: data.cancellation_window_hours || 2,
+          table_turnover: data.table_turnover_minutes || 90,
+          min_age: data.minimum_age || 0,
         })
       } catch (e) {
         console.error('Failed to load restaurant', e)
@@ -127,9 +127,9 @@ export default function AdminRestaurantEditPage() {
           featured: formData.featured,
           main_image_url: formData.main_image_url || null,
           image_urls: formData.image_urls || [],
-          cancellation_window: formData.cancellation_window,
-          table_turnover: formData.table_turnover,
-          min_age: formData.min_age,
+          cancellation_window_hours: formData.cancellation_window,
+          table_turnover_minutes: formData.table_turnover,
+          minimum_age: formData.min_age === 0 ? null : formData.min_age,
           updated_at: new Date().toISOString(),
         })
         .eq('id', restaurant.id)

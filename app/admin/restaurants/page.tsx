@@ -303,7 +303,7 @@ export default function RestaurantManagement() {
         return
       }
 
-      const { error } = await supabase
+      const { data: inserted, error } = await supabase
         .from('restaurants')
         .insert([{
           name: formData.name.trim(),
@@ -322,8 +322,86 @@ export default function RestaurantManagement() {
           average_rating: 0,
           total_reviews: 0
         }])
+        .select('id')
+        .single()
 
       if (error) throw error
+
+      const newRestaurantId = inserted?.id
+
+      // Initialize defaults for the new restaurant (best-effort; non-blocking)
+      if (newRestaurantId) {
+        const initializeDefaults = async () => {
+          try {
+            const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+            const defaultOpenHours = daysOfWeek.map((day) => ({
+              restaurant_id: newRestaurantId,
+              day_of_week: day,
+              service_type: 'general',
+              is_open: true,
+              open_time: formData.opening_time || '08:00',
+              close_time: formData.closing_time || '23:00',
+              name: 'General Service',
+              accepts_walkins: true,
+              notes: null
+            }))
+
+            const { error: openHoursError } = await supabase
+              .from('restaurant_open_hours')
+              .insert(defaultOpenHours)
+
+            const { error: sectionError } = await supabase
+              .from('restaurant_sections')
+              .insert({
+                restaurant_id: newRestaurantId,
+                name: 'Main Dining',
+                description: 'Default section',
+                display_order: 0,
+                is_active: true,
+                color: '#3b82f6',
+                icon: 'grid'
+              })
+
+            const { error: loyaltyError } = await supabase
+              .from('restaurant_loyalty_balance')
+              .insert({
+                restaurant_id: newRestaurantId,
+                total_purchased: 0,
+                current_balance: 0
+              })
+
+            const { data: authUser } = await supabase.auth.getUser()
+            const creatorId = authUser?.user?.id
+            let notifError: any = null
+            if (creatorId) {
+              const { error: npError } = await supabase
+                .from('restaurant_notification_preferences')
+                .insert({
+                  user_id: creatorId,
+                  restaurant_id: newRestaurantId,
+                  new_bookings: true,
+                  cancellations: true,
+                  modifications: true,
+                  waitlist_updates: true,
+                  table_ready: true,
+                  order_updates: true
+                })
+              notifError = npError
+            }
+
+            // Log but do not block UX
+            if (openHoursError) console.warn('Failed to init open hours', openHoursError)
+            if (sectionError) console.warn('Failed to init default section', sectionError)
+            if (loyaltyError) console.warn('Failed to init loyalty balance', loyaltyError)
+            if (notifError) console.warn('Failed to init notification prefs', notifError)
+          } catch (e) {
+            console.warn('Initialization error', e)
+          }
+        }
+
+        // Fire and forget
+        initializeDefaults()
+      }
 
       await fetchRestaurants()
       setShowAddDialog(false)
