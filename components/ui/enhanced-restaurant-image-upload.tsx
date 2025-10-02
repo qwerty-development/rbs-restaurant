@@ -259,8 +259,9 @@ export function EnhancedRestaurantImageUpload({
 
     // Add uploaded images to gallery
     if (uploadedImages.length > 0) {
-      setAllImages(prev => [...prev, ...uploadedImages])
-      updateImageArrays([...allImages, ...uploadedImages])
+      const updatedImages = [...allImages, ...uploadedImages]
+      setAllImages(updatedImages)
+      updateImageArrays(updatedImages)
     }
 
     // Clear completed uploads after delay
