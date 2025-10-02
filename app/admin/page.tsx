@@ -1,4 +1,3 @@
-
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -133,25 +132,25 @@ export default function AdminPage() {
     role: 'manager',
     restaurantId: ''
   })
-  
+
   // New state for pre-creation image upload
   const [showPreImageUpload, setShowPreImageUpload] = useState(false)
   const [mainImageUrl, setMainImageUrl] = useState<string>('')
   const [imageUrls, setImageUrls] = useState<string[]>([])
   const [tempRestaurantId, setTempRestaurantId] = useState<string>('')
-  
+
   // Owner search state
   const [ownerSearch, setOwnerSearch] = useState("")
   const [searchedUsers, setSearchedUsers] = useState<SearchedUser[]>([])
   const [selectedOwner, setSelectedOwner] = useState<SearchedUser | null>(null)
   const [isSearchingUsers, setIsSearchingUsers] = useState(false)
-  
+
   // Staff user search state
   const [staffUserSearch, setStaffUserSearch] = useState("")
   const [searchedStaffUsers, setSearchedStaffUsers] = useState<SearchedUser[]>([])
   const [selectedStaffUser, setSelectedStaffUser] = useState<SearchedUser | null>(null)
   const [isSearchingStaffUsers, setIsSearchingStaffUsers] = useState(false)
-  
+
   const supabase = createClient()
 
   // Predefined cuisine types for consistency
@@ -173,52 +172,6 @@ export default function AdminPage() {
     'International',
   ].sort()
 
-  // Phone number validation and formatting for Lebanese numbers
-  const validateLebananesePhone = (phone: string): { isValid: boolean; formatted?: string; error?: string } => {
-    // Remove all non-digit characters
-    const cleanPhone = phone.replace(/\D/g, '')
-
-    if (cleanPhone.length === 0) {
-      return { isValid: false, error: 'Phone number is required' }
-    }
-
-    // Lebanese number patterns:
-    // Mobile: +961 + 8 digits starting with 3, 7, or 8
-    // Landline: +961 + 8 digits starting with 1 (e.g., 01XXXXXX)
-    // Examples: +96181972024, +96171234567, +96131234567, +9611234567
-
-    // If it starts with 0 and has 9 digits (0XXXXXXXX)
-    if (cleanPhone.startsWith('0') && cleanPhone.length === 9) {
-      const nationalNumber = cleanPhone.slice(1)
-      if (/^[1378]/.test(nationalNumber)) {
-        const formatted = `+961${nationalNumber}`
-        return { isValid: true, formatted }
-      }
-      return { isValid: false, error: 'Lebanese numbers must start with 1 (landline), 3, 7, or 8 (mobile)' }
-    }
-
-    // If it starts with 961 (with country code)
-    if (cleanPhone.startsWith('961')) {
-      const nationalNumber = cleanPhone.slice(3)
-      if (nationalNumber.length === 8 && /^[1378]/.test(nationalNumber)) {
-        const formatted = `+961${nationalNumber}`
-        return { isValid: true, formatted }
-      }
-      return { isValid: false, error: 'Lebanese numbers must be 8 digits starting with 1 (landline), 3, 7, or 8 (mobile)' }
-    }
-
-    // If it's just 8 digits starting with 1, 3, 7, or 8
-    if (cleanPhone.length === 8 && /^[1378]/.test(cleanPhone)) {
-      const formatted = `+961${cleanPhone}`
-      return { isValid: true, formatted }
-    }
-
-    return { isValid: false, error: 'Please enter a valid Lebanese number (+961XXXXXXXX)' }
-  }
-
-  // State for phone validation
-  const [phoneError, setPhoneError] = useState<string>('')
-
   useEffect(() => {
     const fetchExistingRestaurants = async () => {
       const { data: restaurants, error } = await supabase
@@ -233,9 +186,9 @@ export default function AdminPage() {
 
       setExistingRestaurants(restaurants || [])
     }
-    
+
     fetchExistingRestaurants()
-    
+
     // Generate a temporary ID for image upload
     setTempRestaurantId(`temp-${Date.now()}-${Math.random().toString(36).substring(7)}`)
   }, [supabase])
@@ -342,9 +295,9 @@ export default function AdminPage() {
       }
 
       // Filter out users with null/empty emails and ensure they have the required fields
-      const validUsers = users.filter(u => 
-        u.email && 
-        u.full_name && 
+      const validUsers = users.filter(u =>
+        u.email &&
+        u.full_name &&
         u.id
       )
 
@@ -440,9 +393,9 @@ export default function AdminPage() {
       }
 
       // Filter out users with null/empty emails and ensure they have the required fields
-      const validUsers = users.filter(u => 
-        u.email && 
-        u.full_name && 
+      const validUsers = users.filter(u =>
+        u.email &&
+        u.full_name &&
         u.id
       )
 
@@ -485,14 +438,14 @@ export default function AdminPage() {
 
   // Handle address and coordinates changes from Enhanced AddressSearch
   const handleAddressChange = (address: string, coordinates?: Coordinates, result?: EnhancedGeocodingResult) => {
-    setRestaurant(prev => ({ 
-      ...prev, 
+    setRestaurant(prev => ({
+      ...prev,
       address: address,
       coordinates: coordinates || null
     }))
-    
+
     // If we have a business result, we could potentially auto-fill some fields
-    if (result && result.name && result.type && 
+    if (result && result.name && result.type &&
         (result.type === 'restaurant' || result.type === 'cafe' || result.type === 'bakery')) {
       // Show a toast suggesting this might be a restaurant they want to add
       toast.success(`Found business: ${result.name}`, {
@@ -501,16 +454,16 @@ export default function AdminPage() {
     }
   }
 
-  // Handle location changes from LocationPicker  
+  // Handle location changes from LocationPicker
   const handleLocationPickerChange = (coordinates: Coordinates, address?: string) => {
-    setRestaurant(prev => ({ 
-      ...prev, 
+    setRestaurant(prev => ({
+      ...prev,
       coordinates: coordinates,
       address: address || prev.address // Keep existing address if none provided
     }))
   }
 
-  
+
 
   const refreshRestaurants = async () => {
     setLoading(true)
@@ -547,26 +500,18 @@ export default function AdminPage() {
       return
     }
 
-    // Validate phone number before creating
-    const phoneValidation = validateLebananesePhone(restaurant.phone_number)
-    if (!phoneValidation.isValid) {
-      toast.error(`Invalid phone number: ${phoneValidation.error}`)
-      setPhoneError(phoneValidation.error || 'Invalid phone number')
-      return
-    }
-
     setLoading(true)
     try {
       setCreationProgress(`Creating ${restaurant.name}...`)
 
       // Use selected owner's data
       const ownerProfile = selectedOwner
-      
+
       // Create location string from coordinates if available
-      const locationValue = restaurant.coordinates 
+      const locationValue = restaurant.coordinates
         ? `POINT(${restaurant.coordinates.lng} ${restaurant.coordinates.lat})`
         : `POINT(-74.006 40.7128)` // Default NYC location
-      
+
       const { data, error } = await supabase
         .from('restaurants')
         .insert({
@@ -638,7 +583,7 @@ export default function AdminPage() {
       // Create restaurant hours based on availability settings
       setCreationProgress(`Setting up operating hours for ${restaurant.name}...`)
       const DAYS_OF_WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-      
+
       const allShifts: any[] = []
       DAYS_OF_WEEK.forEach(day => {
         const dayShifts = restaurant.availability[day] || []
@@ -664,16 +609,16 @@ export default function AdminPage() {
           toast.error('Restaurant created but failed to set operating hours. Please set them in settings.')
         }
       }
-      
+
       // Update the existing restaurants list
       setExistingRestaurants(prev => [...prev, { id: data.id, name: data.name }])
-      
-      const imageMessage = mainImageUrl || imageUrls.length > 0 
+
+      const imageMessage = mainImageUrl || imageUrls.length > 0
         ? ` with ${imageUrls.length + (mainImageUrl ? 1 : 0)} image(s)`
         : ''
-      
+
       toast.success(`Successfully created ${restaurant.name}${imageMessage} and assigned ${selectedOwner.full_name} (${selectedOwner.email}) as owner!`)
-      
+
       // Reset form and images after successful creation
       setRestaurant(defaultRestaurant)
       clearOwnerSelection()
@@ -749,32 +694,12 @@ export default function AdminPage() {
     setRestaurant(prev => ({ ...prev, [field]: value }))
   }
 
-  // Handle phone number input with validation
-  const handlePhoneChange = (value: string) => {
-    updateRestaurant('phone_number', value)
-    
-    if (value.trim()) {
-      const validation = validateLebananesePhone(value)
-      if (!validation.isValid) {
-        setPhoneError(validation.error || 'Invalid phone number')
-      } else {
-        setPhoneError('')
-        // Auto-format the phone number
-        if (validation.formatted && validation.formatted !== value) {
-          updateRestaurant('phone_number', validation.formatted)
-        }
-      }
-    } else {
-      setPhoneError('')
-    }
-  }
-
   const updateAvailability = (day: string, shiftIndex: number, field: string, value: any) => {
     setRestaurant(prev => ({
       ...prev,
       availability: {
         ...prev.availability,
-        [day]: prev.availability[day].map((shift, index) => 
+        [day]: prev.availability[day].map((shift, index) =>
           index === shiftIndex ? { ...shift, [field]: value } : shift
         )
       }
@@ -789,7 +714,7 @@ export default function AdminPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
-              
+
               <p className="text-blue-200 text-sm mt-1">
                 Manage restaurants, users, and system-wide settings
               </p>
@@ -876,7 +801,7 @@ export default function AdminPage() {
                   </ul>
                 </div>
                 <div className="space-y-2">
-                  <h4 className="font-semibold text-blue-800">� Restaurant Profile</h4>
+                  <h4 className="font-semibold text-blue-800">🍽 Restaurant Profile</h4>
                   <ul className="space-y-1 text-blue-700">
                     <li>• Basic restaurant information</li>
                     <li>• Contact details and address</li>
@@ -953,16 +878,9 @@ export default function AdminPage() {
                       <Label>Phone Number *</Label>
                       <Input
                         value={restaurant.phone_number}
-                        onChange={(e) => handlePhoneChange(e.target.value)}
-                        placeholder="+961 3 123 456 or 01 234 567"
-                        className={phoneError ? 'border-red-500' : ''}
+                        onChange={(e) => updateRestaurant('phone_number', e.target.value)}
+                        placeholder="Enter phone number"
                       />
-                      {phoneError && (
-                        <p className="text-red-500 text-sm mt-1">{phoneError}</p>
-                      )}
-                      <p className="text-muted-foreground text-xs mt-1">
-                        Lebanese format: Mobile (3/7/8) or Landline (01-09)
-                      </p>
                     </div>
                     <div>
                       <Label>WhatsApp Number</Label>
@@ -971,9 +889,6 @@ export default function AdminPage() {
                         onChange={(e) => updateRestaurant('whatsapp_number', e.target.value)}
                         placeholder="WhatsApp number (optional)"
                       />
-                      <p className="text-muted-foreground text-xs mt-1">
-                        Optional WhatsApp number for restaurant communication
-                      </p>
                     </div>
                     <div>
                       <Label>Instagram Handle</Label>
@@ -982,9 +897,6 @@ export default function AdminPage() {
                         onChange={(e) => updateRestaurant('instagram_handle', e.target.value)}
                         placeholder="restaurantname (optional)"
                       />
-                      <p className="text-muted-foreground text-xs mt-1">
-                        Optional Instagram handle for social media presence
-                      </p>
                     </div>
                     <div>
                       <Label>Price Range (1-4)</Label>
@@ -1437,7 +1349,7 @@ export default function AdminPage() {
                             {showLocationPicker ? 'Hide Map' : 'Open Map'}
                           </Button>
                         </div>
-                        
+
                         {restaurant.coordinates && (
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <MapPin className="h-3 w-3 text-green-600" />
@@ -1512,7 +1424,7 @@ export default function AdminPage() {
                           )}
                         </div>
                       </div>
-                      
+
                       {/* Search Results - Show directly under search box */}
                       {searchedUsers.length > 0 && !selectedOwner && (
                         <div className="mt-2 space-y-2 max-h-64 overflow-y-auto border rounded-lg bg-white shadow-lg">
@@ -1721,13 +1633,13 @@ export default function AdminPage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      {restaurant.phone_number && !phoneError ? (
+                      {restaurant.phone_number ? (
                         <CheckCircle2 className="w-4 h-4 text-green-600" />
                       ) : (
                         <div className="w-4 h-4 border-2 border-red-500 rounded-full" />
                       )}
-                      <span className={restaurant.phone_number && !phoneError ? 'text-green-700' : 'text-red-600'}>
-                        Valid Phone Number
+                      <span className={restaurant.phone_number ? 'text-green-700' : 'text-red-600'}>
+                        Phone Number
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1766,14 +1678,13 @@ export default function AdminPage() {
                 <Button
                   onClick={handleCreateRestaurant}
                   disabled={
-                    loading || 
-                    !restaurant.name || 
-                    !restaurant.address || 
-                    !restaurant.phone_number || 
-                    !restaurant.cuisine_type || 
-                    !selectedOwner || 
-                    !restaurant.coordinates ||
-                    !!phoneError
+                    loading ||
+                    !restaurant.name ||
+                    !restaurant.address ||
+                    !restaurant.phone_number ||
+                    !restaurant.cuisine_type ||
+                    !selectedOwner ||
+                    !restaurant.coordinates
                   }
                   className="w-full"
                   size="lg"
@@ -1827,7 +1738,7 @@ export default function AdminPage() {
                 <div>
                   <CardTitle>Add Staff to Restaurants</CardTitle>
                   <CardDescription>
-                    Add existing users as staff members to restaurants. Users must be registered first. 
+                    Add existing users as staff members to restaurants. Users must be registered first.
                     You can also assign owners here in addition to the restaurant creation form.
                   </CardDescription>
                 </div>
@@ -1871,7 +1782,7 @@ export default function AdminPage() {
                       </Button>
                     )}
                   </div>
-                  
+
                   {/* User suggestions dropdown */}
                   {searchedStaffUsers.length > 0 && !selectedStaffUser && (
                     <div className="mt-2 border rounded-lg shadow-lg bg-white max-h-64 overflow-y-auto">
