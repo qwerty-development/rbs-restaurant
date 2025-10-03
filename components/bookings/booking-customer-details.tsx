@@ -51,180 +51,6 @@ import { LowRatingFlag, CustomerRatingDisplay } from "@/components/ui/low-rating
 import { titleCase } from "@/lib/utils"
 import { customerUtils } from "@/lib/customer-utils"
 
-// Guest Customer Card Component for bookings without customer records
-function GuestCustomerCard({ booking, restaurantId }: { booking: Booking; restaurantId: string }) {
-  const [guestBookings, setGuestBookings] = useState<any[]>([])
-  const [loadingHistory, setLoadingHistory] = useState(true)
-  const supabase = createClient()
-
-  useEffect(() => {
-    const loadGuestHistory = async () => {
-      if (!booking.guest_email) {
-        setLoadingHistory(false)
-        return
-      }
-
-      try {
-        // Find all bookings with the same guest email
-        const { data, error } = await supabase
-          .from('bookings')
-          .select('*')
-          .eq('restaurant_id', restaurantId)
-          .eq('guest_email', booking.guest_email)
-          .order('booking_time', { ascending: false })
-          .limit(10)
-
-        if (!error && data) {
-          setGuestBookings(data)
-        }
-      } catch (error) {
-        console.error('Error loading guest history:', error)
-      } finally {
-        setLoadingHistory(false)
-      }
-    }
-
-    loadGuestHistory()
-  }, [booking.guest_email, restaurantId])
-
-  const completedBookings = guestBookings.filter(b => b.status === 'completed').length
-  const noShowCount = guestBookings.filter(b => b.status === 'no_show').length
-  const totalBookings = guestBookings.length
-
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <Avatar className="h-12 w-12">
-                <AvatarFallback className="bg-muted">
-                  {(booking.guest_name || 'G')
-                    .split(' ')
-                    .map(n => n[0])
-                    .join('')
-                    .toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  {booking.guest_name || 'Guest Customer'}
-                  <Badge variant="outline" className="text-xs">
-                    Guest
-                  </Badge>
-                </CardTitle>
-                <CardDescription>
-                  Walk-in customer
-                </CardDescription>
-              </div>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Contact Information */}
-          <div className="space-y-2">
-            {booking.guest_email && (
-              <div className="flex items-center gap-2 text-sm">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-                <span>{booking.guest_email}</span>
-              </div>
-            )}
-            {booking.guest_phone && (
-              <div className="flex items-center gap-2 text-sm">
-                <Phone className="h-4 w-4 text-muted-foreground" />
-                <span>{booking.guest_phone}</span>
-              </div>
-            )}
-          </div>
-
-          {booking.guest_email && !loadingHistory && totalBookings > 0 && (
-            <>
-              <Separator />
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Total Visits</p>
-                  <p className="text-2xl font-bold">{totalBookings}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Completed</p>
-                  <p className="text-2xl font-bold text-green-600">{completedBookings}</p>
-                </div>
-                {noShowCount > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">No-Shows</p>
-                    <p className="text-2xl font-bold text-red-600">{noShowCount}</p>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          <Separator />
-          <div className="rounded-lg bg-muted/50 p-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Guest Customer</p>
-                <p className="text-xs text-muted-foreground">
-                  This customer doesn't have a registered profile.
-                  {booking.guest_email && totalBookings > 1 && (
-                    <> Visit history is based on email address ({booking.guest_email}).</>
-                  )}
-                  {!booking.guest_email && (
-                    <> No email provided, so visit history cannot be tracked.</>
-                  )}
-                </p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Booking History */}
-      {booking.guest_email && !loadingHistory && guestBookings.length > 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Recent Visits
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[300px]">
-              <div className="space-y-3">
-                {guestBookings.slice(0, 5).map((pastBooking) => (
-                  <div
-                    key={pastBooking.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-                  >
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">
-                        {format(new Date(pastBooking.booking_time), 'MMM d, yyyy • h:mm a')}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Party of {pastBooking.party_size}
-                        {pastBooking.id === booking.id && ' (Current)'}
-                      </p>
-                    </div>
-                    <Badge variant={
-                      pastBooking.status === 'completed' ? 'default' :
-                      pastBooking.status === 'no_show' ? 'destructive' :
-                      pastBooking.status === 'cancelled_by_user' || pastBooking.status === 'cancelled_by_restaurant' ? 'secondary' :
-                      'outline'
-                    }>
-                      {titleCase(pastBooking.status)}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  )
-}
-
 interface BookingCustomerDetailsProps {
   booking: Booking
   restaurantId: string
@@ -232,7 +58,7 @@ interface BookingCustomerDetailsProps {
 }
 
 export function BookingCustomerDetails({ booking, restaurantId, currentUserId }: BookingCustomerDetailsProps) {
-  const [customerData, setCustomerData]:any = useState<RestaurantCustomer | null>(null)
+  const [customerData, setCustomerData] = useState<RestaurantCustomer | null>(null)
   const [totalBookingCount, setTotalBookingCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   
@@ -245,20 +71,13 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
     // Clear previous customer data when booking changes to prevent showing wrong data
     setCustomerData(null)
     setLoading(true)
-
-    // For guest/walk-in bookings (identified by guest_name being populated),
-    // try to load customer data by email or name
-    // This prevents showing staff member details for manual bookings
-    if (booking.guest_name) {
-      // Guest booking - try to load customer data
-      loadCustomerData()
-    } else if (booking.user_id) {
-      // For registered user bookings (no guest_name), load by user_id
+    
+    if (booking.user_id || booking.guest_email) {
       loadCustomerData()
     } else {
       setLoading(false)
     }
-  }, [booking.id, booking.user_id, booking.guest_email, booking.guest_name, restaurantId])
+  }, [booking.id, booking.user_id, booking.guest_email, restaurantId])
 
   // Clean up function to ensure no state bleeding between instances
   useEffect(() => {
@@ -292,62 +111,19 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
         `)
         .eq('restaurant_id', restaurantId)
 
-      // Query logic:
-      // - For guest bookings (guest_name exists), prioritize guest_email, fall back to guest_name
-      // - For registered user bookings, use user_id
-      // This prevents loading staff member details for manual bookings
-      if (booking.guest_name) {
-        // Guest/walk-in booking
-        if (booking.guest_email) {
-          // Prefer email lookup as it's more reliable
-          console.log('[Customer Details] Querying by guest_email:', booking.guest_email)
-          query = query.eq('guest_email', booking.guest_email)
-        } else {
-          // Fall back to name lookup (less reliable but better than nothing)
-          console.log('[Customer Details] Querying by guest_name:', booking.guest_name)
-          query = query.eq('guest_name', booking.guest_name)
-        }
-      } else if (booking.user_id) {
-        // Registered user booking (no guest_name) - query by user_id
-        console.log('[Customer Details] Querying by user_id:', booking.user_id)
+      // Query by user_id if available, otherwise by guest_email
+      if (booking.user_id) {
         query = query.eq('user_id', booking.user_id)
-      } else {
-        // No valid identifier available
-        console.log('[Customer Details] No valid identifier, showing guest card')
-        setLoading(false)
-        return
+      } else if (booking.guest_email) {
+        query = query.eq('guest_email', booking.guest_email)
       }
 
-      // Use limit(1) to get the first result, then extract it from the array
-      // This handles cases where multiple customer records exist with the same email
-      const { data: customerResults, error } = await query
-        .order('created_at', { ascending: false }) // Get most recent customer record
-        .limit(1)
+      const { data: customerResult, error } = await query.single()
 
       if (error) {
-        console.error('[Customer Details] Error loading customer data:', error)
-        setLoading(false)
+        console.error('Error loading customer data:', error)
         return
       }
-
-      // If no customer record found, show guest booking UI
-      const customerResult = customerResults?.[0]
-      console.log('[Customer Details] Customer result:', customerResult)
-
-      if (!customerResult) {
-        console.log('[Customer Details] No customer record found, showing guest card')
-        setLoading(false)
-        return
-      }
-
-      console.log('[Customer Details] Found customer record:', {
-        id: customerResult.id,
-        guest_name: customerResult.guest_name,
-        guest_email: customerResult.guest_email,
-        user_id: customerResult.user_id,
-        total_bookings: customerResult.total_bookings,
-        vip_status: customerResult.vip_status
-      })
 
       let customerNotes: any[] = []
       
@@ -395,10 +171,9 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
           .or(`customer_id.eq.${customerResult.id},related_customer_id.eq.${customerResult.id}`)
 
         // Load recent booking history
-        // Use the same logic as customer lookup: guest_name = use guest_email, otherwise use user_id
-        const bookingQuery = booking.guest_name && booking.guest_email
-          ? supabase.from('bookings').select('*').eq('guest_email', booking.guest_email)
-          : supabase.from('bookings').select('*').eq('user_id', booking.user_id)
+        const bookingQuery = booking.user_id
+          ? supabase.from('bookings').select('*').eq('user_id', booking.user_id)
+          : supabase.from('bookings').select('*').eq('guest_email', booking.guest_email)
 
         const { data: bookingHistory } = await bookingQuery
           .eq('restaurant_id', restaurantId)
@@ -407,17 +182,17 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
           .limit(5)
 
         // Get total booking count for this restaurant
-        const totalBookingQuery = booking.guest_name && booking.guest_email
-          ? supabase.from('bookings').select('id', { count: 'exact' }).eq('guest_email', booking.guest_email)
-          : supabase.from('bookings').select('id', { count: 'exact' }).eq('user_id', booking.user_id)
+        const totalBookingQuery = booking.user_id
+          ? supabase.from('bookings').select('id', { count: 'exact' }).eq('user_id', booking.user_id)
+          : supabase.from('bookings').select('id', { count: 'exact' }).eq('guest_email', booking.guest_email)
 
         const { count: restaurantBookingCount } = await totalBookingQuery
           .eq('restaurant_id', restaurantId)
 
         // Get all bookings for statistics calculation
-        const allBookingsQuery = booking.guest_name && booking.guest_email
-          ? supabase.from('bookings').select('status').eq('guest_email', booking.guest_email)
-          : supabase.from('bookings').select('status').eq('user_id', booking.user_id)
+        const allBookingsQuery = booking.user_id
+          ? supabase.from('bookings').select('status').eq('user_id', booking.user_id)
+          : supabase.from('bookings').select('status').eq('guest_email', booking.guest_email)
 
         const { data: allBookings } = await allBookingsQuery
           .eq('restaurant_id', restaurantId)
@@ -444,14 +219,6 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
           cancelled_count: cancelledCount
         }
 
-        console.log('[Customer Details] Setting customer data:', {
-          id: transformedCustomer.id,
-          guest_name: transformedCustomer.guest_name,
-          total_bookings: transformedCustomer.total_bookings,
-          vip_status: transformedCustomer.vip_status,
-          has_profile: !!transformedCustomer.profile
-        })
-
         setCustomerData(transformedCustomer)
         setTotalBookingCount(restaurantBookingCount || 0)
       }
@@ -477,7 +244,26 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
   }
 
   if (!customerData) {
-    return <GuestCustomerCard booking={booking} restaurantId={restaurantId} />
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <User className="h-5 w-5" />
+            Guest Customer
+          </CardTitle>
+          <CardDescription>
+            {booking.guest_name && <span>{booking.guest_name}</span>}
+            {booking.guest_email && <span className="block">{booking.guest_email}</span>}
+            {booking.guest_phone && <span className="block">{booking.guest_phone}</span>}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-sm text-muted-foreground">
+            This is a guest booking. Customer profile data is not available.
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
 
