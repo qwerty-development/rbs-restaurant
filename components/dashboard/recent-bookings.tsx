@@ -55,11 +55,11 @@ export function RecentBookings({ bookings, customersData = {} }: RecentBookingsP
   }
 
   const getDisplayName = (booking: Booking) => {
-    return booking.user?.full_name || booking.guest_name || 'Guest'
+    return booking.guest_name || booking.user?.full_name || 'Guest'
   }
 
   const getDisplayPhone = (booking: Booking) => {
-    return booking.user?.phone_number || booking.guest_phone || '-'
+    return booking.guest_phone || booking.user?.phone_number || '-'
   }
 
   if (!bookings || bookings.length === 0) {

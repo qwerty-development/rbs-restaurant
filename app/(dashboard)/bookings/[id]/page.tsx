@@ -620,7 +620,7 @@ export default function BookingsPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <span className="font-medium">
-                          {booking.user?.full_name || booking.guest_name}
+                          {booking.guest_name || booking.user?.full_name}
                         </span>
                         <Badge variant="secondary" className="text-xs">
                           {titleCase(booking.status)}

@@ -181,7 +181,7 @@ export default function DashboardPage() {
           
           if (upcomingSharedBooking) {
             const bookingTime = format(new Date(upcomingSharedBooking.booking_time), 'h:mm a')
-            const guestName = upcomingSharedBooking.user?.full_name || upcomingSharedBooking.guest_name || 'Unknown'
+            const guestName = upcomingSharedBooking.guest_name || upcomingSharedBooking.user?.full_name || 'Unknown'
             warnings.push(`Shared table ${table.table_number} has upcoming reservation at ${bookingTime} for ${guestName}`)
           }
         }
@@ -195,12 +195,12 @@ export default function DashboardPage() {
         })
 
         if (isOccupied) {
-          const occupyingBooking = todaysBookings.find(booking => 
+          const occupyingBooking = todaysBookings.find(booking =>
             booking.id !== bookingId &&
-            ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status) && 
+            ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(booking.status) &&
             booking.tables?.some((t: any) => t.id === tableId)
           )
-          const guestName = occupyingBooking?.user?.full_name || occupyingBooking?.guest_name || 'Unknown'
+          const guestName = occupyingBooking?.guest_name || occupyingBooking?.user?.full_name || 'Unknown'
           errors.push(`Table ${table.table_number} is occupied by ${guestName}`)
           continue
         }
@@ -217,7 +217,7 @@ export default function DashboardPage() {
 
         if (upcomingBooking) {
           const bookingTime = format(new Date(upcomingBooking.booking_time), 'h:mm a')
-          const guestName = upcomingBooking.user?.full_name || upcomingBooking.guest_name || 'Unknown'
+          const guestName = upcomingBooking.guest_name || upcomingBooking.user?.full_name || 'Unknown'
           warnings.push(`Table ${table.table_number} has reservation at ${bookingTime} for ${guestName}`)
         }
       }

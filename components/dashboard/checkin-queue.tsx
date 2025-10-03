@@ -942,10 +942,10 @@ export function CheckInQueue({
             <div>
               <p className="font-medium">Tables Swapped Successfully</p>
               <p className="text-sm mt-1">
-                {booking.user?.full_name || booking.guest_name} → Tables {selectedOption.tables.map(t => t.table_number).join(', ')}
+                {booking.guest_name || booking.user?.full_name} → Tables {selectedOption.tables.map(t => t.table_number).join(', ')}
               </p>
               <p className="text-sm">
-                {targetBooking.user?.full_name || targetBooking.guest_name} → Tables {currentTableIds.map((id: any) => tables.find(t => t.id === id)?.table_number).join(', ')}
+                {targetBooking.guest_name || targetBooking.user?.full_name} → Tables {currentTableIds.map((id: any) => tables.find(t => t.id === id)?.table_number).join(', ')}
               </p>
             </div>,
             { duration: 5000 }
@@ -967,10 +967,10 @@ export function CheckInQueue({
             <div>
               <p className="font-medium">Tables Reassigned</p>
               <p className="text-sm mt-1">
-                {booking.user?.full_name || booking.guest_name} → Tables {selectedOption.tables.map(t => t.table_number).join(', ')}
+                {booking.guest_name || booking.user?.full_name} → Tables {selectedOption.tables.map(t => t.table_number).join(', ')}
               </p>
               <p className="text-sm text-muted-foreground">
-                {targetBooking.user?.full_name || targetBooking.guest_name} needs new table assignment
+                {targetBooking.guest_name || targetBooking.user?.full_name} needs new table assignment
               </p>
             </div>,
             { duration: 5000 }
@@ -992,7 +992,7 @@ export function CheckInQueue({
             <div>
               <p className="font-medium">Table Combination Assigned</p>
               <p className="text-sm mt-1">
-                {booking.user?.full_name || booking.guest_name} → Tables {selectedOption.tables.map(t => t.table_number).join(', ')}
+                {booking.guest_name || booking.user?.full_name} → Tables {selectedOption.tables.map(t => t.table_number).join(', ')}
               </p>
             </div>
           )
@@ -1006,7 +1006,7 @@ export function CheckInQueue({
             <div>
               <p className="font-medium">Tables Assigned</p>
               <p className="text-sm mt-1">
-                {booking.user?.full_name || booking.guest_name} → Tables {selectedOption.tables.map(t => t.table_number).join(', ')}
+                {booking.guest_name || booking.user?.full_name} → Tables {selectedOption.tables.map(t => t.table_number).join(', ')}
               </p>
             </div>
           )
@@ -2562,8 +2562,8 @@ export function CheckInQueue({
           <DialogHeader>
             <DialogTitle>Assign Tables</DialogTitle>
             <DialogDescription>
-              {tableSwitchModal.booking ? 
-                `Assign tables for ${tableSwitchModal.booking.user?.full_name || tableSwitchModal.booking.guest_name} (party of ${tableSwitchModal.booking.party_size})` :
+              {tableSwitchModal.booking ?
+                `Assign tables for ${tableSwitchModal.booking.guest_name || tableSwitchModal.booking.user?.full_name} (party of ${tableSwitchModal.booking.party_size})` :
                 "Select tables for this booking"
               }
             </DialogDescription>

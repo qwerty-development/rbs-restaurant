@@ -106,7 +106,7 @@ function ConflictResolutionDialog({
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div>
                 <span className="text-muted-foreground">Guest:</span>{" "}
-                {booking.user?.full_name || booking.guest_name}
+                {booking.guest_name || booking.user?.full_name}
               </div>
               <div>
                 <span className="text-muted-foreground">Party:</span>{" "}
@@ -445,10 +445,10 @@ export function PendingRequestsWidget({
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <h4 className="font-semibold text-lg">
-                          {booking.user?.full_name || booking.guest_name || 'Guest'}
+                          {booking.guest_name || booking.user?.full_name || 'Guest'}
                         </h4>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          {booking.user?.phone_number || booking.guest_phone ? (
+                          {booking.guest_phone || booking.user?.phone_number ? (
                             <>
                               <Phone className="h-3 w-3" />
                               {booking.user?.phone_number || booking.guest_phone}

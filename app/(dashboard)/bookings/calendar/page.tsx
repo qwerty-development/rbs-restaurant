@@ -206,7 +206,7 @@ export default function BookingCalendarPage() {
         {format(new Date(booking.booking_time), "HH:mm")}
       </div>
       <div className="truncate">
-        {booking.user?.full_name || booking.guest_name}
+        {booking.guest_name || booking.user?.full_name}
       </div>
       <div className="flex items-center gap-1 text-[10px] opacity-75">
         <Users className="h-3 w-3" />
@@ -361,7 +361,7 @@ export default function BookingCalendarPage() {
                               }}
                             >
                               <div className="font-medium truncate">
-                                {format(new Date(booking.booking_time), "HH:mm")} - {booking.user?.full_name || booking.guest_name}
+                                {format(new Date(booking.booking_time), "HH:mm")} - {booking.guest_name || booking.user?.full_name}
                               </div>
                             </div>
                           ))}
@@ -492,7 +492,7 @@ export default function BookingCalendarPage() {
                               <div className="flex items-center justify-between">
                                 <div>
                                   <CardTitle className="text-base">
-                                    {format(bookingTime, "HH:mm")} - {booking.user?.full_name || booking.guest_name}
+                                    {format(bookingTime, "HH:mm")} - {booking.guest_name || booking.user?.full_name}
                                   </CardTitle>
                                   <CardDescription className="text-xs">
                                     {booking.confirmation_code}

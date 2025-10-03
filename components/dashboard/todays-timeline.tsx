@@ -5,7 +5,6 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -222,8 +221,8 @@ export function TodaysTimeline({
     const StatusIcon = statusConfig.icon
     const bookingTime = new Date(booking.booking_time)
     const minutesUntil = differenceInMinutes(bookingTime, clientTime || currentTime)
-    const guestName = booking.user?.full_name || booking.guest_name || 'Guest'
-    const guestPhone = booking.user?.phone_number || booking.guest_phone
+    const guestName = booking.guest_name || booking.user?.full_name || 'Guest'
+    const guestPhone = booking.guest_phone || booking.user?.phone_number
     const customerData = booking.user?.id ? customersData[booking.user.id] : null
     
     const getTimeDisplay = () => {
@@ -547,8 +546,7 @@ export function TodaysTimeline({
       <CardContent className="px-6 pb-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsContent value="overview" className="mt-0">
-            <ScrollArea className="h-[600px]">
-              <div className="space-y-8">
+            <div className="space-y-8">
                 {stats.needsAttention > 0 && (
                   <>
                     {renderTimelineSection(
@@ -632,33 +630,26 @@ export function TodaysTimeline({
                   </>
                 )}
               </div>
-            </ScrollArea>
           </TabsContent>
 
           <TabsContent value="attention" className="mt-0">
-            <ScrollArea className="h-[600px]">
-              <div className="space-y-4">
+            <div className="space-y-4">
                 {groupedBookings.needsAttention.map(booking => renderBookingCard(booking, true))}
               </div>
-            </ScrollArea>
           </TabsContent>
 
           <TabsContent value="dining" className="mt-0">
-            <ScrollArea className="h-[600px]">
-              <div className="space-y-4">
+            <div className="space-y-4">
                 {groupedBookings.currentlyDining.map(booking => renderBookingCard(booking, false))}
               </div>
-            </ScrollArea>
           </TabsContent>
 
           <TabsContent value="schedule" className="mt-0">
-            <ScrollArea className="h-[600px]">
-              <div className="space-y-6">
+            <div className="space-y-6">
                 {[...groupedBookings.arrivingSoon, ...groupedBookings.laterToday]
                   .sort((a, b) => new Date(a.booking_time).getTime() - new Date(b.booking_time).getTime())
                   .map(booking => renderBookingCard(booking, true))}
               </div>
-            </ScrollArea>
           </TabsContent>
         </Tabs>
       </CardContent>
