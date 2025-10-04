@@ -37,8 +37,7 @@ export async function subscribeUser(subscription: PushSubscription) {
       // Add new subscription
       subscriptions.push(subscription)
     }
-    
-    console.log('User subscribed to push notifications:', subscription.endpoint)
+
     
     // In production, you would save this to your database:
     // await db.pushSubscriptions.upsert({
@@ -64,7 +63,7 @@ export async function unsubscribeUser(endpoint?: string) {
       subscriptions = []
     }
     
-    console.log('User unsubscribed from push notifications')
+
     
     // In production, you would remove from database:
     // await db.pushSubscriptions.delete({
@@ -108,7 +107,7 @@ export async function sendNotification(payload: NotificationPayload) {
     const successful = results.filter(result => result.status === 'fulfilled').length
     const failed = results.filter(result => result.status === 'rejected').length
 
-    console.log(`Notifications sent: ${successful} successful, ${failed} failed`)
+
 
     // Remove failed subscriptions (they're probably expired)
     const validSubscriptions: PushSubscription[] = []

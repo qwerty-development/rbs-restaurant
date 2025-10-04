@@ -143,8 +143,7 @@ export default function CustomerAnalyticsPage() {
     queryFn: async () => {
       if (!restaurantId) return null
 
-      console.log("Fetching customer data for restaurant:", restaurantId)
-      console.log("Date range:", dateRange)
+
 
       // First, let's get ALL bookings for this restaurant to see if there's any data
       const { data: allBookings, error: allBookingsError } = await supabase
@@ -168,7 +167,7 @@ export default function CustomerAnalyticsPage() {
         .not("user_id", "is", null)
         .order("created_at", { ascending: false })
 
-      console.log("All bookings query result:", { data: allBookings, error: allBookingsError })
+
 
       if (allBookingsError) {
         console.error("Error fetching all bookings:", allBookingsError)

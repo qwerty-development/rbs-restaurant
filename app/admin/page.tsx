@@ -525,8 +525,8 @@ export default function AdminPage() {
           tier: restaurant.tier,
           price_range: restaurant.price_range,
           booking_policy: restaurant.booking_policy,
-          cancellation_window_hours_hours: restaurant.cancellation_window_hours,
-          table_turnover_minutes_minutes: restaurant.table_turnover_minutes,
+          cancellation_window_hours: restaurant.cancellation_window_hours,
+          table_turnover_minutes: restaurant.table_turnover_minutes,
           minimum_age: restaurant.min_age || null,
           // Additional restaurant settings
           website_url: restaurant.website_url?.trim() || null,

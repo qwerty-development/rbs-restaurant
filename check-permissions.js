@@ -13,12 +13,12 @@ if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
 }
 
 async function checkRLSandPermissions() {
-  console.log('🔒 Checking RLS and permissions...')
+
   
   const restaurantId = '660e8400-e29b-41d4-a716-446655440005'
   
   // Test with service role (should work)
-  console.log('\n1️⃣ Testing with SERVICE ROLE key...')
+
   const serviceClient = createClient(supabaseUrl, supabaseServiceKey)
   
   try {
@@ -31,14 +31,14 @@ async function checkRLSandPermissions() {
     if (error) {
       console.error('❌ Service role error:', error)
     } else {
-      console.log(`✅ Service role works: Found ${data?.length || 0} records`)
+
     }
   } catch (err) {
     console.error('❌ Service role exception:', err.message)
   }
   
   // Test with anonymous key (this is what browser uses)
-  console.log('\n2️⃣ Testing with ANONYMOUS key (browser simulation)...')
+
   const anonClient = createClient(supabaseUrl, supabaseAnonKey)
   
   try {
@@ -51,14 +51,14 @@ async function checkRLSandPermissions() {
     if (error) {
       console.error('❌ Anonymous error:', error)
     } else {
-      console.log(`✅ Anonymous works: Found ${data?.length || 0} records`)
+
     }
   } catch (err) {
     console.error('❌ Anonymous exception:', err.message)
   }
   
   // Check if RLS is enabled
-  console.log('\n3️⃣ Checking RLS status...')
+
   try {
     const { data: tables, error } = await serviceClient
       .from('information_schema.tables')
@@ -69,14 +69,14 @@ async function checkRLSandPermissions() {
     if (error) {
       console.error('❌ RLS check error:', error)
     } else {
-      console.log('📋 RLS Status:', tables)
+
     }
   } catch (err) {
     console.error('❌ RLS check exception:', err.message)
   }
   
   // Test creating a user session and trying again
-  console.log('\n4️⃣ Testing with mock user session...')
+
   try {
     // Get a user ID from the staff data
     const { data: staffData } = await serviceClient
@@ -87,7 +87,7 @@ async function checkRLSandPermissions() {
     
     if (staffData && staffData.length > 0) {
       const userId = staffData[0].user_id
-      console.log(`🧪 Using user ID: ${userId}`)
+    
       
       // Try to manually set the user context (this might not work but let's see)
       const userClient = createClient(supabaseUrl, supabaseAnonKey)
@@ -102,7 +102,7 @@ async function checkRLSandPermissions() {
       if (userError) {
         console.error('❌ User lookup error:', userError)
       } else {
-        console.log('👤 User data:', userData)
+
       }
     }
   } catch (err) {
@@ -111,6 +111,6 @@ async function checkRLSandPermissions() {
 }
 
 checkRLSandPermissions().then(() => {
-  console.log('\n🏁 Check completed!')
+
   process.exit(0)
 })
