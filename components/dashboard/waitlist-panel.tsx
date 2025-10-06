@@ -101,12 +101,18 @@ export function WaitlistPanel({
   const [showConvertDialog, setShowConvertDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [showNotifyDialog, setShowNotifyDialog] = useState(false)
+  const [showCapacityWarningDialog, setShowCapacityWarningDialog] = useState(false)
   
   // Selected entries
   const [selectedEntry, setSelectedEntry] = useState<WaitlistEntry | null>(null)
   const [convertingEntry, setConvertingEntry] = useState<WaitlistEntry | null>(null)
   const [editingEntry, setEditingEntry] = useState<WaitlistEntry | null>(null)
   const [notifyingEntry, setNotifyingEntry] = useState<WaitlistEntry | null>(null)
+  const [capacityWarning, setCapacityWarning] = useState<{
+    totalCapacity: number
+    partySize: number
+    shortage: number
+  } | null>(null)
 
   // Customer search
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
@@ -676,10 +682,29 @@ export function WaitlistPanel({
   }
 
   // Handle conversion to booking
-  const handleConvertToBooking = async () => {
+  const handleConvertToBooking = async (skipCapacityCheck = false) => {
     if (!convertingEntry || !selectedTime || selectedTables.length === 0) {
       toast.error('Please select a time and at least one table')
       return
+    }
+
+    // Check table capacity unless explicitly skipped
+    if (!skipCapacityCheck) {
+      const totalCapacity = selectedTables.reduce((sum, tableId) => {
+        const table = allTables?.find(t => t.id === tableId)
+        return sum + (table?.capacity || 0)
+      }, 0)
+
+      if (totalCapacity < convertingEntry.party_size) {
+        const shortage = convertingEntry.party_size - totalCapacity
+        setCapacityWarning({
+          totalCapacity,
+          partySize: convertingEntry.party_size,
+          shortage
+        })
+        setShowCapacityWarningDialog(true)
+        return
+      }
     }
 
     try {
@@ -736,6 +761,8 @@ export function WaitlistPanel({
       setConvertingEntry(null)
       setSelectedTime('')
       setSelectedTables([])
+      setShowCapacityWarningDialog(false)
+      setCapacityWarning(null)
     } catch (error) {
       console.error('Error converting to booking:', error)
       toast.error('Failed to convert to booking')
@@ -1425,10 +1452,8 @@ export function WaitlistPanel({
                              booking.tables?.some((t: any) => t.id === table.id)
                     })
                     
-                    // Check if table has sufficient capacity
-                    const hasCapacity = table.capacity >= (convertingEntry?.party_size || 0)
-                    
-                    const isAvailable = !isOccupied && hasCapacity && table.is_active
+                    // Only restrict occupied tables, not capacity
+                    const isAvailable = !isOccupied && table.is_active
                     
                     return (
                       <label
@@ -1437,7 +1462,6 @@ export function WaitlistPanel({
                           "flex items-center p-2 border rounded transition-all",
                           isSelected && "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700",
                           isOccupied && "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800",
-                          !hasCapacity && "bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-700",
                           isAvailable ? "cursor-pointer hover:bg-gray-50" : "cursor-not-allowed opacity-60"
                         )}
                       >
@@ -1463,11 +1487,6 @@ export function WaitlistPanel({
                                 Occupied
                               </Badge>
                             )}
-                            {!hasCapacity && (
-                              <Badge variant="secondary" className="text-xs px-1 py-0">
-                                Too Small
-                              </Badge>
-                            )}
                           </div>
                           <div className="text-xs text-muted-foreground">
                             {table.capacity} seats • {table.table_type}
@@ -1488,8 +1507,7 @@ export function WaitlistPanel({
                           return diningStatuses.includes(booking.status) && 
                                  booking.tables?.some((t: any) => t.id === table.id)
                         })
-                        const hasCapacity = table.capacity >= convertingEntry.party_size
-                        return !isOccupied && hasCapacity && table.is_active
+                        return !isOccupied && table.is_active
                       }) || []
                       
                       const occupiedTables = allTables?.filter(table => {
@@ -1500,13 +1518,16 @@ export function WaitlistPanel({
                         })
                       }) || []
 
+                      const totalSelectedCapacity = allTables?.filter(t => selectedTables.includes(t.id))
+                        .reduce((sum, t) => sum + t.capacity, 0) || 0
+
                       return (
                         <>
                           {availableTables.length === 0 && (
                             <Alert className="border-red-200 bg-red-50">
                               <AlertCircle className="h-4 w-4 text-red-600" />
                               <AlertDescription className="text-xs">
-                                No available tables for party of {convertingEntry.party_size}. All suitable tables are currently occupied.
+                                All tables are currently occupied. No available tables at this time.
                               </AlertDescription>
                             </Alert>
                           )}
@@ -1518,11 +1539,22 @@ export function WaitlistPanel({
                           )}
                           
                           {selectedTables.length > 0 && (
-                            <div className="text-sm text-muted-foreground">
-                              Selected capacity: {
-                                allTables?.filter(t => selectedTables.includes(t.id))
-                                  .reduce((sum, t) => sum + t.capacity, 0) || 0
-                              } seats
+                            <div className="space-y-1">
+                              <div className="text-sm font-medium text-foreground">
+                                Selected: {selectedTables.length} table{selectedTables.length !== 1 ? 's' : ''} ({totalSelectedCapacity} seats)
+                              </div>
+                              {totalSelectedCapacity < convertingEntry.party_size && (
+                                <div className="text-xs text-amber-600 flex items-center gap-1">
+                                  <AlertCircle className="h-3 w-3" />
+                                  Party size is {convertingEntry.party_size}, but selected capacity is only {totalSelectedCapacity} seats
+                                </div>
+                              )}
+                              {totalSelectedCapacity >= convertingEntry.party_size && (
+                                <div className="text-xs text-green-600 flex items-center gap-1">
+                                  <CheckCircle className="h-3 w-3" />
+                                  Sufficient capacity for party of {convertingEntry.party_size}
+                                </div>
+                              )}
                             </div>
                           )}
                         </>
@@ -1545,11 +1577,11 @@ export function WaitlistPanel({
               Cancel
             </Button>
             <Button
-              onClick={handleConvertToBooking}
+              onClick={() => handleConvertToBooking(false)}
               disabled={(() => {
                 if (!selectedTime || selectedTables.length === 0 || isConverting) return true
                 
-                // Check if any selected tables are unavailable
+                // Check if any selected tables are occupied (not capacity)
                 const selectedTablesValid = selectedTables.every(tableId => {
                   const table = allTables?.find(t => t.id === tableId)
                   if (!table) return false
@@ -1560,7 +1592,7 @@ export function WaitlistPanel({
                            booking.tables?.some((t: any) => t.id === table.id)
                   })
                   
-                  return !isOccupied && table.capacity >= (convertingEntry?.party_size || 0) && table.is_active
+                  return !isOccupied && table.is_active
                 })
                 
                 return !selectedTablesValid
@@ -1608,6 +1640,81 @@ export function WaitlistPanel({
             </Button>
             <Button onClick={confirmNotification} className="bg-blue-600 hover:bg-blue-700">
               Send Notification
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Capacity Warning Dialog */}
+      <Dialog open={showCapacityWarningDialog} onOpenChange={setShowCapacityWarningDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertCircle className="h-5 w-5" />
+              Table Capacity Warning
+            </DialogTitle>
+            <DialogDescription>
+              The selected tables may not have enough capacity
+            </DialogDescription>
+          </DialogHeader>
+          
+          {capacityWarning && convertingEntry && (
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0 text-amber-600" />
+                  <div className="flex-1 space-y-2">
+                    <p className="text-sm font-medium text-amber-900">
+                      Insufficient Seating Capacity
+                    </p>
+                    <div className="space-y-1 text-sm text-amber-800">
+                      <p>
+                        • <strong>Party Size:</strong> {capacityWarning.partySize} guests
+                      </p>
+                      <p>
+                        • <strong>Selected Table Capacity:</strong> {capacityWarning.totalCapacity} seats
+                      </p>
+                      <p className="text-amber-900 font-medium">
+                        • <strong>Short by:</strong> {capacityWarning.shortage} seat{capacityWarning.shortage !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <Alert className="border-blue-200 bg-blue-50">
+                <Info className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-sm">
+                  <p className="font-medium mb-1">Options:</p>
+                  <ul className="list-disc list-inside space-y-1 text-xs">
+                    <li>Select additional tables to accommodate all guests</li>
+                    <li>Proceed anyway if guests will share seating</li>
+                    <li>Use extra chairs or alternative seating arrangements</li>
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+          
+          <DialogFooter className="gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowCapacityWarningDialog(false)
+                setCapacityWarning(null)
+              }}
+              className="flex-1"
+            >
+              Cancel & Select More Tables
+            </Button>
+            <Button
+              onClick={() => {
+                setShowCapacityWarningDialog(false)
+                handleConvertToBooking(true)
+              }}
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              Proceed Anyway
             </Button>
           </DialogFooter>
         </DialogContent>
