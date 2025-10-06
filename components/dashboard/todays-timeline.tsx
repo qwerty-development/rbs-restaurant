@@ -246,13 +246,13 @@ export function TodaysTimeline({
       >
         <CardContent className="p-4 tablet:p-6">
           {/* Header with guest name and status */}
-          <div className="flex items-start justify-between gap-3 mb-4">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className={cn("p-2 tablet:p-3 rounded-full bg-white shadow-sm", statusConfig.iconColor)}>
+          <div className="flex items-start gap-3 mb-4">
+            <div className="flex items-center gap-3 flex-1 min-w-0 overflow-hidden">
+              <div className={cn("p-2 tablet:p-3 rounded-full bg-white shadow-sm flex-shrink-0", statusConfig.iconColor)}>
                 <StatusIcon className="h-4 w-4 tablet:h-5 tablet:w-5" />
               </div>
               
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 overflow-hidden">
                 <h3 className="text-lg tablet:text-xl font-bold text-gray-900 truncate mb-1">
                   {guestName}
                 </h3>
@@ -276,17 +276,17 @@ export function TodaysTimeline({
             </div>
 
             {/* Action buttons */}
-            <div className="flex flex-col gap-2 flex-shrink-0">
+            <div className="flex flex-col gap-2 flex-shrink-0 min-w-[90px] tablet:min-w-[100px]">
               {booking.status === 'pending' && (
                 <Button
                   size="sm"
-                  className="h-8 tablet:h-10 px-3 bg-green-600 hover:bg-green-700 text-xs tablet:text-sm whitespace-nowrap min-w-[80px]"
+                  className="h-9 tablet:h-10 px-3 tablet:px-4 bg-green-600 hover:bg-green-700 text-xs tablet:text-sm font-medium whitespace-nowrap w-full"
                   onClick={(e) => {
                     e.stopPropagation()
                     onUpdateStatus(booking.id, 'confirmed')
                   }}
                 >
-                  <CheckCircle className="h-3 w-3 tablet:h-4 tablet:w-4 mr-1 flex-shrink-0" />
+                  <CheckCircle className="h-3.5 w-3.5 tablet:h-4 tablet:w-4 mr-1.5 flex-shrink-0" />
                   Confirm
                 </Button>
               )}
@@ -294,13 +294,13 @@ export function TodaysTimeline({
               {booking.status === 'arrived' && (
                 <Button
                   size="sm"
-                  className="h-8 tablet:h-10 px-3 bg-blue-600 hover:bg-blue-700 text-xs tablet:text-sm whitespace-nowrap min-w-[80px]"
+                  className="h-9 tablet:h-10 px-3 tablet:px-4 bg-blue-600 hover:bg-blue-700 text-xs tablet:text-sm font-medium whitespace-nowrap w-full"
                   onClick={(e) => {
                     e.stopPropagation()
                     onSelectBooking(booking)
                   }}
                 >
-                  <Utensils className="h-3 w-3 tablet:h-4 tablet:w-4 mr-1 flex-shrink-0" />
+                  <Utensils className="h-3.5 w-3.5 tablet:h-4 tablet:w-4 mr-1.5 flex-shrink-0" />
                   Seat
                 </Button>
               )}
@@ -308,7 +308,7 @@ export function TodaysTimeline({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 tablet:h-10 w-8 tablet:w-10 p-0 flex items-center justify-center"
+                className="h-9 tablet:h-10 w-full min-w-[40px] p-0 flex items-center justify-center hover:bg-white/80"
                 onClick={(e) => {
                   e.stopPropagation()
                   onSelectBooking(booking)
