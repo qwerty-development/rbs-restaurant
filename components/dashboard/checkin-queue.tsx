@@ -1156,9 +1156,6 @@ export function CheckInQueue({
       
       toast.error(
         <div className="flex items-center gap-2">
-          <div className="bg-red-100 rounded-full p-1">
-            <X className="h-4 w-4 text-red-600" />
-          </div>
           <div>
             <p className="font-medium">Insufficient Table Capacity</p>
             <p className="text-sm mt-1">
