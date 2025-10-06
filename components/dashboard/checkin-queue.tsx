@@ -2374,7 +2374,7 @@ export function CheckInQueue({
                                   ({table.current_occupancy}/{table.capacity})
                                 </span>
                                 {wouldExceedCapacity && (
-                                  <AlertTriangle className="h-3 w-3 text-orange-500 ml-1 flex-shrink-0" />
+                                  <AlertTriangle className="h-3 w-3 text-orange-500 flex-shrink-0" />
                                 )}
                                 {availableSeats < partySize && !wouldExceedCapacity && (
                                   <span className="text-red-500 text-xs ml-1 flex-shrink-0">Full</span>
