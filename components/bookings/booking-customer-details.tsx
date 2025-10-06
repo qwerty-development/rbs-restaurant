@@ -58,7 +58,7 @@ interface BookingCustomerDetailsProps {
 }
 
 export function BookingCustomerDetails({ booking, restaurantId, currentUserId }: BookingCustomerDetailsProps) {
-  const [customerData, setCustomerData] = useState<RestaurantCustomer | null>(null)
+  const [customerData, setCustomerData]:any = useState<RestaurantCustomer | null>(null)
   const [totalBookingCount, setTotalBookingCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   
@@ -71,13 +71,15 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
     // Clear previous customer data when booking changes to prevent showing wrong data
     setCustomerData(null)
     setLoading(true)
-    
-    if (booking.user_id || booking.guest_email) {
+
+    // Only try to load restaurant_customer data if we have guest identifiers
+    // (guest_email or guest_phone) - never query by user_id alone as it could be staff
+    if (booking.guest_email || booking.guest_phone) {
       loadCustomerData()
     } else {
       setLoading(false)
     }
-  }, [booking.id, booking.user_id, booking.guest_email, restaurantId])
+  }, [booking.id, booking.guest_email, booking.guest_phone, restaurantId])
 
   // Clean up function to ensure no state bleeding between instances
   useEffect(() => {
@@ -111,13 +113,17 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
         `)
         .eq('restaurant_id', restaurantId)
 
-      // PRIORITY: Query by guest_email first (for manually created customers),
-      // then fall back to user_id (for registered users)
-      // This prevents showing staff member's data when a manually created customer is used
+      // PRIORITY: Only query by guest_email or guest_phone
+      // NEVER query by user_id alone as it could be the staff member who created the booking
       if (booking.guest_email) {
         query = query.eq('guest_email', booking.guest_email)
-      } else if (booking.user_id) {
-        query = query.eq('user_id', booking.user_id)
+      } else if (booking.guest_phone) {
+        query = query.eq('guest_phone', booking.guest_phone)
+      } else {
+        // No valid customer identifier - this shouldn't happen as we check in useEffect
+        console.warn('No guest identifiers available for restaurant_customer query')
+        setLoading(false)
+        return
       }
 
       const { data: customerResult, error } = await query.single()
@@ -127,8 +133,27 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
         return
       }
 
+      // CRITICAL: Check if the loaded customer is actually a restaurant staff member
+      // If so, DO NOT display their data in the customer details section
+      if (customerResult && customerResult.user_id) {
+        const { data: staffCheck } = await supabase
+          .from('restaurant_staff')
+          .select('id')
+          .eq('user_id', customerResult.user_id)
+          .eq('restaurant_id', restaurantId)
+          .eq('is_active', true)
+          .single()
+
+        if (staffCheck) {
+          // This is a staff member - do not show their data as customer data
+          console.log('Customer data is actually a staff member - showing fallback instead')
+          setLoading(false)
+          return
+        }
+      }
+
       let customerNotes: any[] = []
-      
+
       // Load customer notes separately to ensure proper filtering
       if (customerResult) {
         const { data: notesData, error: notesError } = await supabase
@@ -172,10 +197,13 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
           `)
           .or(`customer_id.eq.${customerResult.id},related_customer_id.eq.${customerResult.id}`)
 
-        // Load recent booking history - prioritize guest_email over user_id
-        const bookingQuery = booking.guest_email
-          ? supabase.from('bookings').select('*').eq('guest_email', booking.guest_email)
-          : supabase.from('bookings').select('*').eq('user_id', booking.user_id)
+        // Load recent booking history - use guest_email or guest_phone to find related bookings
+        let bookingQuery = supabase.from('bookings').select('*')
+        if (booking.guest_email) {
+          bookingQuery = bookingQuery.eq('guest_email', booking.guest_email)
+        } else if (booking.guest_phone) {
+          bookingQuery = bookingQuery.eq('guest_phone', booking.guest_phone)
+        }
 
         const { data: bookingHistory } = await bookingQuery
           .eq('restaurant_id', restaurantId)
@@ -183,18 +211,24 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
           .order('booking_time', { ascending: false })
           .limit(5)
 
-        // Get total booking count for this restaurant - prioritize guest_email over user_id
-        const totalBookingQuery = booking.guest_email
-          ? supabase.from('bookings').select('id', { count: 'exact' }).eq('guest_email', booking.guest_email)
-          : supabase.from('bookings').select('id', { count: 'exact' }).eq('user_id', booking.user_id)
+        // Get total booking count for this restaurant - use guest_email or guest_phone
+        let totalBookingQuery = supabase.from('bookings').select('id', { count: 'exact' })
+        if (booking.guest_email) {
+          totalBookingQuery = totalBookingQuery.eq('guest_email', booking.guest_email)
+        } else if (booking.guest_phone) {
+          totalBookingQuery = totalBookingQuery.eq('guest_phone', booking.guest_phone)
+        }
 
         const { count: restaurantBookingCount } = await totalBookingQuery
           .eq('restaurant_id', restaurantId)
 
-        // Get all bookings for statistics calculation - prioritize guest_email over user_id
-        const allBookingsQuery = booking.guest_email
-          ? supabase.from('bookings').select('status').eq('guest_email', booking.guest_email)
-          : supabase.from('bookings').select('status').eq('user_id', booking.user_id)
+        // Get all bookings for statistics calculation - use guest_email or guest_phone
+        let allBookingsQuery = supabase.from('bookings').select('status')
+        if (booking.guest_email) {
+          allBookingsQuery = allBookingsQuery.eq('guest_email', booking.guest_email)
+        } else if (booking.guest_phone) {
+          allBookingsQuery = allBookingsQuery.eq('guest_phone', booking.guest_phone)
+        }
 
         const { data: allBookings } = await allBookingsQuery
           .eq('restaurant_id', restaurantId)
@@ -246,22 +280,71 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
   }
 
   if (!customerData) {
+    // No restaurant_customer record found - display booking's direct guest information
+    const hasGuestInfo = booking.guest_name || booking.guest_email || booking.guest_phone
+    const isAnonymous = !hasGuestInfo || booking.guest_name?.toLowerCase().includes('anonymous')
+
     return (
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <User className="h-5 w-5" />
-            Guest Customer
+            {isAnonymous ? 'Anonymous Guest / Walk-in' : 'Guest Booking'}
           </CardTitle>
           <CardDescription>
-            {booking.guest_name && <span>{booking.guest_name}</span>}
-            {booking.guest_email && <span className="block">{booking.guest_email}</span>}
-            {booking.guest_phone && <span className="block">{booking.guest_phone}</span>}
+            {booking.guest_name && <div className="text-sm">{booking.guest_name}</div>}
+            {booking.guest_email && (
+              <div className="flex items-center gap-2 text-sm mt-1">
+                <Mail className="h-3 w-3" />
+                {booking.guest_email}
+              </div>
+            )}
+            {booking.guest_phone && (
+              <div className="flex items-center gap-2 text-sm mt-1">
+                <Phone className="h-3 w-3" />
+                {booking.guest_phone}
+              </div>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-sm text-muted-foreground">
-            This is a guest booking. Customer profile data is not available.
+          <div className="space-y-3">
+            <div className="text-sm text-muted-foreground">
+              {isAnonymous
+                ? 'This is an anonymous booking or walk-in. No customer profile data is available.'
+                : 'This guest has not been added to the restaurant\'s customer database yet.'
+              }
+            </div>
+
+            {/* Show booking details */}
+            <div className="border-t pt-3 mt-3">
+              <h4 className="text-sm font-medium mb-2">Booking Information</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span>{format(new Date(booking.booking_time), 'MMM d, yyyy - h:mm a')}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span>Party of {booking.party_size}</span>
+                </div>
+                {booking.special_requests && (
+                  <div className="flex items-start gap-2 mt-2">
+                    <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5" />
+                    <div>
+                      <div className="font-medium">Special Requests:</div>
+                      <div className="text-muted-foreground">{booking.special_requests}</div>
+                    </div>
+                  </div>
+                )}
+                {booking.occasion && (
+                  <div className="flex items-center gap-2">
+                    <Star className="h-4 w-4 text-muted-foreground" />
+                    <span>Occasion: {booking.occasion}</span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
