@@ -31,6 +31,7 @@ import { Loader2, KeyRound, ArrowLeft, Info } from "lucide-react"
 import Link from "next/link"
 
 const formSchema = z.object({
+  email: z.string().email("Invalid email address").or(z.literal('')),
   token: z.string().length(6, "Token must be exactly 6 digits").regex(/^\d{6}$/, "Token must be 6 digits"),
 })
 
@@ -41,6 +42,7 @@ function EnterTokenContent() {
   const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
   const [email, setEmail] = useState<string>("")
+  const [showEmailInput, setShowEmailInput] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -48,14 +50,15 @@ function EnterTokenContent() {
     if (emailParam) {
       setEmail(emailParam)
     } else {
-      // Redirect back to login if no email provided
-      router.push('/login')
+      // Show email input instead of redirecting
+      setShowEmailInput(true)
     }
-  }, [searchParams, router])
+  }, [searchParams])
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      email: "",
       token: "",
     },
   })
@@ -63,20 +66,30 @@ function EnterTokenContent() {
   async function onSubmit(data: FormData) {
     try {
       setIsLoading(true)
+      console.log("Starting token verification...", { token: data.token, email: data.email })
 
-      if (!email) {
+      // Use email from form if provided, otherwise use email from URL params
+      const emailToUse = data.email || email
+      console.log("Email to use:", emailToUse)
+
+      if (!emailToUse) {
         toast.error("Email is required for token verification")
         return
       }
 
+      console.log("Calling verifyOtp with:", { email: emailToUse, token: data.token, type: 'recovery' })
+
       // Verify token by attempting to exchange it for a session
       const { data: authData, error } = await supabase.auth.verifyOtp({
-        email: email,
+        email: emailToUse,
         token: data.token,
-        type: 'email',
+        type: 'recovery',
       })
 
+      console.log("VerifyOtp response:", { authData, error })
+
       if (error) {
+        console.error("VerifyOtp error:", error)
         if (error.message.includes('invalid') || error.message.includes('expired')) {
           toast.error("Invalid or expired token. Please request a new one.")
         } else {
@@ -86,23 +99,15 @@ function EnterTokenContent() {
       }
 
       if (authData.session) {
-        // Token is valid, now check if user is restaurant staff
-        const { data: staff, error: staffError } = await supabase
-          .from('restaurant_staff')
-          .select('id, is_active')
-          .eq('user_id', authData.session.user.id)
-          .eq('is_active', true)
-          .maybeSingle()
+        console.log("Session created successfully!")
+        toast.success("Token verified! Redirecting to reset password...")
 
-        if (staffError || !staff) {
-          toast.error("This account is not associated with restaurant staff access")
-          await supabase.auth.signOut()
-          return
-        }
-
-        // User is valid restaurant staff, redirect to reset password
+        // Redirect to reset password page
+        // Note: Restaurant staff access will be verified by middleware when accessing dashboard
+        console.log("Redirecting to reset-password page...")
         router.push("/reset-password")
       } else {
+        console.error("No session returned from verifyOtp")
         toast.error("Invalid token. Please check and try again.")
       }
     } catch (error: any) {
@@ -132,6 +137,26 @@ function EnterTokenContent() {
         </Alert>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {showEmailInput && (
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="your@email.com"
+                        disabled={isLoading}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             <FormField
               control={form.control}
               name="token"

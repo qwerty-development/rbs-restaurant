@@ -51,9 +51,9 @@ export default function ForgotPasswordPage() {
     try {
       setIsLoading(true)
 
-      // Send the reset email - Supabase will only send to existing users
+      // Send password recovery OTP - Supabase will only send to existing users
       const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
-        redirectTo: `${window.location.origin}/enter-token`,
+        redirectTo: `${window.location.origin}/reset-password`,
       })
 
       if (error) {
@@ -61,7 +61,7 @@ export default function ForgotPasswordPage() {
         return
       }
 
-      // Note: The actual restaurant staff verification should be done in the 
+      // Note: The actual restaurant staff verification should be done in the
       // reset password flow or via RLS policies. For now, we trust that
       // only restaurant staff users will have accounts in the system.
 
@@ -96,8 +96,8 @@ export default function ForgotPasswordPage() {
           </Alert>
         </CardContent>
         <CardFooter className="flex flex-col space-y-2">
-          <Link 
-            href="/enter-token" 
+          <Link
+            href={`/enter-token?email=${encodeURIComponent(form.getValues("email"))}`}
             className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
           >
             Enter Token

@@ -27,7 +27,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "react-hot-toast"
-import { Loader2, Lock, CheckCircle, AlertCircle } from "lucide-react"
+import { Loader2, Lock, CheckCircle, AlertCircle, Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
 
 const formSchema = z.object({
@@ -46,6 +46,8 @@ export default function ResetPasswordPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [isValidToken, setIsValidToken] = useState(true)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const supabase = createClient()
 
   const form = useForm<FormData>({
@@ -57,26 +59,18 @@ export default function ResetPasswordPage() {
   })
 
   useEffect(() => {
-    // Check if we have a valid recovery token and user is restaurant staff
+    // Check if we have a valid recovery session
     const checkToken = async () => {
       const { data: { session }, error } = await supabase.auth.getSession()
-      
+
       if (error || !session) {
         setIsValidToken(false)
         return
       }
 
-      // Check if user has restaurant staff access
-      const { data: staff, error: staffError } = await supabase
-        .from('restaurant_staff')
-        .select('id, is_active')
-        .eq('user_id', session.user.id)
-        .eq('is_active', true)
-        .maybeSingle()
-
-      if (staffError || !staff) {
-        setIsValidToken(false)
-      }
+      // Session exists, user can reset password
+      // Restaurant staff access will be checked by middleware when accessing dashboard
+      setIsValidToken(true)
     }
 
     checkToken()
@@ -168,12 +162,25 @@ export default function ResetPasswordPage() {
                 <FormItem>
                   <FormLabel>New Password</FormLabel>
                   <FormControl>
-                    <Input
-                      type="password"
-                      placeholder="••••••••"
-                      disabled={isLoading}
-                      {...field}
-                    />
+                    <div className="relative">
+                      <Input
+                        type={showPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        disabled={isLoading}
+                        {...field}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -186,12 +193,25 @@ export default function ResetPasswordPage() {
                 <FormItem>
                   <FormLabel>Confirm Password</FormLabel>
                   <FormControl>
-                    <Input
-                      type="password"
-                      placeholder="••••••••"
-                      disabled={isLoading}
-                      {...field}
-                    />
+                    <div className="relative">
+                      <Input
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        disabled={isLoading}
+                        {...field}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
