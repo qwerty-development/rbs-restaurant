@@ -1,19 +1,17 @@
 // components/bookings/booking-customer-details.tsx
 "use client"
 
-import { useState, useEffect, memo } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { useMemo, memo } from "react"
 import { format } from "date-fns"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { 
-  User, 
-  Mail, 
-  Phone, 
+import {
+  User,
+  Mail,
+  Phone,
   Calendar,
   Star,
   AlertCircle,
@@ -22,34 +20,26 @@ import {
   Clock,
   DollarSign,
   Link2,
-  MessageSquare,
-  ExternalLink,
   TrendingUp,
   Ban
 } from "lucide-react"
-import { toast } from "sonner"
 import type { Booking } from "@/types"
-import type { RestaurantCustomer, CustomerNote, CustomerRelationship, CustomerTag } from "@/types/customer"
-
-// Function to determine if a color is light and needs dark text
-const isLightColor = (hexColor: string): boolean => {
-  // Convert hex to RGB
-  const hex = hexColor.replace('#', '')
-  const r = parseInt(hex.substr(0, 2), 16)
-  const g = parseInt(hex.substr(2, 2), 16)
-  const b = parseInt(hex.substr(4, 2), 16)
-  
-  // Calculate relative luminance
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-  
-  // Return true if light (needs dark text)
-  return luminance > 0.6
-}
 import { QuickCustomerNote } from "./quick-customer-note"
 import { CustomerBookingHistory } from "./customer-booking-history"
 import { LowRatingFlag, CustomerRatingDisplay } from "@/components/ui/low-rating-flag"
 import { titleCase } from "@/lib/utils"
 import { customerUtils } from "@/lib/customer-utils"
+import { useCustomerDetails } from "@/lib/hooks/use-customer-details"
+
+// Function to determine if a color is light and needs dark text
+const isLightColor = (hexColor: string): boolean => {
+  const hex = hexColor.replace('#', '')
+  const r = parseInt(hex.substr(0, 2), 16)
+  const g = parseInt(hex.substr(2, 2), 16)
+  const b = parseInt(hex.substr(4, 2), 16)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance > 0.6
+}
 
 interface BookingCustomerDetailsProps {
   booking: Booking
@@ -57,215 +47,36 @@ interface BookingCustomerDetailsProps {
   currentUserId?: string
 }
 
-export function BookingCustomerDetails({ booking, restaurantId, currentUserId }: BookingCustomerDetailsProps) {
-  const [customerData, setCustomerData]:any = useState<RestaurantCustomer | null>(null)
-  const [totalBookingCount, setTotalBookingCount] = useState<number>(0)
-  const [loading, setLoading] = useState(true)
-  
-  const supabase = createClient()
-  
-  // Create a unique instance ID to ensure component isolation
-  const instanceId = `${booking.id}-${Date.now()}`
+function BookingCustomerDetailsComponent({ booking, restaurantId, currentUserId }: BookingCustomerDetailsProps) {
+  // Use optimized React Query hook with caching and parallel queries
+  const { data: customerData, isLoading, refetch } = useCustomerDetails({
+    booking,
+    restaurantId,
+    enabled: true,
+  })
 
-  useEffect(() => {
-    // Clear previous customer data when booking changes to prevent showing wrong data
-    setCustomerData(null)
-    setLoading(true)
+  // Memoize expensive calculations
+  const customerStats = useMemo(() => {
+    if (!customerData) return null
 
-    // Only try to load restaurant_customer data if we have guest identifiers
-    // (guest_email or guest_phone) - never query by user_id alone as it could be staff
-    if (booking.guest_email || booking.guest_phone) {
-      loadCustomerData()
-    } else {
-      setLoading(false)
+    const totalBookingCount = customerData.total_booking_count || 0
+    const successfulBookings = totalBookingCount - customerData.no_show_count - customerData.cancelled_count
+    const successRate = totalBookingCount > 0
+      ? ((successfulBookings / totalBookingCount) * 100).toFixed(1)
+      : 'N/A'
+    const avgSpend = totalBookingCount > 0
+      ? (customerData.total_spent / totalBookingCount).toFixed(2)
+      : '0.00'
+
+    return {
+      totalBookingCount,
+      successRate,
+      avgSpend,
     }
-  }, [booking.id, booking.guest_email, booking.guest_phone, restaurantId])
+  }, [customerData])
 
-  // Clean up function to ensure no state bleeding between instances
-  useEffect(() => {
-    return () => {
-      setCustomerData(null)
-      setLoading(false)
-    }
-  }, [])
-
-  const loadCustomerData = async () => {
-    try {
-      setLoading(true)
-
-      let query = supabase
-        .from('restaurant_customers')
-        .select(`
-          *,
-          profile:profiles!restaurant_customers_user_id_fkey(
-            id,
-            full_name,
-            phone_number,
-            avatar_url,
-            allergies,
-            dietary_restrictions,
-            user_rating,
-            date_of_birth
-          ),
-          tags:customer_tag_assignments(
-            tag:customer_tags(*)
-          )
-        `)
-        .eq('restaurant_id', restaurantId)
-
-      // PRIORITY: Only query by guest_email or guest_phone
-      // NEVER query by user_id alone as it could be the staff member who created the booking
-      if (booking.guest_email) {
-        query = query.eq('guest_email', booking.guest_email)
-      } else if (booking.guest_phone) {
-        query = query.eq('guest_phone', booking.guest_phone)
-      } else {
-        // No valid customer identifier - this shouldn't happen as we check in useEffect
-        console.warn('No guest identifiers available for restaurant_customer query')
-        setLoading(false)
-        return
-      }
-
-      const { data: customerResult, error } = await query.single()
-
-      if (error) {
-        console.error('Error loading customer data:', error)
-        return
-      }
-
-      // CRITICAL: Check if the loaded customer is actually a restaurant staff member
-      // If so, DO NOT display their data in the customer details section
-      if (customerResult && customerResult.user_id) {
-        const { data: staffCheck } = await supabase
-          .from('restaurant_staff')
-          .select('id')
-          .eq('user_id', customerResult.user_id)
-          .eq('restaurant_id', restaurantId)
-          .eq('is_active', true)
-          .single()
-
-        if (staffCheck) {
-          // This is a staff member - do not show their data as customer data
-          console.log('Customer data is actually a staff member - showing fallback instead')
-          setLoading(false)
-          return
-        }
-      }
-
-      let customerNotes: any[] = []
-
-      // Load customer notes separately to ensure proper filtering
-      if (customerResult) {
-        const { data: notesData, error: notesError } = await supabase
-          .from('customer_notes')
-          .select(`
-            *,
-            created_by_profile:profiles!customer_notes_created_by_fkey(
-              full_name,
-              avatar_url
-            )
-          `)
-          .eq('customer_id', customerResult.id)
-          .order('created_at', { ascending: false })
-
-        if (notesError) {
-          console.error('Error loading customer notes:', notesError)
-        } else {
-          customerNotes = notesData || []
-        }
-      }
-
-      if (error) {
-        console.error('Error loading customer data:', error)
-        return
-      }
-
-      if (customerResult) {
-        // Load relationships
-        const { data: relationshipsData } = await supabase
-          .from('customer_relationships')
-          .select(`
-            *,
-            related_customer:restaurant_customers!customer_relationships_related_customer_id_fkey(
-              *,
-              profile:profiles(full_name, avatar_url)
-            ),
-            customer:restaurant_customers!customer_relationships_customer_id_fkey(
-              *,
-              profile:profiles(full_name, avatar_url)
-            )
-          `)
-          .or(`customer_id.eq.${customerResult.id},related_customer_id.eq.${customerResult.id}`)
-
-        // Load recent booking history - use guest_email or guest_phone to find related bookings
-        let bookingQuery = supabase.from('bookings').select('*')
-        if (booking.guest_email) {
-          bookingQuery = bookingQuery.eq('guest_email', booking.guest_email)
-        } else if (booking.guest_phone) {
-          bookingQuery = bookingQuery.eq('guest_phone', booking.guest_phone)
-        }
-
-        const { data: bookingHistory } = await bookingQuery
-          .eq('restaurant_id', restaurantId)
-          .neq('id', booking.id) // Exclude current booking
-          .order('booking_time', { ascending: false })
-          .limit(5)
-
-        // Get total booking count for this restaurant - use guest_email or guest_phone
-        let totalBookingQuery = supabase.from('bookings').select('id', { count: 'exact' })
-        if (booking.guest_email) {
-          totalBookingQuery = totalBookingQuery.eq('guest_email', booking.guest_email)
-        } else if (booking.guest_phone) {
-          totalBookingQuery = totalBookingQuery.eq('guest_phone', booking.guest_phone)
-        }
-
-        const { count: restaurantBookingCount } = await totalBookingQuery
-          .eq('restaurant_id', restaurantId)
-
-        // Get all bookings for statistics calculation - use guest_email or guest_phone
-        let allBookingsQuery = supabase.from('bookings').select('status')
-        if (booking.guest_email) {
-          allBookingsQuery = allBookingsQuery.eq('guest_email', booking.guest_email)
-        } else if (booking.guest_phone) {
-          allBookingsQuery = allBookingsQuery.eq('guest_phone', booking.guest_phone)
-        }
-
-        const { data: allBookings } = await allBookingsQuery
-          .eq('restaurant_id', restaurantId)
-
-        // Calculate statistics from all bookings
-        const noShowCount = allBookings?.filter(b => b.status === 'no_show').length || 0
-        const cancelledCount = allBookings?.filter(b => 
-          b.status === 'cancelled_by_user' || b.status === 'cancelled_by_restaurant'
-        ).length || 0
-
-        // Calculate actual last visit from completed bookings
-        const lastCompletedBooking = bookingHistory?.find(b => b.status === 'completed')
-        const actualLastVisit = lastCompletedBooking?.booking_time
-
-        // Transform data
-        const transformedCustomer = {
-          ...customerResult,
-          tags: customerResult.tags?.map((t: any) => t.tag) || [],
-          notes: customerNotes, // Use separately loaded notes
-          relationships: relationshipsData || [],
-          bookings: bookingHistory || [],
-          last_visit: actualLastVisit || customerResult.last_visit, // Use calculated last visit or fallback to DB value
-          no_show_count: noShowCount,
-          cancelled_count: cancelledCount
-        }
-
-        setCustomerData(transformedCustomer)
-        setTotalBookingCount(restaurantBookingCount || 0)
-      }
-    } catch (error) {
-      console.error('Error loading customer data:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (loading) {
+  // Loading state
+  if (isLoading) {
     return (
       <Card>
         <CardContent className="p-6">
@@ -279,8 +90,8 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
     )
   }
 
+  // Fallback for no customer data (walk-ins, anonymous guests, or staff members)
   if (!customerData) {
-    // No restaurant_customer record found - display booking's direct guest information
     const hasGuestInfo = booking.guest_name || booking.guest_email || booking.guest_phone
     const isAnonymous = !hasGuestInfo || booking.guest_name?.toLowerCase().includes('anonymous')
 
@@ -351,7 +162,6 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
     )
   }
 
-
   return (
     <div className="space-y-4">
       {/* Customer Overview */}
@@ -385,8 +195,8 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
             </div>
             <div className="flex flex-col items-end gap-2">
               {customerData.profile?.user_rating && (
-                <CustomerRatingDisplay 
-                  rating={customerData.profile.user_rating} 
+                <CustomerRatingDisplay
+                  rating={customerData.profile.user_rating}
                   size="md"
                   className="bg-white border border-gray-200 px-2 py-1 rounded"
                 />
@@ -432,7 +242,7 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm">
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                <span>Total Bookings: {totalBookingCount}</span>
+                <span>Total Bookings: {customerStats?.totalBookingCount}</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
@@ -456,9 +266,9 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
                     <Badge
                       key={tag.id}
                       variant="outline"
-                      style={{ 
-                        borderColor: tag.color, 
-                        color: isLightColor(tag.color) ? '#000000' : tag.color 
+                      style={{
+                        borderColor: tag.color,
+                        color: isLightColor(tag.color) ? '#000000' : tag.color
                       }}
                     >
                       {tag.name}
@@ -520,8 +330,8 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
           <CardContent className="pt-4">
             <div className="flex items-center gap-3">
               <div className="flex-shrink-0">
-                <LowRatingFlag 
-                  rating={customerData.profile.user_rating} 
+                <LowRatingFlag
+                  rating={customerData.profile.user_rating}
                   size="lg"
                   showValue={true}
                 />
@@ -531,7 +341,7 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
                   Customer has a low rating ({customerData.profile.user_rating.toFixed(1)}/5.0)
                 </p>
                 <p className="text-xs text-red-700 mt-1">
-                  Please provide exceptional service and monitor this booking closely. 
+                  Please provide exceptional service and monitor this booking closely.
                   Consider reviewing previous visit notes and any reported issues.
                 </p>
               </div>
@@ -551,14 +361,11 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
               </CardTitle>
               {currentUserId && (
                 <div className="flex-shrink-0">
-                  <QuickCustomerNote 
-                    key={`note-add-${customerData.id}-${instanceId}`}
+                  <QuickCustomerNote
+                    key={`note-add-${customerData.id}`}
                     customerId={customerData.id}
                     currentUserId={currentUserId}
-                    onNoteAdded={() => {
-                      // Force reload customer data after adding a note
-                      loadCustomerData()
-                    }}
+                    onNoteAdded={refetch}
                   />
                 </div>
               )}
@@ -575,8 +382,8 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
                         <div className="flex-1 min-w-0">
                           <p className="text-sm break-words">{note.note}</p>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <Badge 
-                              variant="outline" 
+                            <Badge
+                              variant="outline"
                               className="text-xs"
                             >
                               {titleCase(note.category)}
@@ -615,14 +422,11 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
           <CardContent>
             <div className="text-center py-4">
               <p className="text-muted-foreground mb-4">No notes for this customer yet.</p>
-              <QuickCustomerNote 
-                key={`note-add-empty-${customerData.id}-${instanceId}`}
+              <QuickCustomerNote
+                key={`note-add-empty-${customerData.id}`}
                 customerId={customerData.id}
                 currentUserId={currentUserId}
-                onNoteAdded={() => {
-                  // Force reload customer data after adding a note
-                  loadCustomerData()
-                }}
+                onNoteAdded={refetch}
               />
             </div>
           </CardContent>
@@ -641,10 +445,9 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
           <CardContent>
             <div className="space-y-3">
               {customerData.relationships.map((rel) => {
-                // Logic to determine which customer to show (the OTHER person in the relationship)
                 const isCurrentCustomerTheCreator = rel.customer_id === customerData.id
                 const relatedCustomer = isCurrentCustomerTheCreator ? rel.related_customer : rel.customer
-                
+
                 return (
                   <div key={rel.id} className="flex items-center gap-3 p-2 border rounded">
                     <Avatar className="h-8 w-8">
@@ -709,7 +512,7 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
       )}
 
       {/* Customer Booking History */}
-      <CustomerBookingHistory 
+      <CustomerBookingHistory
         customerId={customerData.id}
         currentBookingId={booking.id}
         restaurantId={restaurantId}
@@ -732,21 +535,11 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
             </div>
             <div>
               <div className="text-muted-foreground">Success Rate</div>
-              <div className="font-medium">
-                {totalBookingCount > 0 
-                  ? `${(((totalBookingCount - customerData.no_show_count - customerData.cancelled_count) / totalBookingCount) * 100).toFixed(1)}%`
-                  : 'N/A'
-                }
-              </div>
+              <div className="font-medium">{customerStats?.successRate}%</div>
             </div>
             <div>
               <div className="text-muted-foreground">Avg Spend</div>
-              <div className="font-medium">
-                ${totalBookingCount > 0 
-                  ? (customerData.total_spent / totalBookingCount).toFixed(2)
-                  : '0.00'
-                }
-              </div>
+              <div className="font-medium">${customerStats?.avgSpend}</div>
             </div>
           </div>
         </CardContent>
@@ -756,4 +549,5 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
 }
 
 // Memoize the component to prevent unnecessary re-renders
-export default memo(BookingCustomerDetails)
+export const BookingCustomerDetails = memo(BookingCustomerDetailsComponent)
+export default BookingCustomerDetails
