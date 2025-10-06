@@ -165,9 +165,7 @@ export default function SignUpPage() {
               <CardTitle className="text-2xl font-bold text-center">
                 Create Account
               </CardTitle>
-              <CardDescription className="text-center text-secondary-foreground">
-                Sign up to join a restaurant team
-              </CardDescription>
+   
             </CardHeader>
             <CardContent>
               <Form {...form}>
