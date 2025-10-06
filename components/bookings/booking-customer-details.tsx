@@ -111,11 +111,13 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
         `)
         .eq('restaurant_id', restaurantId)
 
-      // Query by user_id if available, otherwise by guest_email
-      if (booking.user_id) {
-        query = query.eq('user_id', booking.user_id)
-      } else if (booking.guest_email) {
+      // PRIORITY: Query by guest_email first (for manually created customers),
+      // then fall back to user_id (for registered users)
+      // This prevents showing staff member's data when a manually created customer is used
+      if (booking.guest_email) {
         query = query.eq('guest_email', booking.guest_email)
+      } else if (booking.user_id) {
+        query = query.eq('user_id', booking.user_id)
       }
 
       const { data: customerResult, error } = await query.single()
@@ -170,10 +172,10 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
           `)
           .or(`customer_id.eq.${customerResult.id},related_customer_id.eq.${customerResult.id}`)
 
-        // Load recent booking history
-        const bookingQuery = booking.user_id
-          ? supabase.from('bookings').select('*').eq('user_id', booking.user_id)
-          : supabase.from('bookings').select('*').eq('guest_email', booking.guest_email)
+        // Load recent booking history - prioritize guest_email over user_id
+        const bookingQuery = booking.guest_email
+          ? supabase.from('bookings').select('*').eq('guest_email', booking.guest_email)
+          : supabase.from('bookings').select('*').eq('user_id', booking.user_id)
 
         const { data: bookingHistory } = await bookingQuery
           .eq('restaurant_id', restaurantId)
@@ -181,18 +183,18 @@ export function BookingCustomerDetails({ booking, restaurantId, currentUserId }:
           .order('booking_time', { ascending: false })
           .limit(5)
 
-        // Get total booking count for this restaurant
-        const totalBookingQuery = booking.user_id
-          ? supabase.from('bookings').select('id', { count: 'exact' }).eq('user_id', booking.user_id)
-          : supabase.from('bookings').select('id', { count: 'exact' }).eq('guest_email', booking.guest_email)
+        // Get total booking count for this restaurant - prioritize guest_email over user_id
+        const totalBookingQuery = booking.guest_email
+          ? supabase.from('bookings').select('id', { count: 'exact' }).eq('guest_email', booking.guest_email)
+          : supabase.from('bookings').select('id', { count: 'exact' }).eq('user_id', booking.user_id)
 
         const { count: restaurantBookingCount } = await totalBookingQuery
           .eq('restaurant_id', restaurantId)
 
-        // Get all bookings for statistics calculation
-        const allBookingsQuery = booking.user_id
-          ? supabase.from('bookings').select('status').eq('user_id', booking.user_id)
-          : supabase.from('bookings').select('status').eq('guest_email', booking.guest_email)
+        // Get all bookings for statistics calculation - prioritize guest_email over user_id
+        const allBookingsQuery = booking.guest_email
+          ? supabase.from('bookings').select('status').eq('guest_email', booking.guest_email)
+          : supabase.from('bookings').select('status').eq('user_id', booking.user_id)
 
         const { data: allBookings } = await allBookingsQuery
           .eq('restaurant_id', restaurantId)
