@@ -283,6 +283,14 @@ export function WaitlistPanel({
   // Update status
   const updateStatus = async (entryId: string, newStatus: string) => {
     try {
+      const entry = waitlistEntries.find(e => e.id === entryId)
+      
+      // For guest users (no user_id), handle status updates differently
+      if (!entry?.user_id && newStatus === 'notified') {
+        toast.error('Cannot notify guest customers. Please contact them directly via phone.')
+        return
+      }
+
       const updateData: any = { status: newStatus }
       
       if (newStatus === 'notified') {
@@ -290,18 +298,67 @@ export function WaitlistPanel({
         updateData.notification_expires_at = new Date(Date.now() + 15 * 60 * 1000).toISOString()
       }
 
-      const { error } = await supabase
-        .from('waitlist')
-        .update(updateData)
-        .eq('id', entryId)
+      // Use service role or RPC to bypass notification_preferences constraint for guest users
+      if (!entry?.user_id) {
+        // For guest users, use a direct update that won't trigger notification preference creation
+        const { error } = await supabase.rpc('update_waitlist_status', {
+          p_waitlist_id: entryId,
+          p_new_status: newStatus
+        })
+        
+        // If RPC doesn't exist, fall back to direct update and catch the specific error
+        if (error) {
+          if (error.code === 'PGRST202' || error.message?.includes('not found')) {
+            // RPC doesn't exist, try direct update
+            const { error: updateError } = await supabase
+              .from('waitlist')
+              .update(updateData)
+              .eq('id', entryId)
+            
+            if (updateError) {
+              // If it's the notification_preferences constraint error, handle it gracefully
+              if (updateError.code === '23502' && updateError.message?.includes('notification_preferences')) {
+                console.warn('Notification preferences constraint triggered for guest user, but status should be updated')
+                // The update might have succeeded despite the error, so let's verify
+                const { data: verifyData } = await supabase
+                  .from('waitlist')
+                  .select('status')
+                  .eq('id', entryId)
+                  .single()
+                
+                if (verifyData && verifyData.status === newStatus) {
+                  toast.success(`Status updated to ${titleCase(newStatus.replace(/_/g, ' '))}`)
+                  loadWaitlist()
+                  return
+                }
+              }
+              throw updateError
+            }
+          } else {
+            throw error
+          }
+        }
+      } else {
+        // For registered users, use normal update
+        const { error } = await supabase
+          .from('waitlist')
+          .update(updateData)
+          .eq('id', entryId)
 
-      if (error) throw error
+        if (error) throw error
+      }
 
       toast.success(`Status updated to ${titleCase(newStatus.replace(/_/g, ' '))}`)
       loadWaitlist()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating status:', error)
-      toast.error('Failed to update status')
+      
+      // Handle specific notification_preferences constraint error
+      if (error.code === '23502' && error.message?.includes('notification_preferences')) {
+        toast.error('Cannot update guest customer status through system. Please handle manually.')
+      } else {
+        toast.error('Failed to update status')
+      }
     }
   }
 
@@ -482,6 +539,18 @@ export function WaitlistPanel({
 
   // Notify customer
   const notifyCustomer = async (entry: WaitlistEntry) => {
+    // Check if this is a guest user (no registered profile)
+    if (!entry.user_id) {
+      toast.error(
+        <div>
+          <p className="font-medium">Cannot notify guest customer</p>
+          <p className="text-sm mt-1">Call {entry.guest_phone || 'customer'} directly</p>
+        </div>,
+        { duration: 4000 }
+      )
+      return
+    }
+    
     if (!checkAvailability(entry)) {
       toast.error("No tables available for this party size")
       return
@@ -793,15 +862,30 @@ export function WaitlistPanel({
           <div className="flex items-center gap-1 pt-1 border-t border-border/50">
             {/* Main action buttons */}
             {entry.status === 'active' && hasAvailability && (
-              <Button
-                size="sm"
-                onClick={() => notifyCustomer(entry)}
-                className="h-6 px-2 text-xs bg-blue-600 hover:bg-blue-700 flex-1"
-                title="Notify Customer"
-              >
-                <Bell className="h-3 w-3 mr-1" />
-                Notify
-              </Button>
+              <>
+                {entry.user_id ? (
+                  <Button
+                    size="sm"
+                    onClick={() => notifyCustomer(entry)}
+                    className="h-6 px-2 text-xs bg-blue-600 hover:bg-blue-700 flex-1"
+                    title="Send notification to registered customer"
+                  >
+                    <Bell className="h-3 w-3 mr-1" />
+                    Notify
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={() => notifyCustomer(entry)}
+                    variant="outline"
+                    className="h-6 px-2 text-xs border-blue-300 text-blue-600 hover:bg-blue-50 flex-1"
+                    title={`Guest user - Call ${entry.guest_phone || 'customer'} directly`}
+                  >
+                    <Phone className="h-3 w-3 mr-1" />
+                    Call
+                  </Button>
+                )}
+              </>
             )}
             
             {(entry.status === 'active' || entry.status === 'notified') && (
