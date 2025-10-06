@@ -102,21 +102,23 @@ function BookingCustomerDetailsComponent({ booking, restaurantId, currentUserId 
             <User className="h-5 w-5" />
             {isAnonymous ? 'Anonymous Guest / Walk-in' : 'Guest Booking'}
           </CardTitle>
-          <CardDescription>
-            {booking.guest_name && <div className="text-sm">{booking.guest_name}</div>}
-            {booking.guest_email && (
-              <div className="flex items-center gap-2 text-sm mt-1">
-                <Mail className="h-3 w-3" />
-                {booking.guest_email}
-              </div>
-            )}
-            {booking.guest_phone && (
-              <div className="flex items-center gap-2 text-sm mt-1">
-                <Phone className="h-3 w-3" />
-                {booking.guest_phone}
-              </div>
-            )}
-          </CardDescription>
+          {(booking.guest_name || booking.guest_email || booking.guest_phone) && (
+            <CardDescription>
+              <span className="block text-sm">{booking.guest_name}</span>
+              {booking.guest_email && (
+                <span className="flex items-center gap-2 text-sm mt-1">
+                  <Mail className="h-3 w-3" />
+                  {booking.guest_email}
+                </span>
+              )}
+              {booking.guest_phone && (
+                <span className="flex items-center gap-2 text-sm mt-1">
+                  <Phone className="h-3 w-3" />
+                  {booking.guest_phone}
+                </span>
+              )}
+            </CardDescription>
+          )}
         </CardHeader>
         <CardContent>
           <div className="space-y-3">

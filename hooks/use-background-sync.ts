@@ -48,7 +48,10 @@ export function useBackgroundSync({
 
         aggressivePollingInterval.current = setInterval(() => {
           console.log('🔄 Aggressive poll - invalidating all queries')
-          queryClient.invalidateQueries()
+          // Invalidate without cancelling in-flight requests
+          queryClient.invalidateQueries({
+            refetchType: 'none' // Don't cancel active queries
+          })
 
           // Try to force reconnect
           if (onForceReconnect) {
@@ -113,15 +116,24 @@ export function useBackgroundSync({
     const handleServiceWorkerMessage = (event: MessageEvent) => {
       if (event.data?.type === 'FORCE_DATA_REFRESH') {
         console.log('📨 Service worker requesting data refresh')
-        queryClient.invalidateQueries()
+        // Invalidate without cancelling in-flight requests
+        queryClient.invalidateQueries({
+          refetchType: 'none' // Don't cancel active queries, just mark as stale
+        })
 
         if (onForceReconnect) {
           onForceReconnect()
         }
       } else if (event.data?.type === 'BACKGROUND_SYNC_COMPLETE') {
         console.log('📨 Background sync completed by service worker')
-        queryClient.invalidateQueries({ queryKey: ['basic-bookings'] })
-        queryClient.invalidateQueries({ queryKey: ['todays-bookings'] })
+        queryClient.invalidateQueries({
+          queryKey: ['basic-bookings'],
+          refetchType: 'none'
+        })
+        queryClient.invalidateQueries({
+          queryKey: ['todays-bookings'],
+          refetchType: 'none'
+        })
       }
     }
 
@@ -167,7 +179,10 @@ export function useBackgroundSync({
   // Force immediate data sync
   const forceSyncNow = useCallback(async () => {
     console.log('🔄 Force sync now - invalidating all queries')
-    queryClient.invalidateQueries()
+    // Invalidate without cancelling in-flight requests
+    queryClient.invalidateQueries({
+      refetchType: 'none' // Don't cancel active queries
+    })
 
     if (onForceReconnect) {
       onForceReconnect()
