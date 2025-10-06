@@ -583,10 +583,13 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                               }}
                               disabled={!isAvailable && !isSelected}
                               className={cn(
+                                "min-w-0",
                                 !isAvailable && !isSelected && "opacity-50"
                               )}
                             >
-                              T{table.table_number} ({table.capacity})
+                              {/* Use truncated spans so long names/captions don't overflow the button */}
+                              <span className="truncate max-w-[8rem] text-sm font-medium">T{table.table_number} {table.name ? `· ${table.name}` : ''}</span>
+                              <span className="ml-2 text-xs text-muted-foreground">({table.capacity})</span>
                               {!isAvailable && !isSelected && (
                                 <AlertCircle className="h-3 w-3 ml-1" />
                               )}
@@ -649,7 +652,10 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                                         {totalCapacity - partySize} extra {totalCapacity - partySize === 1 ? 'seat' : 'seats'} available
                                       </p>
                                     )}
-                                    <p className="text-muted-foreground mt-2">
+                                    <p
+                                      className="text-muted-foreground mt-2 overflow-hidden truncate"
+                                      title={selectedTables.map(t => `T${t.table_number} (${t.capacity})`).join(', ')}
+                                    >
                                       Selected: {selectedTables.map(t => `T${t.table_number} (${t.capacity})`).join(', ')}
                                     </p>
                                   </div>
