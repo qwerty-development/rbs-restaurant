@@ -235,7 +235,10 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
         if (!validation.isValid) {
           setCapacityWarningMessage(validation.message)
           setShowCapacityWarning(true)
-          throw new Error("Capacity validation failed") // This will trigger onError but won't show a toast
+          // Create a custom error object with a flag to identify validation errors
+          const validationError = new Error("Capacity validation failed")
+          ;(validationError as any).isValidationError = true
+          throw validationError
         }
       }
 
@@ -275,7 +278,9 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
         }
       }
 
-      return { ...editedData, tableIds: selectedTableIds }
+      // Return only the fields that exist in the bookings table
+      // Don't include tableIds as it's not a column in the bookings table
+      return editedData
     },
     onSuccess: (data) => {
       toast.success("Booking updated successfully")
@@ -286,12 +291,14 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
       queryClient.invalidateQueries({ queryKey: ["todays-bookings"] })
       queryClient.invalidateQueries({ queryKey: ["booking-status-history"] })
     },
-    onError: (error) => {
-      console.error("Update error:", error)
-      // Don't show toast for validation errors as we handle them with dialog
-      if (error.message !== "Capacity validation failed") {
-        toast.error("Failed to update booking")
+    onError: (error: any) => {
+      // Don't log or show toast for validation errors as we handle them with dialog
+      if (error?.isValidationError) {
+        return // Silently handle validation errors
       }
+      // Only log and show toast for actual errors
+      console.error("Update error:", error)
+      toast.error("Failed to update booking")
     },
   })
 
@@ -587,11 +594,83 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                           )
                         })}
                       </div>
+                      
+                      {/* Real-time Capacity Indicator */}
+                      {selectedTableIds.length > 0 && allTables && (
+                        (() => {
+                          const selectedTables = allTables.filter(t => selectedTableIds.includes(t.id))
+                          const totalCapacity = selectedTables.reduce((sum, t) => sum + t.capacity, 0)
+                          const partySize = editedData.party_size
+                          const deficit = partySize - totalCapacity
+                          const isUnderCapacity = totalCapacity < partySize
+                          const isExactCapacity = totalCapacity === partySize
+                          const isOverCapacity = totalCapacity > partySize
+                          
+                          return (
+                            <div className={cn(
+                              "p-4 rounded-lg border-2",
+                              isUnderCapacity && "bg-red-50 border-red-300",
+                              isExactCapacity && "bg-yellow-50 border-yellow-300",
+                              isOverCapacity && "bg-green-50 border-green-300"
+                            )}>
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    {isUnderCapacity && <AlertCircle className="h-5 w-5 text-red-600" />}
+                                    {isExactCapacity && <Users className="h-5 w-5 text-yellow-600" />}
+                                    {isOverCapacity && <CheckCircle className="h-5 w-5 text-green-600" />}
+                                    <h4 className={cn(
+                                      "font-semibold",
+                                      isUnderCapacity && "text-red-800",
+                                      isExactCapacity && "text-yellow-800",
+                                      isOverCapacity && "text-green-800"
+                                    )}>
+                                      {isUnderCapacity && "⚠️ Insufficient Capacity"}
+                                      {isExactCapacity && "Perfect Fit"}
+                                      {isOverCapacity && "✓ Adequate Capacity"}
+                                    </h4>
+                                  </div>
+                                  <div className="space-y-1 text-sm">
+                                    <p className={cn(
+                                      "font-medium",
+                                      isUnderCapacity && "text-red-700",
+                                      isExactCapacity && "text-yellow-700",
+                                      isOverCapacity && "text-green-700"
+                                    )}>
+                                      Party Size: {partySize} guests | Total Capacity: {totalCapacity} seats
+                                    </p>
+                                    {isUnderCapacity && (
+                                      <p className="text-red-600 font-medium">
+                                        Short by {deficit} {deficit === 1 ? 'seat' : 'seats'} - Please select additional tables or proceed at your own discretion
+                                      </p>
+                                    )}
+                                    {isOverCapacity && (
+                                      <p className="text-green-600">
+                                        {totalCapacity - partySize} extra {totalCapacity - partySize === 1 ? 'seat' : 'seats'} available
+                                      </p>
+                                    )}
+                                    <p className="text-muted-foreground mt-2">
+                                      Selected: {selectedTables.map(t => `T${t.table_number} (${t.capacity})`).join(', ')}
+                                    </p>
+                                  </div>
+                                </div>
+                                <Badge 
+                                  variant={isUnderCapacity ? "destructive" : isExactCapacity ? "secondary" : "default"}
+                                  className="text-lg px-3 py-1 whitespace-nowrap"
+                                >
+                                  {totalCapacity}/{partySize}
+                                </Badge>
+                              </div>
+                            </div>
+                          )
+                        })()
+                      )}
+                      
                       {tableAvailability && !tableAvailability.available && (
                         <Alert>
                           <AlertCircle className="h-4 w-4" />
                           <AlertDescription>
-                            Some selected tables have conflicts
+                            Some selected tables have conflicts with other bookings
                           </AlertDescription>
                         </Alert>
                       )}
@@ -966,18 +1045,32 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-orange-500" />
-            Table Capacity Warning
+            ⚠️ Capacity Insufficient
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <p className="text-sm whitespace-pre-line">{capacityWarningMessage}</p>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              The selected tables cannot accommodate all guests comfortably.
+            </AlertDescription>
+          </Alert>
+          <div className="bg-muted p-4 rounded-lg space-y-2 text-sm">
+            <p className="whitespace-pre-line font-medium">{capacityWarningMessage}</p>
+          </div>
+          <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
+            <p className="text-sm text-yellow-800">
+              <strong>Recommendation:</strong> Select additional tables or reduce party size to ensure guest comfort and safety compliance.
+            </p>
+          </div>
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowCapacityWarning(false)}
             >
-              Cancel
+              <X className="h-4 w-4 mr-1" />
+              Go Back
             </Button>
             <Button
               size="sm"
@@ -987,6 +1080,7 @@ export function BookingDetails({ booking, onClose, onUpdate }: BookingDetailsPro
                 updateBookingMutation.mutate(true) // Force update with forceUpdate=true
               }}
             >
+              <AlertCircle className="h-4 w-4 mr-1" />
               Proceed Anyway
             </Button>
           </div>
