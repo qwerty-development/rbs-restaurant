@@ -439,6 +439,36 @@ export function SectionManager({
           </DialogContent>
         </Dialog>
       </div>
+      {/* Quick Stats - moved above sections grid for better visibility */}
+      {sections && sections.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Section Overview</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex flex-wrap gap-4 text-xs">
+              <div>
+                <span className="text-muted-foreground">Total Sections:</span>
+                <span className="ml-2 font-medium">{sections.length}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Total Tables:</span>
+                <span className="ml-2 font-medium">
+                  {sections.reduce((sum, s: any) => sum + (s.table_count || 0), 0)}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Average per Section:</span>
+                <span className="ml-2 font-medium">
+                  {Math.round(
+                    sections.reduce((sum, s: any) => sum + (s.table_count || 0), 0) / sections.length
+                  )}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Sections Grid - Auto-responsive layout that prevents overflow */}
       <div 
@@ -478,24 +508,34 @@ export function SectionManager({
                         style={{ color: section.color }}
                       />
                     </div>
-                    <div className="flex gap-2 flex-shrink-0 ml-2 mr-1">
+                    <div className="flex gap-2 flex-shrink-0 ml-2 mr-1 items-center">
+                      {/* More prominent enable/disable button: compact pill with icon + label, color coded */}
                       <Button
                         size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0"
+                        variant={section.is_active ? "destructive" : "default"}
+                        className={cn(
+                          "h-7 px-2 flex items-center gap-2",
+                          togglingId === section.id && "opacity-50"
+                        )}
                         onClick={(e) => {
                           e.stopPropagation()
                           handleToggleStatus(section.id, section.is_active)
                         }}
                         disabled={togglingId === section.id}
                         title={section.is_active ? "Disable section" : "Enable section"}
+                        aria-pressed={!!section.is_active}
                       >
                         {section.is_active ? (
-                          <PowerOff className="h-3 w-3" />
+                          <PowerOff className="h-4 w-4" />
                         ) : (
-                          <Power className="h-3 w-3 text-green-600" />
+                          <Power className="h-4 w-4 text-white" />
                         )}
+                        <span className="text-xs font-medium">
+                          {section.is_active ? "Disable" : "Enable"}
+                        </span>
                       </Button>
+
+                      {/* Edit button stays compact to avoid layout shift */}
                       <Button
                         size="sm"
                         variant="ghost"
@@ -505,6 +545,7 @@ export function SectionManager({
                           handleEdit(section)
                         }}
                         disabled={togglingId === section.id}
+                        title="Edit section"
                       >
                         <Edit className="h-3 w-3" />
                       </Button>
