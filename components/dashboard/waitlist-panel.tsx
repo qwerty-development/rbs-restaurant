@@ -732,9 +732,10 @@ export function WaitlistPanel({
           isExpired && "opacity-50"
         )}
       >
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 flex-1">
-            <Avatar className="h-6 w-6">
+        <div className="flex flex-col gap-2">
+          {/* Customer info row */}
+          <div className="flex items-center gap-2">
+            <Avatar className="h-6 w-6 flex-shrink-0">
               <AvatarImage src={entry.user?.avatar_url} />
               <AvatarFallback className="text-xs">
                 {(entry.user?.full_name || entry.guest_name || 'G')[0]}
@@ -742,9 +743,8 @@ export function WaitlistPanel({
             </Avatar>
             
             <div className="flex-1 min-w-0">
-              {/* Customer info */}
-              <div className="flex items-center gap-1 mb-1">
-                <p className="font-medium text-sm truncate flex-1 min-w-0">
+              <div className="flex items-center gap-1">
+                <p className="font-medium text-sm truncate">
                   {entry.user?.full_name || entry.guest_name || 'Guest'}
                 </p>
                 <Badge 
@@ -759,46 +759,48 @@ export function WaitlistPanel({
                   {titleCase(entry.status.replace(/_/g, ' '))}
                 </Badge>
               </div>
-              
-              {/* Details */}
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-0.5">
-                  <Clock className="h-3 w-3" />
-                  {entry.desired_time_range}
-                </span>
-                <span className="flex items-center gap-0.5">
-                  <Users className="h-3 w-3" />
-                  {entry.party_size}
-                </span>
-                {(entry.user?.phone_number || entry.guest_phone) && (
-                  <span className="flex items-center gap-0.5">
-                    <Phone className="h-3 w-3" />
-                    {(entry.user?.phone_number || entry.guest_phone)?.slice(-4)}
-                  </span>
-                )}
-              </div>
-              
-              {/* Notification expiry warning */}
-              {isNotified && entry.notification_expires_at && (
-                <div className="mt-1">
-                  <span className="text-xs text-blue-600 font-medium">
-                    Expires: {format(parseISO(entry.notification_expires_at), 'h:mm a')}
-                  </span>
-                </div>
-              )}
             </div>
           </div>
           
-          {/* Actions */}
-          <div className="flex items-center gap-1">
+          {/* Details row */}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-0.5">
+              <Clock className="h-3 w-3" />
+              {entry.desired_time_range}
+            </span>
+            <span className="flex items-center gap-0.5">
+              <Users className="h-3 w-3" />
+              {entry.party_size}
+            </span>
+            {(entry.user?.phone_number || entry.guest_phone) && (
+              <span className="flex items-center gap-0.5">
+                <Phone className="h-3 w-3" />
+                {(entry.user?.phone_number || entry.guest_phone)?.slice(-4)}
+              </span>
+            )}
+          </div>
+          
+          {/* Notification expiry warning */}
+          {isNotified && entry.notification_expires_at && (
+            <div>
+              <span className="text-xs text-blue-600 font-medium">
+                Expires: {format(parseISO(entry.notification_expires_at), 'h:mm a')}
+              </span>
+            </div>
+          )}
+          
+          {/* Actions row - stacked on own line */}
+          <div className="flex items-center gap-1 pt-1 border-t border-border/50">
             {/* Main action buttons */}
             {entry.status === 'active' && hasAvailability && (
               <Button
                 size="sm"
                 onClick={() => notifyCustomer(entry)}
-                className="h-5 px-1 text-xs bg-blue-600 hover:bg-blue-700"
+                className="h-6 px-2 text-xs bg-blue-600 hover:bg-blue-700 flex-1"
+                title="Notify Customer"
               >
-                <Bell className="h-3 w-3" />
+                <Bell className="h-3 w-3 mr-1" />
+                Notify
               </Button>
             )}
             
@@ -806,43 +808,46 @@ export function WaitlistPanel({
               <Button
                 size="sm"
                 onClick={() => openConvertDialog(entry)}
-                className="h-5 px-1 text-xs bg-green-600 hover:bg-green-700"
+                className="h-6 px-2 text-xs bg-green-600 hover:bg-green-700 flex-1"
+                title="Convert to Booking"
               >
-                <CheckCircle className="h-3 w-3" />
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Book
               </Button>
             )}
             
-            {/* Secondary actions (visible on hover) */}
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-              {['active', 'notified'].includes(entry.status) && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => openEditDialog(entry)}
-                    className="h-5 px-1 text-xs text-blue-600 hover:text-blue-700"
-                  >
-                    <Edit className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => updateStatus(entry.id, 'expired')}
-                    className="h-5 px-1 text-xs text-orange-600 hover:text-orange-700"
-                  >
-                    <XCircle className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => deleteEntry(entry.id)}
-                    className="h-5 px-1 text-xs text-red-600 hover:text-red-700"
-                  >
-                    <Trash className="h-3 w-3" />
-                  </Button>
-                </>
-              )}
-            </div>
+            {/* Secondary actions */}
+            {['active', 'notified'].includes(entry.status) && (
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => openEditDialog(entry)}
+                  className="h-6 w-6 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                  title="Edit Entry"
+                >
+                  <Edit className="h-3 w-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => updateStatus(entry.id, 'expired')}
+                  className="h-6 w-6 p-0 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                  title="Mark as Expired"
+                >
+                  <XCircle className="h-3 w-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => deleteEntry(entry.id)}
+                  className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  title="Delete Entry"
+                >
+                  <Trash className="h-3 w-3" />
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>
