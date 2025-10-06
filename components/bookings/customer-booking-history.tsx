@@ -87,8 +87,16 @@ export function CustomerBookingHistory({ customerId, currentBookingId, restauran
 
       if (!bookings) return
 
+      // Get total booking count for this restaurant (same logic as booking-customer-details)
+      const totalBookingQuery = customer.user_id
+        ? supabase.from('bookings').select('id', { count: 'exact' }).eq('user_id', customer.user_id)
+        : supabase.from('bookings').select('id', { count: 'exact' }).eq('guest_email', customer.guest_email)
+
+      const { count: totalBookings } = await totalBookingQuery
+        .eq('restaurant_id', restaurantId)
+
       // Calculate statistics
-      const totalBookings = customer.total_bookings || 0
+      const totalBookingsCount = totalBookings || 0
       const successfulBookings = bookings.filter(b => b.status === 'completed').length
       const cancelledBookings = bookings.filter(b => 
         b.status === 'cancelled_by_user' || b.status === 'cancelled_by_restaurant'
@@ -99,7 +107,7 @@ export function CustomerBookingHistory({ customerId, currentBookingId, restauran
       const averagePartySize = bookings.length > 0 ? totalPartySize / bookings.length : 0
       
       const totalSpent = customer.total_spent || 0
-      const averageSpent = totalBookings > 0 ? totalSpent / totalBookings : 0
+      const averageSpent = totalBookingsCount > 0 ? totalSpent / totalBookingsCount : 0
 
       let daysSinceLastVisit: number | undefined
       if (customer.last_visit) {
@@ -108,16 +116,16 @@ export function CustomerBookingHistory({ customerId, currentBookingId, restauran
 
       // Determine booking frequency
       let bookingFrequency: BookingHistoryData['bookingFrequency'] = 'first-time'
-      if (totalBookings >= 10) {
+      if (totalBookingsCount >= 10) {
         bookingFrequency = 'frequent'
-      } else if (totalBookings >= 5) {
+      } else if (totalBookingsCount >= 5) {
         bookingFrequency = 'regular'
-      } else if (totalBookings >= 2) {
+      } else if (totalBookingsCount >= 2) {
         bookingFrequency = 'occasional'
       }
 
       const historyData: BookingHistoryData = {
-        totalBookings,
+        totalBookings: totalBookingsCount,
         successfulBookings,
         cancelledBookings,
         noShowBookings,
