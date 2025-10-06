@@ -167,7 +167,7 @@ export function TableForm({
       return null
     }
     
-    // Check if table number already exists in the restaurant
+
     const existingTable = tables.find(t => 
       t.table_number.toLowerCase() === tableNumber.toLowerCase() && 
       t.id !== table?.id
@@ -321,9 +321,7 @@ export function TableForm({
             <p className="text-sm text-red-600 mt-1">{errors.table_number.message}</p>
           )}
           {/* Show real-time duplicate validation */}
-          {!errors.table_number && customValidationError && customValidationError.includes("already exists") && (
-            <p className="text-sm text-red-600 mt-1">{customValidationError}</p>
-          )}
+         
           {/* Show helpful hint for new tables */}
           {!table && !errors.table_number && !customValidationError && (
             <p className="text-xs text-muted-foreground mt-1">
