@@ -87,7 +87,10 @@ export default function WaitlistPage() {
   const router = useRouter()
   const supabase = createClient()
   const { currentRestaurant } = useRestaurantContext()
-  
+
+  // Check if restaurant is on basic plan
+  const isBasicPlan = currentRestaurant?.restaurant?.tier === 'basic'
+
   // State
   const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -442,6 +445,65 @@ export default function WaitlistPage() {
     }
     
     return slots
+  }
+
+  // Handle basic plan booking conversion (no table selection)
+  const handleBasicConversion = async () => {
+    if (!convertingEntry || !selectedTime) {
+      toast.error('Please select a time')
+      return
+    }
+
+    try {
+      setIsConverting(true)
+
+      // Create booking datetime
+      const bookingDate = new Date(convertingEntry.desired_date)
+      const [hours, minutes] = selectedTime.split(':')
+      bookingDate.setHours(parseInt(hours), parseInt(minutes))
+
+      // Generate confirmation code
+      const confirmationCode = `${restaurantId.slice(0, 4).toUpperCase()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+
+      // Create the booking without table assignment
+      const { data: booking, error: bookingError } = await supabase
+        .from("bookings")
+        .insert({
+          restaurant_id: restaurantId,
+          user_id: convertingEntry.user_id || null,
+          source: 'waitlist',
+          guest_name: convertingEntry.user?.full_name || convertingEntry.guest_name,
+          guest_email: convertingEntry.guest_email,
+          guest_phone: convertingEntry.user?.phone_number || convertingEntry.guest_phone,
+          booking_time: bookingDate.toISOString(),
+          party_size: convertingEntry.party_size,
+          status: 'confirmed',
+          special_requests: convertingEntry.special_requests,
+          confirmation_code: confirmationCode,
+        })
+        .select()
+        .single()
+
+      if (bookingError) throw bookingError
+
+      // Update waitlist status to 'booked'
+      const { error: waitlistUpdateError } = await supabase
+        .from('waitlist')
+        .update({ status: 'booked' })
+        .eq('id', convertingEntry.id)
+
+      if (waitlistUpdateError) throw waitlistUpdateError
+
+      toast.success('Successfully converted waitlist entry to booking!')
+      setShowConvertDialog(false)
+      setConvertingEntry(null)
+      loadWaitlistEntries()
+    } catch (error) {
+      console.error('Error converting to booking:', error)
+      toast.error('Failed to convert to booking')
+    } finally {
+      setIsConverting(false)
+    }
   }
 
   // Handle simple booking conversion
@@ -1404,6 +1466,11 @@ export default function WaitlistPage() {
                   </span>{" "}
                   - {convertingEntry.party_size} people on{" "}
                   {format(new Date(convertingEntry.desired_date), 'MMM d, yyyy')}
+                  {isBasicPlan && (
+                    <span className="block mt-2 text-sm text-muted-foreground">
+                      Simply select a time to confirm the booking.
+                    </span>
+                  )}
                 </>
               )}
             </DialogDescription>
@@ -1469,85 +1536,87 @@ export default function WaitlistPage() {
                 </div>
               </div>
 
-              {/* Table Selection */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                      <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                      Select Tables
-                    </h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-300">
-                      Choose tables for {convertingEntry.party_size} guests
-                      {selectedTables.length > 0 && (
-                        <span> (Selected capacity: {
-                          allTables?.filter(t => selectedTables.includes(t.id))
-                            .reduce((sum, t) => sum + t.capacity, 0) || 0
-                        })</span>
-                      )}
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={suggestTablesForConversion}
-                    disabled={!selectedTime || checkingAvailability}
-                  >
-                    <RefreshCw className={`h-4 w-4 mr-1 ${checkingAvailability ? 'animate-spin' : ''}`} />
-                    Auto-suggest
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {allTables?.map((table) => {
-                    const isSelected = selectedTables.includes(table.id)
-                    const isAvailable = isTableAvailableForConversion(table.id)
-                    
-                    return (
-                      <label
-                        key={table.id}
-                        className={cn(
-                          "flex items-center p-3 border rounded-lg cursor-pointer transition-all",
-                          isSelected && "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700",
-                          !isSelected && isAvailable && "hover:bg-slate-50 dark:hover:bg-slate-700",
-                          !isAvailable && "opacity-50 cursor-not-allowed bg-red-50 dark:bg-red-900/20"
+              {/* Table Selection - Only for Pro Plan */}
+              {!isBasicPlan && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                        <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        Select Tables
+                      </h3>
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Choose tables for {convertingEntry.party_size} guests
+                        {selectedTables.length > 0 && (
+                          <span> (Selected capacity: {
+                            allTables?.filter(t => selectedTables.includes(t.id))
+                              .reduce((sum, t) => sum + t.capacity, 0) || 0
+                          })</span>
                         )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => {
-                            if (!isAvailable) {
-                              toast.error("This table is not available for the selected time")
-                              return
-                            }
-                            setSelectedTables(prev => 
-                              prev.includes(table.id) 
-                                ? prev.filter(id => id !== table.id)
-                                : [...prev, table.id]
-                            )
-                          }}
-                          disabled={!isAvailable}
-                          className="mr-3"
-                        />
-                        <div className="flex-1">
-                          <div className="font-medium text-gray-900 dark:text-white">
-                            Table {table.table_number}
-                          </div>
-                          <div className="text-sm text-slate-600 dark:text-slate-300">
-                            {table.capacity} seats • {table.table_type}
-                          </div>
-                          {!isAvailable && (
-                            <div className="text-xs text-red-600 dark:text-red-400">
-                              Not available at selected time
-                            </div>
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={suggestTablesForConversion}
+                      disabled={!selectedTime || checkingAvailability}
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-1 ${checkingAvailability ? 'animate-spin' : ''}`} />
+                      Auto-suggest
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {allTables?.map((table) => {
+                      const isSelected = selectedTables.includes(table.id)
+                      const isAvailable = isTableAvailableForConversion(table.id)
+
+                      return (
+                        <label
+                          key={table.id}
+                          className={cn(
+                            "flex items-center p-3 border rounded-lg cursor-pointer transition-all",
+                            isSelected && "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700",
+                            !isSelected && isAvailable && "hover:bg-slate-50 dark:hover:bg-slate-700",
+                            !isAvailable && "opacity-50 cursor-not-allowed bg-red-50 dark:bg-red-900/20"
                           )}
-                        </div>
-                      </label>
-                    )
-                  })}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              if (!isAvailable) {
+                                toast.error("This table is not available for the selected time")
+                                return
+                              }
+                              setSelectedTables(prev =>
+                                prev.includes(table.id)
+                                  ? prev.filter(id => id !== table.id)
+                                  : [...prev, table.id]
+                              )
+                            }}
+                            disabled={!isAvailable}
+                            className="mr-3"
+                          />
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900 dark:text-white">
+                              Table {table.table_number}
+                            </div>
+                            <div className="text-sm text-slate-600 dark:text-slate-300">
+                              {table.capacity} seats • {table.table_type}
+                            </div>
+                            {!isAvailable && (
+                              <div className="text-xs text-red-600 dark:text-red-400">
+                                Not available at selected time
+                              </div>
+                            )}
+                          </div>
+                        </label>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-4 border-t">
@@ -1562,8 +1631,12 @@ export default function WaitlistPage() {
                   Cancel
                 </Button>
                 <Button
-                  onClick={handleSimpleConversion}
-                  disabled={!selectedTime || selectedTables.length === 0 || isConverting}
+                  onClick={isBasicPlan ? handleBasicConversion : handleSimpleConversion}
+                  disabled={
+                    !selectedTime ||
+                    (!isBasicPlan && selectedTables.length === 0) ||
+                    isConverting
+                  }
                 >
                   {isConverting ? "Converting..." : "Convert to Booking"}
                 </Button>
