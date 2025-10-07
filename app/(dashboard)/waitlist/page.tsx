@@ -456,12 +456,6 @@ export default function WaitlistPage() {
 
     try {
       setIsConverting(true)
-      const { data: { user } } = await supabase.auth.getUser()
-
-      if (!user) {
-        toast.error('You must be logged in')
-        return
-      }
 
       // Create booking datetime
       const bookingDate = new Date(convertingEntry.desired_date)
@@ -476,7 +470,7 @@ export default function WaitlistPage() {
         .from("bookings")
         .insert({
           restaurant_id: restaurantId,
-          user_id: convertingEntry.user_id || user.id, // Use staff user ID if no customer user ID
+          user_id: convertingEntry.user_id || null,
           source: 'waitlist',
           guest_name: convertingEntry.user?.full_name || convertingEntry.guest_name,
           guest_email: convertingEntry.guest_email,
@@ -1067,16 +1061,14 @@ export default function WaitlistPage() {
                     <div className="flex gap-2">
                       {entry.status === 'active' && (
                         <>
-                          {entry.user_id && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => updateStatus(entry.id, 'notified')}
-                            >
-                              <AlertCircle className="h-4 w-4 mr-1" />
-                              Notify
-                            </Button>
-                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateStatus(entry.id, 'notified')}
+                          >
+                            <AlertCircle className="h-4 w-4 mr-1" />
+                            Notify
+                          </Button>
                           <Button
                             size="sm"
                             onClick={() => convertToBooking(entry.id)}
