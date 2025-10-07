@@ -462,13 +462,23 @@ export function EditCustomerDialog({
                   <span className="ml-2 font-medium">${customer.total_spent.toFixed(2)}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">No Shows:</span>
-                  <span className="ml-2 font-medium">{customer.no_show_count}</span>
+                  <span className="text-muted-foreground">Completed:</span>
+                  <span className="ml-2 font-medium text-green-600">{customer.profile?.completed_bookings || 0}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Cancelled:</span>
-                  <span className="ml-2 font-medium">{customer.cancelled_count}</span>
+                  <span className="ml-2 font-medium text-orange-600">{customer.profile?.cancelled_bookings || 0}</span>
                 </div>
+                <div>
+                  <span className="text-muted-foreground">No Shows:</span>
+                  <span className="ml-2 font-medium text-red-600">{customer.profile?.no_show_bookings || 0}</span>
+                </div>
+                {customer.profile?.user_rating && customer.profile.user_rating !== 5.0 && (
+                  <div>
+                    <span className="text-muted-foreground">Rating:</span>
+                    <span className="ml-2 font-medium">{customer.profile.user_rating.toFixed(1)}</span>
+                  </div>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-2">
                 These values are automatically calculated and cannot be edited.
