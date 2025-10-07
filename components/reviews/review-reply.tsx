@@ -81,7 +81,10 @@ export function ReviewReply({ reviewId, restaurantId, existingReply }: ReviewRep
     onSuccess: () => {
       toast.success(existingReply ? "Reply updated successfully" : "Reply posted successfully")
       setIsReplying(false)
-      queryClient.invalidateQueries({ queryKey: ["restaurant-reviews"] })
+      queryClient.invalidateQueries({
+        queryKey: ["restaurant-reviews", restaurantId],
+        refetchType: 'all'
+      })
     },
     onError: (error) => {
       toast.error(error.message || "Failed to post reply")
@@ -92,16 +95,21 @@ export function ReviewReply({ reviewId, restaurantId, existingReply }: ReviewRep
     mutationFn: async () => {
       if (!existingReply) return
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("review_replies")
         .delete()
         .eq("id", existingReply.id)
+        .select()
 
       if (error) throw error
+      return data
     },
     onSuccess: () => {
       toast.success("Reply deleted successfully")
-      queryClient.invalidateQueries({ queryKey: ["restaurant-reviews"] })
+      queryClient.invalidateQueries({
+        queryKey: ["restaurant-reviews", restaurantId],
+        refetchType: 'all'
+      })
     },
     onError: () => {
       toast.error("Failed to delete reply")

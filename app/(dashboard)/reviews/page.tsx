@@ -104,14 +104,14 @@ export default function ReviewsPage() {
     queryKey: ["restaurant-reviews", restaurantId, sortBy],
     queryFn: async () => {
       if (!restaurantId) return []
-      
+
       let query = supabase
         .from("reviews")
         .select(`
           *,
           user:profiles(id, full_name, avatar_url),
           booking:bookings(id, booking_time, party_size),
-          reply:review_replies(
+          reply:review_replies!review_replies_review_id_fkey(
             id,
             reply_message,
             created_at,
@@ -134,9 +134,20 @@ export default function ReviewsPage() {
       const { data, error } = await query
 
       if (error) throw error
-      return data as Review[]
+
+      // Transform reply from array to single object (one-to-one relationship)
+      const transformedData = data?.map(review => ({
+        ...review,
+        reply: Array.isArray(review.reply)
+          ? (review.reply.length > 0 ? review.reply[0] : null)
+          : review.reply
+      }))
+
+      return transformedData as Review[]
     },
     enabled: !!restaurantId,
+    staleTime: 0,
+    gcTime: 0,
   })
 
   // Calculate review statistics
