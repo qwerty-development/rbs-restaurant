@@ -97,22 +97,24 @@ export function CriticalAlerts({
             )}
           </div>
         </div>
-        
-        <Button 
-          variant="secondary" 
-          size="sm"
-          className="bg-white/20 hover:bg-white/30 text-white border-0 font-medium"
-          onClick={() => {
-            if (onViewAll) {
-              onViewAll()
-            } else {
-              // Scroll to the pending requests section
-              document.querySelector('.pending-requests')?.scrollIntoView({ behavior: 'smooth' })
-            }
-          }}
-        >
-          View All
-        </Button>
+
+        {pendingCount > 0 && (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="bg-white/20 hover:bg-white/30 text-white border-0 font-medium"
+            onClick={() => {
+              if (onViewAll) {
+                onViewAll()
+              } else {
+                // Scroll to the pending requests section
+                document.querySelector('.pending-requests')?.scrollIntoView({ behavior: 'smooth' })
+              }
+            }}
+          >
+            View All
+          </Button>
+        )}
       </div>
     </div>
   )
