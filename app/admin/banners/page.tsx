@@ -45,7 +45,6 @@ export default function AdminBannersPage() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
   const [specialOffers, setSpecialOffers] = useState<SpecialOffer[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editBanner, setEditBanner] = useState<Banner | null>(null)
 
@@ -207,10 +206,69 @@ function BannerDialog({
   const [displayOrder, setDisplayOrder] = useState(banner?.display_order?.toString() || "0")
   const [restaurantId, setRestaurantId] = useState<string | null>(banner?.restaurant_id || null)
   const [specialOfferId, setSpecialOfferId] = useState<string | null>(banner?.special_offer_id || null)
-  const [validFrom, setValidFrom] = useState(banner?.valid_from?.slice(0, 16) || "")
-  const [validUntil, setValidUntil] = useState(banner?.valid_until?.slice(0, 16) || "")
+
+  // Date/Time state - separate for better control
+  const [validFromDate, setValidFromDate] = useState("")
+  const [validFromTime, setValidFromTime] = useState("")
+  const [validUntilDate, setValidUntilDate] = useState("")
+  const [validUntilTime, setValidUntilTime] = useState("")
+
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+
+  // Helper functions to convert between dd/mm/yyyy and ISO
+  const formatDateToDDMMYYYY = (isoDate: string | null): string => {
+    if (!isoDate) return ""
+    const date = new Date(isoDate)
+    const day = String(date.getDate()).padStart(2, '0')
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const year = date.getFullYear()
+    return `${day}/${month}/${year}`
+  }
+
+  const formatTimeToHHMM = (isoDate: string | null): string => {
+    if (!isoDate) return ""
+    const date = new Date(isoDate)
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    return `${hours}:${minutes}`
+  }
+
+  const parseDDMMYYYY = (dateStr: string, timeStr: string): string | null => {
+    if (!dateStr) return null
+    const parts = dateStr.split('/')
+    if (parts.length !== 3) return null
+
+    const day = parseInt(parts[0])
+    const month = parseInt(parts[1]) - 1 // JavaScript months are 0-indexed
+    const year = parseInt(parts[2])
+
+    // Validate date parts
+    if (isNaN(day) || isNaN(month) || isNaN(year)) return null
+    if (day < 1 || day > 31 || month < 0 || month > 11 || year < 1900) return null
+
+    const [hours, minutes] = timeStr ? timeStr.split(':').map(Number) : [0, 0]
+
+    const date = new Date(year, month, day, hours || 0, minutes || 0)
+    return date.toISOString()
+  }
+
+  // Format date input as user types (add slashes automatically)
+  const handleDateInput = (value: string, setter: (val: string) => void) => {
+    // Remove all non-digit characters
+    const digits = value.replace(/\D/g, '')
+
+    // Format as DD/MM/YYYY
+    let formatted = digits
+    if (digits.length >= 2) {
+      formatted = digits.slice(0, 2) + '/' + digits.slice(2)
+    }
+    if (digits.length >= 4) {
+      formatted = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4, 8)
+    }
+
+    setter(formatted)
+  }
 
   useEffect(() => {
     setTitle(banner?.title || "")
@@ -220,8 +278,12 @@ function BannerDialog({
     setDisplayOrder(banner?.display_order?.toString() || "0")
     setRestaurantId(banner?.restaurant_id || null)
     setSpecialOfferId(banner?.special_offer_id || null)
-    setValidFrom(banner?.valid_from?.slice(0, 16) || "")
-    setValidUntil(banner?.valid_until?.slice(0, 16) || "")
+
+    // Parse dates
+    setValidFromDate(formatDateToDDMMYYYY(banner?.valid_from || null))
+    setValidFromTime(formatTimeToHHMM(banner?.valid_from || null))
+    setValidUntilDate(formatDateToDDMMYYYY(banner?.valid_until || null))
+    setValidUntilTime(formatTimeToHHMM(banner?.valid_until || null))
   }, [banner])
 
   // Clear special offer when restaurant changes
@@ -256,8 +318,8 @@ function BannerDialog({
         display_order: parseInt(displayOrder) || 0,
         restaurant_id: restaurantId || null,
         special_offer_id: specialOfferId || null,
-        valid_from: validFrom ? new Date(validFrom).toISOString() : null,
-        valid_until: validUntil ? new Date(validUntil).toISOString() : null,
+        valid_from: parseDDMMYYYY(validFromDate, validFromTime),
+        valid_until: parseDDMMYYYY(validUntilDate, validUntilTime),
       }
 
       if (isEdit && banner) {
@@ -508,21 +570,44 @@ function BannerDialog({
             <div className="grid gap-4 md:grid-cols-2">
               <div className="grid gap-2">
                 <Label>Valid From</Label>
-                <Input
-                  type="datetime-local"
-                  value={validFrom}
-                  onChange={(e) => setValidFrom(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">Format: DD/MM/YYYY HH:MM</p>
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    value={validFromDate}
+                    onChange={(e) => handleDateInput(e.target.value, setValidFromDate)}
+                    placeholder="DD/MM/YYYY"
+                    maxLength={10}
+                    className="flex-1"
+                  />
+                  <Input
+                    type="time"
+                    value={validFromTime}
+                    onChange={(e) => setValidFromTime(e.target.value)}
+                    className="w-32"
+                  />
+                </div>
+
+
               </div>
               <div className="grid gap-2">
                 <Label>Valid Until</Label>
-                <Input
-                  type="datetime-local"
-                  value={validUntil}
-                  onChange={(e) => setValidUntil(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">Format: DD/MM/YYYY HH:MM</p>
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    value={validUntilDate}
+                    onChange={(e) => handleDateInput(e.target.value, setValidUntilDate)}
+                    placeholder="DD/MM/YYYY"
+                    maxLength={10}
+                    className="flex-1"
+                  />
+                  <Input
+                    type="time"
+                    value={validUntilTime}
+                    onChange={(e) => setValidUntilTime(e.target.value)}
+                    className="w-32"
+                  />
+                </div>
+               
               </div>
             </div>
           </div>
