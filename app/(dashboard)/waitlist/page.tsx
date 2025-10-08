@@ -456,43 +456,21 @@ export default function WaitlistPage() {
 
     try {
       setIsConverting(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        toast.error('You must be logged in')
+        return
+      }
 
-      // Create booking datetime
-      const bookingDate = new Date(convertingEntry.desired_date)
-      const [hours, minutes] = selectedTime.split(':')
-      bookingDate.setHours(parseInt(hours), parseInt(minutes))
-
-      // Generate confirmation code
-      const confirmationCode = `${restaurantId.slice(0, 4).toUpperCase()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`
-
-      // Create the booking without table assignment
-      const { data: booking, error: bookingError } = await supabase
-        .from("bookings")
-        .insert({
-          restaurant_id: restaurantId,
-          user_id: convertingEntry.user_id || null,
-          source: 'waitlist',
-          guest_name: convertingEntry.user?.full_name || convertingEntry.guest_name,
-          guest_email: convertingEntry.guest_email,
-          guest_phone: convertingEntry.user?.phone_number || convertingEntry.guest_phone,
-          booking_time: bookingDate.toISOString(),
-          party_size: convertingEntry.party_size,
-          status: 'confirmed',
-          special_requests: convertingEntry.special_requests,
-          confirmation_code: confirmationCode,
+      // Use RPC function for consistent behavior (same as WaitlistManager)
+      const { data, error } = await supabase
+        .rpc('convert_waitlist_to_booking', {
+          p_waitlist_id: convertingEntry.id,
+          p_staff_user_id: user.id
         })
-        .select()
-        .single()
 
-      if (bookingError) throw bookingError
-
-      // Update waitlist status to 'booked'
-      const { error: waitlistUpdateError } = await supabase
-        .from('waitlist')
-        .update({ status: 'booked' })
-        .eq('id', convertingEntry.id)
-
-      if (waitlistUpdateError) throw waitlistUpdateError
+      if (error) throw error
 
       toast.success('Successfully converted waitlist entry to booking!')
       setShowConvertDialog(false)
@@ -567,11 +545,12 @@ export default function WaitlistPage() {
       const confirmationCode = `${restaurantId.slice(0, 4).toUpperCase()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`
 
       // Create the booking (never create customer here; only link if found)
+      // IMPORTANT: Keep user_id as null for guest bookings to avoid notification_preferences constraint errors
       const { data: booking, error: bookingError } = await supabase
         .from("bookings")
         .insert({
           restaurant_id: restaurantId,
-          user_id: convertingEntry.user_id || user.id, // Use staff user ID if no customer user ID
+          user_id: convertingEntry.user_id || null, // Keep null for guest bookings
           source:'manual',
           guest_name: convertingEntry.user?.full_name || convertingEntry.guest_name,
           // If we linked a customer, avoid passing guest contact to prevent duplicate customer upsert by DB triggers
