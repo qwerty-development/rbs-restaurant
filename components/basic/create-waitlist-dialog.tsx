@@ -26,7 +26,7 @@ import {
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from 'react-hot-toast'
-import { CalendarIcon, Loader2, Plus } from 'lucide-react'
+import { CalendarIcon, Loader2, Plus, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface CreateWaitlistDialogProps {
@@ -35,18 +35,6 @@ interface CreateWaitlistDialogProps {
   onOpenChange: (open: boolean) => void
   onSuccess?: () => void
 }
-
-const TIME_RANGES = [
-  '11:00-12:00',
-  '12:00-13:00',
-  '13:00-14:00',
-  '14:00-15:00',
-  '17:00-18:00',
-  '18:00-19:00',
-  '19:00-20:00',
-  '20:00-21:00',
-  '21:00-22:00',
-]
 
 const TABLE_TYPES = [
   { value: 'any', label: 'Any Table' },
@@ -70,7 +58,8 @@ export function CreateWaitlistDialog({
     guest_phone: '',
     party_size: '2',
     desired_date: new Date(),
-    desired_time_range: '',
+    start_time: '19:00',
+    end_time: '20:00',
     table_type: 'any',
     special_requests: '',
   })
@@ -88,7 +77,8 @@ export function CreateWaitlistDialog({
         guest_phone: '',
         party_size: '2',
         desired_date: new Date(),
-        desired_time_range: '',
+        start_time: '19:00',
+        end_time: '20:00',
         table_type: 'any',
         special_requests: '',
       })
@@ -101,12 +91,15 @@ export function CreateWaitlistDialog({
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
 
-    if (!formData.guest_name.trim()) {
-      newErrors.guest_name = 'Guest name is required'
-    }
+    // Guest name is optional - will default to "Anonymous User" if empty
 
-    if (!formData.desired_time_range) {
-      newErrors.desired_time_range = 'Time range is required'
+    if (!formData.start_time || !formData.end_time) {
+      newErrors.time_range = 'Start and end times are required'
+    } else {
+      // Compare times directly (already in 24-hour format HH:MM)
+      if (formData.start_time >= formData.end_time) {
+        newErrors.time_range = 'End time must be after start time'
+      }
     }
 
     const partySize = parseInt(formData.party_size)
@@ -141,16 +134,22 @@ export function CreateWaitlistDialog({
         throw new Error('Validation failed')
       }
 
+      // Time inputs already provide time in 24-hour format (HH:MM)
+      const timeRange = `${formData.start_time}-${formData.end_time}`
+
+      // Use "Anonymous User" if no guest name provided
+      const guestName = formData.guest_name.trim() || 'Anonymous User'
+
       const { data, error } = await supabase
         .from('waitlist')
         .insert({
           restaurant_id: restaurantId,
-          guest_name: formData.guest_name.trim(),
+          guest_name: guestName,
           guest_email: formData.guest_email.trim() || null,
           guest_phone: formData.guest_phone.trim() || null,
           party_size: parseInt(formData.party_size),
           desired_date: format(formData.desired_date, 'yyyy-MM-dd'),
-          desired_time_range: formData.desired_time_range,
+          desired_time_range: timeRange,
           table_type: formData.table_type,
           special_requests: formData.special_requests.trim() || null,
           status: 'active',
@@ -199,7 +198,7 @@ export function CreateWaitlistDialog({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="guest_name">
-                  Guest Name <span className="text-red-500">*</span>
+                  Guest Name
                 </Label>
                 <Input
                   id="guest_name"
@@ -207,7 +206,7 @@ export function CreateWaitlistDialog({
                   onChange={(e) =>
                     setFormData({ ...formData, guest_name: e.target.value })
                   }
-                  placeholder="John Doe"
+                  placeholder="John Doe (optional - defaults to Anonymous User)"
                   className={cn(errors.guest_name && 'border-red-500')}
                 />
                 {errors.guest_name && (
@@ -308,32 +307,56 @@ export function CreateWaitlistDialog({
                 </Popover>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="desired_time_range">
+              {/* Time Range Inputs */}
+              <div className="space-y-2 md:col-span-2">
+                <Label>
                   Time Range <span className="text-red-500">*</span>
                 </Label>
-                <Select
-                  value={formData.desired_time_range}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, desired_time_range: value })
-                  }
-                >
-                  <SelectTrigger
-                    className={cn(errors.desired_time_range && 'border-red-500')}
-                  >
-                    <SelectValue placeholder="Select time range" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TIME_RANGES.map((range) => (
-                      <SelectItem key={range} value={range}>
-                        {range}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.desired_time_range && (
-                  <p className="text-sm text-red-500">{errors.desired_time_range}</p>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Start Time */}
+                  <div className="space-y-2">
+                    <Label htmlFor="start_time" className="text-xs text-muted-foreground">
+                      Start Time
+                    </Label>
+                    <div className="relative">
+                      <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        id="start_time"
+                        type="time"
+                        value={formData.start_time}
+                        onChange={(e) =>
+                          setFormData({ ...formData, start_time: e.target.value })
+                        }
+                        className={cn('pl-10', errors.time_range && 'border-red-500')}
+                      />
+                    </div>
+                  </div>
+
+                  {/* End Time */}
+                  <div className="space-y-2">
+                    <Label htmlFor="end_time" className="text-xs text-muted-foreground">
+                      End Time
+                    </Label>
+                    <div className="relative">
+                      <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        id="end_time"
+                        type="time"
+                        value={formData.end_time}
+                        onChange={(e) =>
+                          setFormData({ ...formData, end_time: e.target.value })
+                        }
+                        className={cn('pl-10', errors.time_range && 'border-red-500')}
+                      />
+                    </div>
+                  </div>
+                </div>
+                {errors.time_range && (
+                  <p className="text-sm text-red-500">{errors.time_range}</p>
                 )}
+                <p className="text-xs text-muted-foreground">
+                  Time will be shown in 12-hour format based on your system settings
+                </p>
               </div>
 
               <div className="space-y-2">
