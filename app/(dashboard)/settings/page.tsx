@@ -277,6 +277,7 @@ export default function SettingsPage() {
     "Fusion",
     "Vegetarian",
     "Cafe",
+    "Asian"
   ]
 
   const DIETARY_OPTIONS = [

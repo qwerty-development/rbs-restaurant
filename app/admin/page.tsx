@@ -170,6 +170,7 @@ export default function AdminPage() {
     'Seafood',
     'Cafe',
     'International',
+    'Asian'
   ].sort()
 
   useEffect(() => {
