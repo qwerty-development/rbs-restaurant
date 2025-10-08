@@ -684,49 +684,52 @@ export default function WaitlistPage() {
         return
       }
 
-      // Check if we have available tables that can accommodate this party size
-      if (!allTables || allTables.length === 0) {
-        toast.error('No tables available in the restaurant')
-        return
-      }
-
-      // Calculate maximum possible capacity (all tables combined or largest single table based on table type)
-      let maxCapacity = 0
-      let availableTablesForPartySize = 0
-
-      if (manualEntry.table_type === 'any') {
-        // For 'any' table type, we can combine tables, so use total capacity
-        maxCapacity = allTables.reduce((sum, table) => sum + table.capacity, 0)
-        availableTablesForPartySize = allTables.filter(table => table.capacity >= manualEntry.party_size).length
-      } else {
-        // For specific table types, filter by type first
-        const filteredTables = allTables.filter(table =>
-          manualEntry.table_type === 'any' ||
-          table.table_type.toLowerCase() === manualEntry.table_type.toLowerCase()
-        )
-
-        if (filteredTables.length === 0) {
-          toast.error(`No ${manualEntry.table_type} tables available in the restaurant`)
+      // For Pro plan restaurants, validate table availability and capacity
+      if (!isBasicPlan) {
+        // Check if we have available tables that can accommodate this party size
+        if (!allTables || allTables.length === 0) {
+          toast.error('No tables available in the restaurant')
           return
         }
 
-        // For specific table types, we can still combine tables
-        maxCapacity = filteredTables.reduce((sum, table) => sum + table.capacity, 0)
-        availableTablesForPartySize = filteredTables.filter(table => table.capacity >= manualEntry.party_size).length
-      }
+        // Calculate maximum possible capacity (all tables combined or largest single table based on table type)
+        let maxCapacity = 0
+        let availableTablesForPartySize = 0
 
-      // Check if party size exceeds restaurant's total capacity
-      if (manualEntry.party_size > maxCapacity) {
-        toast.error(`Party size of ${manualEntry.party_size} exceeds restaurant capacity of ${maxCapacity} seats`)
-        return
-      }
+        if (manualEntry.table_type === 'any') {
+          // For 'any' table type, we can combine tables, so use total capacity
+          maxCapacity = allTables.reduce((sum, table) => sum + table.capacity, 0)
+          availableTablesForPartySize = allTables.filter(table => table.capacity >= manualEntry.party_size).length
+        } else {
+          // For specific table types, filter by type first
+          const filteredTables = allTables.filter(table =>
+            manualEntry.table_type === 'any' ||
+            table.table_type.toLowerCase() === manualEntry.table_type.toLowerCase()
+          )
 
-      // For large parties, check if they can be accommodated
-      if (manualEntry.party_size > 8) {
-        const largestTable = Math.max(...allTables.map(table => table.capacity))
-        if (manualEntry.party_size > largestTable && availableTablesForPartySize === 0) {
-          toast.error(`Party size of ${manualEntry.party_size} requires table combination. Largest single table seats ${largestTable}`)
+          if (filteredTables.length === 0) {
+            toast.error(`No ${manualEntry.table_type} tables available in the restaurant`)
+            return
+          }
+
+          // For specific table types, we can still combine tables
+          maxCapacity = filteredTables.reduce((sum, table) => sum + table.capacity, 0)
+          availableTablesForPartySize = filteredTables.filter(table => table.capacity >= manualEntry.party_size).length
+        }
+
+        // Check if party size exceeds restaurant's total capacity
+        if (manualEntry.party_size > maxCapacity) {
+          toast.error(`Party size of ${manualEntry.party_size} exceeds restaurant capacity of ${maxCapacity} seats`)
           return
+        }
+
+        // For large parties, check if they can be accommodated
+        if (manualEntry.party_size > 8) {
+          const largestTable = Math.max(...allTables.map(table => table.capacity))
+          if (manualEntry.party_size > largestTable && availableTablesForPartySize === 0) {
+            toast.error(`Party size of ${manualEntry.party_size} requires table combination. Largest single table seats ${largestTable}`)
+            return
+          }
         }
       }
 
@@ -1388,7 +1391,7 @@ export default function WaitlistPage() {
                       className="pl-10"
                     />
                   </div>
-                  {allTables && allTables.length > 0 && (
+                  {!isBasicPlan && allTables && allTables.length > 0 && (
                     <div className="mt-2 text-sm text-muted-foreground">
                       Restaurant capacity: {allTables.reduce((sum, table) => sum + table.capacity, 0)} seats total
                       {manualEntry.party_size > 8 && (
@@ -1400,24 +1403,26 @@ export default function WaitlistPage() {
                   )}
                 </div>
 
-              <div>
+              {!isBasicPlan && (
+                <div>
                   <Label htmlFor="table_type">Table Type</Label>
-                <Select 
-                  value={manualEntry.table_type} 
-                  onValueChange={(value) => setManualEntry({ ...manualEntry, table_type: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="any">Any</SelectItem>
-                    <SelectItem value="indoor">Indoor</SelectItem>
-                    <SelectItem value="outdoor">Outdoor</SelectItem>
-                    <SelectItem value="bar">Bar</SelectItem>
-                    <SelectItem value="private">Private</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                  <Select
+                    value={manualEntry.table_type}
+                    onValueChange={(value) => setManualEntry({ ...manualEntry, table_type: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any</SelectItem>
+                      <SelectItem value="indoor">Indoor</SelectItem>
+                      <SelectItem value="outdoor">Outdoor</SelectItem>
+                      <SelectItem value="bar">Bar</SelectItem>
+                      <SelectItem value="private">Private</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
               <div>

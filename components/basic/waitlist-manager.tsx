@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { cn, titleCase } from '@/lib/utils'
 import { toast } from 'react-hot-toast'
+import { CreateWaitlistDialog } from './create-waitlist-dialog'
 import {
   Clock,
   Users,
@@ -30,7 +31,8 @@ import {
   UserCheck,
   MessageSquare,
   Calendar,
-  Star
+  Star,
+  Plus
 } from 'lucide-react'
 
 interface WaitlistEntry {
@@ -77,6 +79,7 @@ export function WaitlistManager({
 
   // Dialog states
   const [showConvertDialog, setShowConvertDialog] = useState(false)
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [selectedEntry, setSelectedEntry] = useState<WaitlistEntry | null>(null)
   const [isConverting, setIsConverting] = useState(false)
 
@@ -277,6 +280,14 @@ export function WaitlistManager({
           >
             <RefreshCw className={cn("h-4 w-4 mr-2", refreshing && "animate-spin")} />
             Refresh
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => setShowCreateDialog(true)}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Create Entry
           </Button>
         </div>
       </div>
@@ -558,6 +569,14 @@ export function WaitlistManager({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Create Waitlist Dialog */}
+      <CreateWaitlistDialog
+        restaurantId={restaurantId}
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onSuccess={() => loadWaitlist(false)}
+      />
     </div>
   )
 }
