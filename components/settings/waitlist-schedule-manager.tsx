@@ -128,11 +128,6 @@ export function WaitlistScheduleManager({ restaurantId, tier }: WaitlistSchedule
   const supabase = createClient()
   const queryClient = useQueryClient()
 
-  // Only show for basic tier
-  if (!isBasicTier(tier as any)) {
-    return null
-  }
-
   const form = useForm<WaitlistScheduleFormData>({
     resolver: zodResolver(waitlistScheduleSchema),
     defaultValues: {
@@ -291,6 +286,11 @@ export function WaitlistScheduleManager({ restaurantId, tier }: WaitlistSchedule
 
   const formatDate = (dateString: string) => {
     return formatDateForLebanon(dateString)
+  }
+
+  // Only show for basic tier - check after all hooks are called
+  if (!isBasicTier(tier as any)) {
+    return null
   }
 
   if (isLoading) {

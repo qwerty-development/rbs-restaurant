@@ -547,15 +547,42 @@
   }
 }
 
+/* CRITICAL: Global touch optimization for tablets (8-inch screens) */
+/* Prevent iOS double-tap zoom on all interactive elements */
+button, a, [role="button"], [role="link"], [role="tab"], input, select, textarea, label {
+  touch-action: manipulation !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ensure ALL interactive elements meet minimum touch target size (Apple HIG) */
+button,
+a,
+[role="button"],
+[role="link"],
+[role="tab"],
+[type="button"],
+[type="submit"],
+[type="reset"] {
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
+}
+
 /* Tablet-specific optimizations for 8-inch screens */
 @media screen and (min-width: 768px) and (max-width: 1024px) and (orientation: landscape) {
   body {
     font-size: 16px; /* Optimal for tablet reading */
   }
 
-  /* Ensure touch targets are at least 44px */
-  button, [role="button"], input, select, textarea {
-    min-height: 44px;
-    min-width: 44px;
+  /* Enhanced touch targets for tablet */
+  button, [role="button"], a, input, select, textarea {
+    min-height: 48px;
+    min-width: 48px;
+  }
+
+  /* Larger tap targets for frequently used actions */
+  .primary-action, [data-primary="true"] {
+    min-height: 52px;
+    min-width: 52px;
   }
 }

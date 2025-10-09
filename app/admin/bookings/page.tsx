@@ -309,7 +309,8 @@ export default function AdminAllBookingsPage() {
 }
 
 function BookingRowItem({ row, onUpdateStatus }: { row: BookingRow; onUpdateStatus: (id: string, status: 'confirmed' | 'declined_by_restaurant') => void }) {
-  const elapsed = row.status === 'pending' ? useElapsed(row.created_at) : ''
+  const elapsed = useElapsed(row.created_at)
+  const isPending = row.status === 'pending'
   const customerName = row.guest_name || row.profiles?.full_name || 'Guest'
   const customerEmail = row.guest_email || row.profiles?.email || ''
   const time = new Date(row.booking_time)
@@ -317,7 +318,6 @@ function BookingRowItem({ row, onUpdateStatus }: { row: BookingRow; onUpdateStat
   const timeStr = time.toLocaleString()
   const createdStr = created.toLocaleString()
   const restaurantName = row.restaurants?.name || 'Unknown Restaurant'
-  const isPending = row.status === 'pending'
 
   return (
     <div className={`border rounded-lg p-3 ${isPending ? 'bg-red-50 border-red-200' : 'bg-white'}`}>
