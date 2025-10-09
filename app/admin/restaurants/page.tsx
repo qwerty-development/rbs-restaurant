@@ -51,8 +51,6 @@ interface Restaurant {
   whatsapp_number?: string
   instagram_handle?: string
   cuisine_type: string
-  opening_time: string
-  closing_time: string
   price_range: number
   booking_policy: 'instant' | 'request'
   average_rating: number
@@ -104,8 +102,6 @@ export default function RestaurantManagement() {
     whatsapp_number: '',
     instagram_handle: '',
     cuisine_type: '',
-    opening_time: '09:00',
-    closing_time: '22:00',
     price_range: 2,
     booking_policy: 'request',
     featured: false
@@ -313,8 +309,6 @@ export default function RestaurantManagement() {
           whatsapp_number: formData.whatsapp_number.trim() || null,
           instagram_handle: formData.instagram_handle.trim() || null,
           cuisine_type: formData.cuisine_type.trim(),
-          opening_time: formData.opening_time,
-          closing_time: formData.closing_time,
           price_range: formData.price_range,
           booking_policy: formData.booking_policy,
           featured: formData.featured,
@@ -339,8 +333,8 @@ export default function RestaurantManagement() {
               day_of_week: day,
               service_type: 'general',
               is_open: true,
-              open_time: formData.opening_time || '08:00',
-              close_time: formData.closing_time || '23:00',
+              open_time: '08:00',
+              close_time: '23:00',
               name: 'General Service',
               accepts_walkins: true,
               notes: null
@@ -428,8 +422,6 @@ export default function RestaurantManagement() {
           address: formData.address.trim(),
           phone_number: formData.phone_number.trim(),
           cuisine_type: formData.cuisine_type.trim(),
-          opening_time: formData.opening_time,
-          closing_time: formData.closing_time,
           price_range: formData.price_range,
           booking_policy: formData.booking_policy,
           featured: formData.featured,
@@ -455,7 +447,7 @@ export default function RestaurantManagement() {
     setExporting(true)
     try {
       const csv = [
-        'Name,Description,Address,Phone,WhatsApp,Instagram,Cuisine,Opening Time,Closing Time,Price Range,Status,Average Rating,Total Reviews,Featured',
+        'Name,Description,Address,Phone,WhatsApp,Instagram,Cuisine,Price Range,Status,Average Rating,Total Reviews,Featured',
         ...filteredRestaurants.map(restaurant => [
           `"${restaurant.name}"`,
           `"${restaurant.description}"`,
@@ -464,8 +456,6 @@ export default function RestaurantManagement() {
           restaurant.whatsapp_number || '',
           restaurant.instagram_handle || '',
           restaurant.cuisine_type,
-          restaurant.opening_time,
-          restaurant.closing_time,
           restaurant.price_range,
           restaurant.status,
           restaurant.average_rating,
@@ -502,8 +492,6 @@ export default function RestaurantManagement() {
       whatsapp_number: '',
       instagram_handle: '',
       cuisine_type: '',
-      opening_time: '09:00',
-      closing_time: '22:00',
       price_range: 2,
       booking_policy: 'request',
       featured: false
@@ -519,8 +507,6 @@ export default function RestaurantManagement() {
       whatsapp_number: restaurant.whatsapp_number || '',
       instagram_handle: restaurant.instagram_handle || '',
       cuisine_type: restaurant.cuisine_type,
-      opening_time: restaurant.opening_time,
-      closing_time: restaurant.closing_time,
       price_range: restaurant.price_range,
       booking_policy: restaurant.booking_policy,
       featured: restaurant.featured
@@ -761,10 +747,6 @@ export default function RestaurantManagement() {
                     <span>{getPriceRangeText(restaurant.price_range)}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-blue-500" />
-                    <span>{restaurant.opening_time} - {restaurant.closing_time}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-purple-500" />
                     <span>{restaurant.total_bookings || 0} bookings</span>
                   </div>
@@ -902,12 +884,6 @@ export default function RestaurantManagement() {
                     <p className="text-gray-900 mt-1">{selectedRestaurant.cuisine_type}</p>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium text-gray-700">Operating Hours</Label>
-                    <p className="text-gray-900 mt-1">
-                      {selectedRestaurant.opening_time} - {selectedRestaurant.closing_time}
-                    </p>
-                  </div>
-                  <div>
                     <Label className="text-sm font-medium text-gray-700">Price Range</Label>
                     <p className="text-gray-900 mt-1">
                       {getPriceRangeText(selectedRestaurant.price_range)}
@@ -1010,24 +986,6 @@ export default function RestaurantManagement() {
                     <SelectItem value="4">$$$$ - Fine Dining</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              <div>
-                <Label htmlFor="opening_time">Opening Time</Label>
-                <Input
-                  id="opening_time"
-                  type="time"
-                  value={formData.opening_time}
-                  onChange={(e) => setFormData({...formData, opening_time: e.target.value})}
-                />
-              </div>
-              <div>
-                <Label htmlFor="closing_time">Closing Time</Label>
-                <Input
-                  id="closing_time"
-                  type="time"
-                  value={formData.closing_time}
-                  onChange={(e) => setFormData({...formData, closing_time: e.target.value})}
-                />
               </div>
             </div>
 
