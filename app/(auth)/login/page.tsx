@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
+import { Turnstile } from "@marsidev/react-turnstile"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
@@ -41,8 +42,9 @@ export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const supabase = createClient()
-  
+
   const redirectTo = searchParams.get('redirectTo') || '/dashboard'
   const error = searchParams.get('error')
 
@@ -57,11 +59,21 @@ export default function LoginPage() {
   async function onSubmit(data: FormData) {
     try {
       setIsLoading(true)
-  
-      // Sign in
+
+      // Validate captcha token
+      if (!captchaToken) {
+        toast.error("Please complete the captcha verification")
+        setIsLoading(false)
+        return
+      }
+
+      // Sign in with captcha token
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
+        options: {
+          captchaToken,
+        },
       })
   
       if (authError) {
@@ -227,10 +239,24 @@ export default function LoginPage() {
                 </FormItem>
               )}
             />
+            <div className="flex justify-center my-4">
+              <Turnstile
+                siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+                onSuccess={(token) => setCaptchaToken(token)}
+                onError={() => {
+                  setCaptchaToken(null)
+                  toast.error("Captcha verification failed. Please try again.")
+                }}
+                onExpire={() => {
+                  setCaptchaToken(null)
+                  toast.error("Captcha expired. Please verify again.")
+                }}
+              />
+            </div>
             <Button
               type="submit"
               className="w-full"
-              disabled={isLoading}
+              disabled={isLoading || !captchaToken}
             >
               {isLoading ? (
                 <>
