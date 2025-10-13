@@ -26,7 +26,8 @@ import {
   Calendar,
   Filter,
   Download,
-  RefreshCw
+  RefreshCw,
+  Search
 } from 'lucide-react'
 
 interface NotificationTemplate {
@@ -87,6 +88,8 @@ export default function AdminNotificationsPage() {
   const [templates, setTemplates] = useState<NotificationTemplate[]>([])
   const [restaurants, setRestaurants] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
+  const [userSearch, setUserSearch] = useState('')
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false)
 
   // Load initial data
   useEffect(() => {
@@ -98,6 +101,17 @@ export default function AdminNotificationsPage() {
       loadFailedNotifications()
     }
   }, [activeTab])
+
+  // Debounced user search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (targetType === 'specific_users') {
+        loadUsers(userSearch)
+      }
+    }, 300) // 300ms debounce
+
+    return () => clearTimeout(timer)
+  }, [userSearch, targetType])
 
   const loadTemplates = async () => {
     // For now, using predefined templates. In production, these would come from database
@@ -151,19 +165,29 @@ export default function AdminNotificationsPage() {
     }
   }
 
-  const loadUsers = async () => {
+  const loadUsers = async (searchTerm: string = '') => {
     try {
-      const { data, error } = await supabase
+      setIsSearchingUsers(true)
+      let query = supabase
         .from('profiles')
         .select('id, full_name, email')
+      
+      // If there's a search term, search by name or email
+      if (searchTerm.trim()) {
+        query = query.or(`full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
+      }
+      
+      const { data, error } = await query
         .order('full_name')
-        .limit(100) // Limit for performance
+        .limit(200) // Increased limit, search helps narrow results
       
       if (error) throw error
       setUsers(data || [])
     } catch (error) {
       console.error('Failed to load users:', error)
       toast.error('Failed to load users')
+    } finally {
+      setIsSearchingUsers(false)
     }
   }
 
@@ -531,28 +555,68 @@ export default function AdminNotificationsPage() {
                 )}
 
                 {targetType === 'specific_users' && (
-                  <div>
-                    <Label>Select Users</Label>
-                    <div className="max-h-40 overflow-y-auto border rounded p-2 mt-2">
-                      {users.map(user => (
-                        <div key={user.id} className="flex items-center space-x-2 p-1">
-                          <input
-                            type="checkbox"
-                            id={`user-${user.id}`}
-                            checked={selectedUsers.includes(user.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedUsers([...selectedUsers, user.id])
-                              } else {
-                                setSelectedUsers(selectedUsers.filter(id => id !== user.id))
-                              }
-                            }}
-                          />
-                          <Label htmlFor={`user-${user.id}`} className="text-sm">
-                            {user.full_name} ({user.email})
-                          </Label>
-                        </div>
-                      ))}
+                  <div className="space-y-3">
+                    <div>
+                      <Label>Search Users</Label>
+                      <div className="relative mt-2">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by name or email..."
+                          value={userSearch}
+                          onChange={(e) => setUserSearch(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                      {isSearchingUsers && (
+                        <p className="text-xs text-muted-foreground mt-1">Searching...</p>
+                      )}
+                    </div>
+                    
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <Label>Select Users</Label>
+                        <Badge variant="secondary">
+                          {selectedUsers.length} selected / {users.length} shown
+                        </Badge>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto border rounded p-2">
+                        {users.length === 0 ? (
+                          <div className="text-center py-4 text-sm text-muted-foreground">
+                            {userSearch.trim() ? 'No users found. Try a different search.' : 'Start typing to search for users'}
+                          </div>
+                        ) : (
+                          users.map(user => (
+                            <div key={user.id} className="flex items-center space-x-2 p-1 hover:bg-muted/50 rounded">
+                              <input
+                                type="checkbox"
+                                id={`user-${user.id}`}
+                                checked={selectedUsers.includes(user.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedUsers([...selectedUsers, user.id])
+                                  } else {
+                                    setSelectedUsers(selectedUsers.filter(id => id !== user.id))
+                                  }
+                                }}
+                                className="cursor-pointer"
+                              />
+                              <Label htmlFor={`user-${user.id}`} className="text-sm cursor-pointer flex-1">
+                                {user.full_name || 'Unknown'} ({user.email})
+                              </Label>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      {selectedUsers.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedUsers([])}
+                          className="mt-2 w-full"
+                        >
+                          Clear Selection
+                        </Button>
+                      )}
                     </div>
                   </div>
                 )}

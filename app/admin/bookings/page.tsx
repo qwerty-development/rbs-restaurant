@@ -5,9 +5,10 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'react-hot-toast'
-import { ChevronLeft, ChevronRight, Search, RefreshCw, Calendar, Clock, CheckCircle, XCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, RefreshCw, Calendar, Clock, CheckCircle, XCircle, Phone, Users, Mail } from 'lucide-react'
 
 type BookingRow = {
   id: string
@@ -15,6 +16,7 @@ type BookingRow = {
   user_id: string | null
   guest_name: string | null
   guest_email: string | null
+  guest_phone: string | null
   booking_time: string
   created_at: string
   status: string
@@ -83,7 +85,7 @@ export default function AdminAllBookingsPage() {
       let query = supabase
         .from('bookings')
         .select(
-          `id, restaurant_id, user_id, guest_name, guest_email, booking_time, created_at, status, party_size,
+          `id, restaurant_id, user_id, guest_name, guest_email, guest_phone, booking_time, created_at, status, party_size,
            profiles:profiles!bookings_user_id_fkey(id, full_name, email, phone_number),
            restaurants:restaurants!bookings_restaurant_id_fkey(name)`,
           { count: 'exact' }
@@ -312,51 +314,123 @@ function BookingRowItem({ row, onUpdateStatus }: { row: BookingRow; onUpdateStat
   const elapsed = row.status === 'pending' ? useElapsed(row.created_at) : ''
   const customerName = row.guest_name || row.profiles?.full_name || 'Guest'
   const customerEmail = row.guest_email || row.profiles?.email || ''
+  const customerPhone = row.profiles?.phone_number || row.guest_phone || ''
   const time = new Date(row.booking_time)
   const created = new Date(row.created_at)
-  const timeStr = time.toLocaleString()
-  const createdStr = created.toLocaleString()
+  const timeStr = time.toLocaleString('en-US', { 
+    weekday: 'short', 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric', 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  })
+  const createdStr = created.toLocaleString('en-US', { 
+    month: 'short', 
+    day: 'numeric', 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  })
   const restaurantName = row.restaurants?.name || 'Unknown Restaurant'
   const isPending = row.status === 'pending'
 
+  // Status badge variant
+  const getStatusVariant = (status: string) => {
+    switch (status) {
+      case 'pending': return 'destructive'
+      case 'confirmed': return 'default'
+      case 'completed': return 'secondary'
+      case 'cancelled': return 'outline'
+      case 'declined_by_restaurant': return 'outline'
+      default: return 'secondary'
+    }
+  }
+
   return (
-    <div className={`border rounded-lg p-3 ${isPending ? 'bg-red-50 border-red-200' : 'bg-white'}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium truncate max-w-[260px]">{customerName}</span>
-            <span className="text-xs bg-slate-100 text-slate-700 border border-slate-200 rounded px-2 py-0.5 truncate max-w-[240px]">
-              {restaurantName}
-            </span>
-            {customerEmail && (
-              <span className="text-xs text-muted-foreground truncate max-w-[240px]">{customerEmail}</span>
-            )}
-            {isPending && (
-              <span className="inline-flex items-center text-xs text-red-700 bg-red-100 border border-red-200 rounded px-2 py-0.5">
-                <Clock className="h-3 w-3 mr-1" /> Waiting: {elapsed}
-              </span>
-            )}
+    <div className={`border rounded-lg p-3 md:p-4 transition-all ${isPending ? 'bg-red-50 border-red-300 shadow-md' : 'bg-white hover:shadow-sm'}`}>
+      <div className="flex flex-col gap-3">
+        {/* Header: Name & Status */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-lg md:text-xl font-bold text-slate-900 truncate">{customerName}</h3>
+            <div className="text-xs md:text-sm text-slate-600 mt-0.5">
+              📍 {restaurantName}
+            </div>
           </div>
-          <div className="text-xs text-muted-foreground">
-            <span className={`font-medium ${isPending ? 'text-red-700' : 'text-slate-700'}`}>Status: {row.status.replaceAll('_', ' ')}</span>
-            <span className="mx-2">•</span>
-            <span>Party: {row.party_size}</span>
-          </div>
-          <div className="text-xs text-muted-foreground">
-            Created: {createdStr} • Booking time: {timeStr}
-          </div>
+          <Badge variant={getStatusVariant(row.status)} className="text-xs flex-shrink-0">
+            {row.status.replaceAll('_', ' ').toUpperCase()}
+          </Badge>
         </div>
-        <div className="flex items-center gap-2">
-          {isPending && (
-            <>
-              <Button size="sm" onClick={() => onUpdateStatus(row.id, 'confirmed')}>
-                <CheckCircle className="h-4 w-4 mr-1" /> Accept
-              </Button>
-              <Button size="sm" variant="destructive" onClick={() => onUpdateStatus(row.id, 'declined_by_restaurant')}>
-                <XCircle className="h-4 w-4 mr-1" /> Decline
-              </Button>
-            </>
+
+        {/* Pending Timer */}
+        {isPending && (
+          <div className="inline-flex items-center text-xs md:text-sm font-semibold text-red-700 bg-red-100 border border-red-300 rounded px-2 py-1 animate-pulse w-fit">
+            <Clock className="h-3 w-3 md:h-4 md:w-4 mr-1.5" /> Waiting: {elapsed}
+          </div>
+        )}
+
+        {/* Key Details Grid */}
+        <div className="grid grid-cols-2 gap-2 md:gap-3">
+          {/* Booking Time */}
+          <div className="flex items-start gap-1.5 md:gap-2">
+            <Calendar className="h-4 w-4 md:h-5 md:w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[10px] md:text-xs text-muted-foreground font-medium uppercase">Time</div>
+              <div className="text-xs md:text-sm font-bold text-slate-900 break-words">{timeStr}</div>
+            </div>
+          </div>
+
+          {/* Party Size */}
+          <div className="flex items-start gap-1.5 md:gap-2">
+            <Users className="h-4 w-4 md:h-5 md:w-5 text-purple-600 mt-0.5 flex-shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[10px] md:text-xs text-muted-foreground font-medium uppercase">Party</div>
+              <div className="text-xs md:text-sm font-bold text-slate-900">{row.party_size} {row.party_size === 1 ? 'person' : 'people'}</div>
+            </div>
+          </div>
+
+          {/* Phone Number */}
+          {customerPhone && (
+            <div className="flex items-start gap-1.5 md:gap-2 col-span-2">
+              <Phone className="h-4 w-4 md:h-5 md:w-5 text-green-600 mt-0.5 flex-shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[10px] md:text-xs text-muted-foreground font-medium uppercase">Phone</div>
+                <a href={`tel:${customerPhone}`} className="text-sm md:text-base font-bold text-blue-600 hover:text-blue-800 hover:underline break-all">
+                  {customerPhone}
+                </a>
+              </div>
+            </div>
           )}
+
+          {/* Email */}
+          {customerEmail && (
+            <div className="flex items-start gap-1.5 md:gap-2 col-span-2">
+              <Mail className="h-4 w-4 md:h-5 md:w-5 text-slate-500 mt-0.5 flex-shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[10px] md:text-xs text-muted-foreground font-medium uppercase">Email</div>
+                <a href={`mailto:${customerEmail}`} className="text-xs md:text-sm text-blue-600 hover:text-blue-800 hover:underline break-all">
+                  {customerEmail}
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Action Buttons - Only show for pending */}
+        {isPending && (
+          <div className="flex gap-2 pt-2 border-t">
+            <Button size="sm" onClick={() => onUpdateStatus(row.id, 'confirmed')} className="flex-1">
+              <CheckCircle className="h-4 w-4 mr-1.5" /> Accept
+            </Button>
+            <Button size="sm" variant="destructive" onClick={() => onUpdateStatus(row.id, 'declined_by_restaurant')} className="flex-1">
+              <XCircle className="h-4 w-4 mr-1.5" /> Decline
+            </Button>
+          </div>
+        )}
+
+        {/* Metadata */}
+        <div className="text-[10px] md:text-xs text-muted-foreground pt-2 border-t">
+          Created: {createdStr} • ID: {row.id.slice(0, 8)}
         </div>
       </div>
     </div>
