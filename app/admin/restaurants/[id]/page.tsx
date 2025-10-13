@@ -23,8 +23,6 @@ interface Restaurant {
   whatsapp_number?: string
   instagram_handle?: string
   cuisine_type: string
-  opening_time: string
-  closing_time: string
   price_range: number
   booking_policy: 'instant' | 'request'
   featured: boolean
@@ -51,8 +49,6 @@ export default function AdminRestaurantEditPage() {
     whatsapp_number: '',
     instagram_handle: '',
     cuisine_type: '',
-    opening_time: '09:00',
-    closing_time: '22:00',
     price_range: 2,
     booking_policy: 'request' as 'instant' | 'request',
     featured: false,
@@ -84,8 +80,6 @@ export default function AdminRestaurantEditPage() {
           whatsapp_number: data.whatsapp_number || '',
           instagram_handle: data.instagram_handle || '',
           cuisine_type: data.cuisine_type || '',
-          opening_time: data.opening_time || '09:00',
-          closing_time: data.closing_time || '22:00',
           price_range: data.price_range || 2,
           booking_policy: (data.booking_policy || 'request') as 'instant' | 'request',
           featured: !!data.featured,
@@ -120,8 +114,6 @@ export default function AdminRestaurantEditPage() {
           whatsapp_number: formData.whatsapp_number.trim() || null,
           instagram_handle: formData.instagram_handle.trim() || null,
           cuisine_type: formData.cuisine_type.trim(),
-          opening_time: formData.opening_time,
-          closing_time: formData.closing_time,
           price_range: formData.price_range,
           booking_policy: formData.booking_policy,
           featured: formData.featured,
@@ -216,14 +208,6 @@ export default function AdminRestaurantEditPage() {
                   <SelectItem value="4">$$$$ - Fine Dining</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div>
-              <Label>Opening Time</Label>
-              <Input type="time" value={formData.opening_time} onChange={(e) => setFormData({ ...formData, opening_time: e.target.value })} />
-            </div>
-            <div>
-              <Label>Closing Time</Label>
-              <Input type="time" value={formData.closing_time} onChange={(e) => setFormData({ ...formData, closing_time: e.target.value })} />
             </div>
           </div>
 

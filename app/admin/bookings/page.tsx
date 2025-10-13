@@ -311,7 +311,8 @@ export default function AdminAllBookingsPage() {
 }
 
 function BookingRowItem({ row, onUpdateStatus }: { row: BookingRow; onUpdateStatus: (id: string, status: 'confirmed' | 'declined_by_restaurant') => void }) {
-  const elapsed = row.status === 'pending' ? useElapsed(row.created_at) : ''
+  const elapsed = useElapsed(row.created_at)
+  const isPending = row.status === 'pending'
   const customerName = row.guest_name || row.profiles?.full_name || 'Guest'
   const customerEmail = row.guest_email || row.profiles?.email || ''
   const customerPhone = row.profiles?.phone_number || row.guest_phone || ''
@@ -332,7 +333,6 @@ function BookingRowItem({ row, onUpdateStatus }: { row: BookingRow; onUpdateStat
     minute: '2-digit' 
   })
   const restaurantName = row.restaurants?.name || 'Unknown Restaurant'
-  const isPending = row.status === 'pending'
 
   // Status badge variant
   const getStatusVariant = (status: string) => {

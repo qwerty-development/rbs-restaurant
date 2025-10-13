@@ -456,43 +456,21 @@ export default function WaitlistPage() {
 
     try {
       setIsConverting(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        toast.error('You must be logged in')
+        return
+      }
 
-      // Create booking datetime
-      const bookingDate = new Date(convertingEntry.desired_date)
-      const [hours, minutes] = selectedTime.split(':')
-      bookingDate.setHours(parseInt(hours), parseInt(minutes))
-
-      // Generate confirmation code
-      const confirmationCode = `${restaurantId.slice(0, 4).toUpperCase()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`
-
-      // Create the booking without table assignment
-      const { data: booking, error: bookingError } = await supabase
-        .from("bookings")
-        .insert({
-          restaurant_id: restaurantId,
-          user_id: convertingEntry.user_id || null,
-          source: 'waitlist',
-          guest_name: convertingEntry.user?.full_name || convertingEntry.guest_name,
-          guest_email: convertingEntry.guest_email,
-          guest_phone: convertingEntry.user?.phone_number || convertingEntry.guest_phone,
-          booking_time: bookingDate.toISOString(),
-          party_size: convertingEntry.party_size,
-          status: 'confirmed',
-          special_requests: convertingEntry.special_requests,
-          confirmation_code: confirmationCode,
+      // Use RPC function for consistent behavior (same as WaitlistManager)
+      const { data, error } = await supabase
+        .rpc('convert_waitlist_to_booking', {
+          p_waitlist_id: convertingEntry.id,
+          p_staff_user_id: user.id
         })
-        .select()
-        .single()
 
-      if (bookingError) throw bookingError
-
-      // Update waitlist status to 'booked'
-      const { error: waitlistUpdateError } = await supabase
-        .from('waitlist')
-        .update({ status: 'booked' })
-        .eq('id', convertingEntry.id)
-
-      if (waitlistUpdateError) throw waitlistUpdateError
+      if (error) throw error
 
       toast.success('Successfully converted waitlist entry to booking!')
       setShowConvertDialog(false)
@@ -567,11 +545,12 @@ export default function WaitlistPage() {
       const confirmationCode = `${restaurantId.slice(0, 4).toUpperCase()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`
 
       // Create the booking (never create customer here; only link if found)
+      // IMPORTANT: Keep user_id as null for guest bookings to avoid notification_preferences constraint errors
       const { data: booking, error: bookingError } = await supabase
         .from("bookings")
         .insert({
           restaurant_id: restaurantId,
-          user_id: convertingEntry.user_id || user.id, // Use staff user ID if no customer user ID
+          user_id: convertingEntry.user_id || null, // Keep null for guest bookings
           source:'manual',
           guest_name: convertingEntry.user?.full_name || convertingEntry.guest_name,
           // If we linked a customer, avoid passing guest contact to prevent duplicate customer upsert by DB triggers
@@ -684,49 +663,52 @@ export default function WaitlistPage() {
         return
       }
 
-      // Check if we have available tables that can accommodate this party size
-      if (!allTables || allTables.length === 0) {
-        toast.error('No tables available in the restaurant')
-        return
-      }
-
-      // Calculate maximum possible capacity (all tables combined or largest single table based on table type)
-      let maxCapacity = 0
-      let availableTablesForPartySize = 0
-
-      if (manualEntry.table_type === 'any') {
-        // For 'any' table type, we can combine tables, so use total capacity
-        maxCapacity = allTables.reduce((sum, table) => sum + table.capacity, 0)
-        availableTablesForPartySize = allTables.filter(table => table.capacity >= manualEntry.party_size).length
-      } else {
-        // For specific table types, filter by type first
-        const filteredTables = allTables.filter(table =>
-          manualEntry.table_type === 'any' ||
-          table.table_type.toLowerCase() === manualEntry.table_type.toLowerCase()
-        )
-
-        if (filteredTables.length === 0) {
-          toast.error(`No ${manualEntry.table_type} tables available in the restaurant`)
+      // For Pro plan restaurants, validate table availability and capacity
+      if (!isBasicPlan) {
+        // Check if we have available tables that can accommodate this party size
+        if (!allTables || allTables.length === 0) {
+          toast.error('No tables available in the restaurant')
           return
         }
 
-        // For specific table types, we can still combine tables
-        maxCapacity = filteredTables.reduce((sum, table) => sum + table.capacity, 0)
-        availableTablesForPartySize = filteredTables.filter(table => table.capacity >= manualEntry.party_size).length
-      }
+        // Calculate maximum possible capacity (all tables combined or largest single table based on table type)
+        let maxCapacity = 0
+        let availableTablesForPartySize = 0
 
-      // Check if party size exceeds restaurant's total capacity
-      if (manualEntry.party_size > maxCapacity) {
-        toast.error(`Party size of ${manualEntry.party_size} exceeds restaurant capacity of ${maxCapacity} seats`)
-        return
-      }
+        if (manualEntry.table_type === 'any') {
+          // For 'any' table type, we can combine tables, so use total capacity
+          maxCapacity = allTables.reduce((sum, table) => sum + table.capacity, 0)
+          availableTablesForPartySize = allTables.filter(table => table.capacity >= manualEntry.party_size).length
+        } else {
+          // For specific table types, filter by type first
+          const filteredTables = allTables.filter(table =>
+            manualEntry.table_type === 'any' ||
+            table.table_type.toLowerCase() === manualEntry.table_type.toLowerCase()
+          )
 
-      // For large parties, check if they can be accommodated
-      if (manualEntry.party_size > 8) {
-        const largestTable = Math.max(...allTables.map(table => table.capacity))
-        if (manualEntry.party_size > largestTable && availableTablesForPartySize === 0) {
-          toast.error(`Party size of ${manualEntry.party_size} requires table combination. Largest single table seats ${largestTable}`)
+          if (filteredTables.length === 0) {
+            toast.error(`No ${manualEntry.table_type} tables available in the restaurant`)
+            return
+          }
+
+          // For specific table types, we can still combine tables
+          maxCapacity = filteredTables.reduce((sum, table) => sum + table.capacity, 0)
+          availableTablesForPartySize = filteredTables.filter(table => table.capacity >= manualEntry.party_size).length
+        }
+
+        // Check if party size exceeds restaurant's total capacity
+        if (manualEntry.party_size > maxCapacity) {
+          toast.error(`Party size of ${manualEntry.party_size} exceeds restaurant capacity of ${maxCapacity} seats`)
           return
+        }
+
+        // For large parties, check if they can be accommodated
+        if (manualEntry.party_size > 8) {
+          const largestTable = Math.max(...allTables.map(table => table.capacity))
+          if (manualEntry.party_size > largestTable && availableTablesForPartySize === 0) {
+            toast.error(`Party size of ${manualEntry.party_size} requires table combination. Largest single table seats ${largestTable}`)
+            return
+          }
         }
       }
 
@@ -1388,7 +1370,7 @@ export default function WaitlistPage() {
                       className="pl-10"
                     />
                   </div>
-                  {allTables && allTables.length > 0 && (
+                  {!isBasicPlan && allTables && allTables.length > 0 && (
                     <div className="mt-2 text-sm text-muted-foreground">
                       Restaurant capacity: {allTables.reduce((sum, table) => sum + table.capacity, 0)} seats total
                       {manualEntry.party_size > 8 && (
@@ -1400,24 +1382,26 @@ export default function WaitlistPage() {
                   )}
                 </div>
 
-              <div>
+              {!isBasicPlan && (
+                <div>
                   <Label htmlFor="table_type">Table Type</Label>
-                <Select 
-                  value={manualEntry.table_type} 
-                  onValueChange={(value) => setManualEntry({ ...manualEntry, table_type: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="any">Any</SelectItem>
-                    <SelectItem value="indoor">Indoor</SelectItem>
-                    <SelectItem value="outdoor">Outdoor</SelectItem>
-                    <SelectItem value="bar">Bar</SelectItem>
-                    <SelectItem value="private">Private</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                  <Select
+                    value={manualEntry.table_type}
+                    onValueChange={(value) => setManualEntry({ ...manualEntry, table_type: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any</SelectItem>
+                      <SelectItem value="indoor">Indoor</SelectItem>
+                      <SelectItem value="outdoor">Outdoor</SelectItem>
+                      <SelectItem value="bar">Bar</SelectItem>
+                      <SelectItem value="private">Private</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
               <div>

@@ -23,6 +23,7 @@ import { MenuItemCard } from "@/components/menu/menu-item-card"
 import { MenuItemForm } from "@/components/menu/menu-item-form"
 import { CategoryForm } from "@/components/menu/category-form"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { DeleteCategoryDialog } from "@/components/menu/delete-category-dialog"
 import { toast } from "react-hot-toast"
 import { Plus, Search, Filter, Upload, Download, ExternalLink, Copy, QrCode, MoreHorizontal } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -280,18 +281,37 @@ export default function MenuPage() {
 
   // Delete category
   const deleteCategoryMutation = useMutation({
-    mutationFn: async (categoryId: string) => {
-      // First check if category has menu items
-      const { data: itemsInCategory } = await supabase
-        .from("menu_items")
-        .select("id")
-        .eq("category_id", categoryId)
-        .limit(1)
+    mutationFn: async ({
+      categoryId,
+      action,
+      targetCategoryId
+    }: {
+      categoryId: string
+      action: "delete-all" | "reassign"
+      targetCategoryId?: string
+    }) => {
+      if (action === "reassign" && targetCategoryId) {
+        // Reassign all items to target category
+        const { error: reassignError } = await supabase
+          .from("menu_items")
+          .update({
+            category_id: targetCategoryId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("category_id", categoryId)
 
-      if (itemsInCategory && itemsInCategory.length > 0) {
-        throw new Error("Cannot delete category that contains menu items")
+        if (reassignError) throw reassignError
+      } else if (action === "delete-all") {
+        // Delete all items in the category
+        const { error: deleteItemsError } = await supabase
+          .from("menu_items")
+          .delete()
+          .eq("category_id", categoryId)
+
+        if (deleteItemsError) throw deleteItemsError
       }
 
+      // Delete the category
       const { error } = await supabase
         .from("menu_categories")
         .delete()
@@ -301,6 +321,8 @@ export default function MenuPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["menu-categories"] })
+      queryClient.invalidateQueries({ queryKey: ["all-menu-items"] })
+      queryClient.invalidateQueries({ queryKey: ["displayed-menu-items"] })
       toast.success("Category deleted successfully")
       setCategoryToDelete(null)
       if (selectedCategory === categoryToDelete) {
@@ -710,13 +732,28 @@ export default function MenuPage() {
         isLoading={deleteItemMutation.isPending}
       />
 
-      {/* Delete Category Confirmation */}
-      <ConfirmDialog
+      {/* Delete Category Dialog */}
+      <DeleteCategoryDialog
         open={!!categoryToDelete}
         onOpenChange={(open) => !open && setCategoryToDelete(null)}
-        title="Delete Category"
-        description="Are you sure you want to delete this category? This action cannot be undone and will only work if the category has no menu items."
-        onConfirm={() => categoryToDelete && deleteCategoryMutation.mutate(categoryToDelete)}
+        categoryName={
+          categories?.find((cat) => cat.id === categoryToDelete)?.name || ""
+        }
+        itemCount={
+          allMenuItems?.filter((item) => item.category_id === categoryToDelete).length || 0
+        }
+        categories={
+          categories?.filter((cat) => cat.id !== categoryToDelete) || []
+        }
+        onConfirm={(action, targetCategoryId) => {
+          if (categoryToDelete) {
+            deleteCategoryMutation.mutate({
+              categoryId: categoryToDelete,
+              action,
+              targetCategoryId,
+            })
+          }
+        }}
         isLoading={deleteCategoryMutation.isPending}
       />
     </div>
