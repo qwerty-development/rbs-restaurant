@@ -189,9 +189,14 @@ export default function AdminAllBookingsPage() {
         const orSegments = [
           `guest_name.ilike.%${uq}%`,
           `guest_email.ilike.%${uq}%`,
-          `guest_phone.ilike.%${uq}%`,
-          `id.ilike.%${uq}%`
+          `guest_phone.ilike.%${uq}%`
         ]
+        
+        // Only add UUID search if the search term looks like a UUID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (uuidRegex.test(uq)) {
+          orSegments.push(`id.eq.${uq}`)
+        }
         if (profileIds.length > 0) {
           const inList = profileIds.map(id => `${id}`).join(',')
           orSegments.push(`user_id.in.(${inList})`)
