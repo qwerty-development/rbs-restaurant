@@ -111,12 +111,29 @@ export default function UserManagement() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
   const [activeTab, setActiveTab] = useState('overview')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const [total, setTotal] = useState(0)
+  const [createdFrom, setCreatedFrom] = useState('')
+  const [createdTo, setCreatedTo] = useState('')
+  const [pointsMin, setPointsMin] = useState('')
+  const [pointsMax, setPointsMax] = useState('')
 
   const supabase = createClient()
 
   useEffect(() => {
     fetchData()
   }, [])
+
+  // Refetch when pagination or filters change
+  useEffect(() => {
+    fetchUsers()
+  }, [page, pageSize])
+
+  const onApplyFilters = () => {
+    setPage(1)
+    fetchUsers()
+  }
 
   const fetchData = async () => {
     setLoading(true)
@@ -134,7 +151,10 @@ export default function UserManagement() {
   }
 
   const fetchUsers = async () => {
-    const { data: profiles, error } = await supabase
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
+
+    let query = supabase
       .from('profiles')
       .select(`
         *,
@@ -142,15 +162,84 @@ export default function UserManagement() {
         completed_bookings:bookings!bookings_user_id_fkey(id, status),
         reviews:reviews(count),
         favorites:favorites(count)
-      `)
-      .order('created_at', { ascending: false })
+      `, { count: 'exact' })
+
+    // Search (server-side across name, email, phone)
+    if (searchTerm.trim()) {
+      const sq = searchTerm.trim()
+      query = query.or(`full_name.ilike.%${sq}%,email.ilike.%${sq}%,phone_number.ilike.%${sq}%`)
+    }
+
+    // Tier filter
+    if (tierFilter !== 'all') {
+      query = query.eq('membership_tier', tierFilter)
+    }
+
+    // Rating filter buckets
+    if (ratingFilter !== 'all') {
+      if (ratingFilter === 'high') query = query.gte('user_rating', 4.0)
+      if (ratingFilter === 'medium') query = query.gte('user_rating', 3.0).lt('user_rating', 4.0)
+      if (ratingFilter === 'low') query = query.lt('user_rating', 3.0)
+    }
+
+    // Created date range
+    if (createdFrom) query = query.gte('created_at', new Date(createdFrom).toISOString())
+    if (createdTo) {
+      const end = new Date(createdTo)
+      end.setHours(23,59,59,999)
+      query = query.lte('created_at', end.toISOString())
+    }
+
+    // Loyalty points range
+    const minPts = pointsMin ? parseInt(pointsMin,10) : undefined
+    const maxPts = pointsMax ? parseInt(pointsMax,10) : undefined
+    if (!Number.isNaN(minPts) && typeof minPts === 'number') query = query.gte('loyalty_points', minPts as number)
+    if (!Number.isNaN(maxPts) && typeof maxPts === 'number') query = query.lte('loyalty_points', maxPts as number)
+
+    // Activity filter (based on bookings count) via join-in approach
+    if (activityFilter !== 'all') {
+      if (activityFilter === 'active' || activityFilter === 'frequent') {
+        // Get user_ids with bookings, optionally count>=10
+        const { data: bookingAgg } = await supabase
+          .from('bookings')
+          .select('user_id, count:count(*)')
+          .not('user_id', 'is', null)
+          .group('user_id')
+        const ids = (bookingAgg || [])
+          .filter((r: any) => activityFilter === 'frequent' ? (r.count >= 10) : (r.count > 0))
+          .map((r: any) => r.user_id)
+        if (ids.length === 0) {
+          setUsers([])
+          setTotal(0)
+          return
+        }
+        query = query.in('id', ids as any)
+      } else if (activityFilter === 'inactive') {
+        const { data: bookingAgg } = await supabase
+          .from('bookings')
+          .select('user_id')
+          .not('user_id', 'is', null)
+          .group('user_id')
+        const ids = (bookingAgg || []).map((r: any) => r.user_id)
+        if (ids.length > 0) {
+          query = query.not('id', 'in', `(${ids.join(',')})`)
+        }
+      }
+    }
+
+    // Sort & paginate
+    query = query.order('created_at', { ascending: false }).range(from, to)
+
+    const { data: profiles, error, count } = await query
 
     if (error) {
       console.error('Error fetching users:', error)
       throw error
     }
 
-    const processedUsers = profiles?.map(user => {
+    setTotal(count || 0)
+
+    const processedUsers = (profiles || []).map(user => {
       const completedBookings = user.completed_bookings?.filter((b: { status: string }) => b.status === 'completed').length || 0
       const totalBookings = user.bookings?.[0]?.count || 0
       
@@ -162,47 +251,70 @@ export default function UserManagement() {
         reviews_count: user.reviews?.[0]?.count || 0,
         favorite_restaurants: user.favorites?.[0]?.count || 0
       }
-    }) || []
+    })
 
     setUsers(processedUsers)
   }
 
   const fetchStats = async () => {
     try {
-      // Get user counts and calculations
-      const { data: userStats, error } = await supabase
-        .from('profiles')
-        .select('id, created_at, loyalty_points, user_rating')
+      const PAGE_SIZE = 1000
 
-      if (error) throw error
+      // Page through profiles for stats
+      let profilesFrom = 0
+      let allUserStats: { id: string; created_at: string; loyalty_points: number; user_rating: number }[] = []
+      while (true) {
+        const { data: page, error } = await supabase
+          .from('profiles')
+          .select('id, created_at, loyalty_points, user_rating')
+          .range(profilesFrom, profilesFrom + PAGE_SIZE - 1)
 
-      // Get booking counts separately
-      const { data: bookingCounts, error: bookingError } = await supabase
-        .from('bookings')
-        .select('user_id')
+        if (error) throw error
 
-      if (bookingError) {
-        console.error('Error fetching booking stats:', bookingError)
+        const current = page || []
+        allUserStats = allUserStats.concat(current as any)
+        if (current.length < PAGE_SIZE) break
+        profilesFrom += PAGE_SIZE
+      }
+
+      // Page through bookings just to accumulate user_id counts
+      let bookingsFrom = 0
+      let bookingUserIds: string[] = []
+      while (true) {
+        const { data: page, error: bookingError } = await supabase
+          .from('bookings')
+          .select('user_id')
+          .range(bookingsFrom, bookingsFrom + PAGE_SIZE - 1)
+
+        if (bookingError) {
+          console.error('Error fetching booking stats:', bookingError)
+          break
+        }
+
+        const current = (page || []).map(b => b.user_id).filter(Boolean)
+        bookingUserIds = bookingUserIds.concat(current as any)
+        if ((page || []).length < PAGE_SIZE) break
+        bookingsFrom += PAGE_SIZE
       }
 
       const now = new Date()
       const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
       
-      const totalUsers = userStats?.length || 0
-      const newUsersThisMonth = userStats?.filter(u => new Date(u.created_at) >= thisMonth).length || 0
+      const totalUsers = allUserStats.length
+      const newUsersThisMonth = allUserStats.filter(u => new Date(u.created_at) >= thisMonth).length
       
       // Calculate active users based on booking data
-      const usersWithBookings = new Set(bookingCounts?.map(b => b.user_id) || [])
+      const usersWithBookings = new Set(bookingUserIds)
       const activeUsers = usersWithBookings.size
       
-      const avgRating = userStats?.reduce((sum, u) => sum + (u.user_rating || 0), 0) / totalUsers || 0
-      const totalLoyaltyPoints = userStats?.reduce((sum, u) => sum + (u.loyalty_points || 0), 0) || 0
+      const avgRating = totalUsers > 0 ? (allUserStats.reduce((sum, u) => sum + (u.user_rating || 0), 0) / totalUsers) : 0
+      const totalLoyaltyPoints = allUserStats.reduce((sum, u) => sum + (u.loyalty_points || 0), 0)
       
       // Count users with 10+ bookings
-      const bookingCountsByUser = bookingCounts?.reduce((acc, booking) => {
-        acc[booking.user_id] = (acc[booking.user_id] || 0) + 1
+      const bookingCountsByUser = bookingUserIds.reduce((acc, userId) => {
+        acc[userId] = (acc[userId] || 0) + 1
         return acc
-      }, {} as Record<string, number>) || {}
+      }, {} as Record<string, number>)
       
       const highValueUsers = Object.values(bookingCountsByUser).filter(count => count >= 10).length
 
@@ -320,25 +432,10 @@ export default function UserManagement() {
     }
   }
 
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.phone_number?.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchesTier = tierFilter === 'all' || user.membership_tier === tierFilter
-    
-    const matchesRating = ratingFilter === 'all' || 
-                         (ratingFilter === 'high' && user.user_rating >= 4.0) ||
-                         (ratingFilter === 'medium' && user.user_rating >= 3.0 && user.user_rating < 4.0) ||
-                         (ratingFilter === 'low' && user.user_rating < 3.0)
+  // Results are already server-filtered; keep reference for UI consistency
+  const filteredUsers = users
 
-    const matchesActivity = activityFilter === 'all' ||
-                           (activityFilter === 'active' && user.total_bookings > 0) ||
-                           (activityFilter === 'inactive' && user.total_bookings === 0) ||
-                           (activityFilter === 'frequent' && user.total_bookings >= 10)
-
-    return matchesSearch && matchesTier && matchesRating && matchesActivity
-  })
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   const getRatingColor = (rating: number) => {
     if (rating >= 4.5) return 'text-green-600'
@@ -484,14 +581,14 @@ export default function UserManagement() {
                 <Input
                   placeholder="Search by name, email, or phone..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => { setSearchTerm(e.target.value); setPage(1) }}
                   className="pl-10"
                   style={{ minHeight: '44px' }}
                 />
               </div>
             </div>
             <div className="flex gap-3 w-full lg:w-auto">
-              <Select value={tierFilter} onValueChange={setTierFilter}>
+              <Select value={tierFilter} onValueChange={(v) => { setTierFilter(v); setPage(1) }}>
                 <SelectTrigger className="w-full lg:w-[120px]" style={{ minHeight: '44px' }}>
                   <SelectValue placeholder="Tier" />
                 </SelectTrigger>
@@ -504,7 +601,7 @@ export default function UserManagement() {
                 </SelectContent>
               </Select>
 
-              <Select value={ratingFilter} onValueChange={setRatingFilter}>
+              <Select value={ratingFilter} onValueChange={(v) => { setRatingFilter(v); setPage(1) }}>
                 <SelectTrigger className="w-full lg:w-[120px]" style={{ minHeight: '44px' }}>
                   <SelectValue placeholder="Rating" />
                 </SelectTrigger>
@@ -516,7 +613,7 @@ export default function UserManagement() {
                 </SelectContent>
               </Select>
 
-              <Select value={activityFilter} onValueChange={setActivityFilter}>
+              <Select value={activityFilter} onValueChange={(v) => { setActivityFilter(v); setPage(1) }}>
                 <SelectTrigger className="w-full lg:w-[120px]" style={{ minHeight: '44px' }}>
                   <SelectValue placeholder="Activity" />
                 </SelectTrigger>
@@ -528,6 +625,33 @@ export default function UserManagement() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Additional filters */}
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Created From</Label>
+              <Input type="date" value={createdFrom} onChange={(e) => { setCreatedFrom(e.target.value); setPage(1) }} />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Created To</Label>
+              <Input type="date" value={createdTo} onChange={(e) => { setCreatedTo(e.target.value); setPage(1) }} />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Min Points</Label>
+              <Input type="number" inputMode="numeric" placeholder="0" value={pointsMin} onChange={(e) => { setPointsMin(e.target.value); setPage(1) }} />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Max Points</Label>
+              <Input type="number" inputMode="numeric" placeholder="10000" value={pointsMax} onChange={(e) => { setPointsMax(e.target.value); setPage(1) }} />
+            </div>
+          </div>
+
+          {/* Apply button */}
+          <div className="mt-4 flex items-center justify-end">
+            <Button onClick={onApplyFilters} disabled={loading}>
+              Apply
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -660,6 +784,30 @@ export default function UserManagement() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      {/* Pagination Controls */}
+      <div className="flex items-center justify-between mt-6">
+        <div className="text-sm text-gray-600">
+          Page {page} of {totalPages}
+        </div>
+        <div className="flex items-center gap-3">
+          <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(parseInt(v)); setPage(1) }}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">10 / page</SelectItem>
+              <SelectItem value="20">20 / page</SelectItem>
+              <SelectItem value="50">50 / page</SelectItem>
+              <SelectItem value="100">100 / page</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Previous</Button>
+            <Button variant="outline" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Next</Button>
+          </div>
+        </div>
       </div>
 
       {filteredUsers.length === 0 && (

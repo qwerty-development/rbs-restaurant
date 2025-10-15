@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'react-hot-toast'
-import { ChevronLeft, ChevronRight, Search, RefreshCw, Calendar, Clock, CheckCircle, XCircle, Phone, Users, Mail } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, RefreshCw, Calendar, Clock, CheckCircle, XCircle, Phone, Users, Mail, MapPin, Tag } from 'lucide-react'
 
 type BookingRow = {
   id: string
@@ -30,6 +30,8 @@ type BookingRow = {
   restaurants?: {
     name: string | null
   } | null
+  // Allow any additional fields without strict typing for full payload view
+  [key: string]: any
 }
 
 function useElapsed(iso?: string) {
@@ -63,8 +65,15 @@ export default function AdminAllBookingsPage() {
   const [restaurants, setRestaurants] = useState<{ id: string; name: string }[]>([])
   const [selectedRestaurant, setSelectedRestaurant] = useState<string>('all')
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
+  const [sortField, setSortField] = useState<'created_at' | 'booking_time' | 'elapsed'>('created_at')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [partyMin, setPartyMin] = useState<string>('')
+  const [partyMax, setPartyMax] = useState<string>('')
+  const [bookingType, setBookingType] = useState<'all' | 'registered' | 'guest'>('all')
+  const [hasTable, setHasTable] = useState<'all' | 'yes' | 'no'>('all')
   const [loading, setLoading] = useState(false)
   const [rows, setRows] = useState<BookingRow[]>([])
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
@@ -85,9 +94,35 @@ export default function AdminAllBookingsPage() {
       let query = supabase
         .from('bookings')
         .select(
-          `id, restaurant_id, user_id, guest_name, guest_email, guest_phone, booking_time, created_at, status, party_size,
-           profiles:profiles!bookings_user_id_fkey(id, full_name, email, phone_number),
-           restaurants:restaurants!bookings_restaurant_id_fkey(name)`,
+          `
+           *,
+           profiles:profiles!bookings_user_id_fkey(
+             id,
+             full_name,
+             email,
+             phone_number,
+             avatar_url,
+             dietary_restrictions,
+             allergies
+           ),
+           restaurants:restaurants!bookings_restaurant_id_fkey(
+             id,
+             name,
+             address
+           ),
+           booking_tables(
+             id,
+             table:restaurant_tables(*)
+           ),
+           booking_status_history(
+             new_status,
+             old_status,
+             changed_at,
+             changed_by,
+             metadata
+           ),
+           special_offers: special_offers!bookings_applied_offer_id_fkey(*)
+          `,
           { count: 'exact' }
         )
       // Restaurant filter
@@ -103,18 +138,73 @@ export default function AdminAllBookingsPage() {
         query = query.lte('booking_time', end.toISOString())
       }
 
-      // User filter: match guest_name, guest_email or profile name/email
-      if (userQuery.trim()) {
-        const uq = userQuery.trim()
-        // Attempt a broad filter: guest fields OR via profiles (requires RPC or search)
-        // Use ilike on guest_name and guest_email, plus an or for profiles via text search on a materialized field.
-        query = query.or(
-          `guest_name.ilike.%${uq}%,guest_email.ilike.%${uq}%`
-        )
+      // Status filter
+      if (statusFilter && statusFilter !== 'all') {
+        if (statusFilter === 'dining') {
+          query = query.in('status', ['arrived', 'seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'])
+        } else if (statusFilter === 'cancelled') {
+          // Combined cancelled filter
+          query = query.in('status', ['cancelled_by_user', 'declined_by_restaurant'])
+        } else if (statusFilter === 'cancelled_by_user') {
+          query = query.eq('status', 'cancelled_by_user')
+        } else if (statusFilter === 'cancelled_by_restaurant') {
+          // Map UI label to DB status value
+          query = query.eq('status', 'declined_by_restaurant')
+        } else {
+          query = query.eq('status', statusFilter)
+        }
       }
 
-      // Sorting on created_at; pending will be bubbled to top client-side
-      query = query.order('created_at', { ascending: sortOrder === 'asc' })
+      // Party size filters
+      const partyMinNum = partyMin ? parseInt(partyMin, 10) : undefined
+      const partyMaxNum = partyMax ? parseInt(partyMax, 10) : undefined
+      if (!Number.isNaN(partyMinNum) && typeof partyMinNum === 'number') {
+        query = query.gte('party_size', partyMinNum as number)
+      }
+      if (!Number.isNaN(partyMaxNum) && typeof partyMaxNum === 'number') {
+        query = query.lte('party_size', partyMaxNum as number)
+      }
+
+      // Booking type filter
+      if (bookingType === 'registered') {
+        query = query.not('user_id', 'is', null)
+      } else if (bookingType === 'guest') {
+        query = query.is('user_id', null)
+      }
+
+      // User filter: match guest_name, guest_email, phone, ID or profile name/email
+      if (userQuery.trim()) {
+        const uq = userQuery.trim()
+        // Lookup matching profiles to include user_id.in
+        const profileIds: string[] = []
+        try {
+          const { data: matchedProfiles } = await supabase
+            .from('profiles')
+            .select('id')
+            .or(`full_name.ilike.%${uq}%,email.ilike.%${uq}%,phone_number.ilike.%${uq}%`)
+            .limit(1000)
+          matchedProfiles?.forEach((p: any) => p?.id && profileIds.push(p.id))
+        } catch (_) {}
+
+        const orSegments = [
+          `guest_name.ilike.%${uq}%`,
+          `guest_email.ilike.%${uq}%`,
+          `guest_phone.ilike.%${uq}%`,
+          `id.ilike.%${uq}%`
+        ]
+        if (profileIds.length > 0) {
+          const inList = profileIds.map(id => `${id}`).join(',')
+          orSegments.push(`user_id.in.(${inList})`)
+        }
+        query = query.or(orSegments.join(','))
+      }
+
+      // Server-side sort for created_at or booking_time; elapsed handled client-side
+      if (sortField === 'created_at' || sortField === 'booking_time') {
+        query = query.order(sortField, { ascending: sortOrder === 'asc' })
+      } else {
+        query = query.order('created_at', { ascending: sortOrder === 'asc' })
+      }
 
       // Pagination
       query = query.range(from, to)
@@ -122,18 +212,25 @@ export default function AdminAllBookingsPage() {
       const { data, error, count } = await query
       if (error) throw error
 
-      // Client-side sort to ensure pending appear first
-      const rows = ((data as unknown as BookingRow[]) || []).slice().sort((a, b) => {
-        const aPending = a.status === 'pending' ? 1 : 0
-        const bPending = b.status === 'pending' ? 1 : 0
-        if (aPending !== bPending) return bPending - aPending
-        // then by created_at based on sortOrder
-        const aTime = new Date(a.created_at).getTime()
-        const bTime = new Date(b.created_at).getTime()
-        return sortOrder === 'asc' ? aTime - bTime : bTime - aTime
-      })
+      // Client-side: hasTable filter and elapsed sorting
+      let processed = ((data as unknown as BookingRow[]) || []).slice()
 
-      setRows(rows)
+      if (hasTable !== 'all') {
+        processed = processed.filter((r: any) => {
+          const count = r?.booking_tables?.length || 0
+          return hasTable === 'yes' ? count > 0 : count === 0
+        })
+      }
+
+      if (sortField === 'elapsed') {
+        processed.sort((a, b) => {
+          const aElapsed = Math.max(0, Date.now() - new Date(a.created_at).getTime())
+          const bElapsed = Math.max(0, Date.now() - new Date(b.created_at).getTime())
+          return sortOrder === 'asc' ? aElapsed - bElapsed : bElapsed - aElapsed
+        })
+      }
+
+      setRows(processed)
       setTotal(count || 0)
     } catch (error) {
       console.error(error)
@@ -164,7 +261,7 @@ export default function AdminAllBookingsPage() {
   useEffect(() => {
     fetchBookings()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, sortOrder])
+  }, [page, pageSize, sortOrder, sortField, statusFilter, partyMin, partyMax, bookingType, hasTable])
 
   // Load restaurants for filter once
   useEffect(() => {
@@ -209,7 +306,7 @@ export default function AdminAllBookingsPage() {
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by user name or email"
+                placeholder="Search by name, email, phone, ID"
                 value={userQuery}
                 onChange={(e) => setUserQuery(e.target.value)}
                 className="pl-9"
@@ -241,13 +338,14 @@ export default function AdminAllBookingsPage() {
               <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
             </div>
             <div>
-              <Select value={sortOrder} onValueChange={(v: 'asc' | 'desc') => setSortOrder(v)}>
+              <Select value={sortField} onValueChange={(v: 'created_at' | 'booking_time' | 'elapsed') => setSortField(v)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Sort by" />
+                  <SelectValue placeholder="Sort field" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="desc">Most recent</SelectItem>
-                  <SelectItem value="asc">Oldest first</SelectItem>
+                  <SelectItem value="created_at">Created time</SelectItem>
+                  <SelectItem value="booking_time">Booking time</SelectItem>
+                  <SelectItem value="elapsed">Time elapsed</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -265,6 +363,67 @@ export default function AdminAllBookingsPage() {
             </div>
             <div className="flex sm:justify-end">
               <Button onClick={onApplyFilters} disabled={loading} className="w-full sm:w-auto">Apply</Button>
+            </div>
+          </div>
+
+          {/* Row 3: more filters */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+            <div>
+              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="confirmed">Confirmed</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled (all)</SelectItem>
+                  <SelectItem value="cancelled_by_user">Cancelled by user</SelectItem>
+                  <SelectItem value="cancelled_by_restaurant">Cancelled by restaurant</SelectItem>
+                  <SelectItem value="no_show">No show</SelectItem>
+                  <SelectItem value="dining">Dining</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input type="number" inputMode="numeric" placeholder="Min party" value={partyMin} onChange={(e) => setPartyMin(e.target.value)} />
+              <Input type="number" inputMode="numeric" placeholder="Max party" value={partyMax} onChange={(e) => setPartyMax(e.target.value)} />
+            </div>
+            <div>
+              <Select value={bookingType} onValueChange={(v: 'all' | 'registered' | 'guest') => setBookingType(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Booking type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All types</SelectItem>
+                  <SelectItem value="registered">Registered users</SelectItem>
+                  <SelectItem value="guest">Guests</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Select value={hasTable} onValueChange={(v: 'all' | 'yes' | 'no') => setHasTable(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Has table?" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Any table status</SelectItem>
+                  <SelectItem value="yes">With table</SelectItem>
+                  <SelectItem value="no">Without table</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Select value={sortOrder} onValueChange={(v: 'asc' | 'desc') => setSortOrder(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sort order" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="desc">High to low</SelectItem>
+                  <SelectItem value="asc">Low to high</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -286,7 +445,11 @@ export default function AdminAllBookingsPage() {
           ) : (
             <div className="space-y-3">
               {rows.map((row) => (
-                <BookingRowItem key={row.id} row={row} onUpdateStatus={updateStatus} />
+                <BookingRowItem key={row.id} row={row} onUpdateStatus={updateStatus} expanded={expandedIds.has(row.id)} onToggleExpand={() => setExpandedIds(prev => {
+                  const next = new Set(prev)
+                  if (next.has(row.id)) next.delete(row.id); else next.add(row.id)
+                  return next
+                })} />
               ))}
             </div>
           )}
@@ -310,7 +473,7 @@ export default function AdminAllBookingsPage() {
   )
 }
 
-function BookingRowItem({ row, onUpdateStatus }: { row: BookingRow; onUpdateStatus: (id: string, status: 'confirmed' | 'declined_by_restaurant') => void }) {
+function BookingRowItem({ row, onUpdateStatus, expanded, onToggleExpand }: { row: BookingRow; onUpdateStatus: (id: string, status: 'confirmed' | 'declined_by_restaurant') => void; expanded: boolean; onToggleExpand: () => void }) {
   const elapsed = useElapsed(row.created_at)
   const isPending = row.status === 'pending'
   const customerName = row.guest_name || row.profiles?.full_name || 'Guest'
@@ -432,6 +595,121 @@ function BookingRowItem({ row, onUpdateStatus }: { row: BookingRow; onUpdateStat
         <div className="text-[10px] md:text-xs text-muted-foreground pt-2 border-t">
           Created: {createdStr} • ID: {row.id.slice(0, 8)}
         </div>
+
+        {/* Expand structured details */}
+        <div className="pt-2">
+          <Button variant="outline" size="sm" onClick={onToggleExpand}>{expanded ? 'Hide details' : 'Show details'}</Button>
+        </div>
+        {expanded && (
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Customer */}
+            <div className="border rounded p-3">
+              <div className="text-xs font-semibold text-slate-600 mb-2">Customer</div>
+              <div className="space-y-1 text-sm">
+                <div className="flex items-center gap-2"><Users className="h-4 w-4 text-purple-600" /> <span>{customerName}</span></div>
+                {customerEmail && <div className="flex items-center gap-2"><Mail className="h-4 w-4 text-slate-500" /> <a className="text-blue-600 hover:underline" href={`mailto:${customerEmail}`}>{customerEmail}</a></div>}
+                {customerPhone && <div className="flex items-center gap-2"><Phone className="h-4 w-4 text-green-600" /> <a className="text-blue-600 hover:underline" href={`tel:${customerPhone}`}>{customerPhone}</a></div>}
+                {/* Dietary restrictions & allergies */}
+                {Array.isArray(row.profiles?.dietary_restrictions) && row.profiles?.dietary_restrictions?.length > 0 && (
+                  <div className="pt-1">
+                    <div className="text-[10px] uppercase text-slate-500">Dietary Restrictions</div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {row.profiles?.dietary_restrictions.map((d: string, i: number) => (
+                        <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">{d}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {Array.isArray(row.profiles?.allergies) && row.profiles?.allergies?.length > 0 && (
+                  <div className="pt-1">
+                    <div className="text-[10px] uppercase text-slate-500">Allergies</div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {row.profiles?.allergies.map((a: string, i: number) => (
+                        <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-red-50 text-red-800 border border-red-200">{a}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Booking */}
+            <div className="border rounded p-3">
+              <div className="text-xs font-semibold text-slate-600 mb-2">Booking</div>
+              <div className="space-y-1 text-sm">
+                <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-blue-600" /> <span>{timeStr}</span></div>
+                <div className="flex items-center gap-2"><Clock className="h-4 w-4 text-slate-600" /> <span>Created {createdStr}</span></div>
+                <div className="flex items-center gap-2"><Users className="h-4 w-4 text-purple-600" /> <span>Party {row.party_size}</span></div>
+                <div className="flex items-center gap-2"><Tag className="h-4 w-4 text-slate-600" /> <span>Status {row.status.replaceAll('_',' ')}</span></div>
+                {row.special_offers && <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-block">Offer applied</div>}
+                {/* Special requests */}
+                {row.special_requests && (
+                  <div className="pt-2 text-sm">
+                    <div className="text-[10px] uppercase text-slate-500">Special Requests</div>
+                    <div className="mt-1 italic text-slate-800">"{row.special_requests}"</div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Restaurant */}
+            <div className="border rounded p-3">
+              <div className="text-xs font-semibold text-slate-600 mb-2">Restaurant</div>
+              <div className="space-y-1 text-sm">
+                <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-red-600" /> <span>{restaurantName}</span></div>
+                {row.restaurants?.address && (
+                  <div className="text-xs text-slate-600">{row.restaurants.address}</div>
+                )}
+              </div>
+            </div>
+
+            {/* Tables */}
+            <div className="border rounded p-3">
+              <div className="text-xs font-semibold text-slate-600 mb-2">Tables</div>
+              {Array.isArray((row as any).booking_tables) && (row as any).booking_tables.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {(row as any).booking_tables.map((bt: any) => (
+                    <div key={bt.id} className="text-xs px-2 py-1 rounded bg-slate-100 border">
+                      Table {(bt.table?.table_number) ?? '—'}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-500">No table assigned</div>
+              )}
+            </div>
+
+            {/* Status history */}
+            <div className="border rounded p-3 md:col-span-2">
+              <div className="text-xs font-semibold text-slate-600 mb-2">Status History</div>
+              {Array.isArray((row as any).booking_status_history) && (row as any).booking_status_history.length > 0 ? (
+                <div className="space-y-2">
+                  {(row as any).booking_status_history
+                    .slice()
+                    .sort((a: any, b: any) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime())
+                    .map((h: any, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between text-xs">
+                        <div className="text-slate-700">
+                          {h.old_status?.replaceAll('_',' ') || '—'} → {h.new_status?.replaceAll('_',' ')}
+                        </div>
+                        <div className="text-slate-500">{new Date(h.changed_at).toLocaleString()}</div>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-500">No history</div>
+              )}
+            </div>
+
+            {/* Raw payload (collapsible secondary) */}
+            <div className="border rounded p-3 md:col-span-2">
+              <div className="text-xs font-semibold text-slate-600 mb-2">Raw Payload</div>
+              <pre className="p-3 bg-slate-50 rounded border overflow-auto text-xs max-h-64">
+{JSON.stringify(row, null, 2)}
+              </pre>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

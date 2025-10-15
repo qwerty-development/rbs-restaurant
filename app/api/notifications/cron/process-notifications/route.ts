@@ -5,12 +5,16 @@ import webpush from 'web-push'
 
 const CRON_SECRET = process.env.CRON_SECRET || 'rbs-restaurant-cron-2025-secure-key-x7n9m4p8q2L'
 
-// Configure web push
-webpush.setVapidDetails(
-  process.env.VAPID_EMAIL || 'mailto:admin@rbs-restaurant.com',
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-)
+// Configure web push only if VAPID keys are available
+if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    process.env.VAPID_EMAIL || 'mailto:admin@rbs-restaurant.com',
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  )
+} else {
+  console.warn('⚠️ Web Push not configured - missing VAPID keys')
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -71,6 +75,21 @@ export async function POST(request: NextRequest) {
         }
 
         if (notification.channel === 'push') {
+          // Check if VAPID keys are configured
+          if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+            console.warn('Push notifications disabled: VAPID keys not configured')
+            await supabase
+              .from('notification_outbox')
+              .update({
+                status: 'skipped',
+                sent_at: new Date().toISOString(),
+                error: 'VAPID keys not configured'
+              })
+              .eq('id', notification.id)
+            skipped++
+            continue
+          }
+
           // Get ALL subscriptions for this user (handle multiple devices)
           const { data: subscriptions, error: subError } = await supabase
             .from('push_subscriptions')
