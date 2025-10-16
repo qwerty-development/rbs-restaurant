@@ -51,27 +51,64 @@ export async function POST(request: NextRequest) {
     let targetUserIds: string[] = []
 
     if (body.target.type === 'all_users') {
-      const { data: allUsers, error } = await supabase
-        .from('profiles')
-        .select('id')
+      // Fetch ALL users in batches (Supabase default limit is 1000)
+      let allUsers: any[] = []
+      let from = 0
+      const batchSize = 1000
+      let hasMore = true
+
+      while (hasMore) {
+        const { data: batch, error } = await supabase
+          .from('profiles')
+          .select('id')
+          .range(from, from + batchSize - 1)
+        
+        if (error) throw error
+        
+        if (batch && batch.length > 0) {
+          allUsers = allUsers.concat(batch)
+          from += batchSize
+          hasMore = batch.length === batchSize
+        } else {
+          hasMore = false
+        }
+      }
       
-      if (error) throw error
-      targetUserIds = allUsers?.map((u: any) => u.id) || []
+      targetUserIds = allUsers.map((u: any) => u.id)
+      console.log(`[Admin Notifications] Targeting ${targetUserIds.length} users (all users)`)
 
     } else if (body.target.type === 'restaurant_users') {
       if (!body.target.restaurant_ids || body.target.restaurant_ids.length === 0) {
         return NextResponse.json({ error: 'Restaurant IDs are required for restaurant targeting' }, { status: 400 })
       }
 
-      // Get users who have bookings or interactions with selected restaurants
-      const { data: restaurantUsers, error } = await supabase
-        .from('bookings')
-        .select('user_id')
-        .in('restaurant_id', body.target.restaurant_ids)
-        .neq('user_id', null)
+      // Get ALL users who have bookings or interactions with selected restaurants
+      let restaurantUsers: any[] = []
+      let from = 0
+      const batchSize = 1000
+      let hasMore = true
+
+      while (hasMore) {
+        const { data: batch, error } = await supabase
+          .from('bookings')
+          .select('user_id')
+          .in('restaurant_id', body.target.restaurant_ids)
+          .neq('user_id', null)
+          .range(from, from + batchSize - 1)
+        
+        if (error) throw error
+        
+        if (batch && batch.length > 0) {
+          restaurantUsers = restaurantUsers.concat(batch)
+          from += batchSize
+          hasMore = batch.length === batchSize
+        } else {
+          hasMore = false
+        }
+      }
       
-      if (error) throw error
-      targetUserIds = [...new Set(restaurantUsers?.map((b: any) => b.user_id as string) || [])]
+      targetUserIds = [...new Set(restaurantUsers.map((b: any) => b.user_id as string))]
+      console.log(`[Admin Notifications] Targeting ${targetUserIds.length} users from ${body.target.restaurant_ids.length} restaurant(s)`)
 
     } else if (body.target.type === 'specific_users') {
       if (!body.target.user_ids || body.target.user_ids.length === 0) {
