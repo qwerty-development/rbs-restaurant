@@ -2,6 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { notificationService } from '@/lib/services/notification-service'
 
+const resolveNotificationBody = (notification: any): string => {
+  const candidates = [
+    notification?.body,
+    notification?.payload?.body,
+    notification?.payload?.message,
+    notification?.payload?.content,
+    notification?.payload?.text
+  ]
+
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value
+    }
+  }
+
+  return ''
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Verify cron secret for security
@@ -68,6 +86,9 @@ export async function POST(request: NextRequest) {
         let success = false
         let errorMessage = ''
 
+        const resolvedBody = resolveNotificationBody(notification)
+        const resolvedTitle = notification.title || notification.payload?.title || 'Notification'
+
         if (notification.channel === 'push') {
           // Handle push notifications
           try {
@@ -114,8 +135,8 @@ export async function POST(request: NextRequest) {
 
             // Send push notification
             const result = await notificationService.sendPushToSubscription(subscription, {
-              title: notification.title || 'Notification',
-              body: notification.body || '',
+              title: resolvedTitle,
+              body: resolvedBody || 'You have a new notification',
               type: notification.type,
               priority: notification.priority || 'normal',
               url: notification.payload?.url,
@@ -140,7 +161,8 @@ export async function POST(request: NextRequest) {
             .from('notification_outbox')
             .update({
               status: 'sent',
-              sent_at: new Date().toISOString()
+              sent_at: new Date().toISOString(),
+              body: resolvedBody || 'You have a new notification'
             })
             .eq('id', notification.id)
 

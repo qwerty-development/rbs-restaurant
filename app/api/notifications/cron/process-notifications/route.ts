@@ -16,6 +16,24 @@ if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   console.warn('⚠️ Web Push not configured - missing VAPID keys')
 }
 
+const resolveNotificationBody = (notification: any): string => {
+  const candidates = [
+    notification?.body,
+    notification?.payload?.body,
+    notification?.payload?.message,
+    notification?.payload?.content,
+    notification?.payload?.text
+  ]
+
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value
+    }
+  }
+
+  return ''
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Verify cron authentication
@@ -73,6 +91,9 @@ export async function POST(request: NextRequest) {
           failed++
           continue
         }
+
+        const resolvedBody = resolveNotificationBody(notification)
+        const resolvedTitle = notification.title || notification.payload?.title || 'New Notification'
 
         if (notification.channel === 'push') {
           // Check if VAPID keys are configured
@@ -132,8 +153,8 @@ export async function POST(request: NextRequest) {
           for (const subscription of subscriptions) {
             try {
               const payload = {
-                title: notification.title || 'New Notification',
-                body: notification.body || 'You have a new notification',
+                title: resolvedTitle,
+                body: resolvedBody || 'You have a new notification',
                 icon: '/icon-192x192.png',
                 badge: '/icon-192x192.png',
                 data: {
@@ -199,7 +220,8 @@ export async function POST(request: NextRequest) {
               .update({
                 status: 'sent',
                 sent_at: new Date().toISOString(),
-                attempts: (notification.attempts || 0) + 1
+                attempts: (notification.attempts || 0) + 1,
+                body: resolvedBody || 'You have a new notification'
               })
               .eq('id', notification.id)
             processed++
@@ -222,8 +244,8 @@ export async function POST(request: NextRequest) {
             .from('notifications')
             .insert({
               user_id: notification.user_id,
-              title: notification.title,
-              message: notification.body,
+              title: resolvedTitle,
+              message: resolvedBody || 'You have a new notification',
               type: notification.type,
               data: notification.payload,
               restaurant_id: restaurantId,
@@ -236,7 +258,8 @@ export async function POST(request: NextRequest) {
               .from('notification_outbox')
               .update({
                 status: 'sent',
-                sent_at: new Date().toISOString()
+                sent_at: new Date().toISOString(),
+                body: resolvedBody || 'You have a new notification'
               })
               .eq('id', notification.id)
             processed++

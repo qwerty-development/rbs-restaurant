@@ -89,32 +89,67 @@ export async function POST(request: NextRequest) {
       ? new Date(body.scheduling.send_at).toISOString()
       : new Date().toISOString()
 
-    // Use database function to send notifications
-    const { data: result, error } = await supabase
-      .rpc('admin_send_notification', {
-        p_user_ids: targetUserIds,
-        p_title: body.title,
-        p_message: body.body,
-        p_channels: body.channels,
-        p_priority: body.priority,
-        p_type: 'admin_message',
-        p_scheduled_for: scheduledFor
-      })
-
-    if (error) {
-      console.error('Database function error:', error)
-      throw error
+    // Get first restaurant ID for context (needed for push subscriptions)
+    let restaurantId: string | null = null
+    if (body.target.type === 'restaurant_users' && body.target.restaurant_ids && body.target.restaurant_ids.length > 0) {
+      restaurantId = body.target.restaurant_ids[0]
+    } else if (targetUserIds.length > 0) {
+      // Try to get restaurant from first user's staff record
+      const { data: staffRecord } = await supabase
+        .from('restaurant_staff')
+        .select('restaurant_id')
+        .eq('user_id', targetUserIds[0])
+        .eq('is_active', true)
+        .limit(1)
+        .single()
+      
+      restaurantId = staffRecord?.restaurant_id || null
     }
 
-    if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 400 })
+    // Create notification outbox records directly
+    const outboxRecords = []
+    
+    for (const userId of targetUserIds) {
+      for (const channel of body.channels) {
+        outboxRecords.push({
+          user_id: userId,
+          channel: channel,
+          title: body.title,
+          body: body.body, // CRITICAL: Explicitly set body field
+          payload: {
+            restaurant_id: restaurantId,
+            title: body.title,
+            body: body.body,
+            message: body.body, // Also include as message for compatibility
+            type: 'admin_message',
+            sent_by_admin: true
+          },
+          status: 'queued',
+          priority: body.priority,
+          type: 'general', // Use 'general' type which is allowed by the check constraint
+          scheduled_for: scheduledFor,
+          attempts: 0,
+          retry_count: 0
+        })
+      }
+    }
+
+    // Insert all records
+    const { data: insertedRecords, error: insertError } = await supabase
+      .from('notification_outbox')
+      .insert(outboxRecords)
+      .select('id')
+
+    if (insertError) {
+      console.error('Failed to create notification records:', insertError)
+      throw insertError
     }
 
     return NextResponse.json({ 
       success: true, 
-      recipients: result.users_targeted,
-      notifications: result.notifications_created,
-      queue_items: result.queue_items_created,
+      recipients: targetUserIds.length,
+      notifications: 0, // Not creating notification records, only outbox
+      queue_items: insertedRecords?.length || 0,
       scheduled: !!body.scheduling?.send_at
     })
 
