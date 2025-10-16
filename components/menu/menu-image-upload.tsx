@@ -15,9 +15,15 @@ import {
   Image as ImageIcon, 
   Loader2,
   Link as LinkIcon,
-  AlertCircle
+  AlertCircle,
+  Zap
 } from "lucide-react"
 import Image from "next/image"
+import {
+  compressAndConvertImage,
+  formatFileSize,
+  type CompressionResult
+} from "@/lib/utils/image-compression"
 
 interface MenuImageUploadProps {
   restaurantId: string
@@ -32,6 +38,8 @@ interface UploadProgress {
   progress: number
   url?: string
   error?: string
+  status?: 'compressing' | 'uploading' | 'complete'
+  compressionResult?: CompressionResult
 }
 
 export function MenuImageUpload({
@@ -49,12 +57,12 @@ export function MenuImageUpload({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
 
-  // Generate unique filename for menu images
+  // Generate unique filename for menu images (always WebP)
   const generateFileName = (file: File): string => {
     const timestamp = Date.now()
     const random = Math.random().toString(36).substring(7)
-    const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-    return `${restaurantId}/menu_${timestamp}_${random}.${extension}`
+    // Always use .webp extension since we're converting to WebP
+    return `${restaurantId}/menu_${timestamp}_${random}.webp`
   }
 
   // Upload file to Supabase menu_images bucket
@@ -130,7 +138,7 @@ export function MenuImageUpload({
     return null
   }
 
-  // Handle file upload
+  // Handle file upload with compression
   const handleFileUpload = useCallback(async (files: FileList) => {
     if (files.length === 0 || disabled) return
 
@@ -143,14 +151,44 @@ export function MenuImageUpload({
     }
 
     try {
-      setUpload({ progress: 0 })
-      const fileName = generateFileName(file)
-      const url = await uploadToSupabase(file, fileName)
+      // Step 1: Compress and convert to WebP
+      setUpload({ progress: 10, status: 'compressing' })
+      
+      const compressionResult = await compressAndConvertImage(file, {
+        maxWidth: 1920,
+        maxHeight: 1920,
+        quality: 0.85,
+        format: 'webp',
+        preserveAspectRatio: true
+      })
+
+      // Step 2: Upload compressed image
+      setUpload({ 
+        progress: 30, 
+        status: 'uploading',
+        compressionResult 
+      })
+      
+      const fileName = generateFileName(compressionResult.file)
+      const url = await uploadToSupabase(compressionResult.file, fileName)
+      
+      setUpload({
+        progress: 100,
+        status: 'complete',
+        url,
+        compressionResult
+      })
       
       onChange?.(url)
-      toast.success('Image uploaded successfully')
+      
+      // Show compression stats
+      toast.success(
+        `Image uploaded! Reduced by ${compressionResult.reductionPercentage.toFixed(1)}% (${formatFileSize(compressionResult.originalSize)} → ${formatFileSize(compressionResult.compressedSize)})`,
+        { duration: 4000 }
+      )
     } catch (error: any) {
       console.error('Upload error:', error)
+      setUpload({ progress: 0, error: error.message })
       toast.error('Failed to upload image')
     }
   }, [disabled, onChange])
@@ -239,6 +277,12 @@ export function MenuImageUpload({
                   <p className="text-xs text-muted-foreground">
                     PNG, JPG, WEBP up to {maxFileSize}MB
                   </p>
+                  <div className="flex items-center justify-center gap-1 mt-2">
+                    <Zap className="h-3 w-3 text-green-600" />
+                    <p className="text-xs text-green-600 font-medium">
+                      Auto-compression & WebP conversion enabled
+                    </p>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -264,16 +308,31 @@ export function MenuImageUpload({
                       <span className="text-sm">{upload.error}</span>
                     </div>
                   ) : upload.url ? (
-                    <div className="flex items-center space-x-2 text-green-600">
-                      <span className="text-sm">Upload complete!</span>
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2 text-green-600">
+                        <Zap className="h-4 w-4" />
+                        <span className="text-sm font-medium">✓ Upload complete!</span>
+                      </div>
+                      {upload.compressionResult && (
+                        <p className="text-xs text-muted-foreground">
+                          Saved {upload.compressionResult.reductionPercentage.toFixed(1)}% • {formatFileSize(upload.compressionResult.originalSize)} → {formatFileSize(upload.compressionResult.compressedSize)}
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-2">
                       <div className="flex items-center space-x-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span className="text-sm">Uploading... {upload.progress}%</span>
+                        <span className="text-sm">
+                          {upload.status === 'compressing' ? '🔄 Compressing...' : '📤 Uploading...'} {upload.progress}%
+                        </span>
                       </div>
                       <Progress value={upload.progress} className="w-full" />
+                      {upload.compressionResult && (
+                        <p className="text-xs text-muted-foreground">
+                          Compressed: {formatFileSize(upload.compressionResult.originalSize)} → {formatFileSize(upload.compressionResult.compressedSize)}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

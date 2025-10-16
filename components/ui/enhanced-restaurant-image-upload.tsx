@@ -8,10 +8,10 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "react-hot-toast"
-import { 
-  Upload, 
-  X, 
-  Image as ImageIcon, 
+import {
+  Upload,
+  X,
+  Image as ImageIcon,
   Star,
   Loader2,
   Camera,
@@ -21,9 +21,15 @@ import {
   RotateCcw,
   Crown,
   Grid3X3,
-  ArrowLeftRight
+  ArrowLeftRight,
+  Zap
 } from "lucide-react"
 import Image from "next/image"
+import {
+  compressAndConvertImage,
+  formatFileSize,
+  type CompressionResult
+} from "@/lib/utils/image-compression"
 
 interface RestaurantImageUploadProps {
   restaurantId: string
@@ -41,6 +47,8 @@ interface UploadProgress {
   progress: number
   url?: string
   error?: string
+  compressionResult?: CompressionResult
+  status?: 'compressing' | 'uploading' | 'complete'
 }
 
 interface ImageItem {
@@ -114,9 +122,9 @@ export function EnhancedRestaurantImageUpload({
   const generateFileName = (file: File, isMainImage: boolean = false): string => {
     const timestamp = Date.now()
     const random = Math.random().toString(36).substring(7)
-    const extension = file.name.split('.').pop()
+    // Always use .webp extension since we're converting to WebP
     const prefix = isMainImage ? 'main' : 'gallery'
-    return `${restaurantId}/${prefix}_${timestamp}_${random}.${extension}`
+    return `${restaurantId}/${prefix}_${timestamp}_${random}.webp`
   }
 
   const uploadToSupabase = async (
@@ -207,7 +215,7 @@ export function EnhancedRestaurantImageUpload({
 
   const handleFiles = useCallback(async (files: FileList) => {
     const fileArray = Array.from(files)
-    
+
     if (allImages.length + fileArray.length > maxImages) {
       toast.error(`Maximum ${maxImages} images allowed`)
       return
@@ -226,34 +234,79 @@ export function EnhancedRestaurantImageUpload({
     const newUploads: UploadProgress[] = fileArray.map(file => ({
       id: Math.random().toString(36),
       file,
-      progress: 0
+      progress: 0,
+      status: 'compressing'
     }))
 
     setUploads(prev => [...prev, ...newUploads])
 
-    // Process uploads
+    // Process uploads with compression
     const uploadedImages: ImageItem[] = []
-    
+
     for (let i = 0; i < fileArray.length; i++) {
       const file = fileArray[i]
       const upload = newUploads[i]
-      
+
       try {
-        const fileName = generateFileName(file, false) // All uploads go to gallery first
+        // Step 1: Compress and convert to WebP
+        setUploads(prev =>
+          prev.map(u =>
+            u.id === upload.id
+              ? { ...u, status: 'compressing', progress: 10 }
+              : u
+          )
+        )
+
+        const compressionResult = await compressAndConvertImage(file, {
+          maxWidth: 1920,
+          maxHeight: 1920,
+          quality: 0.85,
+          format: 'webp',
+          preserveAspectRatio: true
+        })
+
+        // Update progress with compression results
+        setUploads(prev =>
+          prev.map(u =>
+            u.id === upload.id
+              ? {
+                  ...u,
+                  status: 'uploading',
+                  progress: 30,
+                  compressionResult
+                }
+              : u
+          )
+        )
+
+        // Step 2: Upload compressed image
+        const fileName = generateFileName(compressionResult.file, false)
         const bucket = 'images'
-        
-        const url = await uploadToSupabase(file, fileName, bucket, upload.id)
-        
+
+        const url = await uploadToSupabase(compressionResult.file, fileName, bucket, upload.id)
+
         const newImage: ImageItem = {
           id: `uploaded-${Date.now()}-${i}`,
           url: url,
           isMain: false
         }
-        
+
         uploadedImages.push(newImage)
-        toast.success(`${file.name} uploaded successfully!`)
+
+        // Show compression stats
+        toast.success(
+          `${file.name} uploaded! Reduced by ${compressionResult.reductionPercentage.toFixed(1)}% (${formatFileSize(compressionResult.originalSize)} → ${formatFileSize(compressionResult.compressedSize)})`,
+          { duration: 4000 }
+        )
       } catch (error: any) {
-        toast.error(`Failed to upload ${file.name}: ${error.message}`)
+        setUploads(prev =>
+          prev.map(u =>
+            u.id === upload.id
+              ? { ...u, error: error.message }
+              : u
+          )
+        )
+        toast.error(`Failed to process ${file.name}: ${error.message}`)
       }
     }
 
@@ -267,7 +320,7 @@ export function EnhancedRestaurantImageUpload({
     // Clear completed uploads after delay
     setTimeout(() => {
       setUploads(prev => prev.filter(u => u.error || !u.url))
-    }, 2000)
+    }, 3000)
   }, [allImages, maxImages, validateFile, generateFileName, uploadToSupabase, updateImageArrays])
 
   const setAsMainImage = async (imageId: string) => {
@@ -409,6 +462,12 @@ export function EnhancedRestaurantImageUpload({
             <p className="text-xs text-muted-foreground mt-2">
               JPEG, PNG, WebP • Max {maxFileSize}MB each • {totalImages}/{maxImages} used
             </p>
+            <div className="flex items-center justify-center gap-1 mt-2">
+              <Zap className="h-3 w-3 text-green-600" />
+              <p className="text-xs text-green-600 font-medium">
+                Auto-compression & WebP conversion enabled
+              </p>
+            </div>
           </div>
           
           <Button
@@ -445,11 +504,26 @@ export function EnhancedRestaurantImageUpload({
                       {upload.error}
                     </p>
                   ) : upload.url ? (
-                    <p className="text-xs text-green-600">✓ Upload complete</p>
+                    <div className="space-y-1">
+                      <p className="text-xs text-green-600 flex items-center gap-1">
+                        <Zap className="h-3 w-3" />
+                        ✓ Complete - Saved {upload.compressionResult?.reductionPercentage.toFixed(0)}%
+                      </p>
+                      {upload.compressionResult && (
+                        <p className="text-xs text-muted-foreground">
+                          {formatFileSize(upload.compressionResult.originalSize)} → {formatFileSize(upload.compressionResult.compressedSize)}
+                        </p>
+                      )}
+                    </div>
                   ) : (
                     <div className="space-y-1">
-                      <Progress value={upload.progress} className="h-1" />
-                      <p className="text-xs text-muted-foreground">{upload.progress}%</p>
+                      <div className="flex items-center gap-2">
+                        <Progress value={upload.progress} className="h-1 flex-1" />
+                        <p className="text-xs text-muted-foreground">{upload.progress}%</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {upload.status === 'compressing' ? '🔄 Compressing...' : '📤 Uploading...'}
+                      </p>
                     </div>
                   )}
                 </div>
