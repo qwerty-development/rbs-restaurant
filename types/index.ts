@@ -127,7 +127,11 @@ export interface Restaurant {
     declined_at: string | null
     declined_by_staff: string | null
     declined_reason: string | null
-    
+
+    // Event booking fields
+    event_occurrence_id: string | null
+    is_event_booking: boolean
+
     // Relations
     user?: {
       id: string
@@ -157,6 +161,20 @@ export interface Restaurant {
       title: string
       description?: string
       discount_percentage: number
+    } | null
+    event_occurrence?: {
+      id: string
+      event_id: string
+      occurrence_date: string
+      start_time: string | null
+      end_time: string | null
+      event?: {
+        id: string
+        title: string
+        description: string | null
+        event_type: string | null
+        image_url: string | null
+      }
     } | null
   }
   

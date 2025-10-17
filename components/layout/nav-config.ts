@@ -18,6 +18,7 @@ import {
   Clock,
   Upload,
   Grid,
+  PartyPopper,
 } from 'lucide-react'
 
 export interface NavigationItem {
@@ -37,6 +38,7 @@ export const NAV_ITEMS: NavigationItem[] = [
   { title: 'Menu', href: '/menu', icon: Utensils, permission: 'menu.view', tierFeature: 'menu_management' },
   { title: 'Sections', href: '/sections', icon: Grid, permission: null, tierFeature: 'section_management' },
   { title: 'Tables', href: '/tables', icon: TableIcon, permission: 'tables.view', tierFeature: 'table_management' },
+  { title: 'Events', href: '/events', icon: PartyPopper, permission: null, tierFeature: 'booking_management' },
   { title: 'Analytics', href: '/analytics', icon: BarChart3, permission: 'analytics.view', tierFeature: 'advanced_analytics' },
   { title: 'Waiting List', href: '/waitlist', icon: Clock, permission: 'bookings.view', tierFeature: 'waitlist' },
   { title: 'Reviews', href: '/reviews', icon: Star, permission: 'reviews.view', tierFeature: 'review_management' },
