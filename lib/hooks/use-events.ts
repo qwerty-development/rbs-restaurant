@@ -407,6 +407,60 @@ export function useCreateEventOccurrence() {
 }
 
 /**
+ * Create multiple event occurrences at once (bulk creation)
+ */
+export function useCreateEventOccurrences() {
+  const queryClient = useQueryClient()
+  const supabase = createClient()
+
+  return useMutation({
+    mutationFn: async (occurrencesData: CreateEventOccurrenceInput[]) => {
+      if (!occurrencesData.length) {
+        throw new Error('No dates provided')
+      }
+
+      // Limit check for safety (max 50 to prevent abuse)
+      if (occurrencesData.length > 50) {
+        throw new Error('Cannot create more than 50 occurrences at once')
+      }
+
+      const occurrencesToCreate = occurrencesData.map(occ => ({
+        ...occ,
+        status: 'scheduled',
+        current_bookings: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }))
+
+      const { data, error } = await supabase
+        .from('event_occurrences')
+        .insert(occurrencesToCreate)
+        .select()
+
+      if (error) {
+        console.error('Error creating event occurrences:', error)
+        throw new Error('Failed to create event occurrences')
+      }
+
+      return data as EventOccurrence[]
+    },
+    onSuccess: (data) => {
+      if (data.length > 0) {
+        const eventId = data[0].event_id
+        queryClient.invalidateQueries({ queryKey: ['event-occurrences', eventId] })
+        queryClient.invalidateQueries({ queryKey: ['event', eventId] })
+        queryClient.invalidateQueries({ queryKey: ['upcoming-event-occurrences'] })
+        toast.success(`${data.length} event date${data.length > 1 ? 's' : ''} added successfully`)
+      }
+    },
+    onError: (error) => {
+      console.error('Error creating event occurrences:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to add event dates')
+    }
+  })
+}
+
+/**
  * Update an event occurrence
  */
 export function useUpdateEventOccurrence() {

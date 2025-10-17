@@ -2,10 +2,11 @@
 
 import { useState } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { useEvent, useUpdateEvent, useCreateEventOccurrence, useDeleteEvent, useEventBookings } from "@/lib/hooks/use-events"
+import { useEvent, useUpdateEvent, useCreateEventOccurrences, useDeleteEvent, useEventBookings } from "@/lib/hooks/use-events"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import {
   Dialog,
   DialogContent,
@@ -46,6 +47,7 @@ import {
   Gift,
   User,
   Filter,
+  X,
 } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "sonner"
@@ -60,21 +62,23 @@ export default function EventDetailsPage() {
   const { data: event, isLoading } = useEvent(eventId)
   const { data: bookings = [], isLoading: bookingsLoading } = useEventBookings(eventId)
   const updateEvent = useUpdateEvent()
-  const createOccurrence = useCreateEventOccurrence()
+  const createOccurrences = useCreateEventOccurrences()
   const deleteEvent = useDeleteEvent()
 
   const [showAddOccurrence, setShowAddOccurrence] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [bookingStatusFilter, setBookingStatusFilter] = useState<string>("all")
   const [expandedOccurrences, setExpandedOccurrences] = useState<Set<string>>(new Set())
-  const [occurrenceForm, setOccurrenceForm] = useState<CreateEventOccurrenceInput>({
-    event_id: eventId,
-    occurrence_date: "",
+  const [selectedDates, setSelectedDates] = useState<Date[]>([])
+  const [occurrenceForm, setOccurrenceForm] = useState({
     start_time: "",
     end_time: "",
-    max_capacity: null,
+    max_capacity: null as number | null,
     special_notes: "",
   })
+
+  // Limit for maximum dates that can be selected at once
+  const MAX_DATES_SELECTION = 30
 
   const handleToggleActive = async () => {
     if (!event) return
@@ -91,25 +95,52 @@ export default function EventDetailsPage() {
   }
 
   const handleAddOccurrence = async () => {
-    if (!occurrenceForm.occurrence_date) {
-      toast.error("Please select a date")
+    if (selectedDates.length === 0) {
+      toast.error("Please select at least one date")
       return
     }
 
     try {
-      await createOccurrence.mutateAsync(occurrenceForm)
-      setShowAddOccurrence(false)
-      setOccurrenceForm({
+      // Create occurrences for all selected dates
+      const occurrencesToCreate: CreateEventOccurrenceInput[] = selectedDates.map(date => ({
         event_id: eventId,
-        occurrence_date: "",
+        occurrence_date: format(date, 'yyyy-MM-dd'),
+        start_time: occurrenceForm.start_time || null,
+        end_time: occurrenceForm.end_time || null,
+        max_capacity: occurrenceForm.max_capacity,
+        special_notes: occurrenceForm.special_notes || null,
+      }))
+
+      await createOccurrences.mutateAsync(occurrencesToCreate)
+      setShowAddOccurrence(false)
+      setSelectedDates([])
+      setOccurrenceForm({
         start_time: "",
         end_time: "",
         max_capacity: null,
         special_notes: "",
       })
     } catch (error) {
-      console.error("Error creating occurrence:", error)
+      console.error("Error creating occurrences:", error)
     }
+  }
+
+  const handleRemoveDate = (dateToRemove: Date) => {
+    setSelectedDates(dates => dates.filter(d => d.getTime() !== dateToRemove.getTime()))
+  }
+
+  const handleDateSelect = (dates: Date[] | undefined) => {
+    if (!dates) {
+      setSelectedDates([])
+      return
+    }
+
+    if (dates.length > MAX_DATES_SELECTION) {
+      toast.error(`You can only select up to ${MAX_DATES_SELECTION} dates at once`)
+      return
+    }
+
+    setSelectedDates(dates)
   }
 
   const handleDeleteEvent = async () => {
@@ -546,90 +577,145 @@ export default function EventDetailsPage() {
 
       {/* Add Occurrence Dialog */}
       <Dialog open={showAddOccurrence} onOpenChange={setShowAddOccurrence}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Event Date</DialogTitle>
+            <DialogTitle>Add Event Dates</DialogTitle>
             <DialogDescription>
-              Schedule a new occurrence for this event
+              Select up to {MAX_DATES_SELECTION} dates to create event occurrences. Click dates on the calendar to add or remove them.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="occurrence_date">Date *</Label>
-              <Input
-                id="occurrence_date"
-                type="date"
-                value={occurrenceForm.occurrence_date}
-                onChange={(e) =>
-                  setOccurrenceForm(prev => ({ ...prev, occurrence_date: e.target.value }))
-                }
-                min={new Date().toISOString().split('T')[0]}
-                required
-                className="mt-1.5"
-              />
+          <div className="space-y-6">
+            {/* Calendar for date selection */}
+            <div className="flex flex-col">
+              <div className="flex items-center justify-between mb-3">
+                <Label className="text-base font-semibold">Select Dates</Label>
+                <span className="text-xs text-muted-foreground">
+                  {selectedDates.length}/{MAX_DATES_SELECTION} selected
+                </span>
+              </div>
+              <div className="flex justify-center">
+                <CalendarComponent
+                  mode="multiple"
+                  selected={selectedDates}
+                  onSelect={handleDateSelect}
+                  disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                  className="rounded-md border"
+                  numberOfMonths={1}
+                />
+              </div>
+              {selectedDates.length >= MAX_DATES_SELECTION && (
+                <p className="text-xs text-amber-600 dark:text-amber-500 mt-2 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  Maximum limit reached. Remove dates to select different ones.
+                </p>
+              )}
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            {/* Selected dates display */}
+            {selectedDates.length > 0 && (
               <div>
-                <Label htmlFor="start_time">Start Time</Label>
-                <Input
-                  id="start_time"
-                  type="time"
-                  value={occurrenceForm.start_time || ""}
-                  onChange={(e) =>
-                    setOccurrenceForm(prev => ({ ...prev, start_time: e.target.value }))
-                  }
-                  className="mt-1.5"
-                />
+                <Label className="mb-2 block">
+                  Selected Dates ({selectedDates.length})
+                </Label>
+                <div className="flex flex-wrap gap-2 p-3 bg-muted rounded-md max-h-24 overflow-y-auto">
+                  {selectedDates
+                    .sort((a, b) => a.getTime() - b.getTime())
+                    .map((date, index) => (
+                      <Badge
+                        key={index}
+                        variant="secondary"
+                        className="flex items-center gap-1 pr-1 text-xs"
+                      >
+                        <Calendar className="h-3 w-3" />
+                        {format(date, 'MMM d')}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDate(date)}
+                          className="ml-1 hover:bg-background/50 rounded-full p-0.5"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Time and capacity settings (applied to all selected dates) */}
+            <div className="space-y-4 border-t pt-4">
+              <Label className="text-sm font-semibold text-muted-foreground">
+                Settings for all dates
+              </Label>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="start_time" className="text-sm">Start Time</Label>
+                  <Input
+                    id="start_time"
+                    type="time"
+                    value={occurrenceForm.start_time || ""}
+                    onChange={(e) =>
+                      setOccurrenceForm(prev => ({ ...prev, start_time: e.target.value }))
+                    }
+                    className="mt-1.5"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="end_time" className="text-sm">End Time</Label>
+                  <Input
+                    id="end_time"
+                    type="time"
+                    value={occurrenceForm.end_time || ""}
+                    onChange={(e) =>
+                      setOccurrenceForm(prev => ({ ...prev, end_time: e.target.value }))
+                    }
+                    className="mt-1.5"
+                  />
+                </div>
               </div>
 
               <div>
-                <Label htmlFor="end_time">End Time</Label>
+                <Label htmlFor="max_capacity" className="text-sm">Maximum Capacity</Label>
                 <Input
-                  id="end_time"
-                  type="time"
-                  value={occurrenceForm.end_time || ""}
+                  id="max_capacity"
+                  type="number"
+                  min="1"
+                  value={occurrenceForm.max_capacity || ""}
                   onChange={(e) =>
-                    setOccurrenceForm(prev => ({ ...prev, end_time: e.target.value }))
+                    setOccurrenceForm(prev => ({
+                      ...prev,
+                      max_capacity: e.target.value ? parseInt(e.target.value) : null
+                    }))
                   }
+                  placeholder="Leave empty for unlimited"
                   className="mt-1.5"
                 />
               </div>
-            </div>
-
-            <div>
-              <Label htmlFor="max_capacity">Maximum Capacity</Label>
-              <Input
-                id="max_capacity"
-                type="number"
-                min="1"
-                value={occurrenceForm.max_capacity || ""}
-                onChange={(e) =>
-                  setOccurrenceForm(prev => ({
-                    ...prev,
-                    max_capacity: e.target.value ? parseInt(e.target.value) : null
-                  }))
-                }
-                placeholder="Leave empty for unlimited"
-                className="mt-1.5"
-              />
             </div>
           </div>
 
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setShowAddOccurrence(false)}
-              disabled={createOccurrence.isPending}
+              onClick={() => {
+                setShowAddOccurrence(false)
+                setSelectedDates([])
+              }}
+              disabled={createOccurrences.isPending}
             >
               Cancel
             </Button>
             <Button
               onClick={handleAddOccurrence}
-              disabled={createOccurrence.isPending}
+              disabled={createOccurrences.isPending || selectedDates.length === 0}
             >
-              {createOccurrence.isPending ? "Adding..." : "Add Date"}
+              {createOccurrences.isPending 
+                ? "Adding..." 
+                : selectedDates.length > 0 
+                  ? `Add ${selectedDates.length} Date${selectedDates.length !== 1 ? 's' : ''}` 
+                  : "Select Dates"}
             </Button>
           </DialogFooter>
         </DialogContent>
