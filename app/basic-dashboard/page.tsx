@@ -1653,29 +1653,16 @@ export default function BasicDashboardPage() {
 
                         {booking.status === "confirmed" && (
                           <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                handleStatusChange(booking, "completed")
-                              }
-                              disabled={updateBookingMutation.isPending}
-                              className="h-8 tablet:h-10 px-4 text-sm tablet:text-base min-w-[90px]"
-                            >
-                              <CheckCircle className="h-4 w-4 tablet:h-5 tablet:w-5 mr-2" />
-                              Complete
-                            </Button>
-
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   disabled={updateBookingMutation.isPending}
-                                  className="h-8 tablet:h-10 px-4 text-sm tablet:text-base min-w-[90px]"
+                                  className="h-8 tablet:h-10 px-4 text-sm tablet:text-base min-w-[90px] ml-auto"
                                 >
                                   <MoreHorizontal className="h-4 w-4 tablet:h-5 tablet:w-5 mr-2" />
-                                  More
+                                  Manage Booking
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
@@ -1694,6 +1681,19 @@ export default function BasicDashboardPage() {
                                 >
                                   <XCircle className="h-4 w-4 mr-2" />
                                   Cancel Booking
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    const ok = confirm(
+                                      "You should only mark 'Cancelled by Customer' if the customer called the restaurant and cancelled (inside cancellation window)."
+                                    )
+                                    if (!ok) return
+                                    handleStatusChange(booking, "cancelled_by_user")
+                                  }}
+                                  className="text-red-600"
+                                >
+                                  <XCircle className="h-4 w-4 mr-2" />
+                                  Cancelled by Customer
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -1867,28 +1867,16 @@ export default function BasicDashboardPage() {
 
                       {booking.status === "confirmed" && (
                         <div className="flex gap-3">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              handleStatusChange(booking, "completed")
-                            }
-                            disabled={updateBookingMutation.isPending}
-                            className="flex-1 h-10"
-                          >
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Complete
-                          </Button>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
                                 size="sm"
                                 variant="outline"
                                 disabled={updateBookingMutation.isPending}
-                                className="h-10 px-4"
+                                className="h-10 px-4 ml-auto"
                               >
                                 <MoreHorizontal className="h-4 w-4 mr-2" />
-                                More
+                                Manage Booking
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
@@ -1907,6 +1895,19 @@ export default function BasicDashboardPage() {
                               >
                                 <XCircle className="h-4 w-4 mr-2" />
                                 Cancel Booking
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  const ok = confirm(
+                                    "You should only mark 'Cancelled by Customer' if the customer called the restaurant and cancelled (inside cancellation window)."
+                                  )
+                                  if (!ok) return
+                                  handleStatusChange(booking, "cancelled_by_user")
+                                }}
+                                className="text-red-600"
+                              >
+                                <XCircle className="h-4 w-4 mr-2" />
+                                Cancelled by Customer
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
