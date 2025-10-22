@@ -74,6 +74,7 @@ import {
   Star,
   MoreHorizontal,
   Gift,
+  PartyPopper,
 } from "lucide-react";
 
 export default function BasicDashboardPage() {
@@ -84,6 +85,7 @@ export default function BasicDashboardPage() {
   >("today");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [bookingTypeFilter, setBookingTypeFilter] = useState<string>("all"); // New: Filter for event bookings
   const [userId, setUserId] = useState<string>("");
   const [actionDialog, setActionDialog] = useState<{
     isOpen: boolean;
@@ -265,6 +267,8 @@ export default function BasicDashboardPage() {
           applied_offer_id,
           confirmation_code,
           table_preferences,
+          is_event_booking,
+          event_occurrence_id,
           special_offers!bookings_applied_offer_id_fkey (
             id,
             title,
@@ -277,6 +281,22 @@ export default function BasicDashboardPage() {
             phone_number,
             email,
             user_rating
+          ),
+          event_occurrences!bookings_event_occurrence_id_fkey (
+            id,
+            occurrence_date,
+            start_time,
+            end_time,
+            status,
+            max_capacity,
+            current_bookings,
+            event:restaurant_events!event_occurrences_event_id_fkey (
+              id,
+              title,
+              description,
+              event_type,
+              image_url
+            )
           )
         `
         )
@@ -316,6 +336,8 @@ export default function BasicDashboardPage() {
             applied_offer_id,
             confirmation_code,
             table_preferences,
+            is_event_booking,
+            event_occurrence_id,
             special_offers!bookings_applied_offer_id_fkey (
               id,
               title,
@@ -328,6 +350,22 @@ export default function BasicDashboardPage() {
               phone_number,
               email,
               user_rating
+            ),
+            event_occurrences!bookings_event_occurrence_id_fkey (
+              id,
+              occurrence_date,
+              start_time,
+              end_time,
+              status,
+              max_capacity,
+              current_bookings,
+              event:restaurant_events!event_occurrences_event_id_fkey (
+                id,
+                title,
+                description,
+                event_type,
+                image_url
+              )
             )
           `
           )
@@ -374,6 +412,8 @@ export default function BasicDashboardPage() {
               applied_offer_id,
               confirmation_code,
               table_preferences,
+              is_event_booking,
+              event_occurrence_id,
               special_offers!bookings_applied_offer_id_fkey (
                 id,
                 title,
@@ -386,6 +426,22 @@ export default function BasicDashboardPage() {
                 phone_number,
                 email,
                 user_rating
+              ),
+              event_occurrences!bookings_event_occurrence_id_fkey (
+                id,
+                occurrence_date,
+                start_time,
+                end_time,
+                status,
+                max_capacity,
+                current_bookings,
+                event:restaurant_events!event_occurrences_event_id_fkey (
+                  id,
+                  title,
+                  description,
+                  event_type,
+                  image_url
+                )
               )
             `
             )
@@ -741,7 +797,7 @@ export default function BasicDashboardPage() {
 
         const { data, error } = await supabase
           .from("bookings")
-          .select("status, created_at, booking_time")
+          .select("status, created_at, booking_time, is_event_booking")
           .eq("restaurant_id", restaurantId)
           .gte("booking_time", today.toISOString());
 
@@ -755,7 +811,7 @@ export default function BasicDashboardPage() {
         for (const date of effectiveDates) {
           const { data, error } = await supabase
             .from("bookings")
-            .select("status, created_at, booking_time")
+            .select("status, created_at, booking_time, is_event_booking")
             .eq("restaurant_id", restaurantId)
             .gte("booking_time", startOfDay(date).toISOString())
             .lte("booking_time", endOfDay(date).toISOString());
@@ -771,7 +827,7 @@ export default function BasicDashboardPage() {
       // Also get all pending bookings for the analytics (they don't have specific dates)
       const { data: pendingData, error: pendingError } = await supabase
         .from("bookings")
-        .select("status, created_at, booking_time")
+        .select("status, created_at, booking_time, is_event_booking")
         .eq("restaurant_id", restaurantId)
         .eq("status", "pending");
 
@@ -801,6 +857,10 @@ export default function BasicDashboardPage() {
       const cancelledByRestaurant = allAnalyticsData.filter(
         (b) => b.status === "cancelled_by_restaurant"
       ).length;
+      const eventBookings = allAnalyticsData.filter(
+        (b: any) => b.is_event_booking === true
+      ).length;
+      const regularBookings = total - eventBookings;
 
       console.log("📊 Analytics data:", {
         total,
@@ -823,6 +883,8 @@ export default function BasicDashboardPage() {
         completed,
         noShow,
         cancelledByRestaurant,
+        eventBookings,
+        regularBookings,
         acceptanceRate:
           confirmed + declined > 0
             ? Math.round((confirmed / (confirmed + declined)) * 100)
@@ -901,7 +963,13 @@ export default function BasicDashboardPage() {
     const matchesStatus =
       statusFilter === "all" || booking.status === statusFilter;
 
-    return matchesSearch && matchesStatus;
+    // Filter by booking type (regular or event)
+    const matchesType = 
+      bookingTypeFilter === "all" ||
+      (bookingTypeFilter === "event" && booking.is_event_booking === true) ||
+      (bookingTypeFilter === "regular" && booking.is_event_booking !== true);
+
+    return matchesSearch && matchesStatus && matchesType;
   });
 
   const getStatusBadgeVariant = (status: string) => {
@@ -1069,6 +1137,87 @@ export default function BasicDashboardPage() {
     );
   };
 
+  // Event Badge component
+  const EventBadge = ({ booking }: { booking: any }) => {
+    if (!booking.is_event_booking || !booking.event_occurrences) return null;
+
+    const occurrence = Array.isArray(booking.event_occurrences) 
+      ? booking.event_occurrences[0] 
+      : booking.event_occurrences;
+    
+    const event = occurrence?.event;
+    if (!event) return null;
+
+    return (
+      <div className="flex items-center gap-2 mb-2">
+        <Badge variant="secondary" className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-200">
+          <PartyPopper className="h-3 w-3 mr-1" />
+          Event Booking
+        </Badge>
+        {event.event_type && (
+          <Badge variant="outline" className="text-xs capitalize">
+            {event.event_type.replace('_', ' ')}
+          </Badge>
+        )}
+      </div>
+    );
+  };
+
+  // Event Details component
+  const EventDetails = ({ booking }: { booking: any }) => {
+    if (!booking.is_event_booking || !booking.event_occurrences) return null;
+
+    const occurrence = Array.isArray(booking.event_occurrences) 
+      ? booking.event_occurrences[0] 
+      : booking.event_occurrences;
+    
+    const event = occurrence?.event;
+    if (!event) return null;
+
+    return (
+      <div className="mt-3 p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-800">
+        <div className="flex items-start gap-3">
+          {event.image_url && (
+            <img 
+              src={event.image_url} 
+              alt={event.title}
+              className="w-12 h-12 rounded-lg object-cover"
+            />
+          )}
+          <div className="flex-1 min-w-0">
+            <h4 className="font-semibold text-sm text-purple-900 dark:text-purple-100 truncate">
+              {event.title}
+            </h4>
+            {event.description && (
+              <p className="text-xs text-purple-700 dark:text-purple-300 mt-1 line-clamp-2">
+                {event.description}
+              </p>
+            )}
+            <div className="flex items-center gap-3 mt-2 text-xs text-purple-600 dark:text-purple-400">
+              <div className="flex items-center gap-1">
+                <CalendarIcon className="h-3 w-3" />
+                {format(new Date(occurrence.occurrence_date), 'MMM d, yyyy')}
+              </div>
+              {occurrence.start_time && (
+                <div className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {occurrence.start_time}
+                  {occurrence.end_time && ` - ${occurrence.end_time}`}
+                </div>
+              )}
+              {occurrence.max_capacity && (
+                <div className="flex items-center gap-1">
+                  <Users className="h-3 w-3" />
+                  {occurrence.current_bookings} / {occurrence.max_capacity}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Show loading while context is loading or no restaurant selected
   if (contextLoading || !restaurantId) {
     return (
@@ -1153,7 +1302,7 @@ export default function BasicDashboardPage() {
 
       {/* Analytics Cards */}
       {analytics && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
           <Card
             className={cn(
               "transition-all duration-300",
@@ -1179,20 +1328,6 @@ export default function BasicDashboardPage() {
                     analytics.pending > 0 && "animate-pulse"
                   )}
                 />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Cancelled</p>
-                  <p className="text-2xl font-bold text-gray-600">
-                    {analytics.cancelled}
-                  </p>
-                </div>
-                <XCircle className="h-8 w-8 text-gray-600" />
               </div>
             </CardContent>
           </Card>
@@ -1235,6 +1370,34 @@ export default function BasicDashboardPage() {
                   </p>
                 </div>
                 <CheckCircle className="h-8 w-8 text-blue-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-purple-50 dark:bg-purple-950/20">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-purple-600 dark:text-purple-400">Events</p>
+                  <p className="text-2xl font-bold text-purple-600">
+                    {analytics.eventBookings}
+                  </p>
+                </div>
+                <PartyPopper className="h-8 w-8 text-purple-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Regular</p>
+                  <p className="text-2xl font-bold text-gray-600">
+                    {analytics.regularBookings}
+                  </p>
+                </div>
+                <CalendarIcon className="h-8 w-8 text-gray-600" />
               </div>
             </CardContent>
           </Card>
@@ -1380,6 +1543,27 @@ export default function BasicDashboardPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Booking Type Filter */}
+            <div className="flex gap-2 items-center">
+              <span className="text-sm text-muted-foreground">Type:</span>
+
+              <Select value={bookingTypeFilter} onValueChange={setBookingTypeFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filter by type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Bookings</SelectItem>
+                  <SelectItem value="regular">Regular Only</SelectItem>
+                  <SelectItem value="event">
+                    <div className="flex items-center gap-2">
+                      <PartyPopper className="h-4 w-4" />
+                      Events Only
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Bookings List */}
@@ -1399,7 +1583,7 @@ export default function BasicDashboardPage() {
                     No bookings found
                   </h3>
                   <p className="text-muted-foreground text-center">
-                    {searchQuery || statusFilter !== "all"
+                    {searchQuery || statusFilter !== "all" || bookingTypeFilter !== "all"
                       ? "Try adjusting your search or filters"
                       : dateViewMode === "today"
                       ? `No booking requests for today`
@@ -1428,6 +1612,9 @@ export default function BasicDashboardPage() {
                   )}
                 >
                   <CardContent className="p-4">
+                    {/* Event Badge - Show if it's an event booking */}
+                    <EventBadge booking={booking} />
+
                     {/* Header with customer name and status */}
                     <div className="flex items-start justify-between gap-4 mb-3">
                       <div className="flex-1 min-w-0">
@@ -1781,6 +1968,9 @@ export default function BasicDashboardPage() {
                         </div>
                       </div>
                     )}
+
+                    {/* Event Details - Show if it's an event booking */}
+                    <EventDetails booking={booking} />
 
                     {booking.table_preferences && 
                      Array.isArray(booking.table_preferences) && 
