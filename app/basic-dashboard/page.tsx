@@ -56,6 +56,7 @@ import { useNotifications } from "@/lib/contexts/notification-context";
 import { PushNotificationPermission } from "@/components/notifications/push-notification-permission";
 import { BookingActionDialog } from "@/components/bookings/booking-action-dialog";
 import { WaitlistManager } from "@/components/basic/waitlist-manager";
+import { ManualBookingDialog } from "@/components/basic/manual-booking-dialog";
 import {
   Calendar as CalendarIcon,
   Search,
@@ -75,6 +76,7 @@ import {
   MoreHorizontal,
   Gift,
   PartyPopper,
+  Plus,
 } from "lucide-react";
 
 export default function BasicDashboardPage() {
@@ -102,6 +104,8 @@ export default function BasicDashboardPage() {
   const [activeTab, setActiveTab] = useState<"bookings" | "waitlist">(
     "bookings"
   );
+
+  const [manualBookingDialogOpen, setManualBookingDialogOpen] = useState(false);
 
   const supabase = createClient();
   const queryClient = useQueryClient();
@@ -269,6 +273,7 @@ export default function BasicDashboardPage() {
           table_preferences,
           is_event_booking,
           event_occurrence_id,
+          turn_time_minutes,
           special_offers!bookings_applied_offer_id_fkey (
             id,
             title,
@@ -297,6 +302,9 @@ export default function BasicDashboardPage() {
               event_type,
               image_url
             )
+          ),
+          tables:booking_tables(
+            table:restaurant_tables(*)
           )
         `
         )
@@ -338,6 +346,7 @@ export default function BasicDashboardPage() {
             table_preferences,
             is_event_booking,
             event_occurrence_id,
+            turn_time_minutes,
             special_offers!bookings_applied_offer_id_fkey (
               id,
               title,
@@ -366,6 +375,9 @@ export default function BasicDashboardPage() {
                 event_type,
                 image_url
               )
+            ),
+            tables:booking_tables(
+              table:restaurant_tables(*)
             )
           `
           )
@@ -414,6 +426,7 @@ export default function BasicDashboardPage() {
               table_preferences,
               is_event_booking,
               event_occurrence_id,
+              turn_time_minutes,
               special_offers!bookings_applied_offer_id_fkey (
                 id,
                 title,
@@ -442,6 +455,9 @@ export default function BasicDashboardPage() {
                   event_type,
                   image_url
                 )
+              ),
+              tables:booking_tables(
+                table:restaurant_tables(*)
               )
             `
             )
@@ -478,6 +494,14 @@ export default function BasicDashboardPage() {
         (booking, index, self) =>
           index === self.findIndex((b) => b.id === booking.id)
       );
+
+      // Transform tables structure for ManualBookingForm compatibility
+      // Convert booking_tables array to simple tables array
+      uniqueBookings.forEach((booking: any) => {
+        if (booking.tables && Array.isArray(booking.tables)) {
+          booking.tables = booking.tables.map((bt: any) => bt.table).filter(Boolean);
+        }
+      });
 
       // Sort: pending first, then by creation date (newest first)
       uniqueBookings.sort((a, b) => {
@@ -1283,6 +1307,15 @@ export default function BasicDashboardPage() {
             isAggressivePolling={isAggressivePolling}
             unhealthyDurationMinutes={unhealthyDurationMinutes}
           />
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => setManualBookingDialogOpen(true)}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New Booking
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -2146,6 +2179,14 @@ export default function BasicDashboardPage() {
         }
         partySize={actionDialog.booking?.party_size}
         isLoading={updateBookingMutation.isPending}
+      />
+
+      {/* Manual Booking Dialog */}
+      <ManualBookingDialog
+        open={manualBookingDialogOpen}
+        onOpenChange={setManualBookingDialogOpen}
+        restaurantId={restaurantId || ""}
+        currentBookings={bookings}
       />
     </div>
   );
