@@ -7,3 +7,8 @@ COMMENT ON COLUMN public.bookings.assigned_table IS 'Table number assigned to th
 
 
 
+
+
+
+
+

@@ -9,8 +9,6 @@ import { Input } from '@/components/ui/input'
 import { toast } from 'react-hot-toast'
 import { Calendar, Download, RefreshCw, TrendingUp, Users, CheckCircle2, XCircle, DollarSign, BarChart3, Activity, Target, CreditCard, Clock, AlertCircle } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useReportFilters } from '@/hooks/use-report-filters'
-import { SortableTable, Column } from './sortable-table'
 
 type UserStats = {
   total_users: number
@@ -75,9 +73,11 @@ type KPI = {
 
 export default function AdminReportsPage() {
   const supabase = createClient()
-  const { filters, updateFilters, getDateFilter } = useReportFilters()
 
   const [restaurants, setRestaurants] = useState<{ id: string; name: string }[]>([])
+  const [restaurantId, setRestaurantId] = useState<string>('all')
+  const [dateFrom, setDateFrom] = useState<string>('')
+  const [dateTo, setDateTo] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [kpi, setKpi] = useState<KPI>({ total: 0, accepted: 0, cancelled: 0, noShow: 0, totalCovers: 0, acceptedCovers: 0, declinedCovers: 0, cancelledCovers: 0, billableUSD: 0 })
   const [byHour, setByHour] = useState<{ hour: number; count: number }[]>([])
@@ -98,15 +98,10 @@ export default function AdminReportsPage() {
   const [recurringUsers, setRecurringUsers] = useState<any[]>([])
   const [waitingTimeStats, setWaitingTimeStats] = useState<any>(null)
 
-  // User-specific filters
-  const [userFilterMinBookings, setUserFilterMinBookings] = useState<string>('')
-  const [userFilterMinCompleted, setUserFilterMinCompleted] = useState<string>('')
-  const [userFilterActiveOnly, setUserFilterActiveOnly] = useState<boolean>(false)
-
   const dateSummary = useMemo(() => {
-    if (!filters.dateRange.from && !filters.dateRange.to) return 'All time'
-    return `${filters.dateRange.from || '…'} → ${filters.dateRange.to || '…'}`
-  }, [filters.dateRange])
+    if (!dateFrom && !dateTo) return 'All time'
+    return `${dateFrom || '…'} → ${dateTo || '…'}`
+  }, [dateFrom, dateTo])
 
   const loadRestaurants = async () => {
     try {
@@ -121,11 +116,13 @@ export default function AdminReportsPage() {
   const loadKPIs = async () => {
     try {
       setLoading(true)
-      const dateFilter = getDateFilter()
       let base = supabase.from('bookings').select('status, booking_time, party_size, restaurant_id, restaurants:restaurants!bookings_restaurant_id_fkey(tier)', { count: 'exact', head: false })
-      if (filters.restaurantId !== 'all') base = base.eq('restaurant_id', filters.restaurantId)
-      if (dateFilter.from) base = base.gte('booking_time', dateFilter.from)
-      if (dateFilter.to) base = base.lte('booking_time', dateFilter.to)
+      if (restaurantId !== 'all') base = base.eq('restaurant_id', restaurantId)
+      if (dateFrom) base = base.gte('booking_time', new Date(dateFrom).toISOString())
+      if (dateTo) {
+        const end = new Date(dateTo); end.setHours(23,59,59,999)
+        base = base.lte('booking_time', end.toISOString())
+      }
 
       const { data, error } = await base
       if (error) throw error
@@ -171,31 +168,32 @@ export default function AdminReportsPage() {
     try {
       setLoading(true)
       
-      // Load User Stats - always platform-wide
+      // Build restaurant filter if needed
+      const restaurantFilter = restaurantId !== 'all' ? { restaurant_id: restaurantId } : {}
+      
+      // Load User Stats
       const { data: userData } = await supabase.from('vw_user_summary_stats').select('*').single()
       if (userData) setUserStats(userData)
       
-      // Load Booking Stats - always platform-wide
+      // Load Booking Stats
       const { data: bookingData } = await supabase.from('vw_booking_summary_stats').select('*').single()
       if (bookingData) setBookingStats(bookingData)
       
-      // Load Booking Rates - always platform-wide
+      // Load Booking Rates
       const { data: ratesData } = await supabase.from('vw_booking_rates').select('*').single()
       if (ratesData) setBookingRates(ratesData)
       
-      // Load Platform Revenue - always platform-wide (no restaurant filter)
+      // Load Platform Revenue
       const { data: revenueData } = await supabase.from('vw_platform_revenue_summary').select('*').single()
       if (revenueData) setPlatformRevenue(revenueData)
       
-      // Load Customer Demographics - always platform-wide
+      // Load Customer Demographics
       const { data: demoData } = await supabase.from('vw_customer_demographics').select('*').single()
       if (demoData) setCustomerDemographics(demoData)
       
-      // Load Top Restaurants
+      // Load Top Restaurants (with restaurant filter)
       let restaurantsQuery = supabase.from('vw_top_restaurants').select('*').limit(20)
-      if (filters.restaurantId !== 'all') {
-        restaurantsQuery = restaurantsQuery.eq('id', filters.restaurantId)
-      }
+      if (restaurantId !== 'all') restaurantsQuery = restaurantsQuery.eq('id', restaurantId)
       const { data: restaurantsData } = await restaurantsQuery
       if (restaurantsData) setTopRestaurants(restaurantsData)
       
@@ -224,8 +222,8 @@ export default function AdminReportsPage() {
   }
 
   useEffect(() => { loadRestaurants() }, [])
-  useEffect(() => { loadKPIs() }, [filters.restaurantId, filters.dateRange.from, filters.dateRange.to])
-  useEffect(() => { loadComprehensiveStats() }, [])
+  useEffect(() => { loadKPIs() }, [restaurantId, dateFrom, dateTo])
+  useEffect(() => { loadComprehensiveStats() }, [restaurantId])
 
   const applyFilters = () => {
     loadKPIs()
@@ -272,16 +270,15 @@ export default function AdminReportsPage() {
         const headers = ['booking_id','restaurant_id','restaurant_name','restaurant_tier','status','party_size','booking_time','created_at','guest_name','guest_email']
         const all: any[] = []
         const pageSize = 1000
-        const dateFilter = getDateFilter()
         for (let page = 0; page < 50; page++) {
           let query = supabase
             .from('bookings')
             .select('id, restaurant_id, status, party_size, booking_time, created_at, guest_name, guest_email, profiles:profiles!bookings_user_id_fkey(full_name, email), restaurants:restaurants!bookings_restaurant_id_fkey(name, tier)')
             .order('created_at', { ascending: false })
             .range(page * pageSize, page * pageSize + pageSize - 1)
-          if (filters.restaurantId !== 'all') query = query.eq('restaurant_id', filters.restaurantId)
-          if (dateFilter.from) query = query.gte('booking_time', dateFilter.from)
-          if (dateFilter.to) query = query.lte('booking_time', dateFilter.to)
+          if (restaurantId !== 'all') query = query.eq('restaurant_id', restaurantId)
+          if (dateFrom) query = query.gte('booking_time', new Date(dateFrom).toISOString())
+          if (dateTo) { const end = new Date(dateTo); end.setHours(23,59,59,999); query = query.lte('booking_time', end.toISOString()) }
           if (exportStatus !== 'all') query = query.eq('status', exportStatus)
           const { data, error } = await query
           if (error) throw error
@@ -310,7 +307,6 @@ export default function AdminReportsPage() {
         ])
         downloadCSV('bookings_export.csv', headers, rows)
       } else {
-        const dateFilter = getDateFilter()
         const headers = ['review_id','restaurant_id','restaurant_name','user_id','reviewer_name','reviewer_email','rating','comment','created_at','flags']
         const all: any[] = []
         const pageSize = 1000
@@ -320,9 +316,9 @@ export default function AdminReportsPage() {
             .select('id, restaurant_id, user_id, rating, comment, created_at, restaurants:restaurants!reviews_restaurant_id_fkey(name), profiles:profiles!reviews_user_id_fkey(full_name, email), review_reports:review_reports(count)')
             .order('created_at', { ascending: false })
             .range(page * pageSize, page * pageSize + pageSize - 1)
-          if (filters.restaurantId !== 'all') query = query.eq('restaurant_id', filters.restaurantId)
-          if (dateFilter.from) query = query.gte('created_at', dateFilter.from)
-          if (dateFilter.to) query = query.lte('created_at', dateFilter.to)
+          if (restaurantId !== 'all') query = query.eq('restaurant_id', restaurantId)
+          if (dateFrom) query = query.gte('created_at', new Date(dateFrom).toISOString())
+          if (dateTo) { const end = new Date(dateTo); end.setHours(23,59,59,999); query = query.lte('created_at', end.toISOString()) }
           const { data, error } = await query
           if (error) throw error
           const chunk = (data || [])
@@ -366,16 +362,6 @@ export default function AdminReportsPage() {
     return Math.round((kpi.accepted / totalDecided) * 100)
   }, [kpi])
 
-  // Filter users based on user-specific filters
-  const filteredMostActiveUsers = useMemo(() => {
-    return mostBookedUsers.filter(user => {
-      if (userFilterMinBookings && user.total_bookings < parseInt(userFilterMinBookings)) return false
-      if (userFilterMinCompleted && user.completed_bookings < parseInt(userFilterMinCompleted)) return false
-      if (userFilterActiveOnly && user.total_bookings === 0) return false
-      return true
-    })
-  }, [mostBookedUsers, userFilterMinBookings, userFilterMinCompleted, userFilterActiveOnly])
-
   const exportViewCSV = async (viewName: string, headers: string[]) => {
     try {
       const { data, error } = await supabase.from(viewName).select('*')
@@ -412,6 +398,39 @@ export default function AdminReportsPage() {
         </Button>
       </div>
 
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+            <div>
+              <Select value={restaurantId} onValueChange={setRestaurantId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="All restaurants" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All restaurants</SelectItem>
+                  {restaurants.map(r => (
+                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <Input type="date" value={dateFrom} onChange={(e)=>setDateFrom(e.target.value)} />
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <Input type="date" value={dateTo} onChange={(e)=>setDateTo(e.target.value)} />
+            </div>
+            <div className="flex sm:justify-end">
+              <Button onClick={applyFilters} disabled={loading} className="w-full sm:w-auto">Apply</Button>
+            </div>
+          </div>
+          <div className="text-xs text-muted-foreground">Date range: {dateSummary}</div>
+        </CardContent>
+      </Card>
+
       {/* Tabs for different report sections */}
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList className="grid w-full grid-cols-5">
@@ -424,14 +443,6 @@ export default function AdminReportsPage() {
 
         {/* OVERVIEW TAB */}
         <TabsContent value="overview" className="space-y-4">
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-sm text-muted-foreground">
-                📊 Platform-wide statistics showing overall user activity, bookings, and performance metrics.
-              </p>
-            </CardContent>
-          </Card>
-
           {/* User Stats */}
           {userStats && (
             <Card>
@@ -592,105 +603,46 @@ export default function AdminReportsPage() {
 
         {/* USERS TAB */}
         <TabsContent value="users" className="space-y-4">
-          {/* User-Specific Filters */}
-          <Card>
-            <CardContent className="p-4">
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">Min Total Bookings</label>
-                  <Input 
-                    type="number" 
-                    placeholder="e.g. 5"
-                    value={userFilterMinBookings}
-                    onChange={(e) => setUserFilterMinBookings(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">Min Completed Bookings</label>
-                  <Input 
-                    type="number" 
-                    placeholder="e.g. 3"
-                    value={userFilterMinCompleted}
-                    onChange={(e) => setUserFilterMinCompleted(e.target.value)}
-                  />
-                </div>
-                <div className="flex items-end">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={userFilterActiveOnly}
-                      onChange={(e) => setUserFilterActiveOnly(e.target.checked)}
-                      className="rounded"
-                    />
-                    <span className="text-sm font-medium">Active users only</span>
-                  </label>
-                </div>
-                <div className="flex items-end">
-                  <Button 
-                    variant="outline" 
-                    onClick={() => {
-                      setUserFilterMinBookings('')
-                      setUserFilterMinCompleted('')
-                      setUserFilterActiveOnly(false)
-                    }}
-                    className="w-full"
-                  >
-                    Clear Filters
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Most Booked Users */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle><Users className="inline h-5 w-5 mr-2" /> Most Active Users</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Showing {filteredMostActiveUsers.length} of {mostBookedUsers.length} users
-                  </p>
-                </div>
+                <CardTitle><Users className="inline h-5 w-5 mr-2" /> Most Active Users</CardTitle>
                 <Button variant="outline" size="sm" onClick={() => exportViewCSV('vw_most_booked_users', ['full_name', 'email', 'total_bookings', 'total_covers', 'completed_bookings'])}>
                   <Download className="h-4 w-4" />
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
-              <SortableTable
-                data={filteredMostActiveUsers}
-                columns={[
-                  {
-                    key: 'full_name',
-                    label: 'User',
-                    sortable: true,
-                    render: (value, row) => (
-                      <div>
-                        <div className="font-medium">{row.full_name || 'Guest'}</div>
-                        <div className="text-xs text-muted-foreground">{row.email}</div>
-                      </div>
-                    )
-                  },
-                  { key: 'total_bookings', label: 'Bookings', sortable: true },
-                  { key: 'total_covers', label: 'Total Covers', sortable: true },
-                  {
-                    key: 'completed_bookings',
-                    label: 'Completed',
-                    sortable: true,
-                    render: (value) => <span className="text-green-600">{value}</span>
-                  },
-                  {
-                    key: 'last_booking_date',
-                    label: 'Last Booking',
-                    sortable: true,
-                    render: (value) => (
-                      <span className="text-xs">{new Date(value).toLocaleDateString()}</span>
-                    )
-                  }
-                ]}
-                defaultSort={{ key: 'total_bookings', direction: 'desc' }}
-              />
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="p-2 text-left text-sm font-semibold">User</th>
+                      <th className="p-2 text-left text-sm font-semibold">Bookings</th>
+                      <th className="p-2 text-left text-sm font-semibold">Total Covers</th>
+                      <th className="p-2 text-left text-sm font-semibold">Completed</th>
+                      <th className="p-2 text-left text-sm font-semibold">Last Booking</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mostBookedUsers.slice(0, 20).map((user, i) => (
+                      <tr key={user.id} className="border-b">
+                        <td className="p-2">
+                          <div>
+                            <div className="font-medium">{user.full_name || 'Guest'}</div>
+                            <div className="text-xs text-muted-foreground">{user.email}</div>
+                          </div>
+                        </td>
+                        <td className="p-2">{user.total_bookings}</td>
+                        <td className="p-2">{user.total_covers}</td>
+                        <td className="p-2 text-green-600">{user.completed_bookings}</td>
+                        <td className="p-2 text-xs">{new Date(user.last_booking_date).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </CardContent>
           </Card>
 
@@ -728,7 +680,7 @@ export default function AdminReportsPage() {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle><Users className="inline h-5 w-5 mr-2" /> Recurring Users (2+ completed bookings in 20 days)</CardTitle>
+                  <CardTitle><Users className="inline h-5 w-5 mr-2" /> Recurring Users (2+ bookings in 20 days)</CardTitle>
                   <Button variant="outline" size="sm" onClick={() => exportViewCSV('vw_recurring_users', ['full_name', 'email', 'bookings_past_20d', 'covers_past_20d'])}>
                     <Download className="h-4 w-4" />
                   </Button>
@@ -736,33 +688,31 @@ export default function AdminReportsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-lg font-semibold mb-4">Total Recurring Users: <span className="text-purple-600">{recurringUsers.length}</span></div>
-                <SortableTable
-                  data={recurringUsers}
-                  columns={[
-                    {
-                      key: 'full_name',
-                      label: 'User',
-                      sortable: true,
-                      render: (value, row) => (
-                        <div>
-                          <div className="font-medium">{row.full_name || 'Guest'}</div>
-                          <div className="text-xs text-muted-foreground">{row.email}</div>
-                        </div>
-                      )
-                    },
-                    { key: 'bookings_past_20d', label: 'Bookings (20d)', sortable: true, render: (value) => <span className="text-purple-600 font-semibold">{value}</span> },
-                    { key: 'covers_past_20d', label: 'Covers (20d)', sortable: true },
-                    {
-                      key: 'last_booking',
-                      label: 'Last Booking',
-                      sortable: true,
-                      render: (value) => (
-                        <span className="text-xs">{new Date(value).toLocaleDateString()}</span>
-                      )
-                    }
-                  ]}
-                  defaultSort={{ key: 'bookings_past_20d', direction: 'desc' }}
-                />
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="p-2 text-left text-sm font-semibold">User</th>
+                        <th className="p-2 text-left text-sm font-semibold">Bookings (20d)</th>
+                        <th className="p-2 text-left text-sm font-semibold">Covers (20d)</th>
+                        <th className="p-2 text-left text-sm font-semibold">Last Booking</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recurringUsers.slice(0, 20).map((user, i) => (
+                        <tr key={user.user_id} className="border-b">
+                          <td className="p-2">
+                            <div className="font-medium">{user.full_name || 'Guest'}</div>
+                            <div className="text-xs text-muted-foreground">{user.email}</div>
+                          </td>
+                          <td className="p-2 text-purple-600 font-semibold">{user.bookings_past_20d}</td>
+                          <td className="p-2">{user.covers_past_20d}</td>
+                          <td className="p-2 text-xs">{new Date(user.last_booking).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -770,44 +720,6 @@ export default function AdminReportsPage() {
 
         {/* BOOKINGS TAB */}
         <TabsContent value="bookings" className="space-y-4">
-          {/* Booking-Specific Filters */}
-          <Card>
-            <CardContent className="p-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">Restaurant</label>
-                  <Select value={filters.restaurantId} onValueChange={(v) => updateFilters({ restaurantId: v })}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="All restaurants" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All restaurants</SelectItem>
-                      {restaurants.map(r => (
-                        <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">From Date</label>
-                  <Input 
-                    type="date" 
-                    value={filters.dateRange.from} 
-                    onChange={(e) => updateFilters({ dateRange: { ...filters.dateRange, from: e.target.value } })}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">To Date</label>
-                  <Input 
-                    type="date" 
-                    value={filters.dateRange.to} 
-                    onChange={(e) => updateFilters({ dateRange: { ...filters.dateRange, to: e.target.value } })}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -890,14 +802,6 @@ export default function AdminReportsPage() {
 
         {/* REVENUE TAB */}
         <TabsContent value="revenue" className="space-y-4">
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-sm text-muted-foreground">
-                💰 Platform-wide revenue statistics showing estimated revenue from completed covers across all restaurants.
-              </p>
-            </CardContent>
-          </Card>
-
           {platformRevenue && (
             <>
               <Card>
@@ -935,44 +839,6 @@ export default function AdminReportsPage() {
 
         {/* ANALYTICS TAB */}
         <TabsContent value="analytics" className="space-y-4">
-          {/* Analytics-Specific Filters */}
-          <Card>
-            <CardContent className="p-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">Restaurant</label>
-                  <Select value={filters.restaurantId} onValueChange={(v) => updateFilters({ restaurantId: v })}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="All restaurants" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All restaurants</SelectItem>
-                      {restaurants.map(r => (
-                        <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">From Date</label>
-                  <Input 
-                    type="date" 
-                    value={filters.dateRange.from} 
-                    onChange={(e) => updateFilters({ dateRange: { ...filters.dateRange, from: e.target.value } })}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">To Date</label>
-                  <Input 
-                    type="date" 
-                    value={filters.dateRange.to} 
-                    onChange={(e) => updateFilters({ dateRange: { ...filters.dateRange, to: e.target.value } })}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Top Restaurants */}
           <Card>
             <CardHeader>
@@ -984,33 +850,38 @@ export default function AdminReportsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <SortableTable
-                data={topRestaurants}
-                columns={[
-                  { key: 'name', label: 'Restaurant', sortable: true, render: (value) => <span className="font-medium">{value}</span> },
-                  {
-                    key: 'tier',
-                    label: 'Tier',
-                    sortable: true,
-                    render: (value) => (
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        value === 'pro' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
-                      }`}>{value}</span>
-                    )
-                  },
-                  { key: 'total_bookings', label: 'Total', sortable: true },
-                  { key: 'completed_bookings', label: 'Completed', sortable: true, render: (value) => <span className="text-green-600">{value}</span> },
-                  { key: 'completed_covers', label: 'Completed Covers', sortable: true },
-                  {
-                    key: 'restaurant_revenue_est',
-                    label: 'Revenue Est.',
-                    sortable: true,
-                    render: (value) => <span className="text-purple-600 font-semibold">${value?.toFixed(0) || '0'}</span>
-                  },
-                  { key: 'bookings_last_7d', label: 'Last 7d', sortable: true, render: (value) => <span className="text-blue-600">{value}</span> }
-                ]}
-                defaultSort={{ key: 'completed_bookings', direction: 'desc' }}
-              />
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="p-2 text-left text-sm font-semibold">Restaurant</th>
+                      <th className="p-2 text-left text-sm font-semibold">Tier</th>
+                      <th className="p-2 text-left text-sm font-semibold">Total</th>
+                      <th className="p-2 text-left text-sm font-semibold">Completed</th>
+                      <th className="p-2 text-left text-sm font-semibold">Completed Covers</th>
+                      <th className="p-2 text-left text-sm font-semibold">Restaurant Revenue</th>
+                      <th className="p-2 text-left text-sm font-semibold">Last 7d</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topRestaurants.slice(0, 20).map((restaurant, i) => (
+                      <tr key={restaurant.id} className="border-b">
+                        <td className="p-2 font-medium">{restaurant.name}</td>
+                        <td className="p-2">
+                          <span className={`px-2 py-1 rounded text-xs ${
+                            restaurant.tier === 'pro' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
+                          }`}>{restaurant.tier}</span>
+                        </td>
+                        <td className="p-2">{restaurant.total_bookings}</td>
+                        <td className="p-2 text-green-600">{restaurant.completed_bookings}</td>
+                        <td className="p-2 font-semibold">{restaurant.completed_covers}</td>
+                        <td className="p-2 text-emerald-600">${restaurant.restaurant_revenue_est?.toFixed(0) || 0}</td>
+                        <td className="p-2 text-blue-600">{restaurant.bookings_last_7d}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
