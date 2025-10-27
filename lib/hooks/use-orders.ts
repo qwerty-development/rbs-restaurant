@@ -8,6 +8,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import { useRealtimeHealth } from '@/hooks/use-realtime-health'
+import { useAdaptiveBookingConfig } from '@/hooks/use-adaptive-refetch'
 
 export interface OrderFilters {
   status?: string
@@ -313,6 +315,8 @@ export function useUpdateOrderStatus() {
  */
 export function useKitchenOrders(restaurantId: string, station?: string) {
   const supabase = createClient()
+  const { healthStatus } = useRealtimeHealth()
+  const adaptiveConfig = useAdaptiveBookingConfig(healthStatus)
   
   return useQuery({
     queryKey: ['kitchen-orders', restaurantId, station],
@@ -352,7 +356,7 @@ export function useKitchenOrders(restaurantId: string, station?: string) {
       return data || []
     },
     enabled: !!restaurantId,
-    staleTime: 10 * 1000, // 10 seconds for kitchen display
-    refetchInterval: 15 * 1000, // 15 seconds
+    staleTime: adaptiveConfig.staleTime,
+    refetchInterval: adaptiveConfig.refetchInterval,
   })
 }

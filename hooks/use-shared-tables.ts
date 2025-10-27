@@ -5,11 +5,15 @@ import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "react-hot-toast"
+import { useRealtimeHealth } from "./use-realtime-health"
+import { useAdaptiveBookingConfig } from "./use-adaptive-refetch"
 import type { SharedTableSummary, SharedTableAvailability, SharedTableBooking, RestaurantTable } from "@/types"
 
 export function useSharedTablesSummary(restaurantId: string, date?: Date) {
   const supabase = createClient()
   const targetDate = date || new Date()
+  const { healthStatus } = useRealtimeHealth()
+  const adaptiveConfig = useAdaptiveBookingConfig(healthStatus)
 
   return useQuery({
     queryKey: ["shared-tables-summary", restaurantId, targetDate.toISOString().split('T')[0]],
@@ -29,7 +33,8 @@ export function useSharedTablesSummary(restaurantId: string, date?: Date) {
       return data || []
     },
     enabled: !!restaurantId,
-    refetchInterval: 30000, // Refresh every 30 seconds for real-time updates
+    refetchInterval: adaptiveConfig.refetchInterval,
+    staleTime: adaptiveConfig.staleTime,
   })
 }
 
@@ -38,6 +43,8 @@ export function useSharedTableAvailability(tableId: string, date?: Date, time?: 
   const bookingDateTime = time && date 
     ? new Date(`${date.toISOString().split('T')[0]}T${time}:00`)
     : date || new Date()
+  const { healthStatus } = useRealtimeHealth()
+  const adaptiveConfig = useAdaptiveBookingConfig(healthStatus)
 
   return useQuery({
     queryKey: ["shared-table-availability", tableId, bookingDateTime.toISOString()],
@@ -137,13 +144,16 @@ export function useSharedTableAvailability(tableId: string, date?: Date, time?: 
       }
     },
     enabled: !!tableId,
-    refetchInterval: 15000, // Refresh every 15 seconds for real-time updates
+    refetchInterval: adaptiveConfig.refetchInterval,
+    staleTime: adaptiveConfig.staleTime,
   })
 }
 
 export function useSharedTableBookings(restaurantId: string, date?: Date) {
   const supabase = createClient()
   const targetDate = date || new Date()
+  const { healthStatus } = useRealtimeHealth()
+  const adaptiveConfig = useAdaptiveBookingConfig(healthStatus)
 
   return useQuery({
     queryKey: ["shared-table-bookings", restaurantId, targetDate.toISOString().split('T')[0]],
@@ -172,6 +182,7 @@ export function useSharedTableBookings(restaurantId: string, date?: Date) {
         .gte("booking_time", targetDate.toISOString().split('T')[0])
         .lt("booking_time", new Date(targetDate.getTime() + 24 * 60 * 60 * 1000).toISOString())
         .order("booking_time", { ascending: true })
+        .limit(100)
 
       if (error) {
         throw error
@@ -180,7 +191,8 @@ export function useSharedTableBookings(restaurantId: string, date?: Date) {
       return data || []
     },
     enabled: !!restaurantId,
-    refetchInterval: 30000,
+    refetchInterval: adaptiveConfig.refetchInterval,
+    staleTime: adaptiveConfig.staleTime,
   })
 }
 

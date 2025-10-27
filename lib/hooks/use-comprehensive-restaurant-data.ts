@@ -114,7 +114,7 @@ export function useComprehensiveRestaurantData(restaurantIds: string[]) {
               *,
               profiles!bookings_user_id_fkey(full_name, phone_number),
               booking_tables(
-                table:restaurant_tables(id, table_number, max_capacity)
+                table:restaurant_tables(id, table_number, max_capacity, section_id)
               ),
               restaurant_customers!bookings_user_id_fkey(vip_status)
             `)

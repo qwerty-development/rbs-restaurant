@@ -580,6 +580,7 @@ export function useEventOccurrenceBookings(occurrenceId: string) {
         .eq('event_occurrence_id', occurrenceId)
         .eq('is_event_booking', true)
         .order('created_at', { ascending: false })
+        .limit(100)
 
       if (error) {
         console.error('Error fetching event occurrence bookings:', error)

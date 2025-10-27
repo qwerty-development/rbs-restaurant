@@ -181,6 +181,8 @@ export function RevenueDashboard() {
         .gte('created_at', start.toISOString())
         .lte('created_at', end.toISOString())
         .in('status', ['completed', 'served'])
+        .limit(1000)
+        .order('created_at', { ascending: false })
 
       if (ordersError) throw ordersError
 
@@ -256,20 +258,27 @@ export function RevenueDashboard() {
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 10)
 
-      // Calculate previous period for comparison
+      // Calculate previous period for comparison (combined query for better performance)
       const periodLength = end.getTime() - start.getTime()
       const prevStart = new Date(start.getTime() - periodLength)
       const prevEnd = new Date(end.getTime() - periodLength)
 
-      const { data: prevOrders } = await supabase
+      // Fetch both current and previous period in one query, then filter client-side
+      const { data: allOrders } = await supabase
         .from('orders')
-        .select('subtotal')
+        .select('subtotal, created_at')
         .eq('restaurant_id', restaurantId)
         .gte('created_at', prevStart.toISOString())
-        .lte('created_at', prevEnd.toISOString())
+        .lte('created_at', end.toISOString())
         .in('status', ['completed', 'served'])
+        .limit(2000)
 
-      const prevRevenue = prevOrders?.reduce((sum, order) => sum + (order.subtotal || 0), 0) || 0
+      // Separate current and previous period orders
+      const prevOrders = allOrders?.filter(order => 
+        new Date(order.created_at) >= prevStart && new Date(order.created_at) < start
+      ) || []
+
+      const prevRevenue = prevOrders.reduce((sum, order) => sum + (order.subtotal || 0), 0)
       const revenueGrowth = prevRevenue > 0 ? ((totalRevenue - prevRevenue) / prevRevenue) * 100 : 0
 
       return {

@@ -17,9 +17,28 @@ export function useTableCombinations(restaurantId: string | undefined) {
       const { data, error } = await supabase
         .from("table_combinations")
         .select(`
-          *,
-          primary_table:restaurant_tables!table_combinations_primary_table_id_fkey(*),
-          secondary_table:restaurant_tables!table_combinations_secondary_table_id_fkey(*)
+          id,
+          restaurant_id,
+          primary_table_id,
+          secondary_table_id,
+          combined_capacity,
+          is_active,
+          created_at,
+          updated_at,
+          primary_table:restaurant_tables!table_combinations_primary_table_id_fkey(
+            id,
+            table_number,
+            max_capacity,
+            section_id,
+            status
+          ),
+          secondary_table:restaurant_tables!table_combinations_secondary_table_id_fkey(
+            id,
+            table_number,
+            max_capacity,
+            section_id,
+            status
+          )
         `)
         .eq("restaurant_id", restaurantId)
         .eq("is_active", true)
@@ -29,7 +48,7 @@ export function useTableCombinations(restaurantId: string | undefined) {
         throw error
       }
       
-      return data as RestaurantTableCombinationWithTables[]
+      return data as unknown as RestaurantTableCombinationWithTables[]
     },
     enabled: !!restaurantId,
   })
