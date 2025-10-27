@@ -114,12 +114,13 @@ export function useAdaptiveQueryConfig(healthStatus: RealtimeHealthStatus) {
 }
 
 // Specialized hook for critical booking queries that need faster updates
+// Note: Realtime is unstable and disconnects, so we keep polling but at smarter intervals
 export function useAdaptiveBookingConfig(healthStatus: RealtimeHealthStatus) {
   return useAdaptiveRefetch(healthStatus, {
-    healthyInterval: 15000,    // 15s when healthy (more frequent for bookings)
-    unhealthyInterval: 5000,   // 5s when connection issues
-    disconnectedInterval: 2000, // 2s when fully disconnected
-    reconnectingInterval: 1000  // 1s during reconnection
+    healthyInterval: 30000,    // 30s when healthy (reduced from 15s for better performance)
+    unhealthyInterval: 10000,  // 10s when connection issues (reduced from 5s)
+    disconnectedInterval: 5000, // 5s when fully disconnected (reduced from 2s)
+    reconnectingInterval: 3000  // 3s during reconnection (reduced from 1s)
   })
 }
 

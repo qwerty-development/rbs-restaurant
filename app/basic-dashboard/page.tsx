@@ -259,249 +259,100 @@ export default function BasicDashboardPage() {
         mode: dateViewMode,
       });
 
-      // Always get ALL pending bookings first (regardless of dates)
-      const { data: pendingBookings, error: pendingError } = await supabase
-        .from("bookings")
-        .select(
-          `
+      // OPTIMIZED: Single query to get all bookings (pending + date-specific)
+      // This replaces multiple queries that were running sequentially (up to 8+ queries for week view)
+      const selectFields = `
+        id,
+        booking_time,
+        party_size,
+        status,
+        special_requests,
+        preferred_section,
+        occasion,
+        dietary_notes,
+        guest_name,
+        guest_email,
+        guest_phone,
+        created_at,
+        user_id,
+        applied_offer_id,
+        confirmation_code,
+        table_preferences,
+        is_event_booking,
+        event_occurrence_id,
+        turn_time_minutes,
+        assigned_table,
+        special_offers!bookings_applied_offer_id_fkey (
           id,
-          booking_time,
-          party_size,
+          title,
+          description,
+          discount_percentage
+        ),
+        profiles!bookings_user_id_fkey (
+          id,
+          full_name,
+          phone_number,
+          email,
+          user_rating
+        ),
+        event_occurrences!bookings_event_occurrence_id_fkey (
+          id,
+          occurrence_date,
+          start_time,
+          end_time,
           status,
-          special_requests,
-          preferred_section,
-          occasion,
-          dietary_notes,
-          guest_name,
-          guest_email,
-          guest_phone,
-          created_at,
-          user_id,
-          applied_offer_id,
-          confirmation_code,
-          table_preferences,
-          is_event_booking,
-          event_occurrence_id,
-          turn_time_minutes,
-          assigned_table,
-          special_offers!bookings_applied_offer_id_fkey (
+          max_capacity,
+          current_bookings,
+          event:restaurant_events!event_occurrences_event_id_fkey (
             id,
             title,
             description,
-            discount_percentage
-          ),
-          profiles!bookings_user_id_fkey (
-            id,
-            full_name,
-            phone_number,
-            email,
-            user_rating
-          ),
-          event_occurrences!bookings_event_occurrence_id_fkey (
-            id,
-            occurrence_date,
-            start_time,
-            end_time,
-            status,
-            max_capacity,
-            current_bookings,
-            event:restaurant_events!event_occurrences_event_id_fkey (
-              id,
-              title,
-              description,
-              event_type,
-              image_url
-            )
-          ),
-          tables:booking_tables(
-            table:restaurant_tables(*)
+            event_type,
+            image_url
           )
-        `
+        ),
+        tables:booking_tables(
+          table:restaurant_tables(*)
         )
-        .eq("restaurant_id", restaurantId)
-        .eq("status", "pending")
-        .order("created_at", { ascending: false });
+      `;
 
-      if (pendingError) {
-        console.error("❌ Error fetching pending bookings:", pendingError);
-      }
+      let query = supabase
+        .from("bookings")
+        .select(selectFields)
+        .eq("restaurant_id", restaurantId);
 
-      console.log("⏳ Found pending bookings:", pendingBookings?.length || 0);
-
-      // Then get date-specific bookings
-      const dateBookings = [];
-
+      // Build optimized OR condition based on view mode
       if (dateViewMode === "all") {
-        // For "all dates" mode, get all bookings from today onward
+        // Get all pending bookings OR all future bookings
         const today = startOfDay(new Date());
-
-        const { data: allBookings, error } = await supabase
-          .from("bookings")
-          .select(
-            `
-            id,
-            booking_time,
-            party_size,
-            status,
-            special_requests,
-            preferred_section,
-            occasion,
-            dietary_notes,
-            guest_name,
-            guest_email,
-            guest_phone,
-            created_at,
-            user_id,
-            applied_offer_id,
-            confirmation_code,
-            table_preferences,
-            is_event_booking,
-            event_occurrence_id,
-            turn_time_minutes,
-            assigned_table,
-            special_offers!bookings_applied_offer_id_fkey (
-              id,
-              title,
-              description,
-              discount_percentage
-            ),
-            profiles!bookings_user_id_fkey (
-              id,
-              full_name,
-              phone_number,
-              email,
-              user_rating
-            ),
-            event_occurrences!bookings_event_occurrence_id_fkey (
-              id,
-              occurrence_date,
-              start_time,
-              end_time,
-              status,
-              max_capacity,
-              current_bookings,
-              event:restaurant_events!event_occurrences_event_id_fkey (
-                id,
-                title,
-                description,
-                event_type,
-                image_url
-              )
-            ),
-            tables:booking_tables(
-              table:restaurant_tables(*)
-            )
-          `
-          )
-          .eq("restaurant_id", restaurantId)
-          .gte("booking_time", today.toISOString())
-          .neq("status", "pending") // Exclude pending since we already got them
-          .order("booking_time", { ascending: true }); // Sort by booking time for all dates view
-
-        if (error) {
-          console.error(
-            "❌ Error fetching all bookings from today onward:",
-            error
-          );
-        } else {
-          dateBookings.push(...(allBookings || []));
-        }
-
-        console.log("📊 All dates bookings result:", {
-          count: dateBookings.length,
-          fromDate: today.toISOString(),
-        });
-      } else if (effectiveDates) {
-        // For specific date modes (today, select, week, month)
-        for (const date of effectiveDates || []) {
-          const startOfSelectedDay = startOfDay(date);
-          const endOfSelectedDay = endOfDay(date);
-
-          const { data: dayBookings, error } = await supabase
-            .from("bookings")
-            .select(
-              `
-              id,
-              booking_time,
-              party_size,
-              status,
-              special_requests,
-              preferred_section,
-              occasion,
-              dietary_notes,
-              guest_name,
-              guest_email,
-              guest_phone,
-              created_at,
-              user_id,
-              applied_offer_id,
-              confirmation_code,
-              table_preferences,
-              is_event_booking,
-              event_occurrence_id,
-              turn_time_minutes,
-              assigned_table,
-              special_offers!bookings_applied_offer_id_fkey (
-                id,
-                title,
-                description,
-                discount_percentage
-              ),
-              profiles!bookings_user_id_fkey (
-                id,
-                full_name,
-                phone_number,
-                email,
-                user_rating
-              ),
-              event_occurrences!bookings_event_occurrence_id_fkey (
-                id,
-                occurrence_date,
-                start_time,
-                end_time,
-                status,
-                max_capacity,
-                current_bookings,
-                event:restaurant_events!event_occurrences_event_id_fkey (
-                  id,
-                  title,
-                  description,
-                  event_type,
-                  image_url
-                )
-              ),
-              tables:booking_tables(
-                table:restaurant_tables(*)
-              )
-            `
-            )
-            .eq("restaurant_id", restaurantId)
-            .gte("booking_time", startOfSelectedDay.toISOString())
-            .lte("booking_time", endOfSelectedDay.toISOString())
-            .neq("status", "pending") // Exclude pending since we already got them
-            .order("created_at", { ascending: false });
-
-          if (error) {
-            console.error(
-              "❌ Error fetching date-specific bookings for",
-              date,
-              ":",
-              error
-            );
-          } else {
-            dateBookings.push(...(dayBookings || []));
-          }
-        }
-
-        console.log("📊 Date-specific bookings result:", {
-          count: dateBookings.length,
-          dates: effectiveDates.length,
-          mode: dateViewMode,
-        });
+        query = query.or(`status.eq.pending,and(booking_time.gte.${today.toISOString()},status.neq.pending)`);
+      } else if (effectiveDates && effectiveDates.length > 0) {
+        // Get all pending bookings OR bookings in the date range
+        const startDate = startOfDay(effectiveDates[0]);
+        const endDate = endOfDay(effectiveDates[effectiveDates.length - 1]);
+        query = query.or(`status.eq.pending,and(booking_time.gte.${startDate.toISOString()},booking_time.lte.${endDate.toISOString()},status.neq.pending)`);
+      } else {
+        // Fallback: just get pending bookings
+        query = query.eq("status", "pending");
       }
 
-      // Combine pending bookings with date-specific bookings
-      const allBookings = [...(pendingBookings || []), ...dateBookings];
+      const { data: fetchedBookings, error } = await query.order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("❌ Error fetching bookings:", error);
+      }
+
+      console.log("📊 Optimized single-query result:", {
+        total: fetchedBookings?.length || 0,
+        pending: fetchedBookings?.filter((b) => b.status === "pending").length || 0,
+        mode: dateViewMode,
+        dateRange: effectiveDates
+          ? `${effectiveDates[0]} to ${effectiveDates[effectiveDates.length - 1]}`
+          : "all",
+      });
+
+      // Use the fetched results
+      const allBookings = fetchedBookings || [];
 
       // Remove duplicates (in case a pending booking is also in the date range)
       const uniqueBookings = allBookings.filter(
