@@ -138,6 +138,7 @@ export default function AdminLayout({
       section: 'System',
       items: [
         { name: 'Reports', href: '/admin/reports', icon: FileText, current: false },
+        { name: 'Settings', href: '/admin/settings', icon: Settings, current: false },
       ]
     }
   ]

@@ -29,6 +29,7 @@ import { PasswordInput } from "@/components/ui/password-input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "react-hot-toast"
 import { Loader2, LogIn, AlertCircle } from "lucide-react"
+import { MfaVerificationForm } from "@/components/admin/mfa-verification-form"
 
 const formSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -41,8 +42,10 @@ export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
+  const [showMfaVerification, setShowMfaVerification] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const supabase = createClient()
-  
+
   const redirectTo = searchParams.get('redirectTo') || '/dashboard'
   const error = searchParams.get('error')
 
@@ -57,35 +60,62 @@ export default function LoginPage() {
   async function onSubmit(data: FormData) {
     try {
       setIsLoading(true)
-  
-      // Sign in
+
+      // Sign in with email and password
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
       })
-  
+
       if (authError) {
         throw authError
       }
-  
+
       if (!authData.user) {
         throw new Error("Login failed")
       }
-  
+
+      // Check if user has MFA enabled
+      const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+
+      // Get list of MFA factors
+      const { data: factorsData } = await supabase.auth.mfa.listFactors()
+      const hasVerifiedFactors = factorsData?.totp?.some((f) => f.status === "verified") || false
+
       // First check if user is an admin
       const { data: adminData, error: adminError } = await supabase
         .from("rbs_admins")
         .select("id, user_id")
         .eq("user_id", authData.user.id)
         .single()
-  
-      // If user is an admin, redirect to admin page
-      if (adminData && !adminError) {
+
+      const userIsAdmin = adminData && !adminError
+
+      // If user has MFA enabled but hasn't verified yet (AAL1 but has factors)
+      if (hasVerifiedFactors && aalData?.currentLevel === "aal1") {
+        setIsAdmin(userIsAdmin)
+        setShowMfaVerification(true)
+        setIsLoading(false)
+        return
+      }
+
+      // If no MFA or already verified (AAL2), proceed with normal login
+      await handleSuccessfulLogin(authData.user.id, userIsAdmin)
+    } catch (error: any) {
+      console.error("Login error:", error)
+      toast.error(error.message || "Failed to login")
+      setIsLoading(false)
+    }
+  }
+
+  async function handleSuccessfulLogin(userId: string, userIsAdmin: boolean) {
+    try {
+      if (userIsAdmin) {
         await supabase.auth.updateUser({
           data: {
-            role: 'admin',
+            role: "admin",
             is_admin: true,
-          }
+          },
         })
         toast.success("Welcome back, Admin!")
         // IMPORTANT: Use window.location.href instead of router.push
@@ -93,7 +123,7 @@ export default function LoginPage() {
         window.location.href = "/admin"
         return
       }
-  
+
       // Check if user has restaurant access
       const { data: staffData, error: staffError } = await supabase
         .from("restaurant_staff")
@@ -103,14 +133,14 @@ export default function LoginPage() {
           restaurant_id,
           restaurant:restaurants(id, name)
         `)
-        .eq("user_id", authData.user.id)
+        .eq("user_id", userId)
         .eq("is_active", true)
-  
+
       if (staffError || !staffData || staffData.length === 0) {
         await supabase.auth.signOut()
         throw new Error("You don't have access to any restaurant. Please contact your restaurant owner.")
       }
-  
+
       // For multi-restaurant users, we'll let the dashboard handle restaurant selection
       // For single restaurant users, we can set some basic metadata
       if (staffData.length === 1) {
@@ -120,23 +150,59 @@ export default function LoginPage() {
             restaurant_id: singleRestaurant.restaurant_id,
             restaurant_name: (singleRestaurant.restaurant as any)?.name,
             role: singleRestaurant.role,
-          }
+          },
         })
         toast.success(`Welcome back! Logging in to ${(singleRestaurant.restaurant as any)?.name}`)
       } else {
         toast.success(`Welcome back! You have access to ${staffData.length} restaurants.`)
       }
-      
+
       // IMPORTANT: Use window.location.href instead of router.push
       // This forces a full page reload which ensures the session is properly set
       window.location.href = "/dashboard"
-      
     } catch (error: any) {
-      console.error("Login error:", error)
-      toast.error(error.message || "Failed to login")
-    } finally {
+      console.error("Post-login error:", error)
+      toast.error(error.message || "Failed to complete login")
+    }
+  }
+
+  async function handleMfaVerified() {
+    try {
+      setIsLoading(true)
+
+      // Get current user after MFA verification
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        throw new Error("User not found after MFA verification")
+      }
+
+      await handleSuccessfulLogin(user.id, isAdmin)
+    } catch (error: any) {
+      console.error("MFA post-verification error:", error)
+      toast.error(error.message || "Failed to complete login")
       setIsLoading(false)
     }
+  }
+
+  function handleMfaCancelled() {
+    // Sign out and reset to login screen
+    supabase.auth.signOut()
+    setShowMfaVerification(false)
+    setIsAdmin(false)
+    toast.info("Login cancelled")
+  }
+
+  // Show MFA verification screen if needed
+  if (showMfaVerification) {
+    return (
+      <MfaVerificationForm
+        onVerified={handleMfaVerified}
+        onCancel={handleMfaCancelled}
+      />
+    )
   }
 
   return (
