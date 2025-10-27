@@ -57,6 +57,7 @@ import { PushNotificationPermission } from "@/components/notifications/push-noti
 import { BookingActionDialog } from "@/components/bookings/booking-action-dialog";
 import { WaitlistManager } from "@/components/basic/waitlist-manager";
 import { ManualBookingDialog } from "@/components/basic/manual-booking-dialog";
+import { CollapsedBookingView } from "@/components/bookings/collapsed-booking-view";
 import {
   Calendar as CalendarIcon,
   Search,
@@ -77,6 +78,9 @@ import {
   Gift,
   PartyPopper,
   Plus,
+  Check,
+  X,
+  Loader2,
 } from "lucide-react";
 
 export default function BasicDashboardPage() {
@@ -105,6 +109,10 @@ export default function BasicDashboardPage() {
     "bookings"
   );
 
+  const [viewMode, setViewMode] = useState<"card" | "collapsed">("card");
+  const [tableInputs, setTableInputs] = useState<Record<string, string>>({});
+  const [isUpdatingTable, setIsUpdatingTable] = useState<Record<string, boolean>>({});
+  const [editingTable, setEditingTable] = useState<Record<string, boolean>>({});
   const [manualBookingDialogOpen, setManualBookingDialogOpen] = useState(false);
 
   const supabase = createClient();
@@ -266,6 +274,7 @@ export default function BasicDashboardPage() {
           dietary_notes,
           guest_name,
           guest_email,
+          guest_phone,
           created_at,
           user_id,
           applied_offer_id,
@@ -274,6 +283,7 @@ export default function BasicDashboardPage() {
           is_event_booking,
           event_occurrence_id,
           turn_time_minutes,
+          assigned_table,
           special_offers!bookings_applied_offer_id_fkey (
             id,
             title,
@@ -339,6 +349,7 @@ export default function BasicDashboardPage() {
             dietary_notes,
             guest_name,
             guest_email,
+            guest_phone,
             created_at,
             user_id,
             applied_offer_id,
@@ -347,6 +358,7 @@ export default function BasicDashboardPage() {
             is_event_booking,
             event_occurrence_id,
             turn_time_minutes,
+            assigned_table,
             special_offers!bookings_applied_offer_id_fkey (
               id,
               title,
@@ -419,6 +431,7 @@ export default function BasicDashboardPage() {
               dietary_notes,
               guest_name,
               guest_email,
+              guest_phone,
               created_at,
               user_id,
               applied_offer_id,
@@ -427,6 +440,7 @@ export default function BasicDashboardPage() {
               is_event_booking,
               event_occurrence_id,
               turn_time_minutes,
+              assigned_table,
               special_offers!bookings_applied_offer_id_fkey (
                 id,
                 title,
@@ -580,10 +594,12 @@ export default function BasicDashboardPage() {
                 dietary_notes,
                 guest_name,
                 guest_email,
+                guest_phone,
                 created_at,
                 user_id,
                 table_preferences,
                 confirmation_code,
+                assigned_table,
                 profiles!bookings_user_id_fkey (
                   id,
                   full_name,
@@ -724,10 +740,12 @@ export default function BasicDashboardPage() {
                 dietary_notes,
                 guest_name,
                 guest_email,
+                guest_phone,
                 created_at,
                 user_id,
                 table_preferences,
                 confirmation_code,
+                assigned_table,
                 profiles!bookings_user_id_fkey (
                   id,
                   full_name,
@@ -821,7 +839,7 @@ export default function BasicDashboardPage() {
 
         const { data, error } = await supabase
           .from("bookings")
-          .select("status, created_at, booking_time, is_event_booking")
+          .select("status, created_at, booking_time")
           .eq("restaurant_id", restaurantId)
           .gte("booking_time", today.toISOString());
 
@@ -835,7 +853,7 @@ export default function BasicDashboardPage() {
         for (const date of effectiveDates) {
           const { data, error } = await supabase
             .from("bookings")
-            .select("status, created_at, booking_time, is_event_booking")
+            .select("status, created_at, booking_time")
             .eq("restaurant_id", restaurantId)
             .gte("booking_time", startOfDay(date).toISOString())
             .lte("booking_time", endOfDay(date).toISOString());
@@ -851,7 +869,7 @@ export default function BasicDashboardPage() {
       // Also get all pending bookings for the analytics (they don't have specific dates)
       const { data: pendingData, error: pendingError } = await supabase
         .from("bookings")
-        .select("status, created_at, booking_time, is_event_booking")
+        .select("status, created_at, booking_time")
         .eq("restaurant_id", restaurantId)
         .eq("status", "pending");
 
@@ -881,10 +899,10 @@ export default function BasicDashboardPage() {
       const cancelledByRestaurant = allAnalyticsData.filter(
         (b) => b.status === "cancelled_by_restaurant"
       ).length;
-      const eventBookings = allAnalyticsData.filter(
-        (b: any) => b.is_event_booking === true
-      ).length;
-      const regularBookings = total - eventBookings;
+      // Note: is_event_booking field doesn't exist in database yet
+      // Set to 0 until the field is added via migration
+      const eventBookings = 0;
+      const regularBookings = total;
 
       console.log("📊 Analytics data:", {
         total,
@@ -1136,6 +1154,86 @@ export default function BasicDashboardPage() {
       bookingId: booking.id,
       status: newStatus,
     });
+  };
+
+  // Handler functions for CollapsedBookingView
+  const onSelectBooking = (booking: any) => {
+    // For now, just log - could be expanded to open a detailed modal
+    console.log("Selected booking:", booking);
+  };
+
+  const onUpdateStatus = (bookingId: string, status: string) => {
+    updateBookingMutation.mutate({
+      bookingId,
+      status,
+    });
+  };
+
+  const handleTableChange = (bookingId: string, value: string) => {
+    setTableInputs(prev => ({
+      ...prev,
+      [bookingId]: value
+    }));
+  };
+
+  const handleApplyTable = async (bookingId: string) => {
+    const tableNumber = tableInputs[bookingId]?.trim();
+    if (!tableNumber) return;
+
+    setIsUpdatingTable(prev => ({ ...prev, [bookingId]: true }));
+    
+    try {
+      const { error } = await supabase
+        .from('bookings')
+        .update({ assigned_table: tableNumber })
+        .eq('id', bookingId);
+
+      if (error) throw error;
+
+      // Update local state
+      setTableInputs(prev => {
+        const newInputs = { ...prev };
+        delete newInputs[bookingId];
+        return newInputs;
+      });
+      setEditingTable(prev => ({ ...prev, [bookingId]: false }));
+
+      // Invalidate queries to refetch data
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      
+      toast.success('Table assigned successfully');
+    } catch (error) {
+      console.error('Error assigning table:', error);
+      toast.error('Failed to assign table');
+    } finally {
+      setIsUpdatingTable(prev => ({ ...prev, [bookingId]: false }));
+    }
+  };
+
+  const handleCancelEdit = (bookingId: string) => {
+    setTableInputs(prev => {
+      const newInputs = { ...prev };
+      delete newInputs[bookingId];
+      return newInputs;
+    });
+    setEditingTable(prev => ({ ...prev, [bookingId]: false }));
+  };
+
+  const handleTableClick = (bookingId: string, currentTable: string) => {
+    setEditingTable(prev => ({ ...prev, [bookingId]: true }));
+    setTableInputs(prev => ({ ...prev, [bookingId]: currentTable }));
+  };
+
+  const getAssignedTable = (booking: any) => {
+    if (tableInputs[booking.id]) {
+      return tableInputs[booking.id];
+    }
+    if (booking.assigned_table !== null &&
+        booking.assigned_table !== undefined &&
+        booking.assigned_table.trim() !== '') {
+      return booking.assigned_table;
+    }
+    return null;
   };
 
   // Rating display component
@@ -1470,38 +1568,31 @@ export default function BasicDashboardPage() {
         </TabsList>
 
         <TabsContent value="bookings" className="space-y-6">
-          {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-4">
-            {/* Search - takes 1/2 width */}
-            <div className="relative flex-1 sm:flex-[2]">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by customer name, phone, email, or confirmation code..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
+          {/* Search Bar - Full Width */}
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by customer name, phone, email, or confirmation code..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
 
-            {/* Date Filter Buttons */}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant={dateViewMode === "today" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setDateViewMode("today")}
-              >
-                Today
-              </Button>
-
+          {/* Filters and View Toggle */}
+          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+            {/* Filter Buttons */}
+            <div className="flex flex-wrap gap-3 items-center">
+              {/* Select Range Button with This Week/This Month inside */}
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
-                    variant={dateViewMode === "select" ? "default" : "outline"}
+                    variant={dateViewMode === "select" || dateViewMode === "week" || dateViewMode === "month" ? "default" : "outline"}
                     size="sm"
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     Select Range
-                    {dateViewMode === "select" && selectedDates.length > 0 && (
+                    {(dateViewMode === "select" && selectedDates.length > 0) && (
                       <Badge variant="secondary" className="ml-2 h-5">
                         {selectedDates.length}
                       </Badge>
@@ -1509,7 +1600,7 @@ export default function BasicDashboardPage() {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
-                  <div className="p-3">
+                  <div className="p-3 space-y-3">
                     <DateRangePicker
                       selectedDates={selectedDates}
                       onDatesChange={(dates) => {
@@ -1521,26 +1612,38 @@ export default function BasicDashboardPage() {
                       placeholder="Select date range"
                       className="w-[280px]"
                     />
+                    <div className="flex gap-2">
+                      <Button
+                        variant={dateViewMode === "week" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setDateViewMode("week")}
+                        className="flex-1"
+                      >
+                        This Week
+                      </Button>
+                      <Button
+                        variant={dateViewMode === "month" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setDateViewMode("month")}
+                        className="flex-1"
+                      >
+                        This Month
+                      </Button>
+                    </div>
                   </div>
                 </PopoverContent>
               </Popover>
 
+              {/* Today Button */}
               <Button
-                variant={dateViewMode === "week" ? "default" : "outline"}
+                variant={dateViewMode === "today" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setDateViewMode("week")}
+                onClick={() => setDateViewMode("today")}
               >
-                This Week
+                Today
               </Button>
 
-              <Button
-                variant={dateViewMode === "month" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setDateViewMode("month")}
-              >
-                This Month
-              </Button>
-
+              {/* All Dates Button */}
               <Button
                 variant={dateViewMode === "all" ? "default" : "outline"}
                 size="sm"
@@ -1548,15 +1651,11 @@ export default function BasicDashboardPage() {
               >
                 All Dates
               </Button>
-            </div>
 
-            {/* Status Filter */}
-            <div className="flex gap-2 items-center">
-              <span className="text-sm text-muted-foreground">Status:</span>
-
+              {/* Status Filter - No Label */}
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by status" />
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
@@ -1575,15 +1674,11 @@ export default function BasicDashboardPage() {
                   <SelectItem value="no_show">No Show</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
 
-            {/* Booking Type Filter */}
-            <div className="flex gap-2 items-center">
-              <span className="text-sm text-muted-foreground">Type:</span>
-
+              {/* Booking Type Filter - No Label */}
               <Select value={bookingTypeFilter} onValueChange={setBookingTypeFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by type" />
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Bookings</SelectItem>
@@ -1596,6 +1691,26 @@ export default function BasicDashboardPage() {
                   </SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* View Toggle Buttons */}
+            <div className="flex border rounded-md">
+              <Button
+                variant={viewMode === "card" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("card")}
+                className="rounded-r-none border-r"
+              >
+                Card View
+              </Button>
+              <Button
+                variant={viewMode === "collapsed" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("collapsed")}
+                className="rounded-l-none"
+              >
+                Collapsed View
+              </Button>
             </div>
           </div>
 
@@ -1633,6 +1748,16 @@ export default function BasicDashboardPage() {
                   </p>
                 </CardContent>
               </Card>
+            ) : viewMode === "collapsed" ? (
+              <CollapsedBookingView
+                bookings={filteredBookings}
+                isLoading={isLoading}
+                onSelectBooking={onSelectBooking}
+                onUpdateStatus={onUpdateStatus}
+                onCancelBooking={handleCancelBooking}
+                restaurantId={restaurantId}
+                onRefresh={refetch}
+              />
             ) : (
               filteredBookings.map((booking) => (
                 <Card
@@ -1698,11 +1823,11 @@ export default function BasicDashboardPage() {
 
                               {/* Phone and Email - stacked vertically */}
                               <div className="text-sm text-muted-foreground space-y-1">
-                                {customer?.phone_number && (
+                                {(booking.guest_phone || customer?.phone_number) && (
                                   <div className="flex items-center gap-1">
                                     <Phone className="h-3 w-3" />
                                     <span className="font-medium">
-                                      {customer.phone_number}
+                                      {booking.guest_phone || customer?.phone_number}
                                     </span>
                                   </div>
                                 )}
@@ -1966,62 +2091,158 @@ export default function BasicDashboardPage() {
                         </div>
                       </div>
 
-                      {/* Preference Box */}
+                      {/* Section & Assigned Table Box */}
                       <div className="bg-muted/50 rounded-md p-3 border">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="text-xs text-muted-foreground font-medium">
-                            Section
+                            Section & Table
                           </span>
                         </div>
-                        {booking.preferred_section ? (
-                          <div className="font-bold text-base tablet:text-lg text-foreground">
-                            {booking.preferred_section}
+                        <div className="space-y-2">
+                          <div>
+                            {booking.preferred_section ? (
+                              <div className="font-bold text-base tablet:text-lg text-foreground">
+                                {booking.preferred_section}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-muted-foreground">
+                                No preference
+                              </div>
+                            )}
                           </div>
-                        ) : (
-                          <div className="text-sm text-muted-foreground">
-                            No preference
+                          <div>
+                            {booking.status === 'confirmed' && editingTable[booking.id] ? (
+                              <div className="relative w-36">
+                                <Input
+                                  placeholder="Table #"
+                                  value={tableInputs[booking.id] || ""}
+                                  onChange={(e) => handleTableChange(booking.id, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleApplyTable(booking.id);
+                                    if (e.key === "Escape") handleCancelEdit(booking.id);
+                                  }}
+                                  autoFocus
+                                  className="
+                                    h-8 w-full text-xs pr-16
+                                    rounded-md
+                                    transition-[box-shadow,background-color,border-color]
+                                    border-blue-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500
+                                  "
+                                />
+
+                                {/* End adornment inside input */}
+                                <div className="absolute inset-y-0 right-1 flex items-center">
+                                  <div className="flex items-center -space-x-4">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      disabled={isUpdatingTable[booking.id]}
+                                      onClick={() => handleApplyTable(booking.id)}
+                                      className="
+                                        h-6 w-6 rounded-md
+                                        hover:bg-muted/70
+                                        focus-visible:ring-1 focus-visible:ring-blue-500
+                                        transition
+                                      "
+                                      aria-label="Apply"
+                                      title="Apply"
+                                    >
+                                      {isUpdatingTable[booking.id]
+                                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        : <Check className="h-3.5 w-3.5" />}
+                                    </Button>
+
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleCancelEdit(booking.id)}
+                                      className="
+                                        h-6 w-6 rounded-md p-0
+                                        hover:bg-muted/70
+                                        focus-visible:ring-1 focus-visible:ring-blue-500
+                                        transition
+                                      "
+                                      aria-label="Cancel"
+                                      title="Cancel"
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : booking.status === 'confirmed' ? (
+                              <div
+                                className="flex items-center gap-2 cursor-pointer group"
+                                onClick={() => {
+                                  const currentTable = getAssignedTable(booking);
+                                  if (currentTable) {
+                                    handleTableClick(booking.id, currentTable);
+                                  } else {
+                                    setEditingTable((prev) => ({ ...prev, [booking.id]: true }));
+                                    setTableInputs((prev) => ({ ...prev, [booking.id]: "" }));
+                                  }
+                                }}
+                              >
+                                <span className="font-medium text-sm group-hover:text-blue-600 transition-colors">
+                                  {getAssignedTable(booking) ? `Table ${getAssignedTable(booking)}` : "Assign table"}
+                                </span>
+                                <span className="text-xs text-muted-foreground group-hover:text-blue-600 transition-colors">✏️</span>
+                              </div>
+                            ) : (
+                              <span className="font-medium text-sm text-muted-foreground">
+                                {getAssignedTable(booking) ? `Table ${getAssignedTable(booking)}` : "No table"}
+                              </span>
+                            )}
                           </div>
-                        )}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Occasion - above special requests */}
-                    {booking.occasion && (
+                    {/* Occasion and Table Preferences - Same line */}
+                    {(booking.occasion || (booking.table_preferences && 
+                         Array.isArray(booking.table_preferences) && 
+                         booking.table_preferences.length > 0)) && (
                       <div className="mt-3">
-                        <div className="p-2 bg-muted/30 rounded-md border">
-                          <div className="flex items-center gap-2">
-                            <Gift className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                            <span className="text-xs tablet:text-sm text-muted-foreground">
-                              Occasion:
-                            </span>
-                            <span className="text-xs tablet:text-sm text-foreground font-medium">
-                              {booking.occasion.charAt(0).toUpperCase() + booking.occasion.slice(1)}
-                            </span>
-                          </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {/* Occasion - Only show if exists */}
+                          {booking.occasion && (
+                            <div className="p-2 bg-muted/30 rounded-md border">
+                              <div className="flex items-center gap-2">
+                                <Gift className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                                <span className="text-xs tablet:text-sm text-muted-foreground font-medium">
+                                  Occasion:
+                                </span>
+                                <Badge variant="secondary" className="text-xs px-2 py-1 bg-blue-100 text-blue-800">
+                                  {booking.occasion.charAt(0).toUpperCase() + booking.occasion.slice(1)}
+                                </Badge>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Table Preferences */}
+                          {booking.table_preferences && 
+                           Array.isArray(booking.table_preferences) && 
+                           booking.table_preferences.length > 0 && (
+                            <div className="p-2 bg-muted/30 rounded-md border">
+                              <div className="flex items-center gap-2">
+                                <Gift className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                                <span className="text-xs tablet:text-sm text-muted-foreground font-medium">
+                                  Table Preferences:
+                                </span>
+                                <Badge variant="secondary" className="text-xs px-2 py-1 bg-green-100 text-green-800">
+                                  {booking.table_preferences.join(", ")}
+                                </Badge>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
 
                     {/* Event Details - Show if it's an event booking */}
                     <EventDetails booking={booking} />
-
-                    {booking.table_preferences && 
-                     Array.isArray(booking.table_preferences) && 
-                     booking.table_preferences.length > 0 && (
-                      <div className="mt-3">
-                        <div className="p-2 bg-muted/30 rounded-md border">
-                          <div className="flex items-center gap-2">
-                            <Gift className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                            <span className="text-xs tablet:text-sm text-muted-foreground">
-                              Table Preferences:
-                            </span>
-                            <span className="text-xs tablet:text-sm text-foreground font-medium">
-                              {booking.table_preferences.join(", ")}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
 
                     {/* Special requests and dietary notes - compact */}
                     {(booking.special_requests ||

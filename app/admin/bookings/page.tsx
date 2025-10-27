@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'react-hot-toast'
 import { ChevronLeft, ChevronRight, Search, RefreshCw, Calendar, Clock, CheckCircle, XCircle, Phone, Users, Mail, MapPin, Tag } from 'lucide-react'
 
@@ -74,6 +75,19 @@ export default function AdminAllBookingsPage() {
   const [loading, setLoading] = useState(false)
   const [rows, setRows] = useState<BookingRow[]>([])
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  
+  // Confirmation dialog states
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean
+    type: 'accept' | 'decline' | null
+    bookingId: string | null
+    customerName: string | null
+  }>({
+    open: false,
+    type: null,
+    bookingId: null,
+    customerName: null
+  })
 
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
@@ -242,6 +256,47 @@ export default function AdminAllBookingsPage() {
       toast.error('Failed to fetch bookings')
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Show confirmation dialog
+  const showConfirmDialog = (type: 'accept' | 'decline', bookingId: string, customerName: string) => {
+    setConfirmDialog({
+      open: true,
+      type,
+      bookingId,
+      customerName
+    })
+  }
+
+  // Handle confirmed action
+  const handleConfirmedAction = async () => {
+    if (!confirmDialog.bookingId || !confirmDialog.type) return
+
+    try {
+      const status = confirmDialog.type === 'accept' ? 'confirmed' : 'declined_by_restaurant'
+      const { error } = await supabase
+        .from('bookings')
+        .update({ status })
+        .eq('id', confirmDialog.bookingId)
+      if (error) throw error
+      
+      toast.success(status === 'confirmed' ? 'Booking accepted' : 'Booking declined')
+      // Soft update local rows for quick feedback
+      setRows(prev => prev.map(r => r.id === confirmDialog.bookingId ? { ...r, status } : r))
+      // Refresh to keep counts/pagination correct
+      fetchBookings()
+    } catch (e) {
+      console.error(e)
+      toast.error('Failed to update booking')
+    } finally {
+      // Close dialog
+      setConfirmDialog({
+        open: false,
+        type: null,
+        bookingId: null,
+        customerName: null
+      })
     }
   }
 
@@ -450,7 +505,7 @@ export default function AdminAllBookingsPage() {
           ) : (
             <div className="space-y-3">
               {rows.map((row) => (
-                <BookingRowItem key={row.id} row={row} onUpdateStatus={updateStatus} expanded={expandedIds.has(row.id)} onToggleExpand={() => setExpandedIds(prev => {
+                <BookingRowItem key={row.id} row={row} onUpdateStatus={updateStatus} onShowConfirmDialog={showConfirmDialog} expanded={expandedIds.has(row.id)} onToggleExpand={() => setExpandedIds(prev => {
                   const next = new Set(prev)
                   if (next.has(row.id)) next.delete(row.id); else next.add(row.id)
                   return next
@@ -474,11 +529,32 @@ export default function AdminAllBookingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+        title={confirmDialog.type === 'accept' ? 'Accept Booking' : 'Decline Booking'}
+        description={
+          confirmDialog.type === 'accept' 
+            ? `Are you sure you want to accept the booking for ${confirmDialog.customerName}?`
+            : `Are you sure you want to decline the booking for ${confirmDialog.customerName}?`
+        }
+        confirmText={confirmDialog.type === 'accept' ? 'Accept' : 'Decline'}
+        cancelText="Cancel"
+        onConfirm={handleConfirmedAction}
+      />
     </div>
   )
 }
 
-function BookingRowItem({ row, onUpdateStatus, expanded, onToggleExpand }: { row: BookingRow; onUpdateStatus: (id: string, status: 'confirmed' | 'declined_by_restaurant') => void; expanded: boolean; onToggleExpand: () => void }) {
+function BookingRowItem({ row, onUpdateStatus, onShowConfirmDialog, expanded, onToggleExpand }: { 
+  row: BookingRow; 
+  onUpdateStatus: (id: string, status: 'confirmed' | 'declined_by_restaurant') => void; 
+  onShowConfirmDialog: (type: 'accept' | 'decline', bookingId: string, customerName: string) => void;
+  expanded: boolean; 
+  onToggleExpand: () => void 
+}) {
   const elapsed = useElapsed(row.created_at)
   const isPending = row.status === 'pending'
   const customerName = row.guest_name || row.profiles?.full_name || 'Guest'
@@ -587,10 +663,10 @@ function BookingRowItem({ row, onUpdateStatus, expanded, onToggleExpand }: { row
         {/* Action Buttons - Only show for pending */}
         {isPending && (
           <div className="flex gap-2 pt-2 border-t">
-            <Button size="sm" onClick={() => onUpdateStatus(row.id, 'confirmed')} className="flex-1">
+            <Button size="sm" onClick={() => onShowConfirmDialog('accept', row.id, customerName)} className="flex-1">
               <CheckCircle className="h-4 w-4 mr-1.5" /> Accept
             </Button>
-            <Button size="sm" variant="destructive" onClick={() => onUpdateStatus(row.id, 'declined_by_restaurant')} className="flex-1">
+            <Button size="sm" variant="destructive" onClick={() => onShowConfirmDialog('decline', row.id, customerName)} className="flex-1">
               <XCircle className="h-4 w-4 mr-1.5" /> Decline
             </Button>
           </div>

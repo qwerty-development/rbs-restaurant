@@ -48,6 +48,7 @@ const formSchema = z.object({
   party_size: z.number().min(1, "At least 1 guest required").max(50, "Maximum 50 guests"),
   special_requests: z.string().optional(),
   occasion: z.string().optional(),
+  assigned_table: z.string().optional(),
   preferred_section: z.string().optional(),
   dietary_notes: z.string().optional(),
   event_occurrence_id: z.string().optional(), // For event bookings
@@ -89,6 +90,7 @@ export function BasicManualBookingForm({
       booking_time: format(new Date(), "HH:mm"),
       special_requests: "",
       occasion: "",
+      assigned_table: "",
       preferred_section: "",
       dietary_notes: "",
       event_occurrence_id: "",
@@ -183,12 +185,13 @@ export function BasicManualBookingForm({
     const processedData = {
       guest_name: data.guest_name.trim(),
       guest_email: data.guest_email?.trim() || null,
-      guest_phone: data.guest_phone?.trim() || null,
+      guest_phone: data.guest_phone?.trim() ? `+961${data.guest_phone.trim()}` : null,
       booking_time: bookingDateTime.toISOString(),
       party_size: data.party_size,
       status: data.status,
       special_requests: data.special_requests?.trim() || null,
       occasion: data.occasion?.trim() || null,
+      assigned_table: data.assigned_table?.trim() || null,
       preferred_section: data.preferred_section?.trim() || null,
       dietary_notes: data.dietary_notes?.trim() || null,
       event_occurrence_id: data.event_occurrence_id || null,
@@ -229,13 +232,19 @@ export function BasicManualBookingForm({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="guest_phone">Phone Number (Optional)</Label>
-              <Input
-                id="guest_phone"
-                type="tel"
-                placeholder="Enter phone number"
-                {...register("guest_phone")}
-                disabled={isLoading}
-              />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">
+                  +961
+                </span>
+                <Input
+                  id="guest_phone"
+                  type="tel"
+                  placeholder="Enter phone number"
+                  {...register("guest_phone")}
+                  disabled={isLoading}
+                  className="pl-12"
+                />
+              </div>
               {errors.guest_phone && (
                 <p className="text-sm text-red-600 mt-1">{errors.guest_phone.message}</p>
               )}
@@ -427,6 +436,18 @@ export function BasicManualBookingForm({
               />
             </div>
 
+            <div>
+              <Label htmlFor="assigned_table">Assigned Table</Label>
+              <Input
+                id="assigned_table"
+                placeholder="Table number (e.g., 5, 12, A1)"
+                {...register("assigned_table")}
+                disabled={isLoading}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {sections && sections.length > 0 && (
               <div>
                 <Label htmlFor="preferred_section">

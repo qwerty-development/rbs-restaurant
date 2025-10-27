@@ -72,6 +72,7 @@ export function ManualBookingDialog({
         status: data.status || 'confirmed',
         special_requests: data.special_requests || null,
         occasion: data.occasion || null,
+        assigned_table: data.assigned_table || null,
         preferred_section: data.preferred_section || null,
         dietary_notes: data.dietary_notes ? [data.dietary_notes] : null, // Convert string to array
         guest_name: data.guest_name,
@@ -100,6 +101,7 @@ export function ManualBookingDialog({
           special_requests,
           preferred_section,
           occasion,
+          assigned_table,
           dietary_notes,
           guest_name,
           guest_email,

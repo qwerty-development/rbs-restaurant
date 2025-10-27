@@ -71,6 +71,7 @@ const formSchema = z.object({
   turn_time_minutes: z.number().min(30).max(240),
   special_requests: z.string().optional(),
   occasion: z.string().optional(),
+  assigned_table: z.string().optional(),
   preferred_section: z.string().optional(),
   table_ids: z.array(z.string()).optional(),
   status: z.enum(["pending", "confirmed", "completed"]),
@@ -963,6 +964,7 @@ export function ManualBookingForm({
         : (pendingSubmission.data.guest_email?.trim() || null),
       special_requests: pendingSubmission.data.special_requests?.trim() || null,
       occasion: pendingSubmission.data.occasion?.trim() || null,
+      assigned_table: pendingSubmission.data.assigned_table?.trim() || null,
       preferred_section: pendingSubmission.data.preferred_section?.trim() || null,
       table_ids: selectedTables,
       shared_table_id: selectedSharedTable,
@@ -1706,6 +1708,16 @@ export function ManualBookingForm({
               id="occasion"
               placeholder="Birthday, Anniversary, etc."
               {...register("occasion")}
+              disabled={isLoading}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="assigned_table">Assigned Table</Label>
+            <Input
+              id="assigned_table"
+              placeholder="Table number (e.g., 5, 12, A1)"
+              {...register("assigned_table")}
               disabled={isLoading}
             />
           </div>

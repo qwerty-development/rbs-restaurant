@@ -98,6 +98,7 @@ export interface Restaurant {
     guest_name: string | null
     guest_email: string | null
     guest_phone: string | null
+    assigned_table: string | null
     is_group_booking: boolean
     organizer_id: string | null
     attendees: number
