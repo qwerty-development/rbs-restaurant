@@ -11,7 +11,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "react-hot-toast"
-import { Plus, Pencil, Trash2 } from "lucide-react"
+import { Plus, Pencil, Trash2, Zap } from "lucide-react"
+import { compressAndConvertImage, formatFileSize } from "@/lib/utils/image-compression"
 
 type Banner = {
   id: string
@@ -350,14 +351,25 @@ function BannerDialog({
     if (!file) return
     try {
       setUploading(true)
-      const fileExt = file.name.split('.').pop() || 'jpg'
-      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`
+
+      // Step 1: Compress and convert to WebP
+      const compressionResult = await compressAndConvertImage(file, {
+        maxWidth: 1920,
+        maxHeight: 1920,
+        quality: 0.85,
+        format: 'webp',
+        preserveAspectRatio: true
+      })
+
+      // Generate unique filename (always .webp since we're converting)
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.webp`
       const filePath = `${fileName}`
 
+      // Step 2: Upload compressed image
       const { error: uploadError } = await supabase
         .storage
         .from('special-offers')
-        .upload(filePath, file, { contentType: file.type })
+        .upload(filePath, compressionResult.file, { contentType: 'image/webp' })
 
       if (uploadError) throw uploadError
 
@@ -368,7 +380,10 @@ function BannerDialog({
 
       if (pub?.publicUrl) {
         setImageUrl(pub.publicUrl)
-        toast.success('Image uploaded')
+        toast.success(
+          `Image uploaded! Reduced by ${compressionResult.reductionPercentage.toFixed(1)}% (${formatFileSize(compressionResult.originalSize)} → ${formatFileSize(compressionResult.compressedSize)})`,
+          { duration: 4000 }
+        )
       } else {
         toast.error('Failed to get public URL')
       }
@@ -436,7 +451,7 @@ function BannerDialog({
                   <div className="flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
                     {uploading ? (
                       <>
-                        <span className="animate-pulse">Uploading...</span>
+                        <span className="animate-pulse">Compressing & Uploading...</span>
                       </>
                     ) : (
                       <>
@@ -457,6 +472,12 @@ function BannerDialog({
                     disabled={uploading}
                   />
                 </Label>
+                <div className="flex items-center justify-center gap-1">
+                  <Zap className="h-3 w-3 text-green-600" />
+                  <p className="text-xs text-green-600 font-medium">
+                    Auto-compression & WebP conversion enabled
+                  </p>
+                </div>
                 <p className="text-xs text-muted-foreground text-center">Or paste an image URL below</p>
                 <Input
                   value={imageUrl}
