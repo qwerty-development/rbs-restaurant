@@ -26,6 +26,10 @@ type Banner = {
   updated_at: string | null
   special_offer_id: string | null
   restaurant_id: string | null
+  imageMetadata?: {
+    size: number
+    dimensions: { width: number; height: number }
+  }
 }
 
 type Restaurant = {
@@ -37,6 +41,42 @@ type SpecialOffer = {
   id: string
   title: string
   restaurant_id: string | null
+}
+
+// Helper function to format file size
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
+}
+
+// Helper function to fetch image metadata
+const fetchImageMetadata = async (url: string): Promise<{ size: number; dimensions: { width: number; height: number } }> => {
+  try {
+    const response = await fetch(url)
+    const blob = await response.blob()
+
+    return new Promise((resolve) => {
+      const img = new window.Image()
+      img.onload = () => {
+        resolve({
+          size: blob.size,
+          dimensions: { width: img.width, height: img.height }
+        })
+      }
+      img.onerror = () => {
+        resolve({
+          size: blob.size,
+          dimensions: { width: 0, height: 0 }
+        })
+      }
+      img.src = url
+    })
+  } catch (error) {
+    return { size: 0, dimensions: { width: 0, height: 0 } }
+  }
 }
 
 export default function AdminBannersPage() {
@@ -57,7 +97,20 @@ export default function AdminBannersPage() {
         .order("display_order", { ascending: true })
 
       if (bannersError) throw bannersError
-      setBanners((bannersData as Banner[]) || [])
+      const bannersList = (bannersData as Banner[]) || []
+
+      // Fetch metadata for all banner images
+      const bannersWithMetadata = await Promise.all(
+        bannersList.map(async (banner) => {
+          if (banner.image_url) {
+            const metadata = await fetchImageMetadata(banner.image_url)
+            return { ...banner, imageMetadata: metadata }
+          }
+          return banner
+        })
+      )
+
+      setBanners(bannersWithMetadata)
 
       const { data: restros, error: restrosError } = await supabase
         .from("restaurants")
@@ -151,8 +204,22 @@ export default function AdminBannersPage() {
                     </div>
                   </div>
                   {b.image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={b.image_url} alt={b.title} className="w-full h-32 object-cover rounded" />
+                    <div className="space-y-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={b.image_url} alt={b.title} className="w-full h-32 object-cover rounded" />
+                      {b.imageMetadata && (
+                        <div className="text-xs text-muted-foreground space-y-0.5 px-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">Size:</span>
+                            <span>{formatFileSize(b.imageMetadata.size)}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">Dimensions:</span>
+                            <span>{b.imageMetadata.dimensions.width} × {b.imageMetadata.dimensions.height}px</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   ) : null}
                   <div className="text-xs text-muted-foreground space-y-1">
                     <div>Status: {b.is_active ? "Active" : "Inactive"}</div>
@@ -215,6 +282,7 @@ function BannerDialog({
 
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [imageMetadata, setImageMetadata] = useState<{ size: number; dimensions: { width: number; height: number } } | null>(null)
 
   // Helper functions to convert between dd/mm/yyyy and ISO
   const formatDateToDDMMYYYY = (isoDate: string | null): string => {
@@ -278,12 +346,18 @@ function BannerDialog({
     setDisplayOrder(banner?.display_order?.toString() || "0")
     setRestaurantId(banner?.restaurant_id || null)
     setSpecialOfferId(banner?.special_offer_id || null)
+    setImageMetadata(banner?.imageMetadata || null)
 
     // Parse dates
     setValidFromDate(formatDateToDDMMYYYY(banner?.valid_from || null))
     setValidFromTime(formatTimeToHHMM(banner?.valid_from || null))
     setValidUntilDate(formatDateToDDMMYYYY(banner?.valid_until || null))
     setValidUntilTime(formatTimeToHHMM(banner?.valid_until || null))
+
+    // Fetch metadata if image URL exists
+    if (banner?.image_url) {
+      fetchImageMetadata(banner.image_url).then(setImageMetadata)
+    }
   }, [banner])
 
   // Clear special offer when restaurant changes
@@ -368,6 +442,9 @@ function BannerDialog({
 
       if (pub?.publicUrl) {
         setImageUrl(pub.publicUrl)
+        // Fetch metadata for newly uploaded image
+        const metadata = await fetchImageMetadata(pub.publicUrl)
+        setImageMetadata(metadata)
         toast.success('Image uploaded')
       } else {
         toast.error('Failed to get public URL')
@@ -413,17 +490,34 @@ function BannerDialog({
             <h3 className="text-sm font-medium">Banner Image</h3>
             <div className="grid gap-3">
               {imageUrl ? (
-                <div className="relative">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={imageUrl} alt="Preview" className="w-full h-48 object-cover rounded-lg border-2 border-border" />
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="absolute top-2 right-2"
-                    onClick={() => setImageUrl("")}
-                  >
-                    Remove Image
-                  </Button>
+                <div className="space-y-3">
+                  <div className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={imageUrl} alt="Preview" className="w-full h-48 object-cover rounded-lg border-2 border-border" />
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="absolute top-2 right-2"
+                      onClick={() => {
+                        setImageUrl("")
+                        setImageMetadata(null)
+                      }}
+                    >
+                      Remove Image
+                    </Button>
+                  </div>
+                  {imageMetadata && (
+                    <div className="text-sm text-muted-foreground space-y-1 bg-muted/50 p-3 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">File Size:</span>
+                        <span>{formatFileSize(imageMetadata.size)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">Dimensions:</span>
+                        <span>{imageMetadata.dimensions.width} × {imageMetadata.dimensions.height}px</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
@@ -461,6 +555,13 @@ function BannerDialog({
                 <Input
                   value={imageUrl}
                   onChange={(e) => setImageUrl(e.target.value)}
+                  onBlur={async (e) => {
+                    const url = e.target.value
+                    if (url && url.startsWith('http')) {
+                      const metadata = await fetchImageMetadata(url)
+                      setImageMetadata(metadata)
+                    }
+                  }}
                   placeholder="https://example.com/image.jpg"
                 />
               </div>

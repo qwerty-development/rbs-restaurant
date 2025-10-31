@@ -55,6 +55,8 @@ interface ImageItem {
   id: string
   url: string
   isMain?: boolean
+  size?: number // file size in bytes
+  dimensions?: { width: number; height: number }
 }
 
 export function EnhancedRestaurantImageUpload({
@@ -74,32 +76,73 @@ export function EnhancedRestaurantImageUpload({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
 
+  // Helper function to fetch image metadata
+  const fetchImageMetadata = async (url: string): Promise<{ size: number; dimensions: { width: number; height: number } }> => {
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+
+      return new Promise((resolve) => {
+        const img = new window.Image()
+        img.onload = () => {
+          resolve({
+            size: blob.size,
+            dimensions: { width: img.width, height: img.height }
+          })
+        }
+        img.onerror = () => {
+          resolve({
+            size: blob.size,
+            dimensions: { width: 0, height: 0 }
+          })
+        }
+        img.src = url
+      })
+    } catch (error) {
+      return { size: 0, dimensions: { width: 0, height: 0 } }
+    }
+  }
+
   // Initialize images when props change
   useEffect(() => {
-    const imageItems: ImageItem[] = []
-    
-    // Add main image if exists
-    if (mainImageUrl) {
-      imageItems.push({
-        id: `main-${Date.now()}`,
-        url: mainImageUrl,
-        isMain: true
-      })
-    }
-    
-    // Add gallery images
-    images.forEach((url, index) => {
-      if (url && url !== mainImageUrl) {
+    const loadImages = async () => {
+      const imageItems: ImageItem[] = []
+
+      // Add main image if exists
+      if (mainImageUrl) {
         imageItems.push({
-          id: `gallery-${index}-${Date.now()}`,
-          url: url,
-          isMain: false
+          id: `main-${Date.now()}`,
+          url: mainImageUrl,
+          isMain: true
         })
       }
-    })
-    
-    setAllImages(imageItems)
-    setCurrentMainImage(mainImageUrl || "")
+
+      // Add gallery images
+      images.forEach((url, index) => {
+        if (url && url !== mainImageUrl) {
+          imageItems.push({
+            id: `gallery-${index}-${Date.now()}`,
+            url: url,
+            isMain: false
+          })
+        }
+      })
+
+      setAllImages(imageItems)
+      setCurrentMainImage(mainImageUrl || "")
+
+      // Fetch metadata for all images
+      for (const item of imageItems) {
+        const metadata = await fetchImageMetadata(item.url)
+        setAllImages(prev => prev.map(img =>
+          img.id === item.id
+            ? { ...img, size: metadata.size, dimensions: metadata.dimensions }
+            : img
+        ))
+      }
+    }
+
+    loadImages()
   }, [mainImageUrl, images])
 
   const validateFile = (file: File): string | null => {
@@ -285,10 +328,15 @@ export function EnhancedRestaurantImageUpload({
 
         const url = await uploadToSupabase(compressionResult.file, fileName, bucket, upload.id)
 
+        // Fetch metadata for the newly uploaded image
+        const metadata = await fetchImageMetadata(url)
+
         const newImage: ImageItem = {
           id: `uploaded-${Date.now()}-${i}`,
           url: url,
-          isMain: false
+          isMain: false,
+          size: metadata.size,
+          dimensions: metadata.dimensions
         }
 
         uploadedImages.push(newImage)
@@ -553,29 +601,41 @@ export function EnhancedRestaurantImageUpload({
             </div>
           </CardHeader>
           <CardContent>
-            <div className="relative group w-fit">
-              <div className="relative">
-                <Image
-                  src={mainImage.url}
-                  alt="Main restaurant image"
-                  width={200}
-                  height={150}
-                  className="rounded-lg object-cover border-2 border-yellow-200"
-                />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100">
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => removeImage(mainImage.id)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+            <div className="space-y-2">
+              <div className="relative group w-fit">
+                <div className="relative">
+                  <Image
+                    src={mainImage.url}
+                    alt="Main restaurant image"
+                    width={200}
+                    height={150}
+                    className="rounded-lg object-cover border-2 border-yellow-200"
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => removeImage(mainImage.id)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <Badge className="absolute top-2 left-2 bg-yellow-500">
+                    <Star className="h-3 w-3 mr-1" />
+                    Main
+                  </Badge>
                 </div>
-                <Badge className="absolute top-2 left-2 bg-yellow-500">
-                  <Star className="h-3 w-3 mr-1" />
-                  Main
-                </Badge>
               </div>
+              {mainImage.size && mainImage.dimensions && (
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p className="flex items-center gap-1">
+                    <span className="font-medium">Size:</span> {formatFileSize(mainImage.size)}
+                  </p>
+                  <p className="flex items-center gap-1">
+                    <span className="font-medium">Dimensions:</span> {mainImage.dimensions.width} × {mainImage.dimensions.height}px
+                  </p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -605,7 +665,7 @@ export function EnhancedRestaurantImageUpload({
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {galleryImages.map((image, index) => (
                 <Card key={image.id} className="relative group overflow-hidden">
-                  <CardContent className="p-2">
+                  <CardContent className="p-2 space-y-2">
                     <div className="relative">
                       <Image
                         src={image.url}
@@ -614,7 +674,7 @@ export function EnhancedRestaurantImageUpload({
                         height={100}
                         className="rounded object-cover w-full h-24"
                       />
-                      
+
                       {/* Hover Controls */}
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/70 transition-colors rounded flex items-center justify-center opacity-0 group-hover:opacity-100">
                         <div className="flex gap-1">
@@ -668,6 +728,14 @@ export function EnhancedRestaurantImageUpload({
                         {index + 1}
                       </Badge>
                     </div>
+
+                    {/* Image Metadata */}
+                    {image.size && image.dimensions && (
+                      <div className="text-xs text-muted-foreground space-y-0.5">
+                        <p className="truncate">{formatFileSize(image.size)}</p>
+                        <p className="truncate">{image.dimensions.width} × {image.dimensions.height}px</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
