@@ -48,7 +48,9 @@ import {
   Save,
   ChevronRight,
   Smartphone,
-  Download
+  Download,
+  Copy,
+  Check
 } from "lucide-react"
 import Link from "next/link"
 import { PushNotificationManager } from "@/components/pwa/push-notification-manager"
@@ -120,6 +122,7 @@ export default function SettingsPage() {
   const supabase = createClient()
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState("general")
+  const [copiedLink, setCopiedLink] = useState<string | null>(null)
 
   // Get restaurant data
   const [restaurantId, setRestaurantId] = useState<string>("")
@@ -262,6 +265,18 @@ export default function SettingsPage() {
     updateRestaurantMutation.mutate(data)
   }
 
+  // Copy link to clipboard
+  const copyToClipboard = async (text: string, linkType: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedLink(linkType)
+      toast.success("Link copied to clipboard!")
+      setTimeout(() => setCopiedLink(null), 2000)
+    } catch (err) {
+      toast.error("Failed to copy link")
+    }
+  }
+
   const CUISINE_TYPES = [
     "Lebanese",
     "Mediterranean",
@@ -306,7 +321,7 @@ export default function SettingsPage() {
 
       {/* Quick Access Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {/* Add new settings card for availability */}
+        {/* Operating Hours Card */}
         <Link href="/settings/availability">
           <Card className="cursor-pointer hover:shadow-lg transition-shadow">
             <CardHeader>
@@ -328,11 +343,12 @@ export default function SettingsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="location">Location</TabsTrigger>
           <TabsTrigger value="operational">Operation</TabsTrigger>
           <TabsTrigger value="features">Features</TabsTrigger>
+          <TabsTrigger value="links">Links</TabsTrigger>
           <TabsTrigger value="pwa">PWA</TabsTrigger>
         </TabsList>
 
@@ -899,6 +915,93 @@ export default function SettingsPage() {
                   </div>
                 </form>
               </Form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="links" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Link2 className="h-5 w-5" />
+                Links
+              </CardTitle>
+              <CardDescription>
+                Copy your menu and booking widget links to share with customers
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Menu Link */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  Menu Link
+                </label>
+                <p className="text-sm text-muted-foreground">
+                  Share this link to display your restaurant menu
+                </p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={restaurantId ? `https://plate-app.com/menu/${restaurantId}` : ''}
+                    className="font-mono text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyToClipboard(`https://plate-app.com/menu/${restaurantId}`, 'menu')}
+                    disabled={!restaurantId}
+                  >
+                    {copiedLink === 'menu' ? (
+                      <>
+                        <Check className="h-4 w-4 mr-2 text-green-600" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Widget Link */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  Booking Widget Link
+                </label>
+                <p className="text-sm text-muted-foreground">
+                  Share this link to allow customers to make bookings directly
+                </p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={restaurantId ? `https://plate-app.com/widget/${restaurantId}` : ''}
+                    className="font-mono text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyToClipboard(`https://plate-app.com/widget/${restaurantId}`, 'widget')}
+                    disabled={!restaurantId}
+                  >
+                    {copiedLink === 'widget' ? (
+                      <>
+                        <Check className="h-4 w-4 mr-2 text-green-600" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

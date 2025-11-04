@@ -282,6 +282,7 @@ export default function BasicDashboardPage() {
         event_occurrence_id,
         turn_time_minutes,
         assigned_table,
+        source,
         special_offers!bookings_applied_offer_id_fkey (
           id,
           title,
@@ -451,6 +452,7 @@ export default function BasicDashboardPage() {
                 table_preferences,
                 confirmation_code,
                 assigned_table,
+                source,
                 profiles!bookings_user_id_fkey (
                   id,
                   full_name,
@@ -597,6 +599,7 @@ export default function BasicDashboardPage() {
                 table_preferences,
                 confirmation_code,
                 assigned_table,
+                source,
                 profiles!bookings_user_id_fkey (
                   id,
                   full_name,
@@ -1696,19 +1699,59 @@ export default function BasicDashboardPage() {
                         })()}
                       </div>
 
-                      {/* Special Offer - Top Right */}
-                      {(() => {
-                        const hasAppliedOfferId = !!booking.applied_offer_id;
-                        const hasSpecialOfferData =
-                          booking.special_offers &&
-                          (Array.isArray(booking.special_offers)
-                            ? booking.special_offers.length > 0
-                            : booking.special_offers.title);
+                      {/* Top Right: Source Badge and Special Offer */}
+                      <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                        {/* Source Badge - Always show */}
+                        {(() => {
+                          const getSourceInfo = () => {
+                            switch (booking.source) {
+                              case 'widget':
+                                return {
+                                  text: 'Widget',
+                                  className: 'bg-green-100 text-green-800 border-green-200'
+                                };
+                              case 'app':
+                                return {
+                                  text: 'App',
+                                  className: 'bg-blue-100 text-blue-800 border-blue-200'
+                                };
+                              case 'manual':
+                                return {
+                                  text: 'Manual',
+                                  className: 'bg-gray-100 text-gray-800 border-gray-200'
+                                };
+                              default:
+                                return {
+                                  text: booking.source || 'Unknown',
+                                  className: 'bg-gray-100 text-gray-800 border-gray-200'
+                                };
+                            }
+                          };
 
-                        const hasSpecialOffer =
-                          hasAppliedOfferId || hasSpecialOfferData;
+                          const sourceInfo = getSourceInfo();
+                          return (
+                            <Badge
+                              variant="secondary"
+                              className={`${sourceInfo.className} text-xs tablet:text-sm px-2 py-1`}
+                            >
+                              {sourceInfo.text}
+                            </Badge>
+                          );
+                        })()}
 
-                        return hasSpecialOffer ? (
+                        {/* Special Offer */}
+                        {(() => {
+                          const hasAppliedOfferId = !!booking.applied_offer_id;
+                          const hasSpecialOfferData =
+                            booking.special_offers &&
+                            (Array.isArray(booking.special_offers)
+                              ? booking.special_offers.length > 0
+                              : (booking.special_offers as any)?.title);
+
+                          const hasSpecialOffer =
+                            hasAppliedOfferId || hasSpecialOfferData;
+
+                          return hasSpecialOffer ? (
                           <>
                             {/* Mobile: Simple tag with popover */}
                             <div className="tablet:hidden flex-shrink-0">
@@ -1819,7 +1862,8 @@ export default function BasicDashboardPage() {
                             </div>
                           </>
                         ) : null;
-                      })()}
+                        })()}
+                      </div>
 
                       {/* Action Buttons - Hidden on mobile, shown on tablet+ */}
                       <div className="hidden tablet:flex flex-col gap-2 flex-shrink-0">
