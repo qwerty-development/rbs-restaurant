@@ -276,6 +276,24 @@ export function BookingList({
     return booking.guest_phone || booking.user?.phone_number || 'No phone'
   }
 
+  const formatBookingSource = (source: string | undefined) => {
+    if (!source) return 'app'
+    const sourceLower = source.toLowerCase()
+    if (sourceLower === 'widget') return 'Widget'
+    if (sourceLower === 'manual') return 'Manual'
+    if (sourceLower === 'app') return 'App'
+    return source.charAt(0).toUpperCase() + source.slice(1).toLowerCase()
+  }
+
+  const getSourceBadgeVariant = (source: string | undefined) => {
+    if (!source) return 'outline'
+    const sourceLower = source.toLowerCase()
+    if (sourceLower === 'widget') return 'default'
+    if (sourceLower === 'manual') return 'secondary'
+    if (sourceLower === 'app') return 'outline'
+    return 'outline'
+  }
+
   const isDiningStatus = (status: string) => {
     return ['seated', 'ordered', 'appetizers', 'main_course', 'dessert', 'payment'].includes(status)
   }
@@ -471,8 +489,14 @@ export function BookingList({
                         )}
                       </div>
                       
-                      <div className="flex items-center gap-4 text-sm tablet:text-base text-muted-foreground">
+                      <div className="flex items-center gap-4 text-sm tablet:text-base text-muted-foreground flex-wrap">
                         <span className="font-mono font-semibold text-gray-700">#{booking.confirmation_code}</span>
+                        <Badge 
+                          variant={getSourceBadgeVariant(booking.source) as any}
+                          className="px-3 py-1 text-sm tablet:text-base"
+                        >
+                          {formatBookingSource(booking.source)}
+                        </Badge>
                         {booking.occasion && (
                           <Badge variant="secondary" className="px-3 py-1 text-sm tablet:text-base">
                             🎉 {booking.occasion}

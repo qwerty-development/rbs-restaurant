@@ -590,6 +590,26 @@ function BookingRowItem({ row, onUpdateStatus, onShowConfirmDialog, expanded, on
     }
   }
 
+  // Format booking source
+  const formatBookingSource = (source: string | undefined) => {
+    if (!source) return 'App'
+    const sourceLower = source.toLowerCase()
+    if (sourceLower === 'widget') return 'Widget'
+    if (sourceLower === 'manual') return 'Manual'
+    if (sourceLower === 'app') return 'App'
+    return source.charAt(0).toUpperCase() + source.slice(1).toLowerCase()
+  }
+
+  // Get source badge variant
+  const getSourceBadgeVariant = (source: string | undefined) => {
+    if (!source) return 'outline'
+    const sourceLower = source.toLowerCase()
+    if (sourceLower === 'widget') return 'default'
+    if (sourceLower === 'manual') return 'secondary'
+    if (sourceLower === 'app') return 'outline'
+    return 'outline'
+  }
+
   return (
     <div className={`border rounded-lg p-3 md:p-4 transition-all ${isPending ? 'bg-red-50 border-red-300 shadow-md' : 'bg-white hover:shadow-sm'}`}>
       <div className="flex flex-col gap-3">
@@ -601,9 +621,14 @@ function BookingRowItem({ row, onUpdateStatus, onShowConfirmDialog, expanded, on
               📍 {restaurantName}
             </div>
           </div>
-          <Badge variant={getStatusVariant(row.status)} className="text-xs flex-shrink-0">
-            {row.status.replaceAll('_', ' ').toUpperCase()}
-          </Badge>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Badge variant={getSourceBadgeVariant((row as any).source) as any} className="text-xs">
+              {formatBookingSource((row as any).source)}
+            </Badge>
+            <Badge variant={getStatusVariant(row.status)} className="text-xs">
+              {row.status.replaceAll('_', ' ').toUpperCase()}
+            </Badge>
+          </div>
         </div>
 
         {/* Pending Timer */}
@@ -722,6 +747,7 @@ function BookingRowItem({ row, onUpdateStatus, onShowConfirmDialog, expanded, on
                 <div className="flex items-center gap-2"><Clock className="h-4 w-4 text-slate-600" /> <span>Created {createdStr}</span></div>
                 <div className="flex items-center gap-2"><Users className="h-4 w-4 text-purple-600" /> <span>Party {row.party_size}</span></div>
                 <div className="flex items-center gap-2"><Tag className="h-4 w-4 text-slate-600" /> <span>Status {row.status.replaceAll('_',' ')}</span></div>
+                <div className="flex items-center gap-2"><Tag className="h-4 w-4 text-slate-600" /> <span>Source: {formatBookingSource((row as any).source)}</span></div>
                 {row.special_offers && <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 inline-block">Offer applied</div>}
                 {/* Special requests */}
                 {row.special_requests && (
