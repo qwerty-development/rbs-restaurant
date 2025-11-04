@@ -101,7 +101,7 @@ export default function SignUpPage() {
     try {
       setIsLoading(true)
 
-      // Create user account
+      // Create user account with OTP verification
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
@@ -110,7 +110,7 @@ export default function SignUpPage() {
             full_name: data.fullName,
             phone_number: data.phoneNumber,
           },
-          emailRedirectTo: 'https://www.plate-app.com/verify-email',
+          // No emailRedirectTo needed for OTP flow
         },
       })
 
@@ -135,8 +135,11 @@ export default function SignUpPage() {
         // Don't throw here as the user account was created successfully
       }
 
-      // Redirect to confirmation page
-      router.push("/confirm-email")
+      // Show success message
+      toast.success("Account created! Check your email for verification code.")
+
+      // Redirect to OTP verification page with email
+      router.push(`/verify-otp?email=${encodeURIComponent(data.email)}`)
     } catch (error: any) {
       console.error("Sign-up error:", error)
       
