@@ -31,13 +31,17 @@ import {
   DialogTitle 
 } from "@/components/ui/dialog"
 import { MenuItemForm } from "@/components/menu/menu-item-form"
+import { CSVImportDialog } from "@/components/menu/csv-import-dialog"
+import { CSVCategoryImportDialog } from "@/components/menu/csv-category-import-dialog"
 import { toast } from "react-hot-toast"
-import { Plus, Edit, Trash2, Search, ArrowUpDown } from "lucide-react"
+import { Plus, Edit, Trash2, Search, ArrowUpDown, Upload, FolderUp } from "lucide-react"
 import type { MenuItem, MenuCategory } from "@/types"
 
 export default function MenuItemsPage() {
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null)
   const [isFormOpen, setIsFormOpen] = useState(false)
+  const [isCSVImportOpen, setIsCSVImportOpen] = useState(false)
+  const [isCategoryCsvImportOpen, setIsCategoryCsvImportOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [sortConfig, setSortConfig] = useState<{ key: keyof MenuItem; direction: 'asc' | 'desc' } | null>(null);
 
@@ -48,22 +52,39 @@ export default function MenuItemsPage() {
   const [restaurantId, setRestaurantId] = useState<string>("")
 
   useEffect(() => {
+    console.log('🔄 useEffect running to fetch restaurant ID...')
     async function getRestaurantId() {
       const { data: { user } } = await supabase.auth.getUser()
+      console.log('👤 User fetched:', user?.id)
       if (user) {
-        const { data: staffData } = await supabase
+        const { data: staffData, error } = await supabase
           .from("restaurant_staff")
           .select("restaurant_id")
           .eq("user_id", user.id)
           .single()
-        
+
+        if (error) {
+          console.error('❌ Error fetching restaurant staff:', error)
+        }
+
         if (staffData) {
+          console.log('✅ Restaurant ID loaded:', staffData.restaurant_id)
+          console.log('✅ Setting restaurantId state to:', staffData.restaurant_id)
           setRestaurantId(staffData.restaurant_id)
+        } else {
+          console.error('❌ No restaurant staff data found for user')
         }
       }
     }
     getRestaurantId()
   }, [supabase])
+
+  // Log whenever restaurantId state changes
+  useEffect(() => {
+    console.log('📍 restaurantId state changed to:', restaurantId)
+    console.log('📍 restaurantId type:', typeof restaurantId)
+    console.log('📍 restaurantId length:', restaurantId.length)
+  }, [restaurantId])
 
   const { data: menuItems, isLoading: itemsLoading } = useQuery({
     queryKey: ["menu-items", restaurantId],
@@ -210,14 +231,40 @@ export default function MenuItemsPage() {
             Manage all items on your menu
           </p>
         </div>
-        <Button onClick={handleAdd}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Item
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              console.log('📤 Import Categories button clicked')
+              console.log('📤 Current restaurantId:', restaurantId)
+              setIsCategoryCsvImportOpen(true)
+            }}
+            disabled={!restaurantId}
+          >
+            <FolderUp className="mr-2 h-4 w-4" />
+            Import Categories
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              console.log('📤 Import Items button clicked')
+              console.log('📤 Current restaurantId:', restaurantId)
+              setIsCSVImportOpen(true)
+            }}
+            disabled={!restaurantId}
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            Import Items
+          </Button>
+          <Button onClick={handleAdd} disabled={!restaurantId}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Item
+          </Button>
+        </div>
       </div>
 
-      <Dialog 
-        open={isFormOpen} 
+      <Dialog
+        open={isFormOpen}
         onOpenChange={(open) => {
           if (!open) {
             setIsFormOpen(false)
@@ -241,6 +288,25 @@ export default function MenuItemsPage() {
           />
         </DialogContent>
       </Dialog>
+
+      <CSVCategoryImportDialog
+        open={isCategoryCsvImportOpen}
+        onOpenChange={setIsCategoryCsvImportOpen}
+        restaurantId={restaurantId}
+        onImportComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ["menu-categories"] })
+        }}
+      />
+
+      <CSVImportDialog
+        open={isCSVImportOpen}
+        onOpenChange={setIsCSVImportOpen}
+        categories={categories || []}
+        restaurantId={restaurantId}
+        onImportComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ["menu-items"] })
+        }}
+      />
 
       <Card>
         <CardHeader>

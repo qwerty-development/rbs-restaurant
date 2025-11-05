@@ -30,8 +30,10 @@ import { MenuItemForm } from "@/components/menu/menu-item-form"
 import { CategoryForm } from "@/components/menu/category-form"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { DeleteCategoryDialog } from "@/components/menu/delete-category-dialog"
+import { CSVImportDialog } from "@/components/menu/csv-import-dialog"
+import { CSVCategoryImportDialog } from "@/components/menu/csv-category-import-dialog"
 import { toast } from "react-hot-toast"
-import { Plus, Search, Filter, Upload, Download, ExternalLink, Copy, QrCode, MoreHorizontal, Building } from "lucide-react"
+import { Plus, Search, Filter, Upload, Download, ExternalLink, Copy, QrCode, MoreHorizontal, Building, FolderUp } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { MenuItem, MenuCategory } from "@/types"
 
@@ -48,7 +50,9 @@ export default function AdminMenuPage() {
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [dietaryFilter, setDietaryFilter] = useState<string[]>([])
-  
+  const [isCSVImportOpen, setIsCSVImportOpen] = useState(false)
+  const [isCategoryCsvImportOpen, setIsCategoryCsvImportOpen] = useState(false)
+
   const supabase = createClient()
   const queryClient = useQueryClient()
   const [isQrOpen, setIsQrOpen] = useState(false)
@@ -461,9 +465,21 @@ export default function AdminMenuPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" disabled={!selectedRestaurantId}>
+          <Button
+            variant="outline"
+            disabled={!selectedRestaurantId}
+            onClick={() => setIsCategoryCsvImportOpen(true)}
+          >
+            <FolderUp className="mr-2 h-4 w-4" />
+            Import Categories
+          </Button>
+          <Button
+            variant="outline"
+            disabled={!selectedRestaurantId}
+            onClick={() => setIsCSVImportOpen(true)}
+          >
             <Upload className="mr-2 h-4 w-4" />
-            Import
+            Import Items
           </Button>
           <Button variant="outline" disabled={!selectedRestaurantId}>
             <Download className="mr-2 h-4 w-4" />
@@ -804,6 +820,28 @@ export default function AdminMenuPage() {
           }
         }}
         isLoading={deleteCategoryMutation.isPending}
+      />
+
+      {/* CSV Category Import Dialog */}
+      <CSVCategoryImportDialog
+        open={isCategoryCsvImportOpen}
+        onOpenChange={setIsCategoryCsvImportOpen}
+        restaurantId={selectedRestaurantId}
+        onImportComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ["admin-menu-categories"] })
+        }}
+      />
+
+      {/* CSV Items Import Dialog */}
+      <CSVImportDialog
+        open={isCSVImportOpen}
+        onOpenChange={setIsCSVImportOpen}
+        categories={categories || []}
+        restaurantId={selectedRestaurantId}
+        onImportComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ["admin-all-menu-items"] })
+          queryClient.invalidateQueries({ queryKey: ["admin-displayed-menu-items"] })
+        }}
       />
     </div>
   )
