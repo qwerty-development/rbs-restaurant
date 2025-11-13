@@ -41,6 +41,7 @@ import {
   Pause
 } from 'lucide-react'
 import { titleCase } from '@/lib/utils'
+import { EXCLUDED_RESTAURANT_IDS } from '@/lib/config/excluded-restaurants'
 
 interface Restaurant {
   id: string
@@ -137,6 +138,7 @@ export default function RestaurantManagement() {
         staff:restaurant_staff(count),
         tables:restaurant_tables(count)
       `)
+      .not('id', 'in', `(${EXCLUDED_RESTAURANT_IDS.join(',')})`)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -160,6 +162,7 @@ export default function RestaurantManagement() {
       const { data: restaurantStats, error: statsError } = await supabase
         .from('restaurants')
         .select('id, status, average_rating')
+        .not('id', 'in', `(${EXCLUDED_RESTAURANT_IDS.join(',')})`)
 
       if (statsError) throw statsError
 

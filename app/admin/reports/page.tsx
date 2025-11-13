@@ -11,6 +11,7 @@ import { Calendar, Download, RefreshCw, TrendingUp, Users, CheckCircle2, XCircle
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useReportFilters } from '@/hooks/use-report-filters'
 import { SortableTable, Column } from './sortable-table'
+import { EXCLUDED_RESTAURANT_IDS } from '@/lib/config/excluded-restaurants'
 
 type UserStats = {
   total_users: number
@@ -110,7 +111,7 @@ export default function AdminReportsPage() {
 
   const loadRestaurants = async () => {
     try {
-      const { data, error } = await supabase.from('restaurants').select('id, name').order('name')
+      const { data, error } = await supabase.from('restaurants').select('id, name').not('id', 'in', `(${EXCLUDED_RESTAURANT_IDS.join(',')})`).order('name')
       if (error) throw error
       setRestaurants(data || [])
     } catch (e) {
@@ -122,7 +123,7 @@ export default function AdminReportsPage() {
     try {
       setLoading(true)
       const dateFilter = getDateFilter()
-      let base = supabase.from('bookings').select('status, booking_time, party_size, restaurant_id, restaurants:restaurants!bookings_restaurant_id_fkey(tier)', { count: 'exact', head: false })
+      let base = supabase.from('bookings').select('status, booking_time, party_size, restaurant_id, restaurants:restaurants!bookings_restaurant_id_fkey(tier)', { count: 'exact', head: false }).not('restaurant_id', 'in', `(${EXCLUDED_RESTAURANT_IDS.join(',')})`)
       if (filters.restaurantId !== 'all') base = base.eq('restaurant_id', filters.restaurantId)
       if (dateFilter.from) base = base.gte('booking_time', dateFilter.from)
       if (dateFilter.to) base = base.lte('booking_time', dateFilter.to)

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'react-hot-toast'
 import { ChevronLeft, ChevronRight, Search, RefreshCw, Calendar, Clock, CheckCircle, XCircle, Phone, Users, Mail, MapPin, Tag } from 'lucide-react'
+import { EXCLUDED_RESTAURANT_IDS } from '@/lib/config/excluded-restaurants'
 
 type BookingRow = {
   id: string
@@ -139,6 +140,9 @@ export default function AdminAllBookingsPage() {
           `,
           { count: 'exact' }
         )
+        // Exclude test restaurants
+        .not('restaurant_id', 'in', `(${EXCLUDED_RESTAURANT_IDS.join(',')})`)
+
       // Restaurant filter
       if (selectedRestaurant && selectedRestaurant !== 'all') {
         query = query.eq('restaurant_id', selectedRestaurant)
@@ -330,6 +334,7 @@ export default function AdminAllBookingsPage() {
         const { data, error } = await supabase
           .from('restaurants')
           .select('id, name')
+          .not('id', 'in', `(${EXCLUDED_RESTAURANT_IDS.join(',')})`)
           .order('name')
         if (error) throw error
         setRestaurants(data || [])

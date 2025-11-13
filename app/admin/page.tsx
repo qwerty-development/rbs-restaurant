@@ -17,6 +17,7 @@ import { LocationPicker, EnhancedAddressSearch } from '@/components/location'
 import type { Coordinates } from '@/lib/utils/location'
 import type { EnhancedGeocodingResult } from '@/lib/services/enhanced-geocoding'
 import { EnhancedRestaurantImageUpload } from '@/components/ui/enhanced-restaurant-image-upload'
+import { EXCLUDED_RESTAURANT_IDS } from '@/lib/config/excluded-restaurants'
 
 interface Restaurant {
   name: string
@@ -178,6 +179,7 @@ export default function AdminPage() {
       const { data: restaurants, error } = await supabase
         .from('restaurants')
         .select('id, name')
+        .not('id', 'in', `(${EXCLUDED_RESTAURANT_IDS.join(',')})`)
         .order('created_at', { ascending: false })
 
       if (error) {
@@ -472,6 +474,7 @@ export default function AdminPage() {
       const { data: restaurants, error } = await supabase
         .from('restaurants')
         .select('id, name')
+        .not('id', 'in', `(${EXCLUDED_RESTAURANT_IDS.join(',')})`)
         .order('created_at', { ascending: false })
 
       if (error) {
