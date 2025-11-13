@@ -19,8 +19,7 @@
     "migrate:serveme:verbose": "cd migration-tools && npm install && npx ts-node migrate-serveme.ts --verbose --dry-run",
     "migrate:open-hours": "tsx scripts/apply-open-hours-migration.ts",
     "migrate:open-hours:dry-run": "tsx scripts/apply-open-hours-migration.ts --dry-run",
-    "setup:open-hours": "tsx scripts/create-open-hours-table-simple.ts",
-    "delete:test-restaurant": "tsx scripts/delete-test-restaurant-data.ts"
+    "setup:open-hours": "tsx scripts/create-open-hours-table-simple.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.0",
