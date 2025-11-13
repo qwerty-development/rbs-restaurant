@@ -58,6 +58,9 @@ import { BookingActionDialog } from "@/components/bookings/booking-action-dialog
 import { WaitlistManager } from "@/components/basic/waitlist-manager";
 import { ManualBookingDialog } from "@/components/basic/manual-booking-dialog";
 import { CollapsedBookingView } from "@/components/bookings/collapsed-booking-view";
+import { QuickStatsSummary } from "@/components/basic/quick-stats-summary";
+import { RecentActivityFeed } from "@/components/basic/recent-activity-feed";
+import { DailySummaryWidget } from "@/components/basic/daily-summary-widget";
 import {
   Calendar as CalendarIcon,
   Search,
@@ -1285,6 +1288,11 @@ export default function BasicDashboardPage() {
       {/* Push Notification Permission */}
       <PushNotificationPermission />
 
+      {/* Daily Summary Widget - Only show for bookings tab */}
+      {activeTab === "bookings" && dateViewMode === "today" && (
+        <DailySummaryWidget bookings={bookings} selectedDate={new Date()} />
+      )}
+
       {/* Analytics Cards */}
       {analytics && (
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
@@ -1387,6 +1395,11 @@ export default function BasicDashboardPage() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Quick Stats Summary - Only show for today view in bookings tab */}
+      {activeTab === "bookings" && dateViewMode === "today" && (
+        <QuickStatsSummary bookings={bookings} selectedDate={new Date()} />
       )}
 
       {/* Tabs */}
@@ -1568,8 +1581,10 @@ export default function BasicDashboardPage() {
             </div>
           </div>
 
-          {/* Bookings List */}
-          <div className="space-y-4">
+          {/* Bookings List with Activity Feed */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Bookings List - Takes 2/3 on large screens */}
+            <div className="lg:col-span-2 space-y-4">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="flex items-center gap-2">
@@ -2257,6 +2272,14 @@ export default function BasicDashboardPage() {
                 </Card>
               ))
             )}
+            </div>
+
+            {/* Recent Activity Feed - Takes 1/3 on large screens */}
+            <div className="lg:col-span-1">
+              <div className="sticky top-6">
+                <RecentActivityFeed bookings={bookings} />
+              </div>
+            </div>
           </div>
         </TabsContent>
 
