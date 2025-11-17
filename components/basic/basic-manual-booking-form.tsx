@@ -174,6 +174,8 @@ export function BasicManualBookingForm({
     queryFn: async () => {
       if (!bookingDate) return []
 
+      const today = new Date().toISOString().split("T")[0]
+
       const { data, error } = await supabase
         .from("event_occurrences")
         .select(`
@@ -188,17 +190,25 @@ export function BasicManualBookingForm({
             id,
             title,
             description,
-            event_type
+            event_type,
+            restaurant_id
           )
         `)
         .eq("status", "scheduled")
-        .gte("occurrence_date", bookingDate.toISOString().split("T")[0])
+        .gte("occurrence_date", today)
         .order("occurrence_date")
         .order("start_time")
-        .limit(10)
 
       if (error) throw error
-      return data || []
+      
+      // Filter by restaurant_id and ensure event exists
+      const filtered = (data || []).filter(
+        (occurrence: any) => 
+          occurrence.event && 
+          occurrence.event.restaurant_id === restaurantId
+      )
+      
+      return filtered.slice(0, 10)
     },
     enabled: !!restaurantId && !!bookingDate,
   })
@@ -438,6 +448,9 @@ export function BasicManualBookingForm({
                 <SelectContent>
                   <SelectItem value="none">No event (regular booking)</SelectItem>
                   {upcomingEvents.map((occurrence: any) => {
+                    // Skip if event is null or missing title
+                    if (!occurrence.event || !occurrence.event.title) return null
+                    
                     const event = occurrence.event
                     const currentBookings = occurrence.current_bookings || 0
                     const maxCapacity = occurrence.max_capacity || 0
