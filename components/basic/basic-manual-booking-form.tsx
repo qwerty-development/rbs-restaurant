@@ -102,9 +102,9 @@ export function BasicManualBookingForm({
   const partySize = watch("party_size")
   const selectedEventId = watch("event_occurrence_id")
 
-  // Fetch restaurant sections
+  // Fetch restaurant sections with closure filtering
   const { data: sections } = useQuery({
-    queryKey: ["restaurant-sections", restaurantId],
+    queryKey: ["restaurant-sections-with-closures", restaurantId, bookingDate, bookingTime],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("restaurant_sections")
@@ -114,7 +114,56 @@ export function BasicManualBookingForm({
         .order("name")
 
       if (error) throw error
-      return data
+      
+      const allSections = data || []
+      
+      // If no booking date/time, return all active sections
+      if (!bookingDate || !bookingTime) return allSections
+
+      // Format date in YYYY-MM-DD format without timezone conversion
+      const year = bookingDate.getFullYear()
+      const month = String(bookingDate.getMonth() + 1).padStart(2, '0')
+      const day = String(bookingDate.getDate()).padStart(2, '0')
+      const bookingDateStr = `${year}-${month}-${day}`
+      
+      const { data: closures, error: closuresError } = await supabase
+        .from("section_closures")
+        .select("*")
+        .in("section_id", allSections.map(s => s.id))
+        .lte("start_date", bookingDateStr)
+        .gte("end_date", bookingDateStr)
+
+      if (closuresError) throw closuresError
+
+      // If no closures, return all sections
+      if (!closures || closures.length === 0) return allSections
+
+      // Filter out sections with active closures
+      const filteredSections = allSections.filter((section) => {
+        const sectionClosures = closures.filter(
+          (c) => c.section_id === section.id
+        )
+
+        // Check if any closure applies to this section
+        return !sectionClosures.some((closure) => {
+          // If no time range specified, closure applies all day
+          if (!closure.start_time || !closure.end_time) {
+            return true // Section is closed all day
+          }
+
+          // Check if booking time falls within closure time range
+          const bookingTimeFormatted = bookingTime.substring(0, 5) // HH:mm
+          const startTimeFormatted = closure.start_time.substring(0, 5)
+          const endTimeFormatted = closure.end_time.substring(0, 5)
+
+          return (
+            bookingTimeFormatted >= startTimeFormatted &&
+            bookingTimeFormatted < endTimeFormatted
+          )
+        })
+      })
+
+      return filteredSections
     },
     enabled: !!restaurantId,
   })
