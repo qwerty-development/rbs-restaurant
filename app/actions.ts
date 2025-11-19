@@ -192,7 +192,6 @@ export async function sendWaitlistNotification(
   return await sendNotification({
     title,
     body,
-    url: '/waitlist',
     id: `waitlist_${Date.now()}`
   })
 }

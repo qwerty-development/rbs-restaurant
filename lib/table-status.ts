@@ -144,7 +144,7 @@ export class TableStatusService {
     // Use a transaction-like approach: read and update atomically
     const { data: booking, error: fetchError } = await this.supabase
       .from('bookings')
-      .select('status')
+      .select('*')
       .eq('id', bookingId)
       .single()
 
@@ -194,9 +194,6 @@ export class TableStatusService {
     const { error: historyError } = await this.supabase
       .from('booking_status_history')
       .insert({
-        booking_id: bookingId,
-        old_status: oldStatus,
-        new_status: newStatus,
         changed_by: userId,
         metadata: metadata || {}
       })
@@ -204,6 +201,32 @@ export class TableStatusService {
     if (historyError) {
       console.error('Failed to insert status history:', historyError)
       // Don't throw here as the booking was updated successfully
+    }
+
+    // Handle side effects (stats and notifications)
+    try {
+      // 1. Handle No-Show Stats
+      if (newStatus === 'no_show' && booking.user_id && booking.restaurant_id) {
+        const { data: customerData } = await this.supabase
+          .from('restaurant_customers')
+          .select('id, no_show_count')
+          .eq('user_id', booking.user_id)
+          .eq('restaurant_id', booking.restaurant_id)
+          .single()
+
+        if (customerData) {
+          await this.supabase
+            .from('restaurant_customers')
+            .update({
+              no_show_count: (customerData.no_show_count || 0) + 1,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', customerData.id)
+        }
+      }
+    } catch (sideEffectError) {
+      console.error('Error handling status update side effects:', sideEffectError)
+      // Don't fail the operation if side effects fail
     }
 
     return { success: true }

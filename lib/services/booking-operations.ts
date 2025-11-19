@@ -328,3 +328,78 @@ export async function cancelBooking(bookingId: string, staffId: string, reason?:
     return { success: false, error: 'Unexpected error cancelling booking' }
   }
 }
+
+/**
+ * Mark a booking as no-show
+ */
+export async function markAsNoShow(bookingId: string, staffId: string): Promise<BookingActionResult> {
+  try {
+    const supabase = createClient()
+
+    // Get booking details first
+    const { data: existingBooking, error: fetchError } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('id', bookingId)
+      .single()
+
+    if (fetchError || !existingBooking) {
+      return { success: false, error: 'Booking not found' }
+    }
+
+    // Update booking status
+    const { data: booking, error: updateError } = await supabase
+      .from('bookings')
+      .update({
+        status: 'no_show',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', bookingId)
+      .select()
+      .single()
+
+    if (updateError) {
+      console.error('Error marking no-show:', updateError)
+      return { success: false, error: 'Failed to mark as no-show' }
+    }
+
+    // Update customer stats (increment no_show_count)
+    if (existingBooking.user_id && existingBooking.restaurant_id) {
+      const { data: customerData, error: customerError } = await supabase
+        .from('restaurant_customers')
+        .select('id, no_show_count')
+        .eq('user_id', existingBooking.user_id)
+        .eq('restaurant_id', existingBooking.restaurant_id)
+        .single()
+
+      if (!customerError && customerData) {
+        await supabase
+          .from('restaurant_customers')
+          .update({
+            no_show_count: (customerData.no_show_count || 0) + 1,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', customerData.id)
+      }
+    }
+
+    // Create booking history record
+    await supabase
+      .from('booking_history')
+      .insert({
+        booking_id: bookingId,
+        previous_status: existingBooking.status,
+        new_status: 'no_show',
+        changed_by: staffId,
+        changed_at: new Date().toISOString(),
+        notes: 'Marked as no-show by staff'
+      })
+
+    toast.success('Booking marked as no-show')
+    return { success: true, data: booking }
+
+  } catch (error) {
+    console.error('Error in markAsNoShow:', error)
+    return { success: false, error: 'Unexpected error marking no-show' }
+  }
+}
