@@ -40,7 +40,9 @@ import {
   MapPin,
   Heart,
   CreditCard,
-  Settings
+  Settings,
+  Info,
+  ChevronDown
 } from 'lucide-react'
 
 interface User {
@@ -74,6 +76,7 @@ interface UserStats {
   total_users: number
   active_users: number
   new_users_this_month: number
+  new_users_today: number
   avg_user_rating: number
   total_loyalty_points: number
   high_value_users: number
@@ -93,12 +96,14 @@ const TIER_ICONS = {
   platinum: '💎'
 }
 
+
 export default function UserManagement() {
   const [users, setUsers] = useState<User[]>([])
   const [stats, setStats] = useState<UserStats>({
     total_users: 0,
     active_users: 0,
     new_users_this_month: 0,
+    new_users_today: 0,
     avg_user_rating: 0,
     total_loyalty_points: 0,
     high_value_users: 0
@@ -118,12 +123,28 @@ export default function UserManagement() {
   const [createdTo, setCreatedTo] = useState('')
   const [pointsMin, setPointsMin] = useState('')
   const [pointsMax, setPointsMax] = useState('')
+  const [showActiveInfo, setShowActiveInfo] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const [statsCollapsed, setStatsCollapsed] = useState(false)
 
   const supabase = createClient()
 
   useEffect(() => {
     fetchData()
   }, [])
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 640px)')
+    const handleChange = (event: MediaQueryListEvent) => setIsMobile(event.matches)
+
+    setIsMobile(mediaQuery.matches)
+    mediaQuery.addEventListener('change', handleChange)
+    return () => mediaQuery.removeEventListener('change', handleChange)
+  }, [])
+
+  useEffect(() => {
+    setStatsCollapsed(isMobile)
+  }, [isMobile])
 
   // Refetch when pagination or filters change
   useEffect(() => {
@@ -259,6 +280,9 @@ export default function UserManagement() {
   const fetchStats = async () => {
     try {
       const PAGE_SIZE = 1000
+      const now = new Date()
+      const thirtyDaysAgo = new Date(now)
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
       // Page through profiles for stats
       let profilesFrom = 0
@@ -280,10 +304,11 @@ export default function UserManagement() {
       // Page through bookings just to accumulate user_id counts
       let bookingsFrom = 0
       let bookingUserIds: string[] = []
+      let recentBookingUserIds: string[] = []
       while (true) {
         const { data: page, error: bookingError } = await supabase
           .from('bookings')
-          .select('user_id')
+          .select('user_id, created_at')
           .range(bookingsFrom, bookingsFrom + PAGE_SIZE - 1)
 
         if (bookingError) {
@@ -291,21 +316,33 @@ export default function UserManagement() {
           break
         }
 
-        const current = (page || []).map(b => b.user_id).filter(Boolean)
-        bookingUserIds = bookingUserIds.concat(current as any)
+        const current = (page || []).filter(b => b.user_id)
+        bookingUserIds = bookingUserIds.concat(current.map(b => b.user_id) as any)
+        recentBookingUserIds = recentBookingUserIds.concat(
+          current
+            .filter(b => b.created_at && new Date(b.created_at) >= thirtyDaysAgo)
+            .map(b => b.user_id) as any
+        )
         if ((page || []).length < PAGE_SIZE) break
         bookingsFrom += PAGE_SIZE
       }
 
-      const now = new Date()
       const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
       
       const totalUsers = allUserStats.length
       const newUsersThisMonth = allUserStats.filter(u => new Date(u.created_at) >= thisMonth).length
+      const startOfDay = new Date(now)
+      startOfDay.setHours(0, 0, 0, 0)
+      const endOfDay = new Date(now)
+      endOfDay.setHours(23, 59, 59, 999)
+      const newUsersToday = allUserStats.filter(u => {
+        const created = new Date(u.created_at)
+        return created >= startOfDay && created <= endOfDay
+      }).length
       
-      // Calculate active users based on booking data
-      const usersWithBookings = new Set(bookingUserIds)
-      const activeUsers = usersWithBookings.size
+      // Calculate active users based on recent booking data
+      const usersWithRecentBookings = new Set(recentBookingUserIds)
+      const activeUsers = usersWithRecentBookings.size
       
       const avgRating = totalUsers > 0 ? (allUserStats.reduce((sum, u) => sum + (u.user_rating || 0), 0) / totalUsers) : 0
       const totalLoyaltyPoints = allUserStats.reduce((sum, u) => sum + (u.loyalty_points || 0), 0)
@@ -322,6 +359,7 @@ export default function UserManagement() {
         total_users: totalUsers,
         active_users: activeUsers,
         new_users_this_month: newUsersThisMonth,
+        new_users_today: newUsersToday,
         avg_user_rating: avgRating,
         total_loyalty_points: totalLoyaltyPoints,
         high_value_users: highValueUsers
@@ -485,91 +523,153 @@ export default function UserManagement() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Users</p>
-                <p className="text-3xl font-bold text-gray-900">{stats.total_users.toLocaleString()}</p>
-              </div>
-              <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Users className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <Card>
+        <CardHeader
+          className={`flex flex-row items-center justify-between space-y-0 py-4 ${isMobile ? 'cursor-pointer' : ''}`}
+          role={isMobile ? 'button' : undefined}
+          tabIndex={isMobile ? 0 : undefined}
+          aria-expanded={!statsCollapsed}
+          onClick={() => isMobile && setStatsCollapsed(prev => !prev)}
+          onKeyDown={(event) => {
+            if (!isMobile) return
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              setStatsCollapsed(prev => !prev)
+            }
+          }}
+        >
+          <div>
+            <CardTitle className="text-lg">Key Metrics</CardTitle>
+            <CardDescription>Snapshot of user health across the platform</CardDescription>
+          </div>
+          {isMobile && (
+            <ChevronDown
+              className={`w-5 h-5 text-gray-500 transition-transform ${statsCollapsed ? '' : 'rotate-180'}`}
+            />
+          )}
+        </CardHeader>
+        {(!isMobile || !statsCollapsed) && (
+          <CardContent className="space-y-4 pt-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4 md:p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Total Users</p>
+                      <p className="text-2xl font-semibold text-gray-900">{stats.total_users.toLocaleString()}</p>
+                    </div>
+                    <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <Users className="w-5 h-5 text-blue-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Active Users</p>
-                <p className="text-3xl font-bold text-green-600">{stats.active_users.toLocaleString()}</p>
-              </div>
-              <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <UserCheck className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              <Card>
+                <CardContent className="p-4 md:p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Active Users</p>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-gray-500 hover:text-gray-700"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setShowActiveInfo(true)
+                          }}
+                        >
+                          <Info className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <p className="text-2xl font-semibold text-green-600">{stats.active_users.toLocaleString()}</p>
+                      <p className="text-[11px] text-gray-500">Booked in the last 30 days</p>
+                    </div>
+                    <div className="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center">
+                      <UserCheck className="w-5 h-5 text-green-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">New This Month</p>
-                <p className="text-3xl font-bold text-purple-600">{stats.new_users_this_month}</p>
-              </div>
-              <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              <Card>
+                <CardContent className="p-4 md:p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500">New This Month</p>
+                      <p className="text-2xl font-semibold text-purple-600">{stats.new_users_this_month}</p>
+                    </div>
+                    <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <TrendingUp className="w-5 h-5 text-purple-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Avg Rating</p>
-                <p className="text-3xl font-bold text-yellow-600">{stats.avg_user_rating.toFixed(1)}</p>
-              </div>
-              <div className="h-12 w-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <Star className="w-6 h-6 text-yellow-600" />
-              </div>
+              <Card>
+                <CardContent className="p-4 md:p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500">New Today</p>
+                      <p className="text-2xl font-semibold text-blue-600">{stats.new_users_today}</p>
+                      <p className="text-[11px] text-gray-500">Resets daily at midnight</p>
+                    </div>
+                    <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <Clock className="w-5 h-5 text-blue-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Loyalty Points</p>
-                <p className="text-3xl font-bold text-indigo-600">{stats.total_loyalty_points.toLocaleString()}</p>
-              </div>
-              <div className="h-12 w-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-                <Trophy className="w-6 h-6 text-indigo-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              <Card>
+                <CardContent className="p-4 md:p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Avg Rating</p>
+                      <p className="text-2xl font-semibold text-yellow-600">{stats.avg_user_rating.toFixed(1)}</p>
+                    </div>
+                    <div className="h-10 w-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                      <Star className="w-5 h-5 text-yellow-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">High Value</p>
-                <p className="text-3xl font-bold text-emerald-600">{stats.high_value_users}</p>
-              </div>
-              <div className="h-12 w-12 bg-emerald-100 rounded-lg flex items-center justify-center">
-                <CreditCard className="w-6 h-6 text-emerald-600" />
-              </div>
+              <Card>
+                <CardContent className="p-4 md:p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Loyalty Points</p>
+                      <p className="text-2xl font-semibold text-indigo-600">{stats.total_loyalty_points.toLocaleString()}</p>
+                    </div>
+                    <div className="h-10 w-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                      <Trophy className="w-5 h-5 text-indigo-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4 md:p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500">High Value</p>
+                      <p className="text-2xl font-semibold text-emerald-600">{stats.high_value_users}</p>
+                      <p className="text-[11px] text-gray-500">10+ lifetime bookings</p>
+                    </div>
+                    <div className="h-10 w-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                      <CreditCard className="w-5 h-5 text-emerald-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </CardContent>
-        </Card>
-      </div>
+        )}
+      </Card>
 
       {/* Filters */}
       <Card>
@@ -957,6 +1057,27 @@ export default function UserManagement() {
               </TabsContent>
             </Tabs>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showActiveInfo} onOpenChange={setShowActiveInfo}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Info className="w-5 h-5 text-green-600" />
+              How we calculate active users
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-gray-600">
+            <p>
+              Active users represent unique customer accounts that have at least one booking on record.
+              We scan the complete bookings table, aggregate the user_ids, and count the unique values.
+            </p>
+            <p>
+              This metric updates each time you refresh the dashboard and reflects lifetime booking activity,
+              helping you understand how many customers have engaged with your restaurants.
+            </p>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

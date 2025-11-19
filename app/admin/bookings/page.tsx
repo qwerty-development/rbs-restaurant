@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ComponentType } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'react-hot-toast'
-import { ChevronLeft, ChevronRight, Search, RefreshCw, Calendar, Clock, CheckCircle, XCircle, Phone, Users, Mail, MapPin, Tag } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, RefreshCw, Calendar, Clock, CheckCircle, XCircle, Phone, Users, Mail, MapPin, Tag, BarChart3, Activity as ActivityIcon, Sparkles, PieChart, Info } from 'lucide-react'
 import { EXCLUDED_RESTAURANT_IDS } from '@/lib/config/excluded-restaurants'
 
 type BookingRow = {
@@ -34,6 +35,20 @@ type BookingRow = {
   } | null
   // Allow any additional fields without strict typing for full payload view
   [key: string]: any
+}
+
+type BookingStatsRow = {
+  total_bookings: number | null
+  bookings_today: number | null
+  bookings_occurring_today: number | null
+  pending_bookings: number | null
+  confirmed_bookings: number | null
+  live_plate_diners: number | null
+  avg_party_size: number | null
+  widget_bookings: number | null
+  same_day_percentage: number | null
+  occurring_today_percentage: number | null
+  widget_percentage: number | null
 }
 
 function useElapsed(iso?: string) {
@@ -73,9 +88,24 @@ export default function AdminAllBookingsPage() {
   const [partyMax, setPartyMax] = useState<string>('')
   const [bookingType, setBookingType] = useState<'all' | 'registered' | 'guest'>('all')
   const [hasTable, setHasTable] = useState<'all' | 'yes' | 'no'>('all')
+  const [bookingSource, setBookingSource] = useState('all')
   const [loading, setLoading] = useState(false)
   const [rows, setRows] = useState<BookingRow[]>([])
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [bookingStats, setBookingStats] = useState({
+    total: 0,
+    today: 0,
+    occurringToday: 0,
+    pending: 0,
+    confirmed: 0,
+    avgPartySize: 0,
+    widgetShare: 0,
+    sameDayShare: 0,
+    occurringShare: 0,
+    livePlate: 0
+  })
+  const [statInfo, setStatInfo] = useState<{ title: string; body: string } | null>(null)
   
   // Confirmation dialog states
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -190,6 +220,14 @@ export default function AdminAllBookingsPage() {
         query = query.is('user_id', null)
       }
 
+      if (bookingSource !== 'all') {
+        if (bookingSource === 'other') {
+          query = query.not('source', 'in', '(app,widget,manual,partner,waitlist)')
+        } else {
+          query = query.ilike('source', bookingSource)
+        }
+      }
+
       // User filter: match guest_name, guest_email, phone, ID or profile name/email
       if (userQuery.trim()) {
         const uq = userQuery.trim()
@@ -263,6 +301,36 @@ export default function AdminAllBookingsPage() {
     }
   }
 
+  const fetchBookingStats = async () => {
+    try {
+      setStatsLoading(true)
+      const { data, error } = await supabase
+        .from('admin_booking_stats')
+        .select<BookingStatsRow>('*')
+        .single()
+
+      if (error) throw error
+
+      const stats = data || ({} as BookingStatsRow)
+      setBookingStats({
+        total: Number(stats.total_bookings ?? 0),
+        today: Number(stats.bookings_today ?? 0),
+        occurringToday: Number(stats.bookings_occurring_today ?? 0),
+        pending: Number(stats.pending_bookings ?? 0),
+        confirmed: Number(stats.confirmed_bookings ?? 0),
+        avgPartySize: Number(stats.avg_party_size ?? 0),
+        widgetShare: Number(stats.widget_percentage ?? 0),
+        sameDayShare: Number(stats.same_day_percentage ?? 0),
+        occurringShare: Number(stats.occurring_today_percentage ?? 0),
+        livePlate: Number(stats.live_plate_diners ?? 0)
+      })
+    } catch (error) {
+      console.error('Error fetching booking stats', error)
+    } finally {
+      setStatsLoading(false)
+    }
+  }
+
   // Show confirmation dialog
   const showConfirmDialog = (type: 'accept' | 'decline', bookingId: string, customerName: string) => {
     setConfirmDialog({
@@ -290,6 +358,7 @@ export default function AdminAllBookingsPage() {
       setRows(prev => prev.map(r => r.id === confirmDialog.bookingId ? { ...r, status } : r))
       // Refresh to keep counts/pagination correct
       fetchBookings()
+      fetchBookingStats()
     } catch (e) {
       console.error(e)
       toast.error('Failed to update booking')
@@ -316,6 +385,7 @@ export default function AdminAllBookingsPage() {
       setRows(prev => prev.map(r => r.id === bookingId ? { ...r, status } : r))
       // Refresh to keep counts/pagination correct
       fetchBookings()
+      fetchBookingStats()
     } catch (e) {
       console.error(e)
       toast.error('Failed to update booking')
@@ -325,7 +395,12 @@ export default function AdminAllBookingsPage() {
   useEffect(() => {
     fetchBookings()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, sortOrder, sortField, statusFilter, partyMin, partyMax, bookingType, hasTable])
+  }, [page, pageSize, sortOrder, sortField, statusFilter, partyMin, partyMax, bookingType, hasTable, bookingSource])
+
+  useEffect(() => {
+    fetchBookingStats()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Load restaurants for filter once
   useEffect(() => {
@@ -350,6 +425,11 @@ export default function AdminAllBookingsPage() {
     fetchBookings()
   }
 
+  const handleRefresh = () => {
+    fetchBookings()
+    fetchBookingStats()
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   return (
@@ -357,12 +437,94 @@ export default function AdminAllBookingsPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-semibold">All Bookings</h2>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={fetchBookings} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </div>
       </div>
+
+      <Card>
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+            <StatCard
+              label="Total Bookings"
+              value={bookingStats.total}
+              icon={BarChart3}
+              accent="text-blue-600"
+              loading={statsLoading}
+            />
+            <StatCard
+              label="Created Today"
+              value={bookingStats.today}
+              helper={`${bookingStats.sameDayShare.toFixed(1)}% of total`}
+              icon={Sparkles}
+              accent="text-indigo-600"
+              loading={statsLoading}
+              onExplain={() => setStatInfo({
+                title: 'Created Today',
+                body: 'Counts every booking that was created between 12:00 AM and 11:59 PM local time today, regardless of when the visit is scheduled.'
+              })}
+            />
+            <StatCard
+              label="Booked For Today"
+              value={bookingStats.occurringToday}
+              helper={`${bookingStats.occurringShare.toFixed(1)}% of total`}
+              icon={Calendar}
+              accent="text-blue-500"
+              loading={statsLoading}
+              onExplain={() => setStatInfo({
+                title: 'Bookings Occurring Today',
+                body: 'Shows how many parties are scheduled to dine today (booking time falls within today), even if they booked earlier.'
+              })}
+            />
+            <StatCard
+              label="Pending Review"
+              value={bookingStats.pending}
+              icon={Clock}
+              accent="text-amber-600"
+              loading={statsLoading}
+            />
+            <StatCard
+              label="Confirmed"
+              value={bookingStats.confirmed}
+              icon={ActivityIcon}
+              accent="text-emerald-600"
+              loading={statsLoading}
+            />
+            <StatCard
+              label="Avg Party Size"
+              value={bookingStats.avgPartySize.toFixed(1)}
+              icon={Users}
+              accent="text-purple-600"
+              loading={statsLoading}
+            />
+            <StatCard
+              label="Widget Share"
+              value={`${bookingStats.widgetShare.toFixed(1)}%`}
+              icon={PieChart}
+              accent="text-rose-600"
+              loading={statsLoading}
+              onExplain={() => setStatInfo({
+                title: 'Widget Share',
+                body: 'Percentage of all bookings that came through the embedded website widget (instead of the app, manual entry, partners, etc.).'
+              })}
+            />
+            <StatCard
+              label="Live on Plate"
+              value={bookingStats.livePlate}
+              helper="Currently dining via Plate app"
+              icon={ActivityIcon}
+              accent="text-slate-600"
+              loading={statsLoading}
+              onExplain={() => setStatInfo({
+                title: 'Live on Plate',
+                body: 'Guests who are actively dining right now (arrived/seated/ordering/payment) AND originally booked through the Plate app.'
+              })}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-4 space-y-3">
@@ -479,6 +641,22 @@ export default function AdminAllBookingsPage() {
                 </SelectContent>
               </Select>
             </div>
+          <div>
+            <Select value={bookingSource} onValueChange={(v) => setBookingSource(v)}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Source" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All sources</SelectItem>
+                <SelectItem value="app">App</SelectItem>
+                <SelectItem value="widget">Widget</SelectItem>
+                <SelectItem value="manual">Manual</SelectItem>
+                <SelectItem value="partner">Partner</SelectItem>
+                <SelectItem value="waitlist">Waitlist</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
             <div>
               <Select value={sortOrder} onValueChange={(v: 'asc' | 'desc') => setSortOrder(v)}>
                 <SelectTrigger>
@@ -549,6 +727,63 @@ export default function AdminAllBookingsPage() {
         cancelText="Cancel"
         onConfirm={handleConfirmedAction}
       />
+
+      <Dialog open={Boolean(statInfo)} onOpenChange={(open) => !open && setStatInfo(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{statInfo?.title || 'Details'}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">{statInfo?.body}</p>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function StatCard({
+  label,
+  value,
+  helper,
+  icon: Icon,
+  accent,
+  loading,
+  onExplain
+}: {
+  label: string
+  value: number | string
+  helper?: string
+  icon: ComponentType<{ className?: string }>
+  accent?: string
+  loading?: boolean
+  onExplain?: () => void
+}) {
+  return (
+    <div className="border rounded-xl p-3 bg-white">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+          <p className="text-2xl font-semibold text-slate-900">
+            {loading ? '—' : value}
+          </p>
+          {helper && !loading && (
+            <p className="text-xs text-muted-foreground">{helper}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {onExplain && (
+            <button
+              type="button"
+              onClick={onExplain}
+              className="h-7 w-7 rounded-full border border-slate-200 text-slate-500 flex items-center justify-center hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              <Info className="h-4 w-4" />
+            </button>
+          )}
+          <div className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center">
+            <Icon className={`h-5 w-5 ${accent || 'text-slate-600'}`} />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
