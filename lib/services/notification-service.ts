@@ -141,8 +141,7 @@ export class NotificationService {
         }
       }
 
-      // Send welcome notification
-      await this.sendWelcomeNotification(subscription)
+
       
       return { success: true }
     } catch (error: any) {
@@ -349,27 +348,7 @@ export class NotificationService {
     }
   }
 
-  /**
-   * Send welcome notification
-   */
-  private async sendWelcomeNotification(subscription: PushSubscriptionJSON) {
-    if (!isPushConfigured) return
 
-    try {
-      await webpush.sendNotification(
-        subscription as any,
-        JSON.stringify({
-          title: 'Welcome to Restaurant Manager! 🍽️',
-          body: 'You\'ll now receive important notifications about bookings and updates.',
-          icon: '/icon-192x192.png',
-          badge: '/icon-192x192.png',
-          tag: 'welcome'
-        })
-      )
-    } catch (error) {
-      console.error('Failed to send welcome notification:', error)
-    }
-  }
 
   /**
    * Check if notification should be sent based on preferences
