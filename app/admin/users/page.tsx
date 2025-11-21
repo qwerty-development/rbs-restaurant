@@ -225,28 +225,42 @@ export default function UserManagement() {
     // Activity filter (based on bookings count) via join-in approach
     if (activityFilter !== 'all') {
       if (activityFilter === 'active' || activityFilter === 'frequent') {
-        // Get user_ids with bookings, optionally count>=10
-        const { data: bookingAgg } = await supabase
+        // Get user_ids with bookings
+        // Optimization: Fetch only user_id
+        const { data: bookings } = await supabase
           .from('bookings')
-          .select('user_id, count:count(*)')
+          .select('user_id')
           .not('user_id', 'is', null)
-          .group('user_id')
-        const ids = (bookingAgg || [])
-          .filter((r: any) => activityFilter === 'frequent' ? (r.count >= 10) : (r.count > 0))
-          .map((r: any) => r.user_id)
-        if (ids.length === 0) {
+        
+        const bookingCounts: Record<string, number> = {}
+        const ids = new Set<string>()
+        
+        ;(bookings || []).forEach((b: any) => {
+          if (b.user_id) {
+            bookingCounts[b.user_id] = (bookingCounts[b.user_id] || 0) + 1
+            ids.add(b.user_id)
+          }
+        })
+
+        const filteredIds = Array.from(ids).filter(id => {
+          const count = bookingCounts[id]
+          return activityFilter === 'frequent' ? count >= 10 : count > 0
+        })
+
+        if (filteredIds.length === 0) {
           setUsers([])
           setTotal(0)
           return
         }
-        query = query.in('id', ids as any)
+        query = query.in('id', filteredIds)
       } else if (activityFilter === 'inactive') {
-        const { data: bookingAgg } = await supabase
+        const { data: bookings } = await supabase
           .from('bookings')
           .select('user_id')
           .not('user_id', 'is', null)
-          .group('user_id')
-        const ids = (bookingAgg || []).map((r: any) => r.user_id)
+        
+        const ids = Array.from(new Set((bookings || []).map((b: any) => b.user_id)))
+        
         if (ids.length > 0) {
           query = query.not('id', 'in', `(${ids.join(',')})`)
         }
@@ -297,93 +311,79 @@ export default function UserManagement() {
 
   const fetchStats = async () => {
     try {
-      const PAGE_SIZE = 1000
       const now = new Date()
-      const thirtyDaysAgo = new Date(now)
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+      const startOfDay = new Date(now.setHours(0, 0, 0, 0)).toISOString()
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
-      // Page through profiles for stats
-      let profilesFrom = 0
-      let allUserStats: { id: string; created_at: string; loyalty_points: number; user_rating: number }[] = []
-      while (true) {
-        const { data: page, error } = await supabase
-          .from('profiles')
-          .select('id, created_at, loyalty_points, user_rating')
-          .range(profilesFrom, profilesFrom + PAGE_SIZE - 1)
+      // Parallelize independent queries
+      const [
+        { count: totalUsers },
+        { count: newUsersThisMonth },
+        { count: newUsersToday },
+        { data: activeUsersData },
+        { data: ratingsData },
+        { data: highValueData }
+      ] = await Promise.all([
+        // Total users
+        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+        
+        // New users this month
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth),
+        
+        // New users today
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', startOfDay),
+        
+        // Active users (booked in last 30 days) - distinct user_ids
+        supabase.from('bookings')
+          .select('user_id')
+          .gte('created_at', thirtyDaysAgo)
+          .not('user_id', 'is', null),
 
-        if (error) throw error
+        // Avg rating & total loyalty points - fetch only needed columns
+        // Note: For large datasets, this should ideally be a database function (RPC)
+        // but fetching 2 columns for a few thousand users is acceptable for now.
+        supabase.from('profiles').select('user_rating, loyalty_points'),
 
-        const current = page || []
-        allUserStats = allUserStats.concat(current as any)
-        if (current.length < PAGE_SIZE) break
-        profilesFrom += PAGE_SIZE
-      }
+        // High value users (10+ bookings)
+        // We fetch user_ids from bookings to aggregate. 
+        // Optimization: We only need user_id.
+        supabase.from('bookings').select('user_id').not('user_id', 'is', null)
+      ])
 
-      // Page through bookings just to accumulate user_id counts
-      let bookingsFrom = 0
-      let bookingUserIds: string[] = []
-      let recentBookingUserIds: string[] = []
-      while (true) {
-        const { data: page, error: bookingError } = await supabase
-          .from('bookings')
-          .select('user_id, created_at')
-          .range(bookingsFrom, bookingsFrom + PAGE_SIZE - 1)
+      // Process Active Users
+      const activeUsersSet = new Set((activeUsersData || []).map(b => b.user_id))
+      const activeUsers = activeUsersSet.size
 
-        if (bookingError) {
-          console.error('Error fetching booking stats:', bookingError)
-          break
+      // Process Ratings & Points
+      const profiles = ratingsData || []
+      const totalRatingSum = profiles.reduce((sum, p) => sum + (p.user_rating || 0), 0)
+      const avgRating = profiles.length > 0 ? totalRatingSum / profiles.length : 0
+      const totalLoyaltyPoints = profiles.reduce((sum, p) => sum + (p.loyalty_points || 0), 0)
+
+      // Process High Value Users
+      // This is still heavy client-side aggregation but lighter than before (only IDs)
+      const bookingCounts: Record<string, number> = {}
+      const bookings = highValueData || []
+      for (const b of bookings) {
+        if (b.user_id) {
+          bookingCounts[b.user_id] = (bookingCounts[b.user_id] || 0) + 1
         }
-
-        const current = (page || []).filter(b => b.user_id)
-        bookingUserIds = bookingUserIds.concat(current.map(b => b.user_id) as any)
-        recentBookingUserIds = recentBookingUserIds.concat(
-          current
-            .filter(b => b.created_at && new Date(b.created_at) >= thirtyDaysAgo)
-            .map(b => b.user_id) as any
-        )
-        if ((page || []).length < PAGE_SIZE) break
-        bookingsFrom += PAGE_SIZE
       }
-
-      const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-      
-      const totalUsers = allUserStats.length
-      const newUsersThisMonth = allUserStats.filter(u => new Date(u.created_at) >= thisMonth).length
-      const startOfDay = new Date(now)
-      startOfDay.setHours(0, 0, 0, 0)
-      const endOfDay = new Date(now)
-      endOfDay.setHours(23, 59, 59, 999)
-      const newUsersToday = allUserStats.filter(u => {
-        const created = new Date(u.created_at)
-        return created >= startOfDay && created <= endOfDay
-      }).length
-      
-      // Calculate active users based on recent booking data
-      const usersWithRecentBookings = new Set(recentBookingUserIds)
-      const activeUsers = usersWithRecentBookings.size
-      
-      const avgRating = totalUsers > 0 ? (allUserStats.reduce((sum, u) => sum + (u.user_rating || 0), 0) / totalUsers) : 0
-      const totalLoyaltyPoints = allUserStats.reduce((sum, u) => sum + (u.loyalty_points || 0), 0)
-      
-      // Count users with 10+ bookings
-      const bookingCountsByUser = bookingUserIds.reduce((acc, userId) => {
-        acc[userId] = (acc[userId] || 0) + 1
-        return acc
-      }, {} as Record<string, number>)
-      
-      const highValueUsers = Object.values(bookingCountsByUser).filter(count => count >= 10).length
+      const highValueUsers = Object.values(bookingCounts).filter(count => count >= 10).length
 
       setStats({
-        total_users: totalUsers,
+        total_users: totalUsers || 0,
         active_users: activeUsers,
-        new_users_this_month: newUsersThisMonth,
-        new_users_today: newUsersToday,
+        new_users_this_month: newUsersThisMonth || 0,
+        new_users_today: newUsersToday || 0,
         avg_user_rating: avgRating,
         total_loyalty_points: totalLoyaltyPoints,
         high_value_users: highValueUsers
       })
     } catch (error) {
       console.error('Error fetching user stats:', error)
+      toast.error('Failed to load metrics')
     }
   }
 

@@ -68,19 +68,28 @@ class MobilePresenceService {
   }
 
   private ensureChannel() {
-    if (this.channel) return
+    if (this.channel) {
+      // If channel exists but is not joined, we might need to rejoin? 
+      // Usually Supabase handles this, but let's log it.
+      return
+    }
 
+    console.log('MobilePresenceService: Initializing channel...')
     this.setStatus('connecting')
 
     this.channel = this.client.channel(CHANNEL_NAME)
 
-    const updateState = () => this.refreshPresenceState()
+    const updateState = () => {
+      console.log('MobilePresenceService: Presence event received')
+      this.refreshPresenceState()
+    }
 
     this.channel
       .on('presence', { event: 'sync' }, updateState)
       .on('presence', { event: 'join' }, updateState)
       .on('presence', { event: 'leave' }, updateState)
       .subscribe((status) => {
+        console.log(`MobilePresenceService: Channel status changed to ${status}`)
         switch (status) {
           case 'SUBSCRIBED':
             this.retryAttempts = 0
@@ -103,16 +112,24 @@ class MobilePresenceService {
   }
 
   private refreshPresenceState() {
-    if (!this.channel) return
+    if (!this.channel) {
+      console.warn('MobilePresenceService: No channel available to refresh state')
+      return
+    }
     try {
-      const state = this.channel.presenceState<MobilePresenceState>() || {}
+      // We cast to unknown first because Supabase types might not perfectly align with our strict types
+      const state = (this.channel.presenceState<MobileUserPresence>() as unknown) as MobilePresenceState || {}
+      
+      // Log state for debugging in development
+      if (process.env.NODE_ENV === 'development') {
+        const userCount = Object.keys(state).length
+        console.log(`MobilePresenceService: Presence state updated. Users online: ${userCount}`, state)
+      }
+
       this.currentState = state
       this.notifyStateListeners()
     } catch (error) {
-      // Only log in development to avoid console noise in production
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Failed to read mobile presence state:', error)
-      }
+      console.error('MobilePresenceService: Failed to read mobile presence state:', error)
     }
   }
 
