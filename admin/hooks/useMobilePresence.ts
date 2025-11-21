@@ -48,11 +48,21 @@ export const useMobilePresence = () => {
     [state]
   )
 
+  const refresh = useCallback(() => {
+    MobilePresenceService.getInstance().refresh()
+  }, [])
+
+  const reconnect = useCallback(() => {
+    MobilePresenceService.getInstance().reconnect()
+  }, [])
+
   return {
     onlineUsers,
     presenceState: state,
     status,
     isUserOnline,
+    refresh,
+    reconnect
   }
 }
 

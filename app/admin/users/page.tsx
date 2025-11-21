@@ -130,7 +130,7 @@ export default function UserManagement() {
   const [statsCollapsed, setStatsCollapsed] = useState(false)
 
   const supabase = createClient()
-  const { onlineUsers } = useMobilePresence()
+  const { onlineUsers, refresh: refreshPresence } = useMobilePresence()
 
   useEffect(() => {
     fetchData()
@@ -299,6 +299,8 @@ export default function UserManagement() {
   const refreshMetrics = async () => {
     setMetricsLoading(true)
     try {
+      // Refresh both database stats and live presence
+      refreshPresence()
       await fetchStats()
       toast.success('Metrics refreshed')
     } catch (error) {

@@ -111,6 +111,19 @@ class MobilePresenceService {
       })
   }
 
+  public refresh() {
+    console.log('MobilePresenceService: Manual refresh triggered')
+    this.refreshPresenceState()
+    if (this.status !== 'connected' && this.status !== 'connecting') {
+      this.reconnectChannel()
+    }
+  }
+
+  public reconnect() {
+    console.log('MobilePresenceService: Manual reconnect triggered')
+    this.reconnectChannel()
+  }
+
   private refreshPresenceState() {
     if (!this.channel) {
       console.warn('MobilePresenceService: No channel available to refresh state')
@@ -126,7 +139,8 @@ class MobilePresenceService {
         console.log(`MobilePresenceService: Presence state updated. Users online: ${userCount}`, state)
       }
 
-      this.currentState = state
+      // CRITICAL: Create a NEW object reference to ensure React detects the change
+      this.currentState = { ...state }
       this.notifyStateListeners()
     } catch (error) {
       console.error('MobilePresenceService: Failed to read mobile presence state:', error)
