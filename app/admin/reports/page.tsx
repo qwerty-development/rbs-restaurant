@@ -12,6 +12,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useReportFilters } from '@/hooks/use-report-filters'
 import { SortableTable, Column } from './sortable-table'
 import { EXCLUDED_RESTAURANT_IDS } from '@/lib/config/excluded-restaurants'
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+} from 'recharts'
 
 type UserStats = {
   total_users: number
@@ -74,6 +82,12 @@ type KPI = {
   billableUSD: number
 }
 
+type BookingsByHour = {
+  hour: number
+  count: number
+  label: string
+}
+
 export default function AdminReportsPage() {
   const supabase = createClient()
   const { filters, updateFilters, getDateFilter } = useReportFilters()
@@ -82,6 +96,9 @@ export default function AdminReportsPage() {
   const [loading, setLoading] = useState(false)
   const [kpi, setKpi] = useState<KPI>({ total: 0, accepted: 0, cancelled: 0, noShow: 0, totalCovers: 0, acceptedCovers: 0, declinedCovers: 0, cancelledCovers: 0, billableUSD: 0 })
   const [byHour, setByHour] = useState<{ hour: number; count: number }[]>([])
+  const [creationHourTotals, setCreationHourTotals] = useState<BookingsByHour[]>([])
+  const [creationHourByDate, setCreationHourByDate] = useState<Record<string, BookingsByHour[]>>({})
+  const [creationChartDate, setCreationChartDate] = useState<string>('all')
   // Export controls
   const [exportEntity, setExportEntity] = useState<'bookings' | 'reviews'>('bookings')
   const [exportStatus, setExportStatus] = useState<string>('all')
@@ -98,6 +115,14 @@ export default function AdminReportsPage() {
   const [bookingFunnel, setBookingFunnel] = useState<any[]>([])
   const [recurringUsers, setRecurringUsers] = useState<any[]>([])
   const [waitingTimeStats, setWaitingTimeStats] = useState<any>(null)
+
+  const buildCreationSeries = (source: Record<number, number>): BookingsByHour[] => {
+    return Array.from({ length: 24 }, (_, hour) => ({
+      hour,
+      label: `${String(hour).padStart(2, '0')}:00`,
+      count: source[hour] || 0,
+    }))
+  }
 
   // User-specific filters
   const [userFilterMinBookings, setUserFilterMinBookings] = useState<string>('')
@@ -123,7 +148,10 @@ export default function AdminReportsPage() {
     try {
       setLoading(true)
       const dateFilter = getDateFilter()
-      let base = supabase.from('bookings').select('status, booking_time, party_size, restaurant_id, restaurants:restaurants!bookings_restaurant_id_fkey(tier)', { count: 'exact', head: false }).not('restaurant_id', 'in', `(${EXCLUDED_RESTAURANT_IDS.join(',')})`)
+      let base = supabase
+        .from('bookings')
+        .select('status, booking_time, created_at, party_size, restaurant_id, restaurants:restaurants!bookings_restaurant_id_fkey(tier)', { count: 'exact', head: false })
+        .not('restaurant_id', 'in', `(${EXCLUDED_RESTAURANT_IDS.join(',')})`)
       if (filters.restaurantId !== 'all') base = base.eq('restaurant_id', filters.restaurantId)
       if (dateFilter.from) base = base.gte('booking_time', dateFilter.from)
       if (dateFilter.to) base = base.lte('booking_time', dateFilter.to)
@@ -152,13 +180,38 @@ export default function AdminReportsPage() {
 
       setKpi({ total, accepted, cancelled, noShow, totalCovers, acceptedCovers, declinedCovers, cancelledCovers, billableUSD })
 
-      // Peak hours (simple)
+      // Peak hours by reservation time
       const hourMap: Record<number, number> = {}
+      // Booking creation time distribution (aggregate + per-day)
+      const creationTotalsMap: Record<number, number> = {}
+      const creationByDateMap: Record<string, Record<number, number>> = {}
       data?.forEach((b: any) => {
-        const h = new Date(b.booking_time).getHours(); hourMap[h] = (hourMap[h] || 0) + 1
+        const bookingTime = b.booking_time ? new Date(b.booking_time) : null
+        if (bookingTime) {
+          const hour = bookingTime.getHours()
+          hourMap[hour] = (hourMap[hour] || 0) + 1
+        }
+
+        const createdAt = b.created_at ? new Date(b.created_at) : null
+        if (createdAt && !Number.isNaN(createdAt.getTime())) {
+          const creationHour = createdAt.getHours()
+          creationTotalsMap[creationHour] = (creationTotalsMap[creationHour] || 0) + 1
+          const dateKey = createdAt.toISOString().slice(0, 10)
+          creationByDateMap[dateKey] = creationByDateMap[dateKey] || {}
+          creationByDateMap[dateKey][creationHour] = (creationByDateMap[dateKey][creationHour] || 0) + 1
+        }
       })
-      const sorted = Object.entries(hourMap).map(([h,c]) => ({ hour: Number(h), count: c as number })).sort((a,b)=>a.hour-b.hour)
+      const sorted = Object.entries(hourMap)
+        .map(([h, c]) => ({ hour: Number(h), count: c as number }))
+        .sort((a, b) => a.hour - b.hour)
       setByHour(sorted)
+
+      setCreationHourTotals(buildCreationSeries(creationTotalsMap))
+      const perDateSeries: Record<string, BookingsByHour[]> = {}
+      Object.entries(creationByDateMap).forEach(([date, map]) => {
+        perDateSeries[date] = buildCreationSeries(map)
+      })
+      setCreationHourByDate(perDateSeries)
     } catch (e) {
       console.error(e)
       toast.error('Failed to load report')
@@ -166,6 +219,7 @@ export default function AdminReportsPage() {
       setLoading(false)
     }
   }
+
 
   // Load comprehensive stats
   const loadComprehensiveStats = async () => {
@@ -227,6 +281,11 @@ export default function AdminReportsPage() {
   useEffect(() => { loadRestaurants() }, [])
   useEffect(() => { loadKPIs() }, [filters.restaurantId, filters.dateRange.from, filters.dateRange.to])
   useEffect(() => { loadComprehensiveStats() }, [])
+  useEffect(() => {
+    if (creationChartDate !== 'all' && !creationHourByDate[creationChartDate]) {
+      setCreationChartDate('all')
+    }
+  }, [creationChartDate, creationHourByDate])
 
   const applyFilters = () => {
     loadKPIs()
@@ -360,6 +419,44 @@ export default function AdminReportsPage() {
       setLoading(false)
     }
   }
+
+  const creationSeries = useMemo(() => {
+    if (creationChartDate !== 'all' && creationHourByDate[creationChartDate]) {
+      return creationHourByDate[creationChartDate]
+    }
+    return creationHourTotals
+  }, [creationChartDate, creationHourByDate, creationHourTotals])
+
+  const creationDateOptions = useMemo(() => {
+    return Object.keys(creationHourByDate).sort((a, b) => {
+      const aTime = new Date(a).getTime()
+      const bTime = new Date(b).getTime()
+      return bTime - aTime
+    })
+  }, [creationHourByDate])
+
+  const creationInsights = useMemo(() => {
+    if (!creationSeries.length) return null
+    const total = creationSeries.reduce((sum, entry) => sum + entry.count, 0)
+    if (total === 0) {
+      return {
+        total: 0,
+        peak: null,
+        share: 0,
+        topThree: [] as BookingsByHour[],
+      }
+    }
+    const peak = creationSeries.reduce((max, entry) => (entry.count > max.count ? entry : max), creationSeries[0])
+    const topThree = [...creationSeries].sort((a, b) => b.count - a.count).slice(0, 3)
+
+    return {
+      total,
+      peak,
+      share: Math.round((peak.count / total) * 100),
+      topThree,
+    }
+  }, [creationSeries])
+  const hasCreationData = !!(creationInsights && creationInsights.total > 0)
 
   const acceptanceRate = useMemo(() => {
     const totalDecided = kpi.accepted + kpi.cancelled
@@ -830,6 +927,81 @@ export default function AdminReportsPage() {
                     </div>
                   ))}
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-indigo-500" />
+                  Booking Creation Pulse
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  When guests actually place their bookings (based on created_at timestamps).
+                </p>
+              </div>
+              <div className="flex w-full flex-col gap-1 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Day</span>
+                <Select value={creationChartDate} onValueChange={(value) => setCreationChartDate(value)}>
+                  <SelectTrigger className="w-full sm:w-[200px]">
+                    <SelectValue placeholder="All dates" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All dates</SelectItem>
+                    {creationDateOptions.map((date) => (
+                      <SelectItem key={date} value={date}>
+                        {new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {hasCreationData ? (
+                <div className="grid gap-6 lg:grid-cols-3">
+                  <div className="space-y-4">
+                    <div className="rounded-lg border bg-muted/40 p-4">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Peak hour</p>
+                      <p className="text-2xl font-semibold">
+                        {creationInsights?.peak ? creationInsights.peak.label : '--:--'}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {creationInsights?.peak?.count ?? 0} bookings ({creationInsights?.share ?? 0}% of total)
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/40 p-4">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Top creation windows</p>
+                      <div className="space-y-1.5">
+                        {(creationInsights?.topThree ?? []).map((entry) => (
+                          <div key={entry.hour} className="flex items-center justify-between text-sm">
+                            <span>{entry.label}</span>
+                            <span className="font-semibold">{entry.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="lg:col-span-2">
+                    <ResponsiveContainer width="100%" height={260}>
+                      <BarChart data={creationSeries}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={2} />
+                        <RechartsTooltip
+                          labelFormatter={(label) => `Hour ${label}`}
+                          formatter={(value) => [`${value} bookings`, 'Created']}
+                        />
+                        <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Not enough booking creation activity for the selected filters.
+                </p>
               )}
             </CardContent>
           </Card>

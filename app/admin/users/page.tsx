@@ -1,6 +1,6 @@
-'use client'
+"use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Switch } from '@/components/ui/switch'
 import { Progress } from '@/components/ui/progress'
 import { toast } from 'react-hot-toast'
+import { useMobilePresence } from '@/admin/hooks/useMobilePresence'
 import { 
   Search, 
   Filter, 
@@ -109,6 +110,7 @@ export default function UserManagement() {
     high_value_users: 0
   })
   const [loading, setLoading] = useState(true)
+  const [metricsLoading, setMetricsLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [tierFilter, setTierFilter] = useState('all')
   const [ratingFilter, setRatingFilter] = useState('all')
@@ -128,6 +130,7 @@ export default function UserManagement() {
   const [statsCollapsed, setStatsCollapsed] = useState(false)
 
   const supabase = createClient()
+  const { onlineUsers } = useMobilePresence()
 
   useEffect(() => {
     fetchData()
@@ -156,6 +159,7 @@ export default function UserManagement() {
     fetchUsers()
   }
 
+
   const fetchData = async () => {
     setLoading(true)
     try {
@@ -170,6 +174,7 @@ export default function UserManagement() {
       setLoading(false)
     }
   }
+
 
   const fetchUsers = async () => {
     const from = (page - 1) * pageSize
@@ -275,6 +280,19 @@ export default function UserManagement() {
     })
 
     setUsers(processedUsers)
+  }
+
+  const refreshMetrics = async () => {
+    setMetricsLoading(true)
+    try {
+      await fetchStats()
+      toast.success('Metrics refreshed')
+    } catch (error) {
+      console.error('Error refreshing metrics:', error)
+      toast.error('Failed to refresh metrics')
+    } finally {
+      setMetricsLoading(false)
+    }
   }
 
   const fetchStats = async () => {
@@ -538,15 +556,32 @@ export default function UserManagement() {
             }
           }}
         >
-          <div>
-            <CardTitle className="text-lg">Key Metrics</CardTitle>
-            <CardDescription>Snapshot of user health across the platform</CardDescription>
+          <div className="flex items-center justify-between w-full">
+            <div>
+              <CardTitle className="text-lg">Key Metrics</CardTitle>
+              <CardDescription>Snapshot of user health across the platform</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  refreshMetrics()
+                }}
+                disabled={metricsLoading}
+                className="h-8"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${metricsLoading ? 'animate-spin' : ''}`} />
+                Refresh Metrics
+              </Button>
+              {isMobile && (
+                <ChevronDown
+                  className={`w-5 h-5 text-gray-500 transition-transform ${statsCollapsed ? '' : 'rotate-180'}`}
+                />
+              )}
+            </div>
           </div>
-          {isMobile && (
-            <ChevronDown
-              className={`w-5 h-5 text-gray-500 transition-transform ${statsCollapsed ? '' : 'rotate-180'}`}
-            />
-          )}
         </CardHeader>
         {(!isMobile || !statsCollapsed) && (
           <CardContent className="space-y-4 pt-0">
@@ -623,7 +658,22 @@ export default function UserManagement() {
               </Card>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4 md:p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Mobile Users Online</p>
+                      <p className="text-2xl font-semibold text-primary">{onlineUsers?.length ?? 0}</p>
+                      <p className="text-[11px] text-gray-500">Live from mobile app</p>
+                    </div>
+                    <div className="h-10 w-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                      <Activity className="w-5 h-5 text-primary" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
               <Card>
                 <CardContent className="p-4 md:p-5">
                   <div className="flex items-center justify-between">
