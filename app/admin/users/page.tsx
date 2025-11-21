@@ -1,6 +1,6 @@
-'use client'
+"use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Switch } from '@/components/ui/switch'
 import { Progress } from '@/components/ui/progress'
 import { toast } from 'react-hot-toast'
+import { useMobilePresence } from '@/admin/hooks/useMobilePresence'
 import { 
   Search, 
   Filter, 
@@ -44,6 +45,8 @@ import {
   Info,
   ChevronDown
 } from 'lucide-react'
+
+import { AnalyticsTab } from './AnalyticsTab'
 
 interface User {
   id: string
@@ -109,6 +112,7 @@ export default function UserManagement() {
     high_value_users: 0
   })
   const [loading, setLoading] = useState(true)
+  const [metricsLoading, setMetricsLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [tierFilter, setTierFilter] = useState('all')
   const [ratingFilter, setRatingFilter] = useState('all')
@@ -128,6 +132,7 @@ export default function UserManagement() {
   const [statsCollapsed, setStatsCollapsed] = useState(false)
 
   const supabase = createClient()
+  const { onlineUsers, refresh: refreshPresence } = useMobilePresence()
 
   useEffect(() => {
     fetchData()
@@ -156,6 +161,7 @@ export default function UserManagement() {
     fetchUsers()
   }
 
+
   const fetchData = async () => {
     setLoading(true)
     try {
@@ -170,6 +176,7 @@ export default function UserManagement() {
       setLoading(false)
     }
   }
+
 
   const fetchUsers = async () => {
     const from = (page - 1) * pageSize
@@ -220,28 +227,42 @@ export default function UserManagement() {
     // Activity filter (based on bookings count) via join-in approach
     if (activityFilter !== 'all') {
       if (activityFilter === 'active' || activityFilter === 'frequent') {
-        // Get user_ids with bookings, optionally count>=10
-        const { data: bookingAgg } = await supabase
+        // Get user_ids with bookings
+        // Optimization: Fetch only user_id
+        const { data: bookings } = await supabase
           .from('bookings')
-          .select('user_id, count:count(*)')
+          .select('user_id')
           .not('user_id', 'is', null)
-          .group('user_id')
-        const ids = (bookingAgg || [])
-          .filter((r: any) => activityFilter === 'frequent' ? (r.count >= 10) : (r.count > 0))
-          .map((r: any) => r.user_id)
-        if (ids.length === 0) {
+        
+        const bookingCounts: Record<string, number> = {}
+        const ids = new Set<string>()
+        
+        ;(bookings || []).forEach((b: any) => {
+          if (b.user_id) {
+            bookingCounts[b.user_id] = (bookingCounts[b.user_id] || 0) + 1
+            ids.add(b.user_id)
+          }
+        })
+
+        const filteredIds = Array.from(ids).filter(id => {
+          const count = bookingCounts[id]
+          return activityFilter === 'frequent' ? count >= 10 : count > 0
+        })
+
+        if (filteredIds.length === 0) {
           setUsers([])
           setTotal(0)
           return
         }
-        query = query.in('id', ids as any)
+        query = query.in('id', filteredIds)
       } else if (activityFilter === 'inactive') {
-        const { data: bookingAgg } = await supabase
+        const { data: bookings } = await supabase
           .from('bookings')
           .select('user_id')
           .not('user_id', 'is', null)
-          .group('user_id')
-        const ids = (bookingAgg || []).map((r: any) => r.user_id)
+        
+        const ids = Array.from(new Set((bookings || []).map((b: any) => b.user_id)))
+        
         if (ids.length > 0) {
           query = query.not('id', 'in', `(${ids.join(',')})`)
         }
@@ -277,95 +298,96 @@ export default function UserManagement() {
     setUsers(processedUsers)
   }
 
+  const refreshMetrics = async () => {
+    setMetricsLoading(true)
+    try {
+      // Refresh both database stats and live presence
+      refreshPresence()
+      await fetchStats()
+      toast.success('Metrics refreshed')
+    } catch (error) {
+      console.error('Error refreshing metrics:', error)
+      toast.error('Failed to refresh metrics')
+    } finally {
+      setMetricsLoading(false)
+    }
+  }
+
   const fetchStats = async () => {
     try {
-      const PAGE_SIZE = 1000
       const now = new Date()
-      const thirtyDaysAgo = new Date(now)
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+      const startOfDay = new Date(now.setHours(0, 0, 0, 0)).toISOString()
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
-      // Page through profiles for stats
-      let profilesFrom = 0
-      let allUserStats: { id: string; created_at: string; loyalty_points: number; user_rating: number }[] = []
-      while (true) {
-        const { data: page, error } = await supabase
-          .from('profiles')
-          .select('id, created_at, loyalty_points, user_rating')
-          .range(profilesFrom, profilesFrom + PAGE_SIZE - 1)
+      // Parallelize independent queries
+      const [
+        { count: totalUsers },
+        { count: newUsersThisMonth },
+        { count: newUsersToday },
+        { data: activeUsersData },
+        { data: ratingsData },
+        { data: highValueData }
+      ] = await Promise.all([
+        // Total users
+        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+        
+        // New users this month
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth),
+        
+        // New users today
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', startOfDay),
+        
+        // Active users (booked in last 30 days) - distinct user_ids
+        supabase.from('bookings')
+          .select('user_id')
+          .gte('created_at', thirtyDaysAgo)
+          .not('user_id', 'is', null),
 
-        if (error) throw error
+        // Avg rating & total loyalty points - fetch only needed columns
+        // Note: For large datasets, this should ideally be a database function (RPC)
+        // but fetching 2 columns for a few thousand users is acceptable for now.
+        supabase.from('profiles').select('user_rating, loyalty_points'),
 
-        const current = page || []
-        allUserStats = allUserStats.concat(current as any)
-        if (current.length < PAGE_SIZE) break
-        profilesFrom += PAGE_SIZE
-      }
+        // High value users (10+ bookings)
+        // We fetch user_ids from bookings to aggregate. 
+        // Optimization: We only need user_id.
+        supabase.from('bookings').select('user_id').not('user_id', 'is', null)
+      ])
 
-      // Page through bookings just to accumulate user_id counts
-      let bookingsFrom = 0
-      let bookingUserIds: string[] = []
-      let recentBookingUserIds: string[] = []
-      while (true) {
-        const { data: page, error: bookingError } = await supabase
-          .from('bookings')
-          .select('user_id, created_at')
-          .range(bookingsFrom, bookingsFrom + PAGE_SIZE - 1)
+      // Process Active Users
+      const activeUsersSet = new Set((activeUsersData || []).map(b => b.user_id))
+      const activeUsers = activeUsersSet.size
 
-        if (bookingError) {
-          console.error('Error fetching booking stats:', bookingError)
-          break
+      // Process Ratings & Points
+      const profiles = ratingsData || []
+      const totalRatingSum = profiles.reduce((sum, p) => sum + (p.user_rating || 0), 0)
+      const avgRating = profiles.length > 0 ? totalRatingSum / profiles.length : 0
+      const totalLoyaltyPoints = profiles.reduce((sum, p) => sum + (p.loyalty_points || 0), 0)
+
+      // Process High Value Users
+      // This is still heavy client-side aggregation but lighter than before (only IDs)
+      const bookingCounts: Record<string, number> = {}
+      const bookings = highValueData || []
+      for (const b of bookings) {
+        if (b.user_id) {
+          bookingCounts[b.user_id] = (bookingCounts[b.user_id] || 0) + 1
         }
-
-        const current = (page || []).filter(b => b.user_id)
-        bookingUserIds = bookingUserIds.concat(current.map(b => b.user_id) as any)
-        recentBookingUserIds = recentBookingUserIds.concat(
-          current
-            .filter(b => b.created_at && new Date(b.created_at) >= thirtyDaysAgo)
-            .map(b => b.user_id) as any
-        )
-        if ((page || []).length < PAGE_SIZE) break
-        bookingsFrom += PAGE_SIZE
       }
-
-      const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-      
-      const totalUsers = allUserStats.length
-      const newUsersThisMonth = allUserStats.filter(u => new Date(u.created_at) >= thisMonth).length
-      const startOfDay = new Date(now)
-      startOfDay.setHours(0, 0, 0, 0)
-      const endOfDay = new Date(now)
-      endOfDay.setHours(23, 59, 59, 999)
-      const newUsersToday = allUserStats.filter(u => {
-        const created = new Date(u.created_at)
-        return created >= startOfDay && created <= endOfDay
-      }).length
-      
-      // Calculate active users based on recent booking data
-      const usersWithRecentBookings = new Set(recentBookingUserIds)
-      const activeUsers = usersWithRecentBookings.size
-      
-      const avgRating = totalUsers > 0 ? (allUserStats.reduce((sum, u) => sum + (u.user_rating || 0), 0) / totalUsers) : 0
-      const totalLoyaltyPoints = allUserStats.reduce((sum, u) => sum + (u.loyalty_points || 0), 0)
-      
-      // Count users with 10+ bookings
-      const bookingCountsByUser = bookingUserIds.reduce((acc, userId) => {
-        acc[userId] = (acc[userId] || 0) + 1
-        return acc
-      }, {} as Record<string, number>)
-      
-      const highValueUsers = Object.values(bookingCountsByUser).filter(count => count >= 10).length
+      const highValueUsers = Object.values(bookingCounts).filter(count => count >= 10).length
 
       setStats({
-        total_users: totalUsers,
+        total_users: totalUsers || 0,
         active_users: activeUsers,
-        new_users_this_month: newUsersThisMonth,
-        new_users_today: newUsersToday,
+        new_users_this_month: newUsersThisMonth || 0,
+        new_users_today: newUsersToday || 0,
         avg_user_rating: avgRating,
         total_loyalty_points: totalLoyaltyPoints,
         high_value_users: highValueUsers
       })
     } catch (error) {
       console.error('Error fetching user stats:', error)
+      toast.error('Failed to load metrics')
     }
   }
 
@@ -538,15 +560,32 @@ export default function UserManagement() {
             }
           }}
         >
-          <div>
-            <CardTitle className="text-lg">Key Metrics</CardTitle>
-            <CardDescription>Snapshot of user health across the platform</CardDescription>
+          <div className="flex items-center justify-between w-full">
+            <div>
+              <CardTitle className="text-lg">Key Metrics</CardTitle>
+              <CardDescription>Snapshot of user health across the platform</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  refreshMetrics()
+                }}
+                disabled={metricsLoading}
+                className="h-8"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${metricsLoading ? 'animate-spin' : ''}`} />
+                Refresh Metrics
+              </Button>
+              {isMobile && (
+                <ChevronDown
+                  className={`w-5 h-5 text-gray-500 transition-transform ${statsCollapsed ? '' : 'rotate-180'}`}
+                />
+              )}
+            </div>
           </div>
-          {isMobile && (
-            <ChevronDown
-              className={`w-5 h-5 text-gray-500 transition-transform ${statsCollapsed ? '' : 'rotate-180'}`}
-            />
-          )}
         </CardHeader>
         {(!isMobile || !statsCollapsed) && (
           <CardContent className="space-y-4 pt-0">
@@ -623,7 +662,22 @@ export default function UserManagement() {
               </Card>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4 md:p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Mobile Users Online</p>
+                      <p className="text-2xl font-semibold text-primary">{onlineUsers?.length ?? 0}</p>
+                      <p className="text-[11px] text-gray-500">Live from mobile app</p>
+                    </div>
+                    <div className="h-10 w-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                      <Activity className="w-5 h-5 text-primary" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
               <Card>
                 <CardContent className="p-4 md:p-5">
                   <div className="flex items-center justify-between">
@@ -748,184 +802,198 @@ export default function UserManagement() {
           </div>
 
           {/* Apply button */}
-          <div className="mt-4 flex items-center justify-end">
+          <div className="mt-4 flex justify-end">
             <Button onClick={onApplyFilters} disabled={loading}>
-              Apply
+              Apply Filters
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* User List */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredUsers.map((user) => (
-          <Card key={user.id} className="hover:shadow-lg transition-all">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-                    {user.avatar_url ? (
-                      <img src={user.avatar_url} alt={user.full_name} className="w-12 h-12 rounded-full object-cover" />
-                    ) : (
-                      <span className="text-blue-600 font-medium">
-                        {user.full_name?.charAt(0)?.toUpperCase() || user.email?.charAt(0)?.toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg">{user.full_name || 'No Name'}</CardTitle>
-                    <CardDescription className="text-sm truncate max-w-[200px]">
-                      {user.email}
-                    </CardDescription>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge className={TIER_COLORS[user.membership_tier]}>
-                    {TIER_ICONS[user.membership_tier]} {user.membership_tier}
-                  </Badge>
-                </div>
-              </div>
-            </CardHeader>
-            
-            <CardContent>
-              <div className="space-y-4">
-                {/* User Rating & Stats */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center">
-                    <div className={`text-2xl font-bold ${getRatingColor(user.user_rating)}`}>
-                      {user.user_rating?.toFixed(1) || 'N/A'}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          {/* User List */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            {filteredUsers.map((user) => (
+              <Card key={user.id} className="hover:shadow-lg transition-all">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
+                        {user.avatar_url ? (
+                          <img src={user.avatar_url} alt={user.full_name} className="w-12 h-12 rounded-full object-cover" />
+                        ) : (
+                          <span className="text-blue-600 font-medium">
+                            {user.full_name?.charAt(0)?.toUpperCase() || user.email?.charAt(0)?.toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">{user.full_name || 'No Name'}</CardTitle>
+                        <CardDescription className="text-sm truncate max-w-[200px]">
+                          {user.email}
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-600">User Rating</div>
+                    <div className="flex items-center gap-2">
+                      <Badge className={TIER_COLORS[user.membership_tier]}>
+                        {TIER_ICONS[user.membership_tier]} {user.membership_tier}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-900">{user.total_bookings}</div>
-                    <div className="text-xs text-gray-600">Total Bookings</div>
-                  </div>
-                </div>
+                </CardHeader>
+                
+                <CardContent>
+                  <div className="space-y-4">
+                    {/* User Rating & Stats */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="text-center">
+                        <div className={`text-2xl font-bold ${getRatingColor(user.user_rating)}`}>
+                          {user.user_rating?.toFixed(1) || 'N/A'}
+                        </div>
+                        <div className="text-xs text-gray-600">User Rating</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-gray-900">{user.total_bookings}</div>
+                        <div className="text-xs text-gray-600">Total Bookings</div>
+                      </div>
+                    </div>
 
-                {/* Progress Bars */}
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Completion Rate</span>
-                    <span>{user.booking_completion_rate?.toFixed(0)}%</span>
-                  </div>
-                  <Progress value={user.booking_completion_rate} className="h-2" />
-                </div>
+                    {/* Progress Bars */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span>Completion Rate</span>
+                        <span>{user.booking_completion_rate?.toFixed(0)}%</span>
+                      </div>
+                      <Progress value={user.booking_completion_rate} className="h-2" />
+                    </div>
 
-                {/* Key Metrics */}
-                <div className="grid grid-cols-3 gap-2 text-xs text-center">
-                  <div>
-                    <div className="font-medium text-gray-900">{user.loyalty_points}</div>
-                    <div className="text-gray-600">Points</div>
-                  </div>
-                  <div>
-                    <div className="font-medium text-gray-900">{user.reviews_count || 0}</div>
-                    <div className="text-gray-600">Reviews</div>
-                  </div>
-                  <div>
-                    <div className="font-medium text-gray-900">{user.favorite_restaurants || 0}</div>
-                    <div className="text-gray-600">Favorites</div>
-                  </div>
-                </div>
+                    {/* Key Metrics */}
+                    <div className="grid grid-cols-3 gap-2 text-xs text-center">
+                      <div>
+                        <div className="font-medium text-gray-900">{user.loyalty_points}</div>
+                        <div className="text-gray-600">Points</div>
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-900">{user.reviews_count || 0}</div>
+                        <div className="text-gray-600">Reviews</div>
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-900">{user.favorite_restaurants || 0}</div>
+                        <div className="text-gray-600">Favorites</div>
+                      </div>
+                    </div>
 
-                {/* Actions */}
-                <div className="flex items-center justify-between pt-3 border-t">
-                  <div className="flex items-center gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => {
-                        setSelectedUser(user)
-                        setShowDetailsDialog(true)
-                      }}
-                      style={{ minHeight: '36px' }}
-                    >
-                      <Eye className="w-4 h-4 mr-1" />
-                      View
-                    </Button>
+                    {/* Actions */}
+                    <div className="flex items-center justify-between pt-3 border-t">
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            setSelectedUser(user)
+                            setShowDetailsDialog(true)
+                          }}
+                          style={{ minHeight: '36px' }}
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          View
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <Select 
+                          value={user.membership_tier} 
+                          onValueChange={(value) => handleUpdateUserTier(user.id, value)}
+                        >
+                          <SelectTrigger className="w-10 h-9 p-0 hover:bg-gray-100">
+                            <Trophy className="w-4 h-4" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="bronze">Bronze</SelectItem>
+                            <SelectItem value="silver">Silver</SelectItem>
+                            <SelectItem value="gold">Gold</SelectItem>
+                            <SelectItem value="platinum">Platinum</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleResetUserRating(user.id)}
+                          className="text-yellow-600 hover:text-yellow-700"
+                        >
+                          <Star className="w-4 h-4" />
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteUser(user.id)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-
-                  <div className="flex items-center gap-1">
-                    <Select 
-                      value={user.membership_tier} 
-                      onValueChange={(value) => handleUpdateUserTier(user.id, value)}
-                    >
-                      <SelectTrigger className="w-10 h-9 p-0 hover:bg-gray-100">
-                        <Trophy className="w-4 h-4" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="bronze">Bronze</SelectItem>
-                        <SelectItem value="silver">Silver</SelectItem>
-                        <SelectItem value="gold">Gold</SelectItem>
-                        <SelectItem value="platinum">Platinum</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleResetUserRating(user.id)}
-                      className="text-yellow-600 hover:text-yellow-700"
-                    >
-                      <Star className="w-4 h-4" />
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteUser(user.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Pagination Controls */}
-      <div className="flex items-center justify-between mt-6">
-        <div className="text-sm text-gray-600">
-          Page {page} of {totalPages}
-        </div>
-        <div className="flex items-center gap-3">
-          <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(parseInt(v)); setPage(1) }}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="10">10 / page</SelectItem>
-              <SelectItem value="20">20 / page</SelectItem>
-              <SelectItem value="50">50 / page</SelectItem>
-              <SelectItem value="100">100 / page</SelectItem>
-            </SelectContent>
-          </Select>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Previous</Button>
-            <Button variant="outline" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Next</Button>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </div>
-      </div>
 
-      {filteredUsers.length === 0 && (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No users found</h3>
-            <p className="text-gray-500">
-              {searchTerm || tierFilter !== 'all' || ratingFilter !== 'all' || activityFilter !== 'all'
-                ? 'Try adjusting your search criteria'
-                : 'No users registered yet'
-              }
-            </p>
-          </CardContent>
-        </Card>
-      )}
+          {/* Pagination Controls */}
+          <div className="flex items-center justify-between mt-6">
+            <div className="text-sm text-gray-600">
+              Page {page} of {totalPages}
+            </div>
+            <div className="flex items-center gap-3">
+              <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(parseInt(v)); setPage(1) }}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10 / page</SelectItem>
+                  <SelectItem value="20">20 / page</SelectItem>
+                  <SelectItem value="50">50 / page</SelectItem>
+                  <SelectItem value="100">100 / page</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Previous</Button>
+                <Button variant="outline" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Next</Button>
+              </div>
+            </div>
+          </div>
 
-      {/* User Details Dialog */}
+          {filteredUsers.length === 0 && (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No users found</h3>
+                <p className="text-gray-500">
+                  {searchTerm || tierFilter !== 'all' || ratingFilter !== 'all' || activityFilter !== 'all'
+                    ? 'Try adjusting your search criteria'
+                    : 'No users registered yet'
+                  }
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="analytics">
+           <AnalyticsTab />
+        </TabsContent>
+      </Tabs>
+
+      {/* User Details Dialog */
+}
       <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
