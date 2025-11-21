@@ -305,6 +305,15 @@ self.addEventListener('push', async (event) => {
       body: event.data ? event.data.text() : 'You have a new notification'
     };
   }
+
+  // BROADCAST ALARM TO ALL CLIENTS
+  // This is the key to the "nonstop sound" requirement.
+  // We wake up the client and tell it to play the sound.
+  broadcastToClients({
+    type: 'PLAY_ALARM',
+    data: data,
+    timestamp: Date.now()
+  });
   
   event.waitUntil(
     showNotification(data)

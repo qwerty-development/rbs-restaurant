@@ -12,6 +12,8 @@ import {
   parseISO,
   startOfMonth,
   endOfMonth,
+  addDays,
+  isEqual,
 } from "date-fns";
 import { toast } from "react-hot-toast";
 import { useRealtimeHealth } from "@/hooks/use-realtime-health";
@@ -48,7 +50,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { MultiModeDatePicker } from "@/components/ui/multi-mode-date-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { getFirstName } from "@/lib/utils";
@@ -148,6 +150,45 @@ export default function BasicDashboardPage() {
       enableServiceWorkerSync: true,
       aggressivePollingThreshold: 2, // Start aggressive polling after 2 minutes
     });
+
+  // Wake Lock Implementation
+  const [wakeLock, setWakeLock] = useState<WakeLockSentinel | null>(null);
+
+  const requestWakeLock = async () => {
+    try {
+      if ("wakeLock" in navigator) {
+        const sentinel = await navigator.wakeLock.request("screen");
+        setWakeLock(sentinel);
+        console.log("Wake Lock is active");
+
+        sentinel.addEventListener("release", () => {
+          console.log("Wake Lock was released");
+          setWakeLock(null);
+        });
+      }
+    } catch (err) {
+      console.error("Wake Lock request failed:", err);
+    }
+  };
+
+  // Re-request wake lock when visibility changes or component mounts
+  useEffect(() => {
+    requestWakeLock();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        requestWakeLock();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (wakeLock) {
+        wakeLock.release().catch(() => {});
+      }
+    };
+  }, []);
 
   // Debug logging for date changes
   useEffect(() => {
@@ -331,10 +372,36 @@ export default function BasicDashboardPage() {
         const today = startOfDay(new Date());
         query = query.or(`status.eq.pending,and(booking_time.gte.${today.toISOString()},status.neq.pending)`);
       } else if (effectiveDates && effectiveDates.length > 0) {
-        // Get all pending bookings OR bookings in the date range
-        const startDate = startOfDay(effectiveDates[0]);
-        const endDate = endOfDay(effectiveDates[effectiveDates.length - 1]);
-        query = query.or(`status.eq.pending,and(booking_time.gte.${startDate.toISOString()},booking_time.lte.${endDate.toISOString()},status.neq.pending)`);
+        // Check if dates are contiguous
+        let isContiguous = true;
+        if (effectiveDates.length > 1) {
+          const sortedDates = [...effectiveDates].sort((a, b) => a.getTime() - b.getTime());
+          for (let i = 0; i < sortedDates.length - 1; i++) {
+            const nextDay = addDays(sortedDates[i], 1);
+            if (!isEqual(startOfDay(nextDay), startOfDay(sortedDates[i + 1]))) {
+              isContiguous = false;
+              break;
+            }
+          }
+        }
+
+        if (isContiguous) {
+          // Optimization for contiguous dates: use simple range
+          const startDate = startOfDay(effectiveDates[0]);
+          const endDate = endOfDay(effectiveDates[effectiveDates.length - 1]);
+          query = query.or(`status.eq.pending,and(booking_time.gte.${startDate.toISOString()},booking_time.lte.${endDate.toISOString()},status.neq.pending)`);
+        } else {
+          // For non-contiguous dates, build a complex OR query
+          // Format: status.eq.pending,and(status.neq.pending,or(range1,range2,...))
+          const dateRanges = effectiveDates.map(date => {
+            const start = startOfDay(date).toISOString();
+            const end = endOfDay(date).toISOString();
+            return `and(booking_time.gte.${start},booking_time.lte.${end})`;
+          });
+          
+          const rangesOr = `or(${dateRanges.join(',')})`;
+          query = query.or(`status.eq.pending,and(status.neq.pending,${rangesOr})`);
+        }
       } else {
         // Fallback: just get pending bookings
         query = query.eq("status", "pending");
@@ -1468,7 +1535,7 @@ export default function BasicDashboardPage() {
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
                   <div className="p-3 space-y-3">
-                    <DateRangePicker
+                    <MultiModeDatePicker
                       selectedDates={selectedDates}
                       onDatesChange={(dates) => {
                         setSelectedDates(dates);
@@ -1476,7 +1543,7 @@ export default function BasicDashboardPage() {
                           setDateViewMode("select");
                         }
                       }}
-                      placeholder="Select date range"
+                      placeholder="Select dates"
                       className="w-[280px]"
                     />
                     <div className="flex gap-2">

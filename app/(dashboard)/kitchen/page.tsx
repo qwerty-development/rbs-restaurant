@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useKitchenOrders, useUpdateOrderStatus } from "@/lib/hooks/use-orders"
@@ -34,7 +34,8 @@ import {
   WifiOff,
   Volume2,
   VolumeX,
-  Receipt
+  Receipt,
+  BellRing
 } from "lucide-react"
 import { format, differenceInMinutes } from "date-fns"
 import { toast } from "react-hot-toast"
@@ -348,10 +349,78 @@ export default function KitchenDashboard() {
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [restaurantId, setRestaurantId] = useState<string>("")
+  const [isAlarmPlaying, setIsAlarmPlaying] = useState(false)
+  const [wakeLock, setWakeLock] = useState<WakeLockSentinel | null>(null)
   
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const supabase = createClient()
   const queryClient = useQueryClient()
   const { currentRestaurant } = useRestaurantContext()
+
+  // Initialize Audio
+  useEffect(() => {
+    audioRef.current = new Audio('/sounds/notification.mp3')
+    audioRef.current.loop = true // Loop until acknowledged
+  }, [])
+
+  // Wake Lock Implementation
+  const requestWakeLock = useCallback(async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        const sentinel = await navigator.wakeLock.request('screen')
+        setWakeLock(sentinel)
+        console.log('Wake Lock is active')
+        
+        sentinel.addEventListener('release', () => {
+          console.log('Wake Lock was released')
+          setWakeLock(null)
+        })
+      }
+    } catch (err) {
+      console.error('Wake Lock request failed:', err)
+    }
+  }, [])
+
+  // Re-request wake lock when visibility changes or component mounts
+  useEffect(() => {
+    requestWakeLock()
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        requestWakeLock()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (wakeLock) {
+        wakeLock.release().catch(() => {})
+      }
+    }
+  }, [requestWakeLock])
+
+  // Play Alarm Function
+  const playAlarm = useCallback(() => {
+    if (soundEnabled && audioRef.current) {
+      audioRef.current.currentTime = 0
+      audioRef.current.play().catch((e) => {
+        console.error("Audio play failed:", e)
+        // Interaction might be required
+        toast.error("Click anywhere to enable audio")
+      })
+      setIsAlarmPlaying(true)
+    }
+  }, [soundEnabled])
+
+  // Stop Alarm Function
+  const stopAlarm = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+      setIsAlarmPlaying(false)
+    }
+  }, [])
 
   // Set restaurant ID from current restaurant context
   useEffect(() => {
@@ -368,6 +437,26 @@ export default function KitchenDashboard() {
   // Print service
   const { printOrderTicket, autoPrint, isPrinting } = usePrintService()
 
+  // Listen for Service Worker messages (Push Notifications)
+  useEffect(() => {
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'PLAY_ALARM') {
+        console.log("Received PLAY_ALARM from Service Worker")
+        playAlarm()
+      }
+    }
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage)
+    }
+
+    return () => {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage)
+      }
+    }
+  }, [playAlarm])
+
   // Subscribe to real-time updates
   useEffect(() => {
     if (!restaurantId) return
@@ -375,15 +464,28 @@ export default function KitchenDashboard() {
     const unsubscribe = subscribe('kitchen_update', (event) => {
       queryClient.invalidateQueries({ queryKey: ['kitchen-orders'] })
       
-      if (soundEnabled && event.type === 'order_created') {
-        // Play notification sound
-        const audio = new Audio('/sounds/notification.mp3')
-        audio.play().catch(() => {}) // Ignore errors if sound fails
+      if (event.type === 'order_created') {
+        playAlarm()
+        toast((t) => (
+          <div className="flex items-center gap-4">
+            <BellRing className="h-6 w-6 text-primary animate-bounce" />
+            <div>
+              <p className="font-bold">New Order Received!</p>
+              <p className="text-sm">Check the kitchen display</p>
+            </div>
+            <Button size="sm" onClick={() => {
+              stopAlarm()
+              toast.dismiss(t.id)
+            }}>
+              Acknowledge
+            </Button>
+          </div>
+        ), { duration: Infinity })
       }
     })
 
     return unsubscribe
-  }, [restaurantId, subscribe, queryClient, soundEnabled])
+  }, [restaurantId, subscribe, queryClient, playAlarm, stopAlarm])
 
   // Fetch kitchen orders using direct Supabase hook
   const { data: kitchenOrdersData, isLoading, error } = useKitchenOrders(
@@ -445,6 +547,10 @@ export default function KitchenDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kitchen-orders'] })
       toast.success('Status updated successfully')
+      // Stop alarm if it was playing and we interacted
+      if (isAlarmPlaying) {
+        stopAlarm()
+      }
     },
     onError: (error) => {
       toast.error('Failed to update status')
@@ -481,6 +587,11 @@ export default function KitchenDashboard() {
   const updateOrderStatusMutation = useUpdateOrderStatus()
 
   const handleStatusUpdate = (orderId: string, newStatus: string, orderItemId?: string) => {
+    // Stop alarm on interaction
+    if (isAlarmPlaying) {
+      stopAlarm()
+    }
+
     updateOrderStatusMutation.mutate({
       orderId: orderId,
       status: newStatus,
@@ -544,9 +655,17 @@ export default function KitchenDashboard() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-background overflow-hidden">
+    <div className="h-screen flex flex-col bg-background overflow-hidden" onClick={() => {
+      // Ensure audio context is unlocked on first interaction
+      if (audioRef.current && audioRef.current.paused && isAlarmPlaying) {
+        audioRef.current.play().catch(() => {})
+      }
+    }}>
       {/* Header - Optimized for landscape tablets */}
-      <div className="bg-card border-b border-border px-4 py-3 flex items-center justify-between">
+      <div className={cn(
+        "bg-card border-b border-border px-4 py-3 flex items-center justify-between transition-colors duration-500",
+        isAlarmPlaying && "bg-red-500/10 animate-pulse"
+      )}>
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <ChefHat className="h-6 w-6" />
@@ -564,6 +683,13 @@ export default function KitchenDashboard() {
               {connectionStatus === 'open' ? 'Connected' : 'Disconnected'}
             </span>
           </div>
+
+          {/* Wake Lock Status (Hidden but useful for debug) */}
+          {wakeLock && (
+            <Badge variant="outline" className="text-xs text-green-600 border-green-200 bg-green-50">
+              Screen Active
+            </Badge>
+          )}
         </div>
 
         {/* Summary Stats */}
@@ -590,10 +716,28 @@ export default function KitchenDashboard() {
 
         {/* Controls */}
         <div className="flex items-center gap-2">
+          {isAlarmPlaying && (
+            <Button 
+              variant="destructive" 
+              size="sm" 
+              onClick={(e) => {
+                e.stopPropagation()
+                stopAlarm()
+              }}
+              className="animate-pulse"
+            >
+              <VolumeX className="h-4 w-4 mr-2" />
+              STOP ALARM
+            </Button>
+          )}
+
           <Button
             variant={soundEnabled ? "default" : "outline"}
             size="sm"
-            onClick={() => setSoundEnabled(!soundEnabled)}
+            onClick={(e) => {
+              e.stopPropagation()
+              setSoundEnabled(!soundEnabled)
+            }}
           >
             {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
           </Button>
@@ -601,7 +745,10 @@ export default function KitchenDashboard() {
           <Button
             variant={autoRefresh ? "default" : "outline"}
             size="sm"
-            onClick={() => setAutoRefresh(!autoRefresh)}
+            onClick={(e) => {
+              e.stopPropagation()
+              setAutoRefresh(!autoRefresh)
+            }}
           >
             <RefreshCw className={cn("h-4 w-4", autoRefresh && "animate-spin")} />
           </Button>
