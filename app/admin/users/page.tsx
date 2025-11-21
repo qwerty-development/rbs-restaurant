@@ -46,6 +46,8 @@ import {
   ChevronDown
 } from 'lucide-react'
 
+import { AnalyticsTab } from './AnalyticsTab'
+
 interface User {
   id: string
   email: string
@@ -800,184 +802,198 @@ export default function UserManagement() {
           </div>
 
           {/* Apply button */}
-          <div className="mt-4 flex items-center justify-end">
+          <div className="mt-4 flex justify-end">
             <Button onClick={onApplyFilters} disabled={loading}>
-              Apply
+              Apply Filters
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* User List */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredUsers.map((user) => (
-          <Card key={user.id} className="hover:shadow-lg transition-all">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-                    {user.avatar_url ? (
-                      <img src={user.avatar_url} alt={user.full_name} className="w-12 h-12 rounded-full object-cover" />
-                    ) : (
-                      <span className="text-blue-600 font-medium">
-                        {user.full_name?.charAt(0)?.toUpperCase() || user.email?.charAt(0)?.toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg">{user.full_name || 'No Name'}</CardTitle>
-                    <CardDescription className="text-sm truncate max-w-[200px]">
-                      {user.email}
-                    </CardDescription>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge className={TIER_COLORS[user.membership_tier]}>
-                    {TIER_ICONS[user.membership_tier]} {user.membership_tier}
-                  </Badge>
-                </div>
-              </div>
-            </CardHeader>
-            
-            <CardContent>
-              <div className="space-y-4">
-                {/* User Rating & Stats */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center">
-                    <div className={`text-2xl font-bold ${getRatingColor(user.user_rating)}`}>
-                      {user.user_rating?.toFixed(1) || 'N/A'}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          {/* User List */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            {filteredUsers.map((user) => (
+              <Card key={user.id} className="hover:shadow-lg transition-all">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
+                        {user.avatar_url ? (
+                          <img src={user.avatar_url} alt={user.full_name} className="w-12 h-12 rounded-full object-cover" />
+                        ) : (
+                          <span className="text-blue-600 font-medium">
+                            {user.full_name?.charAt(0)?.toUpperCase() || user.email?.charAt(0)?.toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">{user.full_name || 'No Name'}</CardTitle>
+                        <CardDescription className="text-sm truncate max-w-[200px]">
+                          {user.email}
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-600">User Rating</div>
+                    <div className="flex items-center gap-2">
+                      <Badge className={TIER_COLORS[user.membership_tier]}>
+                        {TIER_ICONS[user.membership_tier]} {user.membership_tier}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-900">{user.total_bookings}</div>
-                    <div className="text-xs text-gray-600">Total Bookings</div>
-                  </div>
-                </div>
+                </CardHeader>
+                
+                <CardContent>
+                  <div className="space-y-4">
+                    {/* User Rating & Stats */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="text-center">
+                        <div className={`text-2xl font-bold ${getRatingColor(user.user_rating)}`}>
+                          {user.user_rating?.toFixed(1) || 'N/A'}
+                        </div>
+                        <div className="text-xs text-gray-600">User Rating</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-gray-900">{user.total_bookings}</div>
+                        <div className="text-xs text-gray-600">Total Bookings</div>
+                      </div>
+                    </div>
 
-                {/* Progress Bars */}
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Completion Rate</span>
-                    <span>{user.booking_completion_rate?.toFixed(0)}%</span>
-                  </div>
-                  <Progress value={user.booking_completion_rate} className="h-2" />
-                </div>
+                    {/* Progress Bars */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span>Completion Rate</span>
+                        <span>{user.booking_completion_rate?.toFixed(0)}%</span>
+                      </div>
+                      <Progress value={user.booking_completion_rate} className="h-2" />
+                    </div>
 
-                {/* Key Metrics */}
-                <div className="grid grid-cols-3 gap-2 text-xs text-center">
-                  <div>
-                    <div className="font-medium text-gray-900">{user.loyalty_points}</div>
-                    <div className="text-gray-600">Points</div>
-                  </div>
-                  <div>
-                    <div className="font-medium text-gray-900">{user.reviews_count || 0}</div>
-                    <div className="text-gray-600">Reviews</div>
-                  </div>
-                  <div>
-                    <div className="font-medium text-gray-900">{user.favorite_restaurants || 0}</div>
-                    <div className="text-gray-600">Favorites</div>
-                  </div>
-                </div>
+                    {/* Key Metrics */}
+                    <div className="grid grid-cols-3 gap-2 text-xs text-center">
+                      <div>
+                        <div className="font-medium text-gray-900">{user.loyalty_points}</div>
+                        <div className="text-gray-600">Points</div>
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-900">{user.reviews_count || 0}</div>
+                        <div className="text-gray-600">Reviews</div>
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-900">{user.favorite_restaurants || 0}</div>
+                        <div className="text-gray-600">Favorites</div>
+                      </div>
+                    </div>
 
-                {/* Actions */}
-                <div className="flex items-center justify-between pt-3 border-t">
-                  <div className="flex items-center gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => {
-                        setSelectedUser(user)
-                        setShowDetailsDialog(true)
-                      }}
-                      style={{ minHeight: '36px' }}
-                    >
-                      <Eye className="w-4 h-4 mr-1" />
-                      View
-                    </Button>
+                    {/* Actions */}
+                    <div className="flex items-center justify-between pt-3 border-t">
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            setSelectedUser(user)
+                            setShowDetailsDialog(true)
+                          }}
+                          style={{ minHeight: '36px' }}
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          View
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <Select 
+                          value={user.membership_tier} 
+                          onValueChange={(value) => handleUpdateUserTier(user.id, value)}
+                        >
+                          <SelectTrigger className="w-10 h-9 p-0 hover:bg-gray-100">
+                            <Trophy className="w-4 h-4" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="bronze">Bronze</SelectItem>
+                            <SelectItem value="silver">Silver</SelectItem>
+                            <SelectItem value="gold">Gold</SelectItem>
+                            <SelectItem value="platinum">Platinum</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleResetUserRating(user.id)}
+                          className="text-yellow-600 hover:text-yellow-700"
+                        >
+                          <Star className="w-4 h-4" />
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteUser(user.id)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-
-                  <div className="flex items-center gap-1">
-                    <Select 
-                      value={user.membership_tier} 
-                      onValueChange={(value) => handleUpdateUserTier(user.id, value)}
-                    >
-                      <SelectTrigger className="w-10 h-9 p-0 hover:bg-gray-100">
-                        <Trophy className="w-4 h-4" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="bronze">Bronze</SelectItem>
-                        <SelectItem value="silver">Silver</SelectItem>
-                        <SelectItem value="gold">Gold</SelectItem>
-                        <SelectItem value="platinum">Platinum</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleResetUserRating(user.id)}
-                      className="text-yellow-600 hover:text-yellow-700"
-                    >
-                      <Star className="w-4 h-4" />
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteUser(user.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Pagination Controls */}
-      <div className="flex items-center justify-between mt-6">
-        <div className="text-sm text-gray-600">
-          Page {page} of {totalPages}
-        </div>
-        <div className="flex items-center gap-3">
-          <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(parseInt(v)); setPage(1) }}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="10">10 / page</SelectItem>
-              <SelectItem value="20">20 / page</SelectItem>
-              <SelectItem value="50">50 / page</SelectItem>
-              <SelectItem value="100">100 / page</SelectItem>
-            </SelectContent>
-          </Select>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Previous</Button>
-            <Button variant="outline" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Next</Button>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </div>
-      </div>
 
-      {filteredUsers.length === 0 && (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No users found</h3>
-            <p className="text-gray-500">
-              {searchTerm || tierFilter !== 'all' || ratingFilter !== 'all' || activityFilter !== 'all'
-                ? 'Try adjusting your search criteria'
-                : 'No users registered yet'
-              }
-            </p>
-          </CardContent>
-        </Card>
-      )}
+          {/* Pagination Controls */}
+          <div className="flex items-center justify-between mt-6">
+            <div className="text-sm text-gray-600">
+              Page {page} of {totalPages}
+            </div>
+            <div className="flex items-center gap-3">
+              <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(parseInt(v)); setPage(1) }}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10 / page</SelectItem>
+                  <SelectItem value="20">20 / page</SelectItem>
+                  <SelectItem value="50">50 / page</SelectItem>
+                  <SelectItem value="100">100 / page</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Previous</Button>
+                <Button variant="outline" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Next</Button>
+              </div>
+            </div>
+          </div>
 
-      {/* User Details Dialog */}
+          {filteredUsers.length === 0 && (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No users found</h3>
+                <p className="text-gray-500">
+                  {searchTerm || tierFilter !== 'all' || ratingFilter !== 'all' || activityFilter !== 'all'
+                    ? 'Try adjusting your search criteria'
+                    : 'No users registered yet'
+                  }
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="analytics">
+           <AnalyticsTab />
+        </TabsContent>
+      </Tabs>
+
+      {/* User Details Dialog */
+}
       <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>

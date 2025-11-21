@@ -30,10 +30,69 @@ class MobilePresenceService {
   private readonly maxRetries = 5
   private retryTimer: ReturnType<typeof setTimeout> | null = null
 
+  private loggingInterval: ReturnType<typeof setTimeout> | null = null
+  private readonly LOG_INTERVAL = 5 * 60 * 1000 // 5 minutes
+
   private constructor() {
     this.client = createClient()
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', this.handleVisibilityChange)
+      this.startLogging()
+    }
+  }
+
+  // ... existing methods ...
+
+  private startLogging() {
+    // Initial log after a small delay to allow connection
+    setTimeout(() => this.logPresence(), 10000)
+
+    // Periodic logging
+    this.loggingInterval = setInterval(() => {
+      this.logPresence()
+    }, this.LOG_INTERVAL)
+  }
+
+  private async logPresence() {
+    if (this.status !== 'connected') return
+
+    // Only log if we have data
+    const userCount = Object.keys(this.currentState).length
+    if (userCount === 0) return
+
+    try {
+      // De-duplication: Check if a record exists for the last 4 minutes
+      // This prevents multiple admin tabs from spamming the DB
+      const fourMinutesAgo = new Date(Date.now() - 4 * 60 * 1000).toISOString()
+      
+      const { count } = await this.client
+        .from('presence_history')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', fourMinutesAgo)
+
+      if (count && count > 0) {
+        console.log('MobilePresenceService: Skipping log, recent record exists')
+        return
+      }
+
+      // Insert new record
+      const { error } = await this.client
+        .from('presence_history')
+        .insert({
+          online_count: userCount,
+          metadata: {
+            source: 'admin_dashboard',
+            timestamp: new Date().toISOString()
+          }
+        })
+
+      if (error) {
+        console.error('MobilePresenceService: Failed to log presence history:', error)
+      } else {
+        console.log(`MobilePresenceService: Logged presence history (${userCount} users)`)
+      }
+    } catch (error) {
+      console.error('MobilePresenceService: Error in logPresence:', error)
     }
   }
 
@@ -173,6 +232,10 @@ class MobilePresenceService {
 
   private teardown() {
     this.cleanupChannel()
+    if (this.loggingInterval) {
+      clearInterval(this.loggingInterval)
+      this.loggingInterval = null
+    }
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.handleVisibilityChange)
     }
