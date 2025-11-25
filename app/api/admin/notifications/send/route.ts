@@ -144,49 +144,60 @@ export async function POST(request: NextRequest) {
     }
 
     // Create notification outbox records directly
-    const outboxRecords = []
+    // Create notification outbox records in chunks
+    const CHUNK_SIZE = 1000
+    let processedCount = 0
     
-    for (const userId of targetUserIds) {
-      for (const channel of body.channels) {
-        outboxRecords.push({
-          user_id: userId,
-          channel: channel,
-          title: body.title,
-          body: body.body, // CRITICAL: Explicitly set body field
-          payload: {
-            restaurant_id: restaurantId,
+    // Process users in chunks to avoid memory issues and payload limits
+    for (let i = 0; i < targetUserIds.length; i += CHUNK_SIZE) {
+      const userChunk = targetUserIds.slice(i, i + CHUNK_SIZE)
+      const outboxRecords = []
+      
+      for (const userId of userChunk) {
+        for (const channel of body.channels) {
+          outboxRecords.push({
+            user_id: userId,
+            channel: channel,
             title: body.title,
             body: body.body,
-            message: body.body, // Also include as message for compatibility
-            type: 'admin_message',
-            sent_by_admin: true
-          },
-          status: 'queued',
-          priority: body.priority,
-          type: 'general', // Use 'general' type which is allowed by the check constraint
-          scheduled_for: scheduledFor,
-          attempts: 0,
-          retry_count: 0
-        })
+            payload: {
+              restaurant_id: restaurantId,
+              title: body.title,
+              body: body.body,
+              message: body.body,
+              type: 'admin_message',
+              sent_by_admin: true
+            },
+            status: 'queued',
+            priority: body.priority,
+            type: 'general',
+            scheduled_for: scheduledFor,
+            attempts: 0,
+            retry_count: 0
+          })
+        }
       }
-    }
 
-    // Insert all records
-    const { data: insertedRecords, error: insertError } = await supabase
-      .from('notification_outbox')
-      .insert(outboxRecords)
-      .select('id')
-
-    if (insertError) {
-      console.error('Failed to create notification records:', insertError)
-      throw insertError
+      // Insert chunk
+      if (outboxRecords.length > 0) {
+        const { error: insertError } = await supabase
+          .from('notification_outbox')
+          .insert(outboxRecords)
+        
+        if (insertError) {
+          console.error(`Failed to insert notification chunk ${i / CHUNK_SIZE + 1}:`, insertError)
+          // Continue with other chunks but log error
+        } else {
+          processedCount += outboxRecords.length
+        }
+      }
     }
 
     return NextResponse.json({ 
       success: true, 
       recipients: targetUserIds.length,
       notifications: 0, // Not creating notification records, only outbox
-      queue_items: insertedRecords?.length || 0,
+      queue_items: processedCount,
       scheduled: !!body.scheduling?.send_at
     })
 
