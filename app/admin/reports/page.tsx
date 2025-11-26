@@ -7,7 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { toast } from 'react-hot-toast'
-import { Calendar, Download, RefreshCw, TrendingUp, Users, CheckCircle2, XCircle, DollarSign, BarChart3, Activity, Target, CreditCard, Clock, AlertCircle } from 'lucide-react'
+import { Calendar, Download, RefreshCw, TrendingUp, Users, CheckCircle2, XCircle, DollarSign, BarChart3, Activity, Target, CreditCard, Clock, AlertCircle, FileText } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { generateComprehensivePDF } from '@/lib/utils/pdf-export'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useReportFilters } from '@/hooks/use-report-filters'
 import { SortableTable, Column } from './sortable-table'
@@ -115,6 +118,12 @@ export default function AdminReportsPage() {
   const [bookingFunnel, setBookingFunnel] = useState<any[]>([])
   const [recurringUsers, setRecurringUsers] = useState<any[]>([])
   const [waitingTimeStats, setWaitingTimeStats] = useState<any>(null)
+  const [activationMetrics, setActivationMetrics] = useState<any>(null)
+  const [showExportDialog, setShowExportDialog] = useState(false)
+  const [exportDateRange, setExportDateRange] = useState<{ from: string; to: string }>({
+    from: '2024-10-10',
+    to: '2024-11-10'
+  })
 
   const buildCreationSeries = (source: Record<number, number>): BookingsByHour[] => {
     return Array.from({ length: 24 }, (_, hour) => ({
@@ -269,6 +278,10 @@ export default function AdminReportsPage() {
       // Load Waiting Time Stats
       const { data: waitingData } = await supabase.from('vw_avg_waiting_time').select('*').single()
       if (waitingData) setWaitingTimeStats(waitingData)
+      
+      // Load Activation Metrics
+      const { data: activationData } = await supabase.rpc('get_activation_metrics')
+      if (activationData) setActivationMetrics(activationData)
       
     } catch (e) {
       console.error(e)
@@ -501,14 +514,146 @@ export default function AdminReportsPage() {
     }
   }
 
+  const exportAllToPDF = async () => {
+    try {
+      setLoading(true)
+      toast.loading('Generating comprehensive PDF report...', { id: 'pdf-export' })
+      
+      // Use selected date range or default to Oct 10 - Nov 10
+      const fromDate = new Date(exportDateRange.from + 'T00:00:00Z')
+      const toDate = new Date(exportDateRange.to + 'T23:59:59Z')
+      
+      // Temporarily update filters to get accurate data for the selected range
+      const originalFrom = filters.dateRange.from
+      const originalTo = filters.dateRange.to
+      
+      updateFilters({
+        ...filters,
+        dateRange: {
+          from: exportDateRange.from,
+          to: exportDateRange.to
+        }
+      })
+      
+      // Wait for filters to update and reload data
+      await new Promise(resolve => setTimeout(resolve, 500))
+      await Promise.all([loadKPIs(), loadComprehensiveStats()])
+      
+      // Wait for data to load
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      // Generate PDF
+      await generateComprehensivePDF({
+        userStats,
+        bookingStats,
+        bookingRates,
+        platformRevenue,
+        customerDemographics,
+        kpi,
+        topRestaurants,
+        mostBookedUsers,
+        bookingFunnel,
+        recurringUsers,
+        waitingTimeStats,
+        byHour,
+        activationMetrics,
+        dateRange: {
+          from: fromDate.toISOString(),
+          to: toDate.toISOString()
+        }
+      })
+      
+      // Restore original filters
+      updateFilters({
+        ...filters,
+        dateRange: {
+          from: originalFrom,
+          to: originalTo
+        }
+      })
+      
+      toast.success('PDF report generated successfully!', { id: 'pdf-export' })
+      setShowExportDialog(false)
+    } catch (error) {
+      console.error('PDF export error:', error)
+      toast.error('Failed to generate PDF report. Please ensure all data is loaded.', { id: 'pdf-export' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-semibold">Comprehensive Reports</h2>
-        <Button variant="outline" size="sm" onClick={() => { loadKPIs(); loadComprehensiveStats() }} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Refresh All
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="default" 
+            size="sm" 
+            onClick={() => setShowExportDialog(true)} 
+            disabled={loading}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            <FileText className={`h-4 w-4 mr-2 ${loading ? 'animate-pulse' : ''}`} /> Export All (PDF)
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => { loadKPIs(); loadComprehensiveStats() }} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Refresh All
+          </Button>
+        </div>
       </div>
+
+      {/* Export PDF Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Export Comprehensive PDF Report</DialogTitle>
+            <DialogDescription>
+              Select the date range for your report. The report will include all analytics, metrics, and insights for the selected period.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="from-date">From Date</Label>
+              <Input
+                id="from-date"
+                type="date"
+                value={exportDateRange.from}
+                onChange={(e) => setExportDateRange({ ...exportDateRange, from: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="to-date">To Date</Label>
+              <Input
+                id="to-date"
+                type="date"
+                value={exportDateRange.to}
+                onChange={(e) => setExportDateRange({ ...exportDateRange, to: e.target.value })}
+              />
+            </div>
+            <div className="text-sm text-muted-foreground">
+              <p className="font-semibold mb-1">Report will include:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>User analytics & 30-day activation rates</li>
+                <li>Booking metrics & conversion rates</li>
+                <li>Revenue analysis</li>
+                <li>Customer demographics</li>
+                <li>Top restaurants & users</li>
+                <li>Peak hours analysis</li>
+                <li>Key insights & recommendations</li>
+                <li>Complete calculation methodology</li>
+              </ul>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExportDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={exportAllToPDF} disabled={loading} className="bg-blue-600 hover:bg-blue-700">
+              {loading ? 'Generating...' : 'Generate PDF'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Tabs for different report sections */}
       <Tabs defaultValue="overview" className="space-y-4">
