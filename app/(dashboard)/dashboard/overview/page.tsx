@@ -80,7 +80,8 @@ export default function RestaurantOverviewPage() {
     .filter(data => 
       data.restaurant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       data.restaurant.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      data.restaurant.cuisine_type.toLowerCase().includes(searchQuery.toLowerCase())
+      data.restaurant.cuisine_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (data.restaurant.secondary_cuisines?.some(c => c.toLowerCase().includes(searchQuery.toLowerCase())) ?? false)
     )
     .sort((a, b) => {
       switch(sortBy) {
@@ -537,7 +538,12 @@ function EnhancedRestaurantCard({ data, onSelect, onQuickAction }: EnhancedResta
               <CardTitle className="text-lg font-bold">{data.restaurant.name}</CardTitle>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <MapPin className="h-3 w-3" />
-                <span className="truncate">{data.restaurant.cuisine_type}</span>
+                <span className="truncate">
+                  {data.restaurant.cuisine_type}
+                  {data.restaurant.secondary_cuisines && data.restaurant.secondary_cuisines.length > 0 && (
+                    <span className="opacity-70"> +{data.restaurant.secondary_cuisines.length}</span>
+                  )}
+                </span>
                 <Badge className={cn("text-xs", getRoleColor(data.staff.role))}>
                   {data.staff.role}
                 </Badge>
@@ -659,8 +665,11 @@ function DetailedRestaurantCard({ data, onSelect, onQuickAction }: EnhancedResta
             <div>
               <h3 className="text-xl font-bold">{data.restaurant.name}</h3>
               <p className="text-sm text-muted-foreground">{data.restaurant.address}</p>
-              <div className="flex gap-2 mt-2">
+              <div className="flex flex-wrap gap-2 mt-2">
                 <Badge variant="outline">{data.restaurant.cuisine_type}</Badge>
+                {data.restaurant.secondary_cuisines && data.restaurant.secondary_cuisines.map((cuisine: string) => (
+                  <Badge key={cuisine} variant="secondary" className="text-xs">{cuisine}</Badge>
+                ))}
                 <Badge>{data.staff.role}</Badge>
               </div>
             </div>

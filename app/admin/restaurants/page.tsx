@@ -42,6 +42,7 @@ import {
 } from 'lucide-react'
 import { titleCase } from '@/lib/utils'
 import { EXCLUDED_RESTAURANT_IDS } from '@/lib/config/excluded-restaurants'
+import { CUISINE_TYPES } from '@/lib/constants/cuisines'
 
 interface Restaurant {
   id: string
@@ -52,6 +53,7 @@ interface Restaurant {
   whatsapp_number?: string
   instagram_handle?: string
   cuisine_type: string
+  secondary_cuisines?: string[]
   price_range: number
   booking_policy: 'instant' | 'request'
   average_rating: number
@@ -103,6 +105,7 @@ export default function RestaurantManagement() {
     whatsapp_number: '',
     instagram_handle: '',
     cuisine_type: '',
+    secondary_cuisines: [] as string[],
     price_range: 2,
     booking_policy: 'request',
     featured: false
@@ -312,6 +315,7 @@ export default function RestaurantManagement() {
           whatsapp_number: formData.whatsapp_number.trim() || null,
           instagram_handle: formData.instagram_handle.trim() || null,
           cuisine_type: formData.cuisine_type.trim(),
+          secondary_cuisines: formData.secondary_cuisines.length > 0 ? formData.secondary_cuisines : null,
           price_range: formData.price_range,
           booking_policy: formData.booking_policy,
           featured: formData.featured,
@@ -425,6 +429,7 @@ export default function RestaurantManagement() {
           address: formData.address.trim(),
           phone_number: formData.phone_number.trim(),
           cuisine_type: formData.cuisine_type.trim(),
+          secondary_cuisines: formData.secondary_cuisines.length > 0 ? formData.secondary_cuisines : null,
           price_range: formData.price_range,
           booking_policy: formData.booking_policy,
           featured: formData.featured,
@@ -495,6 +500,7 @@ export default function RestaurantManagement() {
       whatsapp_number: '',
       instagram_handle: '',
       cuisine_type: '',
+      secondary_cuisines: [],
       price_range: 2,
       booking_policy: 'request',
       featured: false
@@ -510,6 +516,7 @@ export default function RestaurantManagement() {
       whatsapp_number: restaurant.whatsapp_number || '',
       instagram_handle: restaurant.instagram_handle || '',
       cuisine_type: restaurant.cuisine_type,
+      secondary_cuisines: restaurant.secondary_cuisines || [],
       price_range: restaurant.price_range,
       booking_policy: restaurant.booking_policy,
       featured: restaurant.featured
@@ -519,10 +526,13 @@ export default function RestaurantManagement() {
   const filteredRestaurants = restaurants.filter(restaurant => {
     const matchesSearch = restaurant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          restaurant.cuisine_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (restaurant.secondary_cuisines?.some(c => c.toLowerCase().includes(searchTerm.toLowerCase())) ?? false) ||
                          restaurant.address.toLowerCase().includes(searchTerm.toLowerCase())
     
     const matchesStatus = statusFilter === 'all' || restaurant.status === statusFilter
-    const matchesCuisine = cuisineFilter === 'all' || restaurant.cuisine_type === cuisineFilter
+    const matchesCuisine = cuisineFilter === 'all' || 
+                          restaurant.cuisine_type === cuisineFilter || 
+                          (restaurant.secondary_cuisines?.includes(cuisineFilter) ?? false)
 
     return matchesSearch && matchesStatus && matchesCuisine
   })
@@ -886,6 +896,16 @@ export default function RestaurantManagement() {
                     <Label className="text-sm font-medium text-gray-700">Cuisine Type</Label>
                     <p className="text-gray-900 mt-1">{selectedRestaurant.cuisine_type}</p>
                   </div>
+                  {selectedRestaurant.secondary_cuisines && selectedRestaurant.secondary_cuisines.length > 0 && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Secondary Cuisines</Label>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {selectedRestaurant.secondary_cuisines.map((cuisine) => (
+                          <Badge key={cuisine} variant="outline">{cuisine}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <Label className="text-sm font-medium text-gray-700">Price Range</Label>
                     <p className="text-gray-900 mt-1">
@@ -942,12 +962,18 @@ export default function RestaurantManagement() {
               </div>
               <div>
                 <Label htmlFor="cuisine_type">Cuisine Type *</Label>
-                <Input
-                  id="cuisine_type"
-                  value={formData.cuisine_type}
-                  onChange={(e) => setFormData({...formData, cuisine_type: e.target.value})}
-                  placeholder="e.g., Italian, Asian, American"
-                />
+                <Select value={formData.cuisine_type} onValueChange={(value) => setFormData({...formData, cuisine_type: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select cuisine" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CUISINE_TYPES.map((cuisine) => (
+                      <SelectItem key={cuisine} value={cuisine}>
+                        {cuisine}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label htmlFor="phone_number">Phone Number *</Label>
@@ -1000,6 +1026,29 @@ export default function RestaurantManagement() {
                 onChange={(e) => setFormData({...formData, address: e.target.value})}
                 placeholder="Full restaurant address"
               />
+            </div>
+
+            <div>
+              <Label>Secondary Cuisines (Optional)</Label>
+              <p className="text-sm text-gray-500 mb-2">Select additional cuisine types</p>
+              <div className="flex flex-wrap gap-2">
+                {CUISINE_TYPES.filter(cuisine => cuisine !== formData.cuisine_type).map((cuisine) => (
+                  <Badge
+                    key={cuisine}
+                    variant={formData.secondary_cuisines.includes(cuisine) ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => {
+                      if (formData.secondary_cuisines.includes(cuisine)) {
+                        setFormData({...formData, secondary_cuisines: formData.secondary_cuisines.filter(c => c !== cuisine)})
+                      } else {
+                        setFormData({...formData, secondary_cuisines: [...formData.secondary_cuisines, cuisine]})
+                      }
+                    }}
+                  >
+                    {cuisine}
+                  </Badge>
+                ))}
+              </div>
             </div>
 
             <div>

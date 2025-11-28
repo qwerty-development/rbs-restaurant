@@ -160,7 +160,12 @@ export function RestaurantSelector() {
                         </div>
                         <div className="flex items-center gap-1 text-xs text-muted-foreground">
                           <MapPin className="h-3 w-3 flex-shrink-0" />
-                          <span className="truncate">{restaurant.restaurant.cuisine_type}</span>
+                          <span className="truncate">
+                            {restaurant.restaurant.cuisine_type}
+                            {restaurant.restaurant.secondary_cuisines && restaurant.restaurant.secondary_cuisines.length > 0 && (
+                              <span className="opacity-70"> +{restaurant.restaurant.secondary_cuisines.length}</span>
+                            )}
+                          </span>
                         </div>
                       </div>
                       <Badge className={cn("text-xs ml-2", getRoleColor(restaurant.role))}>

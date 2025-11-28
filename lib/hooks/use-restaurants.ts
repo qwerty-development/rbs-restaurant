@@ -13,6 +13,7 @@ export interface RestaurantStaffInfo {
     address: string
     main_image_url: string | null
     cuisine_type: string
+    secondary_cuisines?: string[] | null
     status: 'active' | 'inactive' | 'suspended'
     phone_number: string | null
     tier: 'basic' | 'pro'
@@ -43,6 +44,7 @@ export function useUserRestaurants() {
             address,
             main_image_url,
             cuisine_type,
+            secondary_cuisines,
             status,
             phone_number,
             tier,

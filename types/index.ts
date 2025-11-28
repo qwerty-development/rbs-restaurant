@@ -9,6 +9,7 @@ export interface Restaurant {
   main_image_url: string | null
   description: string | null
   cuisine_type: string[] | null
+  secondary_cuisines?: string[] | null
   opening_hours: {
     day: number // 0 = Sunday, 6 = Saturday
     open_time: string // HH:mm format

@@ -10,6 +10,7 @@ export interface ComprehensiveRestaurantData {
     address: string
     main_image_url: string | null
     cuisine_type: string
+    secondary_cuisines?: string[] | null
     status: string
     phone_number: string | null
   }
