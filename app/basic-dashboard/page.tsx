@@ -59,10 +59,12 @@ import { PushNotificationPermission } from "@/components/notifications/push-noti
 import { BookingActionDialog } from "@/components/bookings/booking-action-dialog";
 import { WaitlistManager } from "@/components/basic/waitlist-manager";
 import { ManualBookingDialog } from "@/components/basic/manual-booking-dialog";
+import { BasicBookingDetailsDialog } from "@/components/basic/basic-booking-details-dialog";
 import { CollapsedBookingView } from "@/components/bookings/collapsed-booking-view";
 import { QuickStatsSummary } from "@/components/basic/quick-stats-summary";
 import { RecentActivityFeed } from "@/components/basic/recent-activity-feed";
 import { DailySummaryWidget } from "@/components/basic/daily-summary-widget";
+import { GuestCrmInsightsWidget } from "@/components/basic/guest-crm-insights-widget";
 import {
   Calendar as CalendarIcon,
   Search,
@@ -119,12 +121,16 @@ export default function BasicDashboardPage() {
   const [isUpdatingTable, setIsUpdatingTable] = useState<Record<string, boolean>>({});
   const [editingTable, setEditingTable] = useState<Record<string, boolean>>({});
   const [manualBookingDialogOpen, setManualBookingDialogOpen] = useState(false);
+  const [selectedBookingForDetails, setSelectedBookingForDetails] = useState<any | null>(null);
 
   const supabase = createClient();
   const queryClient = useQueryClient();
-  const { currentRestaurant, isLoading: contextLoading } =
+  const { currentRestaurant, isLoading: contextLoading, hasFeature } =
     useRestaurantContext();
   const restaurantId = currentRestaurant?.restaurant.id;
+  
+  // Check if Guest CRM addon is enabled
+  const hasGuestCRM = hasFeature('customer_management');
 
   // Initialize connection health monitoring
   const { healthStatus, registerChannel, unregisterChannel, forceReconnect } =
@@ -1499,6 +1505,7 @@ export default function BasicDashboardPage() {
             <Users className="h-4 w-4" />
             Waitlist
           </TabsTrigger>
+         
         </TabsList>
 
         <TabsContent value="bookings" className="space-y-6">
@@ -1699,11 +1706,12 @@ export default function BasicDashboardPage() {
                 <Card
                   key={booking.id}
                   className={cn(
-                    "hover:shadow-md transition-all duration-200 active:scale-[0.98]",
+                    "hover:shadow-md transition-all duration-200 active:scale-[0.98] cursor-pointer",
                     "min-h-[100px]",
                     booking.status === "pending" &&
                       "border-orange-200 bg-orange-50/30 ring-1 ring-orange-200"
                   )}
+                  onClick={() => setSelectedBookingForDetails(booking)}
                 >
                   <CardContent className="p-4">
                     {/* Event Badge - Show if it's an event booking */}
@@ -1948,12 +1956,15 @@ export default function BasicDashboardPage() {
                       </div>
 
                       {/* Action Buttons - Hidden on mobile, shown on tablet+ */}
-                      <div className="hidden tablet:flex flex-col gap-2 flex-shrink-0">
+                      <div className="hidden tablet:flex flex-col gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                         {booking.status === "pending" && (
                           <>
                             <Button
                               size="sm"
-                              onClick={() => handleAccept(booking)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAccept(booking);
+                              }}
                               disabled={updateBookingMutation.isPending}
                               className="h-8 tablet:h-10 px-4 bg-green-600 hover:bg-green-700 text-sm tablet:text-base min-w-[90px]"
                             >
@@ -1963,7 +1974,10 @@ export default function BasicDashboardPage() {
                             <Button
                               size="sm"
                               variant="destructive"
-                              onClick={() => handleDecline(booking)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDecline(booking);
+                              }}
                               disabled={updateBookingMutation.isPending}
                               className="h-8 tablet:h-10 px-4 text-sm tablet:text-base min-w-[90px]"
                             >
@@ -2261,13 +2275,16 @@ export default function BasicDashboardPage() {
                     )}
 
                     {/* Mobile Action Buttons - Bottom of card */}
-                    <div className="tablet:hidden mt-4 pt-3 border-t">
+                    <div className="tablet:hidden mt-4 pt-3 border-t" onClick={(e) => e.stopPropagation()}>
                       {booking.status === "pending" && (
                         <div className="flex gap-3">
                           <Button
                             size="sm"
                             variant="destructive"
-                            onClick={() => handleDecline(booking)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDecline(booking);
+                            }}
                             disabled={updateBookingMutation.isPending}
                             className="flex-1 h-10"
                           >
@@ -2276,7 +2293,10 @@ export default function BasicDashboardPage() {
                           </Button>
                           <Button
                             size="sm"
-                            onClick={() => handleAccept(booking)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAccept(booking);
+                            }}
                             disabled={updateBookingMutation.isPending}
                             className="flex-1 h-10 bg-green-600 hover:bg-green-700"
                           >
@@ -2343,7 +2363,11 @@ export default function BasicDashboardPage() {
 
             {/* Recent Activity Feed - Takes 1/3 on large screens */}
             <div className="lg:col-span-1">
-              <div className="sticky top-6">
+              <div className="sticky top-6 space-y-6">
+                {/* Guest CRM Insights - Only show if addon is enabled */}
+                {hasGuestCRM && restaurantId && (
+                  <GuestCrmInsightsWidget restaurantId={restaurantId} />
+                )}
                 <RecentActivityFeed bookings={bookings} />
               </div>
             </div>
@@ -2393,6 +2417,20 @@ export default function BasicDashboardPage() {
         onOpenChange={setManualBookingDialogOpen}
         restaurantId={restaurantId || ""}
         currentBookings={bookings}
+        hasGuestCRM={hasGuestCRM}
+      />
+
+      {/* Booking Details Dialog */}
+      <BasicBookingDetailsDialog
+        booking={selectedBookingForDetails}
+        open={!!selectedBookingForDetails}
+        onOpenChange={(open) => !open && setSelectedBookingForDetails(null)}
+        restaurantId={restaurantId || ""}
+        hasGuestCRM={hasGuestCRM}
+        onStatusChange={() => {
+          queryClient.invalidateQueries({ queryKey: ['basic-bookings'] });
+          queryClient.invalidateQueries({ queryKey: ['basic-analytics'] });
+        }}
       />
     </div>
   );

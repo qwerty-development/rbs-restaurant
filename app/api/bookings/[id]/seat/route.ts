@@ -280,26 +280,34 @@ export async function POST(
         .single()
 
       if (!customerError && customer) {
-        // Update last visit and total bookings
-        await supabase
-          .from('restaurant_customers')
-          .update({
-            last_visit: new Date().toISOString(),
-            total_bookings: customer.total_bookings + 1,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', customer.id)
+        // Just ensure booking is linked, trigger will handle stats
+        if (booking.guest_id !== customer.id) {
+            await supabase
+            .from('bookings')
+            .update({ guest_id: customer.id })
+            .eq('id', booking.id)
+        }
       } else {
         // Create new customer record
-        await supabase
+        const { data: newCustomer } = await supabase
           .from('restaurant_customers')
           .insert({
             restaurant_id: staff.restaurant_id,
             user_id: booking.user_id,
             first_visit: new Date().toISOString(),
             last_visit: new Date().toISOString(),
-            total_bookings: 1
+            total_bookings: 1,
+            source: 'booking'
           })
+          .select()
+          .single()
+          
+        if (newCustomer) {
+             await supabase
+            .from('bookings')
+            .update({ guest_id: newCustomer.id })
+            .eq('id', booking.id)
+        }
       }
     }
 

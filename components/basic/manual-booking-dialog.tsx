@@ -20,6 +20,7 @@ interface ManualBookingDialogProps {
   onOpenChange: (open: boolean) => void
   restaurantId: string
   currentBookings?: any[]
+  hasGuestCRM?: boolean // Whether restaurant has Guest CRM addon
 }
 
 export function ManualBookingDialog({
@@ -27,6 +28,7 @@ export function ManualBookingDialog({
   onOpenChange,
   restaurantId,
   currentBookings = [],
+  hasGuestCRM = false,
 }: ManualBookingDialogProps) {
   const supabase = createClient()
   const queryClient = useQueryClient()
@@ -63,10 +65,11 @@ export function ManualBookingDialog({
       // Generate confirmation code
       const confirmationCode = await generateConfirmationCode()
 
-      // Prepare booking data for basic tier (no tables, no customer tracking)
+      // Prepare booking data for basic tier (no tables, no customer tracking by default)
+      // If Guest CRM addon is enabled, we can link to customers
       const bookingData = {
         restaurant_id: restaurantId,
-        user_id: null, // Basic tier doesn't link to user accounts
+        user_id: data.user_id || null, // Link to user if selected from Guest CRM
         booking_time: data.booking_time,
         party_size: data.party_size,
         status: data.status || 'confirmed',
@@ -199,6 +202,7 @@ export function ManualBookingDialog({
             onSubmit={handleSubmit}
             onCancel={handleCancel}
             isLoading={createBookingMutation.isPending}
+            hasGuestCRM={hasGuestCRM}
           />
         </div>
       </DialogContent>

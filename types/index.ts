@@ -15,6 +15,7 @@ export interface Restaurant {
     close_time: string // HH:mm format
   }[]
   tier: 'basic' | 'pro'
+  addons: string[]
   created_at: string
   updated_at: string
   minimum_age?: number
@@ -98,6 +99,7 @@ export interface Restaurant {
     guest_name: string | null
     guest_email: string | null
     guest_phone: string | null
+    guest_id: string | null
     assigned_table: string | null
     is_group_booking: boolean
     organizer_id: string | null
@@ -561,12 +563,14 @@ export interface RestaurantSection {
     blacklist_reason: string | null
     preferred_table_types: string[] | null
     preferred_time_slots: string[] | null
+    source: 'manual' | 'booking' | 'import' | 'migration'
+    notes: string | null
     created_at: string
     updated_at: string
     // Relations
     profile?: Profile
     tags?: CustomerTagAssignment[]
-    notes?: CustomerNote[]
+    customer_notes?: CustomerNote[]
     preferences?: CustomerPreference[]
   }
 

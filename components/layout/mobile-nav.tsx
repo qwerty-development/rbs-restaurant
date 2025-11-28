@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 import { Role } from '@/lib/restaurant-auth'
 import { NAV_ITEMS, BOTTOM_NAV_ITEMS } from '@/components/layout/nav-config'
 import { useRestaurantContext } from '@/lib/contexts/restaurant-context'
+import { getNavigationItems } from '@/lib/utils/tier'
 
 interface MobileNavProps {
   restaurant: {
@@ -23,18 +24,24 @@ interface MobileNavProps {
     name: string
     main_image_url?: string
   }
-  role: Role
-  permissions: string[]
+  // No props needed as data is fetched from context
 }
 
 // Navigation items sourced from centralized config
 
-export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
+export function MobileNav({}: MobileNavProps) {
+  const { currentRestaurant, tier, hasFeature } = useRestaurantContext()
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
-  const [isOpen, setIsOpen] = useState(false)
-  const { hasFeature, tier } = useRestaurantContext()
+  const [open, setOpen] = useState(false)
+
+  // Get navigation items based on tier and addons
+  // @ts-ignore - addons property exists in DB but might not be in type definition yet
+  const navItems = getNavigationItems(
+    tier,
+    currentRestaurant?.restaurant?.addons || []
+  )
 
   const handleSignOut = async () => {
     try {
@@ -49,7 +56,7 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
 
   const filteredNavItems = NAV_ITEMS.filter(item => {
     // Check permission first
-    if (item.permission && !restaurantAuth.hasPermission(permissions, item.permission, role)) {
+    if (item.permission && !restaurantAuth.hasPermission(currentRestaurant?.permissions || [], item.permission, (currentRestaurant?.role || 'viewer') as Role)) {
       return false
     }
     
@@ -73,7 +80,7 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
 
   const filteredBottomItems = BOTTOM_NAV_ITEMS.filter(item => {
     // Check permission first
-    if (item.permission && !restaurantAuth.hasPermission(permissions, item.permission, role)) {
+    if (item.permission && !restaurantAuth.hasPermission(currentRestaurant?.permissions || [], item.permission, (currentRestaurant?.role || 'viewer') as Role)) {
       return false
     }
     
@@ -85,6 +92,8 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
     return true
   })
 
+  if (!currentRestaurant) return null
+
   return (
     <>
       {/* Mobile Header - Optimized for small tablets */}
@@ -93,7 +102,7 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setIsOpen(true)}
+            onClick={() => setOpen(true)}
             className="md:hidden h-8 w-8 sm:h-9 sm:w-9 touch-manipulation"
           >
             <Menu className="h-5 w-5 sm:h-6 sm:w-6" />
@@ -101,19 +110,19 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
           </Button>
 
           <div className="ml-3 sm:ml-4">
-            <h1 className="text-base sm:text-lg font-semibold truncate">{restaurant.name}</h1>
+            <h1 className="text-base sm:text-lg font-semibold truncate">{currentRestaurant.restaurant.name}</h1>
           </div>
         </div>
       </header>
 
       {/* Mobile Navigation Sheet - Optimized for tablets */}
-      <Sheet open={isOpen} onOpenChange={setIsOpen}>
+      <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="left" className="w-[260px] sm:w-[280px] p-0">
           <SheetHeader className="p-3 sm:p-4 border-b">
             <SheetTitle className="text-left">
               <div>
-                <div className="font-semibold text-sm sm:text-base">{restaurant.name}</div>
-                <div className="text-xs sm:text-sm text-muted-foreground capitalize">{role}</div>
+                <div className="font-semibold text-sm sm:text-base">{currentRestaurant.restaurant.name}</div>
+                <div className="text-xs sm:text-sm text-muted-foreground capitalize">{currentRestaurant.role}</div>
               </div>
             </SheetTitle>
           </SheetHeader>
@@ -128,7 +137,7 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
                     <Link
                       key={item.href}
                       href={item.href}
-                      onClick={() => setIsOpen(false)}
+                      onClick={() => setOpen(false)}
                       className={cn(
                         "flex items-center gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-2.5 sm:py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation",
                         isActive
@@ -152,7 +161,7 @@ export function MobileNav({ restaurant, role, permissions }: MobileNavProps) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    onClick={() => setIsOpen(false)}
+                    onClick={() => setOpen(false)}
                                           className={cn(
                       "flex items-center gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-2.5 sm:py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation",
                         isActive

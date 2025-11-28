@@ -624,6 +624,7 @@ export function ManualBookingForm({
     // FIXED: Convert empty strings to null to avoid unique constraint violations
     const processedData = {
       ...data,
+      guest_id: selectedCustomer?.id || null,
       customer_id: selectedCustomer?.id || null,
       user_id: selectedCustomer?.user_id || null,
       guest_name: selectedCustomer 

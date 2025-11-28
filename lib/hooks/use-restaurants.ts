@@ -16,6 +16,7 @@ export interface RestaurantStaffInfo {
     status: 'active' | 'inactive' | 'suspended'
     phone_number: string | null
     tier: 'basic' | 'pro'
+    addons: string[]
     created_at: string
   }
 }
@@ -45,6 +46,7 @@ export function useUserRestaurants() {
             status,
             phone_number,
             tier,
+            addons,
             created_at
           )
         `)

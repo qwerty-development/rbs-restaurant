@@ -1,7 +1,7 @@
 // lib/contexts/restaurant-context.tsx
 "use client"
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useUserRestaurants, type RestaurantStaffInfo } from "@/lib/hooks/use-restaurants"
 import { getRestaurantTier, hasFeature, getNavigationItems, type RestaurantTier } from "@/lib/utils/tier"
@@ -52,10 +52,10 @@ export function RestaurantProvider({ children, forcedRestaurantId }: RestaurantP
   
   
   // Feature checker function
-  const checkFeature = (feature: string) => {
+  const checkFeature = useCallback((feature: string) => {
     if (!tier) return false // During loading, deny all features
-    return hasFeature(tier, feature as any)
-  }
+    return hasFeature(tier, feature as any, currentRestaurant?.restaurant.addons || [])
+  }, [tier, currentRestaurant])
   
   useEffect(() => {
     if (isLoading || restaurants.length === 0) return

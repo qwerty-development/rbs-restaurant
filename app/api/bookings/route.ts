@@ -164,7 +164,8 @@ export async function POST(request: NextRequest) {
       special_requests,
       occasion,
       dietary_notes,
-      user_id
+      user_id,
+      guest_id
     } = body
 
     if (!booking_time || !party_size || !guest_name) {
@@ -185,10 +186,54 @@ export async function POST(request: NextRequest) {
     // Generate confirmation code
     const confirmationCode = Math.random().toString(36).substring(2, 8).toUpperCase()
 
+    // Find or create guest
+    let finalGuestId = guest_id
+
+    if (!finalGuestId) {
+      // Try to find existing guest by email or phone
+      let query = supabase
+        .from('restaurant_customers')
+        .select('id')
+        .eq('restaurant_id', staff.restaurant_id)
+      
+      const conditions = []
+      if (guest_email) conditions.push(`guest_email.eq.${guest_email}`)
+      if (guest_phone) conditions.push(`guest_phone.eq.${guest_phone}`)
+      
+      if (conditions.length > 0) {
+        const { data: existingGuests } = await query.or(conditions.join(','))
+        if (existingGuests && existingGuests.length > 0) {
+          finalGuestId = existingGuests[0].id
+        }
+      }
+
+      // If still no guest, create one
+      if (!finalGuestId) {
+        const { data: newGuest, error: createGuestError } = await supabase
+          .from('restaurant_customers')
+          .insert({
+            restaurant_id: staff.restaurant_id,
+            guest_name,
+            guest_email: guest_email || null,
+            guest_phone: guest_phone || null,
+            source: 'booking',
+            total_bookings: 0,
+            user_id: user_id || null // Link to user if provided
+          })
+          .select('id')
+          .single()
+
+        if (!createGuestError && newGuest) {
+          finalGuestId = newGuest.id
+        }
+      }
+    }
+
     // Create booking
     const bookingData = {
       restaurant_id: staff.restaurant_id,
       user_id: user_id || null,
+      guest_id: finalGuestId,
       booking_time,
       party_size,
       status: 'pending',

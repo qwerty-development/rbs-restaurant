@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Upload, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MigrationWidget } from './migration-widget'
-import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 interface MigrationButtonProps {
   restaurantId: string
@@ -31,6 +31,9 @@ export function MigrationButton({
       </DialogTrigger>
       
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Import Customer Data</DialogTitle>
+        </DialogHeader>
         <MigrationWidget restaurantId={restaurantId} />
       </DialogContent>
     </Dialog>

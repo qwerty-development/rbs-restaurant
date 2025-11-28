@@ -106,6 +106,12 @@ export function CustomerDetailsDialog({
   const [relationships, setRelationships] = useState<CustomerRelationship[]>([])
   const [bookingHistory, setBookingHistory] = useState<any[]>([])
   const [totalBookingCount, setTotalBookingCount] = useState<number>(customer.total_bookings)
+  const [calculatedStats, setCalculatedStats] = useState<{
+    completed: number
+    cancelled: number
+    declined: number
+    noShow: number
+  }>({ completed: 0, cancelled: 0, declined: 0, noShow: 0 })
   const [availableTags, setAvailableTags] = useState<CustomerTag[]>([])
   const [customerTags, setCustomerTags] = useState<CustomerTag[]>(customer.tags || [])
   const [availableCustomers, setAvailableCustomers] = useState<CustomerForSelection[]>([])
@@ -124,6 +130,8 @@ export function CustomerDetailsDialog({
     setCustomerTags(customer.tags || [])
     setCustomerWithEmail(customer)
     setNotes(customer.notes || [])
+    setCalculatedStats({ completed: 0, cancelled: 0, declined: 0, noShow: 0 })
+    setTotalBookingCount(customer.total_bookings)
     // Reset active tab to overview when customer changes
     setActiveTab('overview')
   }, [customer])
@@ -269,6 +277,18 @@ export function CustomerDetailsDialog({
       // This ensures accuracy by avoiding double-counting bookings that exist under both user_id and email
       const actualTotalBookings = allBookings.length
 
+      // Calculate booking statistics from actual bookings
+      const completedCount = allBookings.filter(b => b.status === 'completed').length
+      // Cancelled = only user-initiated cancellations
+      const cancelledCount = allBookings.filter(b => b.status === 'cancelled_by_user').length
+      // Declined = restaurant rejected (declined, auto_declined, or restaurant cancelled)
+      const declinedCount = allBookings.filter(b => 
+        b.status === 'declined_by_restaurant' || 
+        b.status === 'auto_declined' || 
+        b.status === 'cancelled_by_restaurant'
+      ).length
+      const noShowCount = allBookings.filter(b => b.status === 'no_show').length
+
       // Load available tags
       const { data: tagsData } = await supabase
         .from('customer_tags')
@@ -296,6 +316,12 @@ export function CustomerDetailsDialog({
       setRelationships(relationshipsData || [])
       setBookingHistory(bookingsData || [])
       setTotalBookingCount(actualTotalBookings)
+      setCalculatedStats({
+        completed: completedCount,
+        cancelled: cancelledCount,
+        declined: declinedCount,
+        noShow: noShowCount
+      })
       setAvailableTags(tagsData || [])
       // Transform customers data to fix profile array issue
       const transformedCustomers = (customersData || []).map((c: any) => ({
@@ -580,9 +606,9 @@ export function CustomerDetailsDialog({
               </CardHeader>
               <CardContent className="p-4 pt-0">
                 <div className="text-2xl font-bold">{totalBookingCount}</div>
-                {customer.profile?.completed_bookings !== undefined && (
+                {calculatedStats.completed > 0 && (
                   <p className="text-xs text-green-600 mt-1">
-                    {customer.profile.completed_bookings} completed
+                    {calculatedStats.completed} completed
                   </p>
                 )}
               </CardContent>
@@ -618,11 +644,16 @@ export function CustomerDetailsDialog({
               </CardHeader>
               <CardContent className="p-4 pt-0">
                 <div className="text-2xl font-bold text-red-600">
-                  {customer.no_show_count + customer.cancelled_count}
+                  {calculatedStats.noShow + calculatedStats.cancelled}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  {customer.no_show_count} no-shows, {customer.cancelled_count} cancellations
+                  {calculatedStats.noShow} no-shows, {calculatedStats.cancelled} cancelled
                 </div>
+                {calculatedStats.declined > 0 && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    {calculatedStats.declined} declined by restaurant
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -642,17 +673,7 @@ export function CustomerDetailsDialog({
                 </Card>
               )}
               
-              {customer.total_spent > 0 && (
-                <Card>
-                  <CardHeader className="p-4">
-                    <CardTitle className="text-sm font-medium">Est. Total Spent</CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-4 pt-0">
-                    <div className="text-xl font-bold">${customer.total_spent.toFixed(0)}</div>
-                    <p className="text-xs text-muted-foreground mt-1">lifetime value</p>
-                  </CardContent>
-                </Card>
-              )}
+              
               
               {customer.average_party_size > 0 && (
                 <Card>
