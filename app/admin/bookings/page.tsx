@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'react-hot-toast'
-import { ChevronLeft, ChevronRight, Search, RefreshCw, Calendar, Clock, CheckCircle, XCircle, Phone, Users, Mail, MapPin, Tag, BarChart3, Activity as ActivityIcon, Sparkles, PieChart, Info } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, RefreshCw, Calendar, Clock, CheckCircle, XCircle, Phone, Users, Mail, MapPin, Tag, BarChart3, Activity as ActivityIcon, Sparkles, PieChart, Info, Star } from 'lucide-react'
 import { EXCLUDED_RESTAURANT_IDS } from '@/lib/config/excluded-restaurants'
 
 type BookingRow = {
@@ -290,6 +290,112 @@ export default function AdminAllBookingsPage() {
           return sortOrder === 'asc' ? aElapsed - bElapsed : bElapsed - aElapsed
         })
       }
+
+      // Calculate booking numbers for each user/customer
+      // Fetch actual booking counts from database for accuracy
+      const userIds = new Set<string>()
+      const guestEmails = new Set<string>()
+      const guestPhones = new Set<string>()
+      
+      processed.forEach((booking: BookingRow) => {
+        if (booking.user_id) userIds.add(booking.user_id)
+        if (booking.guest_email) guestEmails.add(booking.guest_email.toLowerCase())
+        if (booking.guest_phone) guestPhones.add(booking.guest_phone.replace(/\D/g, ''))
+      })
+
+      // Fetch booking counts for registered users
+      const userBookingCounts = new Map<string, Map<string, number>>()
+      if (userIds.size > 0) {
+        try {
+          const { data: userBookings } = await supabase
+            .from('bookings')
+            .select('user_id, id, created_at')
+            .in('user_id', Array.from(userIds))
+            .order('created_at', { ascending: true })
+          
+          if (userBookings) {
+            userBookings.forEach((b: any) => {
+              if (!b.user_id) return
+              if (!userBookingCounts.has(b.user_id)) {
+                userBookingCounts.set(b.user_id, new Map())
+              }
+              const count = (userBookingCounts.get(b.user_id)!.size || 0) + 1
+              userBookingCounts.get(b.user_id)!.set(b.id, count)
+            })
+          }
+        } catch (e) {
+          console.error('Error fetching user booking counts:', e)
+        }
+      }
+
+      // Fetch booking counts for guest bookings by email
+      const guestEmailBookingCounts = new Map<string, Map<string, number>>()
+      if (guestEmails.size > 0) {
+        try {
+          const { data: guestBookings } = await supabase
+            .from('bookings')
+            .select('guest_email, id, created_at')
+            .in('guest_email', Array.from(guestEmails))
+            .is('user_id', null)
+            .order('created_at', { ascending: true })
+          
+          if (guestBookings) {
+            guestBookings.forEach((b: any) => {
+              if (!b.guest_email) return
+              const email = b.guest_email.toLowerCase()
+              if (!guestEmailBookingCounts.has(email)) {
+                guestEmailBookingCounts.set(email, new Map())
+              }
+              const count = (guestEmailBookingCounts.get(email)!.size || 0) + 1
+              guestEmailBookingCounts.get(email)!.set(b.id, count)
+            })
+          }
+        } catch (e) {
+          console.error('Error fetching guest email booking counts:', e)
+        }
+      }
+
+      // Fetch booking counts for guest bookings by phone
+      const guestPhoneBookingCounts = new Map<string, Map<string, number>>()
+      if (guestPhones.size > 0) {
+        try {
+          const { data: guestBookings } = await supabase
+            .from('bookings')
+            .select('guest_phone, id, created_at')
+            .in('guest_phone', Array.from(guestPhones))
+            .is('user_id', null)
+            .order('created_at', { ascending: true })
+          
+          if (guestBookings) {
+            guestBookings.forEach((b: any) => {
+              if (!b.guest_phone) return
+              const phone = b.guest_phone.replace(/\D/g, '')
+              if (!guestPhoneBookingCounts.has(phone)) {
+                guestPhoneBookingCounts.set(phone, new Map())
+              }
+              const count = (guestPhoneBookingCounts.get(phone)!.size || 0) + 1
+              guestPhoneBookingCounts.get(phone)!.set(b.id, count)
+            })
+          }
+        } catch (e) {
+          console.error('Error fetching guest phone booking counts:', e)
+        }
+      }
+
+      // Assign booking numbers to processed bookings
+      processed.forEach((booking: BookingRow) => {
+        let bookingNumber: number | undefined
+        
+        if (booking.user_id && userBookingCounts.has(booking.user_id)) {
+          bookingNumber = userBookingCounts.get(booking.user_id)!.get(booking.id)
+        } else if (booking.guest_email && guestEmailBookingCounts.has(booking.guest_email.toLowerCase())) {
+          bookingNumber = guestEmailBookingCounts.get(booking.guest_email.toLowerCase())!.get(booking.id)
+        } else if (booking.guest_phone && guestPhoneBookingCounts.has(booking.guest_phone.replace(/\D/g, ''))) {
+          bookingNumber = guestPhoneBookingCounts.get(booking.guest_phone.replace(/\D/g, ''))!.get(booking.id)
+        }
+        
+        ;(booking as any).booking_number = bookingNumber
+      })
 
       setRows(processed)
       setTotal(count || 0)
@@ -850,21 +956,47 @@ function BookingRowItem({ row, onUpdateStatus, onShowConfirmDialog, expanded, on
     return 'outline'
   }
 
+  // Get booking number badge - simplified for mobile
+  const getBookingNumberBadge = (bookingNumber: number | undefined) => {
+    if (!bookingNumber) return null
+    
+    if (bookingNumber === 1) {
+      return (
+        <Badge variant="default" className="bg-blue-600 text-white border-blue-600 hover:bg-blue-700 text-xs font-semibold px-2 py-0.5">
+          1
+        </Badge>
+      )
+    } else if (bookingNumber === 2) {
+      return (
+        <Badge variant="secondary" className="bg-purple-600 text-white border-purple-600 hover:bg-purple-700 text-xs font-semibold px-2 py-0.5">
+          2
+        </Badge>
+      )
+    } else {
+      return (
+        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300 hover:bg-green-100 text-xs font-semibold px-2 py-0.5">
+          <Star className="h-3 w-3" />
+        </Badge>
+      )
+    }
+  }
+
   return (
     <div className={`border rounded-lg p-3 md:p-4 transition-all ${isPending ? 'bg-red-50 border-red-300 shadow-md' : 'bg-white hover:shadow-sm'}`}>
       <div className="flex flex-col gap-3">
         {/* Header: Name & Status */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <h3 className="text-lg md:text-xl font-bold text-slate-900 truncate">{customerName}</h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-lg md:text-xl font-bold text-slate-900 truncate">{customerName}</h3>
+              <span className="hidden md:inline">{getBookingNumberBadge((row as any).booking_number)}</span>
+            </div>
             <div className="text-xs md:text-sm text-slate-600 mt-0.5">
               📍 {restaurantName}
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <Badge variant={getSourceBadgeVariant((row as any).source) as any} className="text-xs">
-              {formatBookingSource((row as any).source)}
-            </Badge>
+          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+            <span className="md:hidden">{getBookingNumberBadge((row as any).booking_number)}</span>
             <Badge variant={getStatusVariant(row.status)} className="text-xs">
               {row.status.replaceAll('_', ' ').toUpperCase()}
             </Badge>
@@ -942,8 +1074,11 @@ function BookingRowItem({ row, onUpdateStatus, onShowConfirmDialog, expanded, on
           Created: {createdStr} • ID: {row.id.slice(0, 8)}
         </div>
 
-        {/* Expand structured details */}
-        <div className="pt-2">
+        {/* Source badge and Expand structured details */}
+        <div className="pt-2 flex items-center justify-between gap-2">
+          <Badge variant={getSourceBadgeVariant((row as any).source) as any} className="text-xs">
+            {formatBookingSource((row as any).source)}
+          </Badge>
           <Button variant="outline" size="sm" onClick={onToggleExpand}>{expanded ? 'Hide details' : 'Show details'}</Button>
         </div>
         {expanded && (
