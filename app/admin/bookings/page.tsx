@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { toast } from 'react-hot-toast'
 import { ChevronLeft, ChevronRight, Search, RefreshCw, Calendar, Clock, CheckCircle, XCircle, Phone, Users, Mail, MapPin, Tag, BarChart3, Activity as ActivityIcon, Sparkles, PieChart, Info } from 'lucide-react'
 import { EXCLUDED_RESTAURANT_IDS } from '@/lib/config/excluded-restaurants'
@@ -89,6 +91,7 @@ export default function AdminAllBookingsPage() {
   const [bookingType, setBookingType] = useState<'all' | 'registered' | 'guest'>('all')
   const [hasTable, setHasTable] = useState<'all' | 'yes' | 'no'>('all')
   const [bookingSource, setBookingSource] = useState('all')
+  const [showManualBookings, setShowManualBookings] = useState(false)
   const [loading, setLoading] = useState(false)
   const [rows, setRows] = useState<BookingRow[]>([])
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
@@ -225,6 +228,11 @@ export default function AdminAllBookingsPage() {
           query = query.not('source', 'in', '(app,widget,manual,partner,waitlist)')
         } else {
           query = query.ilike('source', bookingSource)
+        }
+      } else {
+        // Filter out manual bookings unless showManualBookings is true (only when source is 'all')
+        if (!showManualBookings) {
+          query = query.not('source', 'eq', 'manual')
         }
       }
 
@@ -395,7 +403,7 @@ export default function AdminAllBookingsPage() {
   useEffect(() => {
     fetchBookings()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, sortOrder, sortField, statusFilter, partyMin, partyMax, bookingType, hasTable, bookingSource])
+  }, [page, pageSize, sortOrder, sortField, statusFilter, partyMin, partyMax, bookingType, hasTable, bookingSource, showManualBookings])
 
   useEffect(() => {
     fetchBookingStats()
@@ -614,6 +622,16 @@ export default function AdminAllBookingsPage() {
               </Select>
             </div>
             <div className="flex items-center gap-2">
+              <Checkbox 
+                id="show-manual-bookings" 
+                checked={showManualBookings}
+                onCheckedChange={(checked) => setShowManualBookings(checked === true)}
+              />
+              <Label htmlFor="show-manual-bookings" className="text-sm font-normal cursor-pointer">
+                Show manual booking
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
               <Input type="number" inputMode="numeric" placeholder="Min party" value={partyMin} onChange={(e) => setPartyMin(e.target.value)} />
               <Input type="number" inputMode="numeric" placeholder="Max party" value={partyMax} onChange={(e) => setPartyMax(e.target.value)} />
             </div>
@@ -797,6 +815,7 @@ function BookingRowItem({ row, onUpdateStatus, onShowConfirmDialog, expanded, on
 }) {
   const elapsed = useElapsed(row.created_at)
   const isPending = row.status === 'pending'
+  const isConfirmed = row.status === 'confirmed'
   const customerName = row.guest_name || row.profiles?.full_name || 'Guest'
   const customerEmail = row.guest_email || row.profiles?.email || ''
   const customerPhone = row.profiles?.phone_number || row.guest_phone || ''
@@ -851,7 +870,7 @@ function BookingRowItem({ row, onUpdateStatus, onShowConfirmDialog, expanded, on
   }
 
   return (
-    <div className={`border rounded-lg p-3 md:p-4 transition-all ${isPending ? 'bg-red-50 border-red-300 shadow-md' : 'bg-white hover:shadow-sm'}`}>
+    <div className={`border rounded-lg p-3 md:p-4 transition-all ${isPending ? 'bg-red-50 border-red-300 shadow-md' : isConfirmed ? 'bg-green-50 border-green-300 shadow-md' : 'bg-white hover:shadow-sm'}`}>
       <div className="flex flex-col gap-3">
         {/* Header: Name & Status */}
         <div className="flex items-start justify-between gap-2">
@@ -865,7 +884,10 @@ function BookingRowItem({ row, onUpdateStatus, onShowConfirmDialog, expanded, on
             <Badge variant={getSourceBadgeVariant((row as any).source) as any} className="text-xs">
               {formatBookingSource((row as any).source)}
             </Badge>
-            <Badge variant={getStatusVariant(row.status)} className="text-xs">
+            <Badge 
+              variant={getStatusVariant(row.status)} 
+              className={`text-xs ${isConfirmed ? 'bg-green-600 hover:bg-green-700 text-white' : ''}`}
+            >
               {row.status.replaceAll('_', ' ').toUpperCase()}
             </Badge>
           </div>
