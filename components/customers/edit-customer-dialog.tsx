@@ -31,7 +31,6 @@ import {
   User, 
   Mail, 
   Phone, 
-  DollarSign,
   Users,
   Star,
   AlertCircle,
@@ -57,7 +56,7 @@ const editCustomerSchema = z.object({
   blacklist_reason: z.string().optional(),
   preferred_table_types: z.array(z.string()).optional(),
   preferred_time_slots: z.array(z.string()).optional(),
-  // Note: Cannot edit user_id, restaurant_id, total_bookings, total_spent, 
+  // Note: Cannot edit user_id, restaurant_id, total_bookings, 
   // average_party_size, last_visit, first_visit, no_show_count, cancelled_count
   // as these are calculated/system fields
 })
@@ -456,10 +455,6 @@ export function EditCustomerDialog({
                 <div>
                   <span className="text-muted-foreground">Total Bookings:</span>
                   <span className="ml-2 font-medium">{customer.total_bookings}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Total Spent:</span>
-                  <span className="ml-2 font-medium">${customer.total_spent.toFixed(2)}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Completed:</span>

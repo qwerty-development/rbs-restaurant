@@ -553,7 +553,7 @@ export function CustomerDetailsDialog({
                 {customerWithEmail.profile?.date_of_birth && (
                   <span className="flex items-center gap-1">
                     <User className="h-3 w-3" />
-                    {customerUtils.formatAge(customerWithEmail.profile.date_of_birth)}
+                    {format(new Date(customerWithEmail.profile.date_of_birth), 'MMM d, yyyy')} ({customerUtils.formatAge(customerWithEmail.profile.date_of_birth)})
                   </span>
                 )}
                 {customerWithEmail.first_visit && (
@@ -842,12 +842,12 @@ export function CustomerDetailsDialog({
                         )}
                         {totalBookingCount > 0 && (
                           <div className="space-y-1">
-                            <span className="text-gray-600 font-medium">Success Rate</span>
+                            <span className="text-gray-600 font-medium">Completion Rate</span>
                             <div className="text-gray-900 font-semibold">
-                              {totalBookingCount > 0 ? 
-                                ((((customer.profile?.completed_bookings || 0) / totalBookingCount) * 100).toFixed(1) + '%') : 
-                                'N/A'
-                              }
+                              {((calculatedStats.completed / totalBookingCount) * 100).toFixed(0)}%
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {calculatedStats.completed} of {totalBookingCount} completed
                             </div>
                           </div>
                         )}

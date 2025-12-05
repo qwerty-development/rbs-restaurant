@@ -42,7 +42,11 @@ import {
   AlertTriangle,
   Hourglass,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  HeartHandshake,
+  Medal,
+  CalendarHeart,
+  Glasses
 } from 'lucide-react'
 import { format, differenceInDays, addYears, isBefore, isAfter, startOfDay, getHours, parseISO, getDay, subMonths, startOfMonth, endOfMonth, subDays } from 'date-fns'
 import {
@@ -264,6 +268,48 @@ interface InsightData {
     email?: string
     phone?: string
   }>
+  // NEW: Special Occasions from upcoming bookings
+  specialOccasions: Array<{
+    id: string
+    bookingId: string
+    customerName: string
+    occasion: string
+    bookingDate: string
+    daysUntil: number
+    partySize: number
+    email?: string
+    phone?: string
+    isVip: boolean
+  }>
+  // NEW: Loyalty tier breakdown
+  loyaltyTierBreakdown: {
+    bronze: number
+    silver: number
+    gold: number
+    platinum: number
+    nearUpgrade: Array<{
+      id: string
+      name: string
+      currentTier: string
+      currentPoints: number
+      pointsToNextTier: number
+      nextTier: string
+      email?: string
+      phone?: string
+    }>
+  }
+  // NEW: Customer relationship insights
+  relationshipInsights: {
+    totalWithRelationships: number
+    couplesCount: number
+    familiesCount: number
+    frequentGroups: Array<{
+      customerName: string
+      relatedTo: string
+      relationshipType: string
+      bookingsTogether: number
+    }>
+  }
 }
 
 export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
@@ -1017,6 +1063,144 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
       })
       noShowRiskCustomers.sort((a, b) => b.noShowRate - a.noShowRate)
 
+      // ==========================================
+      // 16. Special Occasions from upcoming bookings
+      // ==========================================
+      const thirtyDaysFromNow = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000)
+      const { data: occasionBookings } = await supabase
+        .from('bookings')
+        .select('id, occasion, booking_time, party_size, user_id, guest_name, guest_email, guest_phone')
+        .eq('restaurant_id', restaurantId)
+        .not('occasion', 'is', null)
+        .gte('booking_time', today.toISOString())
+        .lte('booking_time', thirtyDaysFromNow.toISOString())
+        .in('status', ['pending', 'confirmed'])
+        .order('booking_time', { ascending: true })
+
+      const specialOccasions: InsightData['specialOccasions'] = []
+      occasionBookings?.forEach(booking => {
+        const bookingDate = new Date(booking.booking_time)
+        const daysUntil = differenceInDays(bookingDate, today)
+        
+        // Find the customer for this booking
+        const customer = customers?.find(c => 
+          c.user_id === booking.user_id || 
+          c.guest_email === booking.guest_email ||
+          c.guest_name === booking.guest_name
+        )
+        
+        specialOccasions.push({
+          id: customer?.id || booking.id,
+          bookingId: booking.id,
+          customerName: customer?.profile?.full_name || customer?.guest_name || booking.guest_name || 'Guest',
+          occasion: booking.occasion,
+          bookingDate: booking.booking_time,
+          daysUntil,
+          partySize: booking.party_size,
+          email: customer?.profile?.email || customer?.guest_email || booking.guest_email || undefined,
+          phone: customer?.profile?.phone_number || customer?.guest_phone || booking.guest_phone || undefined,
+          isVip: customer?.vip_status || false
+        })
+      })
+
+      // ==========================================
+      // 17. Loyalty Tier Breakdown
+      // ==========================================
+      const tierPoints = { bronze: 0, silver: 500, gold: 1000, platinum: 2500 }
+      const loyaltyTierBreakdown: InsightData['loyaltyTierBreakdown'] = {
+        bronze: 0,
+        silver: 0,
+        gold: 0,
+        platinum: 0,
+        nearUpgrade: []
+      }
+
+      customers?.forEach(customer => {
+        const tier = customer.profile?.membership_tier?.toLowerCase() || 'bronze'
+        const points = customer.profile?.loyalty_points || 0
+        
+        if (tier === 'platinum') loyaltyTierBreakdown.platinum++
+        else if (tier === 'gold') loyaltyTierBreakdown.gold++
+        else if (tier === 'silver') loyaltyTierBreakdown.silver++
+        else loyaltyTierBreakdown.bronze++
+
+        // Check if near upgrade (within 100 points)
+        let nextTier = ''
+        let pointsToNext = 0
+        if (tier === 'bronze' && points >= tierPoints.silver - 100) {
+          nextTier = 'Silver'
+          pointsToNext = tierPoints.silver - points
+        } else if (tier === 'silver' && points >= tierPoints.gold - 100) {
+          nextTier = 'Gold'
+          pointsToNext = tierPoints.gold - points
+        } else if (tier === 'gold' && points >= tierPoints.platinum - 200) {
+          nextTier = 'Platinum'
+          pointsToNext = tierPoints.platinum - points
+        }
+
+        if (nextTier && pointsToNext > 0) {
+          loyaltyTierBreakdown.nearUpgrade.push({
+            id: customer.id,
+            name: customer.profile?.full_name || customer.guest_name || 'Guest',
+            currentTier: tier.charAt(0).toUpperCase() + tier.slice(1),
+            currentPoints: points,
+            pointsToNextTier: pointsToNext,
+            nextTier,
+            email: customer.profile?.email || customer.guest_email || undefined,
+            phone: customer.profile?.phone_number || customer.guest_phone || undefined
+          })
+        }
+      })
+      loyaltyTierBreakdown.nearUpgrade.sort((a, b) => a.pointsToNextTier - b.pointsToNextTier)
+
+      // ==========================================
+      // 18. Customer Relationship Insights
+      // ==========================================
+      const { data: relationships } = await supabase
+        .from('customer_relationships')
+        .select(`
+          *,
+          customer:restaurant_customers!customer_relationships_customer_id_fkey(
+            id, guest_name, profile:profiles(full_name)
+          ),
+          related_customer:restaurant_customers!customer_relationships_related_customer_id_fkey(
+            id, guest_name, profile:profiles(full_name)
+          )
+        `)
+        .eq('customer.restaurant_id', restaurantId)
+
+      const relationshipInsights: InsightData['relationshipInsights'] = {
+        totalWithRelationships: 0,
+        couplesCount: 0,
+        familiesCount: 0,
+        frequentGroups: []
+      }
+
+      const uniqueCustomersWithRelations = new Set<string>()
+      relationships?.forEach(rel => {
+        uniqueCustomersWithRelations.add(rel.customer_id)
+        uniqueCustomersWithRelations.add(rel.related_customer_id)
+        
+        if (rel.relationship_type === 'spouse' || rel.relationship_type === 'partner') {
+          relationshipInsights.couplesCount++
+        } else if (['parent', 'child', 'sibling'].includes(rel.relationship_type)) {
+          relationshipInsights.familiesCount++
+        }
+
+        const customerName = rel.customer?.profile?.full_name || rel.customer?.guest_name || 'Guest'
+        const relatedName = rel.related_customer?.profile?.full_name || rel.related_customer?.guest_name || 'Guest'
+        
+        relationshipInsights.frequentGroups.push({
+          customerName,
+          relatedTo: relatedName,
+          relationshipType: rel.relationship_type.charAt(0).toUpperCase() + rel.relationship_type.slice(1),
+          bookingsTogether: 0 // Would need more complex query to calculate
+        })
+      })
+      relationshipInsights.totalWithRelationships = uniqueCustomersWithRelations.size
+      // Only show first 6 relationships
+      relationshipInsights.frequentGroups = relationshipInsights.frequentGroups.slice(0, 6)
+
       setInsights({
         customerSegments: segments,
         trends: {
@@ -1083,7 +1267,11 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
           todayBookings,
           comparedToLastWeek
         },
-        noShowRiskCustomers: noShowRiskCustomers.slice(0, 8)
+        noShowRiskCustomers: noShowRiskCustomers.slice(0, 8),
+        // NEW: Special occasions and personalization
+        specialOccasions: specialOccasions.slice(0, 10),
+        loyaltyTierBreakdown,
+        relationshipInsights
       })
 
     } catch (error) {
@@ -1372,9 +1560,11 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
                           <Gift className="h-3 w-3" /> Today! Turning {customer.age}
                         </span>
                       ) : customer.daysUntil === 1 ? (
-                        <span className="text-yellow-600 font-medium">Tomorrow! Turning {customer.age}</span>
+                        <span className="text-yellow-600 font-medium">Tomorrow ({format(new Date(customer.birthday), 'MMM d')}) • Turning {customer.age}</span>
+                      ) : customer.daysUntil <= 7 ? (
+                        <span className="text-yellow-600">{format(new Date(customer.birthday), 'EEEE, MMM d')} • Turning {customer.age}</span>
                       ) : (
-                        <span>In {customer.daysUntil} days • Turning {customer.age}</span>
+                        <span>{format(new Date(customer.birthday), 'MMM d')} (in {customer.daysUntil} days) • Turning {customer.age}</span>
                       )}
                     </p>
                     <div className="flex items-center gap-2 mt-1">
@@ -1452,7 +1642,7 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
                       )}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {customer.totalVisits} visits • ${customer.totalSpent.toFixed(0)} total
+                      {customer.totalVisits} visits
                     </p>
                     <div className="flex items-center gap-2 mt-1">
                       {customer.phone && (
@@ -1474,45 +1664,179 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
         </Card>
       )}
 
-      {/* Top Spenders */}
-      {insights.topSpenders.length > 0 && (
+      {/* Top Spenders section removed - spending tracking not yet deployed */}
+
+      {/* Special Occasions - Upcoming celebrations */}
+      {insights.specialOccasions.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-green-600" />
-              Top Spenders
+              <CalendarHeart className="h-5 w-5 text-rose-500" />
+              Celebration Bookings
             </CardTitle>
-            <CardDescription>Your highest value customers - treat them like royalty!</CardDescription>
+            <CardDescription>Upcoming reservations where guests are celebrating - prepare something special!</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {insights.topSpenders.slice(0, 6).map((customer, index) => (
-                <div key={customer.id} className="flex items-center justify-between p-3 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 rounded-lg border border-green-200 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-bold text-green-600 w-5">#{index + 1}</span>
-                    <Avatar className="h-8 w-8 ring-2 ring-green-200">
-                      <AvatarImage src={customer.avatarUrl} />
-                      <AvatarFallback className="text-xs bg-green-100">
-                        {customer.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <div className="flex items-center gap-1">
-                        <p className="text-sm font-medium">{customer.name}</p>
-                        {customer.isVip && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {customer.visits} visits • ${customer.averageSpendPerVisit.toFixed(0)}/visit
-                      </p>
-                    </div>
+              {insights.specialOccasions.map((occasion) => (
+                <div 
+                  key={occasion.bookingId} 
+                  className={`flex items-center gap-3 p-3 rounded-lg border ${
+                    occasion.daysUntil === 0 
+                      ? 'bg-rose-50 border-rose-200' 
+                      : occasion.daysUntil <= 3 
+                        ? 'bg-orange-50 border-orange-200'
+                        : 'bg-muted/30'
+                  }`}
+                >
+                  <div className="h-10 w-10 rounded-full bg-rose-100 flex items-center justify-center">
+                    <PartyPopper className="h-5 w-5 text-rose-600" />
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-bold text-green-700">${customer.totalSpent.toFixed(0)}</div>
-                    <div className="text-xs text-muted-foreground">lifetime</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate">{occasion.customerName}</p>
+                      {occasion.isVip && (
+                        <Badge variant="secondary" className="text-xs">
+                          <Star className="h-3 w-3 mr-1" />
+                          VIP
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs font-medium text-rose-600">
+                      <span className="text-muted-foreground">Celebrating: </span>
+                      <span className="capitalize">{occasion.occasion}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {occasion.daysUntil === 0 ? (
+                        <span className="text-rose-600 font-medium">Today!</span>
+                      ) : occasion.daysUntil === 1 ? (
+                        <span>Tomorrow</span>
+                      ) : (
+                        <span>{format(new Date(occasion.bookingDate), 'MMM d')} • in {occasion.daysUntil} days</span>
+                      )}
+                      {' • '}{occasion.partySize} guests
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      {occasion.phone && (
+                        <a href={`tel:${occasion.phone}`} className="text-xs text-muted-foreground hover:text-primary">
+                          <Phone className="h-3 w-3" />
+                        </a>
+                      )}
+                      {occasion.email && (
+                        <a href={`mailto:${occasion.email}`} className="text-xs text-muted-foreground hover:text-primary">
+                          <Mail className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Loyalty Tier Distribution */}
+      {(insights.loyaltyTierBreakdown.bronze > 0 || insights.loyaltyTierBreakdown.silver > 0 || 
+        insights.loyaltyTierBreakdown.gold > 0 || insights.loyaltyTierBreakdown.platinum > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Medal className="h-5 w-5 text-amber-500" />
+              Loyalty Tier Distribution
+            </CardTitle>
+            <CardDescription>Breakdown of your customers by loyalty tier</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="text-center p-3 rounded-lg bg-amber-50 border border-amber-200">
+                <div className="text-2xl font-bold text-amber-700">{insights.loyaltyTierBreakdown.bronze}</div>
+                <div className="text-xs text-amber-600 font-medium">Bronze</div>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-gray-100 border border-gray-300">
+                <div className="text-2xl font-bold text-gray-700">{insights.loyaltyTierBreakdown.silver}</div>
+                <div className="text-xs text-gray-600 font-medium">Silver</div>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-yellow-50 border border-yellow-300">
+                <div className="text-2xl font-bold text-yellow-700">{insights.loyaltyTierBreakdown.gold}</div>
+                <div className="text-xs text-yellow-600 font-medium">Gold</div>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-purple-50 border border-purple-200">
+                <div className="text-2xl font-bold text-purple-700">{insights.loyaltyTierBreakdown.platinum}</div>
+                <div className="text-xs text-purple-600 font-medium">Platinum</div>
+              </div>
+            </div>
+            
+            {/* Near Upgrade Section */}
+            {insights.loyaltyTierBreakdown.nearUpgrade.length > 0 && (
+              <div className="mt-4">
+                <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <ChevronUp className="h-4 w-4 text-green-600" />
+                  Customers Near Tier Upgrade
+                </h4>
+                <div className="space-y-2">
+                  {insights.loyaltyTierBreakdown.nearUpgrade.slice(0, 5).map((customer) => (
+                    <div key={customer.id} className="flex items-center justify-between p-2 bg-green-50 rounded-lg border border-green-200">
+                      <div>
+                        <p className="text-sm font-medium">{customer.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {customer.currentTier} → {customer.nextTier}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-green-700 border-green-300">
+                        {customer.pointsToNextTier} pts to go
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Customer Relationships */}
+      {insights.relationshipInsights.totalWithRelationships > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <HeartHandshake className="h-5 w-5 text-pink-500" />
+              Customer Connections
+            </CardTitle>
+            <CardDescription>Customers who dine together - great for group promotions!</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="text-center p-3 rounded-lg bg-pink-50 border border-pink-200">
+                <div className="text-2xl font-bold text-pink-700">{insights.relationshipInsights.totalWithRelationships}</div>
+                <div className="text-xs text-pink-600">Connected</div>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-red-50 border border-red-200">
+                <div className="text-2xl font-bold text-red-700">{insights.relationshipInsights.couplesCount}</div>
+                <div className="text-xs text-red-600">Couples</div>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-orange-50 border border-orange-200">
+                <div className="text-2xl font-bold text-orange-700">{insights.relationshipInsights.familiesCount}</div>
+                <div className="text-xs text-orange-600">Families</div>
+              </div>
+            </div>
+            
+            {insights.relationshipInsights.frequentGroups.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Recent Connections</h4>
+                {insights.relationshipInsights.frequentGroups.slice(0, 4).map((group, idx) => (
+                  <div key={idx} className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
+                    <Heart className="h-4 w-4 text-pink-500" />
+                    <span className="text-sm">
+                      <span className="font-medium">{group.customerName}</span>
+                      <span className="text-muted-foreground"> & </span>
+                      <span className="font-medium">{group.relatedTo}</span>
+                      <Badge variant="outline" className="ml-2 text-xs">{group.relationshipType}</Badge>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1636,7 +1960,7 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
                     <div>
                       <p className="text-sm font-medium">{customer.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {customer.previousVisitCount} past visits • ${customer.totalSpent.toFixed(0)} spent
+                        {customer.previousVisitCount} past visits
                       </p>
                       <p className="text-xs text-blue-600 font-medium">
                         <Timer className="h-3 w-3 inline mr-1" />

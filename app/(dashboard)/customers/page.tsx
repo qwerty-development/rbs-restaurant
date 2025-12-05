@@ -25,7 +25,8 @@ import {
   Edit,
   Upload,
   Cake,
-  Gift
+  Gift,
+  Smartphone
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { format, differenceInDays, addYears, isBefore, startOfDay } from 'date-fns'
@@ -413,9 +414,6 @@ export default function CustomersPage() {
           break
         case 'total_bookings':
           comparison = b.total_bookings - a.total_bookings
-          break
-        case 'total_spent':
-          comparison = b.total_spent - a.total_spent
           break
       }
       return filters.sort_order === 'desc' ? -comparison : comparison
@@ -862,7 +860,6 @@ export default function CustomersPage() {
                       <SelectItem value="name">Name</SelectItem>
                       <SelectItem value="last_visit">Last Visit</SelectItem>
                       <SelectItem value="total_bookings">Total Bookings</SelectItem>
-                      <SelectItem value="total_spent">Total Spent</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -964,6 +961,18 @@ export default function CustomersPage() {
                               </span>
                             )}
                           </p>
+                          {/* Source indicator - App User or Manual */}
+                          {customer.user_id ? (
+                            <Badge variant="outline" className="text-xs text-blue-600 border-blue-300 bg-blue-50">
+                              <Smartphone className="h-3 w-3 mr-1" />
+                              App User
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs text-gray-600 border-gray-300 bg-gray-50">
+                              <UserPlus className="h-3 w-3 mr-1" />
+                              Manual
+                            </Badge>
+                          )}
                           {customer.vip_status && (
                             <Badge variant="secondary" className="text-xs">
                               <Star className="h-3 w-3 mr-1" />
@@ -1095,13 +1104,6 @@ export default function CustomersPage() {
                           <p className="text-xs text-gray-600">
                             <Calendar className="inline h-3 w-3 mr-1" />
                             Last: {format(new Date(customer.last_visit), 'MMM d, yyyy')}
-                          </p>
-                        )}
-                        
-                        {/* Total spent estimate */}
-                        {customer.total_spent > 0 && (
-                          <p className="text-xs text-gray-600">
-                            Est. spent: ${customer.total_spent.toFixed(0)}
                           </p>
                         )}
                       </div>

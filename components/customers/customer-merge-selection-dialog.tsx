@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Dialog,
@@ -10,22 +10,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, Users, AlertTriangle, Star, Ban } from 'lucide-react'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Loader2, Users, AlertTriangle, Star, Ban, Search, ChevronsUpDown, Check, Smartphone, UserPlus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { RestaurantCustomer } from '@/types/customer'
 import { mergeCustomers } from '@/app/(dashboard)/customers/actions'
+import { cn } from '@/lib/utils'
 
 interface CustomerMergeSelectionDialogProps {
   open: boolean
@@ -49,11 +46,15 @@ export default function CustomerMergeSelectionDialog({
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [merging, setMerging] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [popoverOpen, setPopoverOpen] = useState(false)
 
   // Load eligible customers for merging
   useEffect(() => {
     if (open && primaryCustomer && restaurantId) {
       loadEligibleCustomers()
+      setSelectedCustomerId('')
+      setSearchQuery('')
     }
   }, [open, primaryCustomer, restaurantId])
 
@@ -166,6 +167,29 @@ export default function CustomerMergeSelectionDialog({
     return customer.profile?.phone_number || customer.guest_phone || ''
   }
 
+  // Source indicator helper
+  const getCustomerSource = (customer: RestaurantCustomer): { isApp: boolean; label: string } => {
+    // If customer has a user_id, they registered via the app
+    if (customer.user_id) {
+      return { isApp: true, label: 'App User' }
+    }
+    // Guest customers are manually added by staff
+    return { isApp: false, label: 'Manual' }
+  }
+
+  // Filter customers based on search query
+  const filteredCustomers = useMemo(() => {
+    if (!searchQuery.trim()) return eligibleCustomers
+    
+    const query = searchQuery.toLowerCase()
+    return eligibleCustomers.filter(customer => {
+      const name = getCustomerDisplayName(customer).toLowerCase()
+      const email = getCustomerEmail(customer).toLowerCase()
+      const phone = getCustomerPhone(customer).toLowerCase()
+      return name.includes(query) || email.includes(query) || phone.includes(query)
+    })
+  }, [eligibleCustomers, searchQuery])
+
   const canMerge = primaryCustomer && selectedCustomer && 
     (!primaryCustomer.user_id || !selectedCustomer.user_id)
 
@@ -206,7 +230,7 @@ export default function CustomerMergeSelectionDialog({
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium truncate">
                         {getCustomerDisplayName(primaryCustomer)}
                       </p>
@@ -215,6 +239,25 @@ export default function CustomerMergeSelectionDialog({
                       ) : (
                         <Badge variant="secondary">Guest</Badge>
                       )}
+                      {/* Source indicator */}
+                      {(() => {
+                        const source = getCustomerSource(primaryCustomer)
+                        return (
+                          <Badge variant="outline" className={cn(
+                            "text-xs",
+                            source.isApp 
+                              ? "text-blue-600 border-blue-300 bg-blue-50" 
+                              : "text-gray-600 border-gray-300 bg-gray-50"
+                          )}>
+                            {source.isApp ? (
+                              <Smartphone className="h-3 w-3 mr-1" />
+                            ) : (
+                              <UserPlus className="h-3 w-3 mr-1" />
+                            )}
+                            {source.label}
+                          </Badge>
+                        )
+                      })()}
                       {primaryCustomer.vip_status && (
                         <Badge variant="outline" className="text-yellow-600 border-yellow-600">
                           <Star className="h-3 w-3 mr-1" />
@@ -232,14 +275,14 @@ export default function CustomerMergeSelectionDialog({
                       {getCustomerEmail(primaryCustomer)} • {getCustomerPhone(primaryCustomer)}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {primaryCustomer.total_bookings} bookings • ${primaryCustomer.total_spent} spent
+                      {primaryCustomer.total_bookings} bookings
                     </p>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Customer Selection */}
+            {/* Customer Selection - Searchable */}
             <div className="space-y-2">
               <h3 className="text-sm font-medium text-gray-700">Select Customer to Merge With</h3>
               {eligibleCustomers.length === 0 ? (
@@ -251,30 +294,119 @@ export default function CustomerMergeSelectionDialog({
                   </AlertDescription>
                 </Alert>
               ) : (
-                <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a customer to merge with..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {eligibleCustomers.map((customer) => (
-                      <SelectItem key={customer.id} value={customer.id}>
-                        <div className="flex items-center gap-2 w-full">
-                          <span className="font-medium">
-                            {getCustomerDisplayName(customer)}
+                <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={popoverOpen}
+                      className="w-full justify-between h-auto min-h-10 py-2"
+                    >
+                      {selectedCustomer ? (
+                        <div className="flex items-center gap-2 text-left">
+                          <span className="font-medium truncate">
+                            {getCustomerDisplayName(selectedCustomer)}
                           </span>
-                          {customer.user_id ? (
+                          {selectedCustomer.user_id ? (
                             <Badge variant="default" className="text-xs">Registered</Badge>
                           ) : (
                             <Badge variant="secondary" className="text-xs">Guest</Badge>
                           )}
-                          <span className="text-sm text-gray-600 ml-auto">
-                            {customer.total_bookings} bookings
+                          <span className="text-sm text-gray-500">
+                            • {selectedCustomer.total_bookings} bookings
                           </span>
                         </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      ) : (
+                        <span className="text-muted-foreground">Search and select a customer...</span>
+                      )}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[500px] p-0" align="start">
+                    <div className="p-2 border-b">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          placeholder="Search by name, email, or phone..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                    </div>
+                    <ScrollArea className="h-[300px]">
+                      {filteredCustomers.length === 0 ? (
+                        <div className="p-4 text-center text-sm text-gray-500">
+                          No customers found matching "{searchQuery}"
+                        </div>
+                      ) : (
+                        <div className="p-1">
+                          {filteredCustomers.map((customer) => {
+                            const source = getCustomerSource(customer)
+                            return (
+                              <button
+                                key={customer.id}
+                                onClick={() => {
+                                  setSelectedCustomerId(customer.id)
+                                  setPopoverOpen(false)
+                                  setSearchQuery('')
+                                }}
+                                className={cn(
+                                  "w-full flex items-center gap-3 p-3 rounded-md text-left transition-colors",
+                                  "hover:bg-gray-100",
+                                  selectedCustomerId === customer.id && "bg-gray-100"
+                                )}
+                              >
+                                <Avatar className="h-8 w-8">
+                                  <AvatarImage src={customer.profile?.avatar_url} />
+                                  <AvatarFallback className="text-xs">
+                                    {getCustomerDisplayName(customer)
+                                      .split(' ')
+                                      .map(n => n[0])
+                                      .join('')
+                                      .toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-medium text-sm truncate">
+                                      {getCustomerDisplayName(customer)}
+                                    </span>
+                                    {customer.user_id ? (
+                                      <Badge variant="default" className="text-xs">Registered</Badge>
+                                    ) : (
+                                      <Badge variant="secondary" className="text-xs">Guest</Badge>
+                                    )}
+                                    <Badge variant="outline" className={cn(
+                                      "text-xs",
+                                      source.isApp 
+                                        ? "text-blue-600 border-blue-300" 
+                                        : "text-gray-600 border-gray-300"
+                                    )}>
+                                      {source.isApp ? (
+                                        <Smartphone className="h-2.5 w-2.5 mr-1" />
+                                      ) : (
+                                        <UserPlus className="h-2.5 w-2.5 mr-1" />
+                                      )}
+                                      {source.label}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-xs text-gray-500 truncate">
+                                    {getCustomerEmail(customer) || getCustomerPhone(customer) || 'No contact info'}
+                                    {' • '}{customer.total_bookings} bookings
+                                  </p>
+                                </div>
+                                {selectedCustomerId === customer.id && (
+                                  <Check className="h-4 w-4 text-primary shrink-0" />
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </PopoverContent>
+                </Popover>
               )}
             </div>
 
@@ -294,7 +426,7 @@ export default function CustomerMergeSelectionDialog({
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium truncate">
                         {getCustomerDisplayName(selectedCustomer)}
                       </p>
@@ -303,6 +435,25 @@ export default function CustomerMergeSelectionDialog({
                       ) : (
                         <Badge variant="secondary">Guest</Badge>
                       )}
+                      {/* Source indicator */}
+                      {(() => {
+                        const source = getCustomerSource(selectedCustomer)
+                        return (
+                          <Badge variant="outline" className={cn(
+                            "text-xs",
+                            source.isApp 
+                              ? "text-blue-600 border-blue-300 bg-blue-50" 
+                              : "text-gray-600 border-gray-300 bg-gray-50"
+                          )}>
+                            {source.isApp ? (
+                              <Smartphone className="h-3 w-3 mr-1" />
+                            ) : (
+                              <UserPlus className="h-3 w-3 mr-1" />
+                            )}
+                            {source.label}
+                          </Badge>
+                        )
+                      })()}
                       {selectedCustomer.vip_status && (
                         <Badge variant="outline" className="text-yellow-600 border-yellow-600">
                           <Star className="h-3 w-3 mr-1" />
@@ -320,7 +471,7 @@ export default function CustomerMergeSelectionDialog({
                       {getCustomerEmail(selectedCustomer)} • {getCustomerPhone(selectedCustomer)}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {selectedCustomer.total_bookings} bookings • ${selectedCustomer.total_spent} spent
+                      {selectedCustomer.total_bookings} bookings
                     </p>
                   </div>
                 </div>
