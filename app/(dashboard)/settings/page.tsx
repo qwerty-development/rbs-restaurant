@@ -59,6 +59,7 @@ import { LocationManager } from "@/components/location/location-manager"
 import { MigrationWidget } from "@/components/migration/migration-widget"
 import { WaitlistScheduleManager } from "@/components/settings/waitlist-schedule-manager"
 import { useRestaurantContext } from "@/lib/contexts/restaurant-context"
+import { CUISINE_TYPES, DIETARY_OPTIONS } from "@/lib/constants/cuisines"
 
 // Type definitions
 type Restaurant = {
@@ -76,6 +77,7 @@ type Restaurant = {
   booking_policy: "instant" | "request"
   price_range: number
   cuisine_type: string
+  secondary_cuisines?: string[]
   dietary_options?: string[]
   parking_available: boolean
   valet_parking: boolean
@@ -106,6 +108,7 @@ const operationalSettingsSchema = z.object({
 const pricingSettingsSchema = z.object({
   price_range: z.number().min(1).max(4),
   cuisine_type: z.string(),
+  secondary_cuisines: z.array(z.string()).optional(),
   dietary_options: z.array(z.string()),
   parking_available: z.boolean(),
   valet_parking: z.boolean(),
@@ -184,6 +187,7 @@ export default function SettingsPage() {
     defaultValues: {
       price_range: 2,
       cuisine_type: "",
+      secondary_cuisines: [],
       dietary_options: [],
       parking_available: false,
       valet_parking: false,
@@ -216,6 +220,7 @@ export default function SettingsPage() {
       pricingForm.reset({
         price_range: restaurant.price_range,
         cuisine_type: restaurant.cuisine_type,
+        secondary_cuisines: restaurant.secondary_cuisines || [],
         dietary_options: restaurant.dietary_options || [],
         parking_available: restaurant.parking_available,
         valet_parking: restaurant.valet_parking,
@@ -277,33 +282,7 @@ export default function SettingsPage() {
     }
   }
 
-  const CUISINE_TYPES = [
-    "Lebanese",
-    "Mediterranean",
-    "Italian",
-    "French",
-    "Japanese",
-    "Chinese",
-    "Indian",
-    "Mexican",
-    "American",
-    "Seafood",
-    "Steakhouse",
-    "Fusion",
-    "Vegetarian",
-    "Cafe",
-    "Asian"
-  ]
-
-  const DIETARY_OPTIONS = [
-    "vegetarian",
-    "vegan",
-    "gluten-free",
-    "halal",
-    "kosher",
-    "dairy-free",
-    "nut-free",
-  ]
+  // Using imported CUISINE_TYPES and DIETARY_OPTIONS from lib/constants/cuisines.ts
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>
@@ -782,6 +761,41 @@ export default function SettingsPage() {
                       )}
                     />
                   </div>
+                  
+                  <FormField
+                    control={pricingForm.control}
+                    name="secondary_cuisines"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Secondary Cuisines</FormLabel>
+                        <FormDescription>
+                          Select additional cuisine types your restaurant offers (optional)
+                        </FormDescription>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {CUISINE_TYPES.filter(cuisine => cuisine !== pricingForm.getValues('cuisine_type')).map((cuisine) => (
+                            <Badge
+                              key={cuisine}
+                              variant={(field.value || []).includes(cuisine) ? "default" : "outline"}
+                              className="cursor-pointer"
+                              onClick={() => {
+                                if (!updateRestaurantMutation.isPending) {
+                                  const current = field.value || []
+                                  if (current.includes(cuisine)) {
+                                    field.onChange(current.filter((c) => c !== cuisine))
+                                  } else {
+                                    field.onChange([...current, cuisine])
+                                  }
+                                }
+                              }}
+                            >
+                              {cuisine}
+                            </Badge>
+                          ))}
+                        </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   
                   <FormField
                     control={pricingForm.control}

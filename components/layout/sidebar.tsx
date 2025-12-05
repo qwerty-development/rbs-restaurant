@@ -35,7 +35,8 @@ export function Sidebar({ restaurant, role, permissions }: SidebarProps) {
   const router = useRouter()
   const supabase = createClient()
   const { isCollapsed, setIsCollapsed, toggleSidebar } = useSidebar()
-  const { hasFeature, tier } = useRestaurantContext()
+  const { currentRestaurant, hasFeature, tier } = useRestaurantContext()
+  const [openGroups, setOpenGroups] = useState<string[]>([])
 
   // Keyboard navigation support
   useEffect(() => {

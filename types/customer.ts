@@ -50,11 +50,15 @@ export interface RestaurantCustomer {
     cancelled_bookings?: number
     no_show_bookings?: number
     user_rating?: number
+    date_of_birth?: string
   }
   tags?: CustomerTag[]
   notes?: CustomerNote[]
+  customer_notes?: CustomerNote[] // Alias for consistency if needed
   relationships?: CustomerRelationship[]
   bookings?: any[]
+  source?: 'manual' | 'booking' | 'import' | 'migration'
+  notes_text?: string // Mapped from 'notes' column
 }
 
 export interface CustomerTag {

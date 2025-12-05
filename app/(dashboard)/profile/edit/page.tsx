@@ -41,6 +41,7 @@ import {
   ArrowLeft
 } from "lucide-react"
 import { EnhancedRestaurantImageUpload } from "@/components/ui/enhanced-restaurant-image-upload"
+import { CUISINE_TYPES, DIETARY_OPTIONS, AMBIANCE_TAGS } from "@/lib/constants/cuisines"
 
 // Type definitions
 type Restaurant = {
@@ -53,6 +54,7 @@ type Restaurant = {
   instagram_handle?: string
   address: string
   cuisine_type: string
+  secondary_cuisines?: string[]
   price_range: number
   dietary_options?: string[]
   ambiance_tags?: string[]
@@ -86,6 +88,7 @@ const profileFormSchema = z.object({
   instagram_handle: z.string().optional(),
   address: z.string().min(5, "Address is required"),
   cuisine_type: z.string().min(1, "Please select a cuisine type"),
+  secondary_cuisines: z.array(z.string()).optional(),
   price_range: z.number().min(1).max(4),
   dietary_options: z.array(z.string()),
   ambiance_tags: z.array(z.string()),
@@ -108,44 +111,7 @@ const profileFormSchema = z.object({
 
 type ProfileFormData = z.infer<typeof profileFormSchema>
 
-const CUISINE_TYPES = [
-  "Lebanese",
-  "Mediterranean",
-  "Italian",
-  "French",
-  "Japanese",
-  "Chinese",
-  "Indian",
-  "Mexican",
-  "American",
-  "Seafood",
-  "Steakhouse",
-  "Fusion",
-  "Vegetarian",
-  "Cafe",
-  "Asian"
-]
-
-const DIETARY_OPTIONS = [
-  "vegetarian",
-  "vegan",
-  "gluten-free",
-  "halal",
-  "kosher",
-  "dairy-free",
-  "nut-free",
-]
-
-const AMBIANCE_TAGS = [
-  "casual",
-  "fine dining",
-  "family-friendly",
-  "romantic",
-  "business",
-  "trendy",
-  "cozy",
-  "lively",
-]
+// Using imported CUISINE_TYPES, DIETARY_OPTIONS, AMBIANCE_TAGS from lib/constants/cuisines.ts
 
 export default function EditProfilePage() {
   const router = useRouter()
@@ -197,6 +163,7 @@ export default function EditProfilePage() {
       instagram_handle: "",
       address: "",
       cuisine_type: "",
+      secondary_cuisines: [],
       price_range: 2,
       dietary_options: [],
       ambiance_tags: [],
@@ -230,6 +197,7 @@ export default function EditProfilePage() {
         instagram_handle: restaurant.instagram_handle || "",
         address: restaurant.address || "",
         cuisine_type: restaurant.cuisine_type || "",
+        secondary_cuisines: restaurant.secondary_cuisines || [],
         price_range: Number(restaurant.price_range) || 2,
         dietary_options: restaurant.dietary_options || [],
         ambiance_tags: restaurant.ambiance_tags || [],
@@ -267,6 +235,7 @@ export default function EditProfilePage() {
         .from("restaurants")
         .update({
           ...data,
+          secondary_cuisines: data.secondary_cuisines || [],
           minimum_age: data.minimum_age || null,
           main_image_url: mainImageUrl || null,
           image_urls: imageUrls.length > 0 ? imageUrls : null,
@@ -433,6 +402,41 @@ export default function EditProfilePage() {
                   )}
                 />
               </div>
+              
+              <FormField
+                control={form.control}
+                name="secondary_cuisines"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Secondary Cuisines</FormLabel>
+                    <FormDescription>
+                      Select additional cuisine types your restaurant offers (optional)
+                    </FormDescription>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {CUISINE_TYPES.filter(cuisine => cuisine !== form.getValues('cuisine_type')).map((cuisine) => (
+                        <Badge
+                          key={cuisine}
+                          variant={(field.value || []).includes(cuisine) ? "default" : "outline"}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            if (!updateRestaurantMutation.isPending) {
+                              const current = field.value || []
+                              if (current.includes(cuisine)) {
+                                field.onChange(current.filter((c) => c !== cuisine))
+                              } else {
+                                field.onChange([...current, cuisine])
+                              }
+                            }
+                          }}
+                        >
+                          {cuisine}
+                        </Badge>
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </CardContent>
           </Card>
 

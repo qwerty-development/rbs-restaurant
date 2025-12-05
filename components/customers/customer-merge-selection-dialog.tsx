@@ -25,6 +25,7 @@ import { Loader2, Users, AlertTriangle, Star, Ban } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { RestaurantCustomer } from '@/types/customer'
+import { mergeCustomers } from '@/app/(dashboard)/customers/actions'
 
 interface CustomerMergeSelectionDialogProps {
   open: boolean
@@ -128,22 +129,15 @@ export default function CustomerMergeSelectionDialog({
         return
       }
 
-      // Call the merge API
-      const response = await fetch('/api/customers/merge', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          targetCustomerId: targetCustomer.id,
-          sourceCustomerId: sourceCustomer.id,
-          restaurantId,
-        }),
-      })
+      // Use server action instead of API route
+      const result = await mergeCustomers(
+        targetCustomer.id,
+        sourceCustomer.id,
+        restaurantId
+      )
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || 'Failed to merge customers')
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to merge customers')
       }
 
       toast.success('Customers merged successfully')

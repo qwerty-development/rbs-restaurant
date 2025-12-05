@@ -10,9 +10,11 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
 import { EnhancedRestaurantImageUpload } from '@/components/ui/enhanced-restaurant-image-upload'
 import { ArrowLeft, Save } from 'lucide-react'
 import { toast } from 'react-hot-toast'
+import { CUISINE_TYPES } from '@/lib/constants/cuisines'
 
 interface Restaurant {
   id: string
@@ -23,6 +25,7 @@ interface Restaurant {
   whatsapp_number?: string
   instagram_handle?: string
   cuisine_type: string
+  secondary_cuisines?: string[]
   price_range: number
   booking_policy: 'instant' | 'request'
   featured: boolean
@@ -49,6 +52,7 @@ export default function AdminRestaurantEditPage() {
     whatsapp_number: '',
     instagram_handle: '',
     cuisine_type: '',
+    secondary_cuisines: [] as string[],
     price_range: 2,
     booking_policy: 'request' as 'instant' | 'request',
     featured: false,
@@ -80,6 +84,7 @@ export default function AdminRestaurantEditPage() {
           whatsapp_number: data.whatsapp_number || '',
           instagram_handle: data.instagram_handle || '',
           cuisine_type: data.cuisine_type || '',
+          secondary_cuisines: Array.isArray(data.secondary_cuisines) ? data.secondary_cuisines : [],
           price_range: data.price_range || 2,
           booking_policy: (data.booking_policy || 'request') as 'instant' | 'request',
           featured: !!data.featured,
@@ -114,6 +119,7 @@ export default function AdminRestaurantEditPage() {
           whatsapp_number: formData.whatsapp_number.trim() || null,
           instagram_handle: formData.instagram_handle.trim() || null,
           cuisine_type: formData.cuisine_type.trim(),
+          secondary_cuisines: formData.secondary_cuisines.length > 0 ? formData.secondary_cuisines : null,
           price_range: formData.price_range,
           booking_policy: formData.booking_policy,
           featured: formData.featured,
@@ -181,7 +187,18 @@ export default function AdminRestaurantEditPage() {
             </div>
             <div>
               <Label htmlFor="cuisine">Cuisine Type *</Label>
-              <Input id="cuisine" value={formData.cuisine_type} onChange={(e) => setFormData({ ...formData, cuisine_type: e.target.value })} />
+              <Select value={formData.cuisine_type} onValueChange={(v) => setFormData({ ...formData, cuisine_type: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select cuisine" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CUISINE_TYPES.map((cuisine) => (
+                    <SelectItem key={cuisine} value={cuisine}>
+                      {cuisine}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="phone">Phone Number *</Label>
@@ -208,6 +225,29 @@ export default function AdminRestaurantEditPage() {
                   <SelectItem value="4">$$$$ - Fine Dining</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          <div>
+            <Label>Secondary Cuisines (Optional)</Label>
+            <p className="text-sm text-gray-500 mb-2">Select additional cuisine types</p>
+            <div className="flex flex-wrap gap-2">
+              {CUISINE_TYPES.filter(cuisine => cuisine !== formData.cuisine_type).map((cuisine) => (
+                <Badge
+                  key={cuisine}
+                  variant={formData.secondary_cuisines.includes(cuisine) ? "default" : "outline"}
+                  className="cursor-pointer"
+                  onClick={() => {
+                    if (formData.secondary_cuisines.includes(cuisine)) {
+                      setFormData({...formData, secondary_cuisines: formData.secondary_cuisines.filter(c => c !== cuisine)})
+                    } else {
+                      setFormData({...formData, secondary_cuisines: [...formData.secondary_cuisines, cuisine]})
+                    }
+                  }}
+                >
+                  {cuisine}
+                </Badge>
+              ))}
             </div>
           </div>
 

@@ -140,37 +140,71 @@ export async function POST(
         metadata: actual_party_size ? { actual_party_size } : {}
       })
 
-    // Update customer visit statistics if this is a registered user
-    if (booking.user_id) {
-      // Get or create customer record
-      const { data: customer, error: customerError } = await supabase
-        .from('restaurant_customers')
-        .select('*')
-        .eq('restaurant_id', staff.restaurant_id)
-        .eq('user_id', booking.user_id)
-        .single()
+    // Update customer visit statistics
+    let customerIdToUpdate = booking.guest_id
 
-      if (!customerError && customer) {
-        // Update last visit and total bookings
-        await supabase
+    // If no guest_id, try to find or create one (Backfill logic on check-in)
+    if (!customerIdToUpdate) {
+      if (booking.user_id) {
+         const { data: existingCustomer } = await supabase
           .from('restaurant_customers')
-          .update({
-            last_visit: new Date().toISOString(),
-            total_bookings: customer.total_bookings + 1,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', customer.id)
-      } else {
-        // Create new customer record
+          .select('id')
+          .eq('restaurant_id', staff.restaurant_id)
+          .eq('user_id', booking.user_id)
+          .single()
+        
+        if (existingCustomer) {
+          customerIdToUpdate = existingCustomer.id
+        }
+      }
+      
+      // If still no customer, try matching by email/phone or create new
+      if (!customerIdToUpdate) {
+         // Simplified for check-in: just try to find by email if available
+         if (booking.guest_email) {
+            const { data: existingGuest } = await supabase
+              .from('restaurant_customers')
+              .select('id')
+              .eq('restaurant_id', staff.restaurant_id)
+              .eq('guest_email', booking.guest_email)
+              .single()
+            
+            if (existingGuest) customerIdToUpdate = existingGuest.id
+         }
+      }
+
+      // If found/created, update the booking to link it for future
+      // The trigger will fire on this update and recalculate stats!
+      if (customerIdToUpdate) {
         await supabase
+          .from('bookings')
+          .update({ guest_id: customerIdToUpdate })
+          .eq('id', booking.id)
+      } else if (booking.user_id) {
+        // Create new customer record if needed
+        // This insert will NOT trigger the booking trigger (as it's on bookings table), 
+        // but the booking update above (if we had customerId) would.
+        // If we create a NEW customer here, we should link it to the booking.
+        
+        const { data: newCustomer, error: createError } = await supabase
           .from('restaurant_customers')
           .insert({
             restaurant_id: staff.restaurant_id,
             user_id: booking.user_id,
             first_visit: new Date().toISOString(),
             last_visit: new Date().toISOString(),
-            total_bookings: 1
+            total_bookings: 1,
+            source: 'booking'
           })
+          .select('id')
+          .single()
+          
+        if (!createError && newCustomer) {
+             await supabase
+              .from('bookings')
+              .update({ guest_id: newCustomer.id })
+              .eq('id', booking.id)
+        }
       }
     }
 

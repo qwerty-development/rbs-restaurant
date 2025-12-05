@@ -89,14 +89,27 @@ export const TIER_FEATURES = {
   }
 } as const
 
+export const GUEST_CRM_ADDON = 'guest_crm'
+
 /**
- * Check if a feature is enabled for the given tier
+ * Check if a feature is enabled for the given tier and addons
  */
 export function hasFeature(
   tier: RestaurantTier, 
-  feature: keyof typeof TIER_FEATURES.basic
+  feature: keyof typeof TIER_FEATURES.basic,
+  addons: string[] = []
 ): boolean {
-  return TIER_FEATURES[tier][feature]
+  // Check if feature is enabled by tier
+  if (TIER_FEATURES[tier][feature]) {
+    return true
+  }
+
+  // Check if feature is enabled by addon
+  if (feature === 'customer_management' && addons.includes(GUEST_CRM_ADDON)) {
+    return true
+  }
+
+  return false
 }
 
 /**
@@ -129,9 +142,9 @@ export function isValidBookingStatus(tier: RestaurantTier, status: string): bool
 }
 
 /**
- * Get navigation items based on tier
+ * Get navigation items based on tier and addons
  */
-export function getNavigationItems(tier: RestaurantTier) {
+export function getNavigationItems(tier: RestaurantTier, addons: string[] = []) {
   const baseItems = [
     { href: '/dashboard', label: 'Dashboard', feature: 'booking_management' },
     { href: '/menu', label: 'Menu', feature: 'menu_management' },
@@ -162,5 +175,5 @@ export function getNavigationItems(tier: RestaurantTier) {
   // Filter items based on tier features
   const tierSpecificItems = tier === 'basic' ? basicOnlyItems : proOnlyItems
   const allItems = [...baseItems, ...tierSpecificItems]
-  return allItems.filter(item => hasFeature(tier, item.feature as keyof typeof TIER_FEATURES.basic))
+  return allItems.filter(item => hasFeature(tier, item.feature as keyof typeof TIER_FEATURES.basic, addons))
 }

@@ -6,6 +6,8 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
+import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   TrendingUp,
   TrendingDown,
@@ -13,9 +15,42 @@ import {
   Calendar,
   Clock,
   AlertCircle,
-  Star
+  Star,
+  Cake,
+  Gift,
+  Phone,
+  Mail,
+  Trophy,
+  DollarSign,
+  Heart,
+  RefreshCw,
+  Crown,
+  PartyPopper,
+  Target,
+  Sparkles,
+  Timer,
+  Sun,
+  Sunset,
+  Moon,
+  Info,
+  CalendarDays,
+  UsersRound,
+  Utensils,
+  Activity,
+  BarChart3,
+  Leaf,
+  AlertTriangle,
+  Hourglass,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, differenceInDays, addYears, isBefore, isAfter, startOfDay, getHours, parseISO, getDay, subMonths, startOfMonth, endOfMonth, subDays } from 'date-fns'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface CustomerInsightsProps {
   restaurantId: string
@@ -41,11 +76,20 @@ interface InsightData {
       name: string
       visits: number
       lastVisit: string
+      email?: string
+      phone?: string
+      avatarUrl?: string
     }>
-    highestSpenders: Array<{
+    upcomingBirthdays: Array<{
       id: string
       name: string
-      totalSpent: number
+      birthday: string
+      daysUntil: number
+      age: number
+      email?: string
+      phone?: string
+      avatarUrl?: string
+      isVip: boolean
     }>
   }
   riskMetrics: {
@@ -53,6 +97,173 @@ interface InsightData {
     highNoShowCustomers: number
     blacklistedCustomers: number
   }
+  // NEW: Enhanced personalization metrics
+  firstVisitAnniversaries: Array<{
+    id: string
+    name: string
+    firstVisit: string
+    yearsWithUs: number
+    daysUntil: number
+    totalSpent: number
+    totalVisits: number
+    isVip: boolean
+    email?: string
+    phone?: string
+    avatarUrl?: string
+  }>
+  topSpenders: Array<{
+    id: string
+    name: string
+    totalSpent: number
+    averageSpendPerVisit: number
+    visits: number
+    lastVisit?: string
+    isVip: boolean
+    email?: string
+    phone?: string
+    avatarUrl?: string
+  }>
+  vipCandidates: Array<{
+    id: string
+    name: string
+    visits: number
+    totalSpent: number
+    lastVisit?: string
+    reasons: string[]
+    email?: string
+    phone?: string
+    avatarUrl?: string
+  }>
+  visitMilestones: Array<{
+    id: string
+    name: string
+    visits: number
+    nextMilestone: number
+    visitsToMilestone: number
+    isVip: boolean
+    email?: string
+    phone?: string
+    avatarUrl?: string
+  }>
+  winBackOpportunities: Array<{
+    id: string
+    name: string
+    daysSinceLastVisit: number
+    previousVisitCount: number
+    totalSpent: number
+    lastVisit?: string
+    email?: string
+    phone?: string
+    avatarUrl?: string
+  }>
+  bookingTimeDistribution: {
+    morning: number    // before 12pm
+    lunch: number      // 12pm - 3pm
+    afternoon: number  // 3pm - 5pm
+    dinner: number     // 5pm - 9pm
+    lateNight: number  // after 9pm
+  }
+  loyaltyStats: {
+    averageCustomerLifetimeValue: number
+    totalActiveCustomers: number
+    customersWithMultipleVisits: number
+    averageTimeBetweenVisits: number // in days
+  }
+  // NEW: Additional analytics metrics
+  partySizeAnalytics: {
+    averagePartySize: number
+    distribution: {
+      solo: number       // 1 person
+      couple: number     // 2 people
+      small: number      // 3-4 people
+      medium: number     // 5-6 people
+      large: number      // 7+ people
+    }
+    largePartyCustomers: Array<{
+      id: string
+      name: string
+      averagePartySize: number
+      bookings: number
+      email?: string
+      phone?: string
+    }>
+  }
+  dayOfWeekPatterns: {
+    distribution: {
+      monday: number
+      tuesday: number
+      wednesday: number
+      thursday: number
+      friday: number
+      saturday: number
+      sunday: number
+    }
+    busiestDay: string
+    slowestDay: string
+  }
+  bookingLeadTime: {
+    averageDays: number
+    distribution: {
+      sameDay: number      // 0 days
+      nextDay: number      // 1 day
+      thisWeek: number     // 2-7 days
+      nextWeek: number     // 8-14 days
+      further: number      // 15+ days
+    }
+    lastMinuteBookers: Array<{
+      id: string
+      name: string
+      sameDayBookings: number
+      totalBookings: number
+      email?: string
+      phone?: string
+    }>
+  }
+  customerPreferences: {
+    dietaryBreakdown: {
+      vegetarian: number
+      vegan: number
+      glutenFree: number
+      dairyFree: number
+      halal: number
+      kosher: number
+      none: number
+    }
+    topAllergies: Array<{
+      allergy: string
+      count: number
+    }>
+    customersWithSpecialNeeds: number
+  }
+  monthlyGrowth: Array<{
+    month: string
+    newCustomers: number
+    returningCustomers: number
+    totalBookings: number
+  }>
+  visitFrequency: {
+    weekly: number         // visits every week
+    biweekly: number       // every 2 weeks
+    monthly: number        // once a month
+    quarterly: number      // every 3 months
+    occasional: number     // less frequent
+  }
+  recentActivity: {
+    last7DaysBookings: number
+    last7DaysNewCustomers: number
+    last7DaysReturning: number
+    todayBookings: number
+    comparedToLastWeek: number // percentage change
+  }
+  noShowRiskCustomers: Array<{
+    id: string
+    name: string
+    noShowRate: number
+    totalBookings: number
+    lastNoShow?: string
+    email?: string
+    phone?: string
+  }>
 }
 
 export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
@@ -140,99 +351,7 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
         }
       }
 
-      // Calculate actual booking counts for all customers efficiently with deduplication
-      const customersWithCorrectCounts = await Promise.all(
-        filteredCustomersData.map(async (customer) => {
-          let allBookings: any[] = []
-          
-          try {
-            // Enhanced logic matching the customer details dialog
-            
-            // For registered users with profiles, prioritize user_id matching
-            if (customer.user_id && customer.profile) {
-              const { data: userBookings, error: userBookingsError } = await supabase
-                .from('bookings')
-                .select('id, booking_time')
-                .eq('user_id', customer.user_id)
-                .eq('restaurant_id', restaurantId)
-
-              if (!userBookingsError && userBookings) {
-                allBookings = [...allBookings, ...userBookings]
-              }
-            }
-
-            // For guest customers or when user_id matching fails, try multiple approaches
-            if (!customer.profile || allBookings.length === 0) {
-              // Method 1: Query by guest_email (most reliable for guest customers)
-              if (customer.guest_email) {
-                const { data: emailBookings, error: emailBookingsError } = await supabase
-                  .from('bookings')
-                  .select('id, booking_time')
-                  .eq('guest_email', customer.guest_email)
-                  .eq('restaurant_id', restaurantId)
-
-                if (!emailBookingsError && emailBookings) {
-                  // Add bookings that aren't already in the list (by ID)
-                  const existingIds = new Set(allBookings.map(b => b.id))
-                  const newBookings = emailBookings.filter(b => !existingIds.has(b.id))
-                  allBookings = [...allBookings, ...newBookings]
-                }
-              }
-
-              // Method 2: Query by guest_name and guest_email combination (high confidence match)
-              if (customer.guest_name && customer.guest_email) {
-                const { data: nameEmailBookings, error: nameEmailError } = await supabase
-                  .from('bookings')
-                  .select('id, booking_time')
-                  .eq('guest_name', customer.guest_name)
-                  .eq('guest_email', customer.guest_email)
-                  .eq('restaurant_id', restaurantId)
-
-                if (!nameEmailError && nameEmailBookings) {
-                  // Add bookings that aren't already in the list (by ID)
-                  const existingIds = new Set(allBookings.map(b => b.id))
-                  const newBookings = nameEmailBookings.filter(b => !existingIds.has(b.id))
-                  allBookings = [...allBookings, ...newBookings]
-                }
-              }
-
-              // Method 3: Query by guest_name only (lower confidence, use carefully)
-              if (customer.guest_name && allBookings.length === 0) {
-                const { data: nameBookings, error: nameBookingsError } = await supabase
-                  .from('bookings')
-                  .select('id, booking_time, guest_email')
-                  .eq('guest_name', customer.guest_name)
-                  .eq('restaurant_id', restaurantId)
-
-                if (!nameBookingsError && nameBookings) {
-                  // For name-only matches, be more selective to avoid false positives
-                  // Only include if guest_email matches or is null in both records
-                  const filteredBookings = nameBookings.filter(booking => {
-                    if (!customer.guest_email && !booking.guest_email) return true
-                    if (customer.guest_email && booking.guest_email === customer.guest_email) return true
-                    return false
-                  })
-
-                  const existingIds = new Set(allBookings.map(b => b.id))
-                  const newBookings = filteredBookings.filter(b => !existingIds.has(b.id))
-                  allBookings = [...allBookings, ...newBookings]
-                }
-              }
-            }
-
-            return {
-              ...customer,
-              total_bookings: allBookings.length
-            }
-          } catch (error) {
-            console.error('Error calculating booking count for customer:', customer.id, error)
-            // Fall back to original database value if calculation fails
-            return customer
-          }
-        })
-      )
-
-      const customers = customersWithCorrectCounts
+      const customers = filteredCustomersData
 
       const now = new Date()
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
@@ -252,7 +371,6 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
       let totalVisits = 0
       let returningCustomers = 0
       const frequentCustomers: any[] = []
-      const spenders: any[] = []
       let highCancellation = 0
       let highNoShow = 0
 
@@ -293,18 +411,52 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
             id: customer.id,
             name: customer.profile?.full_name || customer.guest_name || 'Guest',
             visits: customer.total_bookings,
-            lastVisit: customer.last_visit
-          })
-        }
-
-        if (customer.total_spent > 0) {
-          spenders.push({
-            id: customer.id,
-            name: customer.profile?.full_name || customer.guest_name || 'Guest',
-            totalSpent: customer.total_spent
+            lastVisit: customer.last_visit,
+            email: customer.profile?.email || customer.guest_email || undefined,
+            phone: customer.profile?.phone_number || customer.guest_phone || undefined,
+            avatarUrl: customer.profile?.avatar_url || undefined
           })
         }
       })
+
+      // Calculate upcoming birthdays
+      const today = startOfDay(new Date())
+      const upcomingBirthdays: any[] = []
+      
+      customers?.forEach(customer => {
+        const dob = customer.profile?.date_of_birth
+        if (dob) {
+          const birthDate = new Date(dob)
+          // Get this year's birthday
+          let nextBirthday = new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate())
+          
+          // If birthday has passed this year, use next year's
+          if (isBefore(nextBirthday, today)) {
+            nextBirthday = addYears(nextBirthday, 1)
+          }
+          
+          const daysUntil = differenceInDays(nextBirthday, today)
+          
+          // Show birthdays in the next 30 days
+          if (daysUntil <= 30 && daysUntil >= 0) {
+            const age = today.getFullYear() - birthDate.getFullYear() + (daysUntil === 0 ? 0 : -1) + 1
+            upcomingBirthdays.push({
+              id: customer.id,
+              name: customer.profile?.full_name || customer.guest_name || 'Guest',
+              birthday: dob,
+              daysUntil,
+              age,
+              email: customer.profile?.email || customer.guest_email || undefined,
+              phone: customer.profile?.phone_number || customer.guest_phone || undefined,
+              avatarUrl: customer.profile?.avatar_url || undefined,
+              isVip: customer.vip_status
+            })
+          }
+        }
+      })
+
+      // Sort by days until birthday
+      upcomingBirthdays.sort((a, b) => a.daysUntil - b.daysUntil)
 
       // Count new customers this month and last month
       const newThisMonth = customers?.filter(c => {
@@ -316,6 +468,554 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
         const firstVisit = c.first_visit ? new Date(c.first_visit) : null
         return firstVisit && firstVisit > sixtyDaysAgo && firstVisit <= thirtyDaysAgo
       }).length || 0
+
+      // ==========================================
+      // NEW: Enhanced Personalization Metrics
+      // ==========================================
+
+      // 1. First Visit Anniversaries - Customers celebrating loyalty milestones
+      const firstVisitAnniversaries: InsightData['firstVisitAnniversaries'] = []
+      customers?.forEach(customer => {
+        if (customer.first_visit) {
+          try {
+            const firstVisitDate = new Date(customer.first_visit)
+            const yearsWithUs = today.getFullYear() - firstVisitDate.getFullYear()
+            
+            // Get this year's anniversary
+            let nextAnniversary = new Date(today.getFullYear(), firstVisitDate.getMonth(), firstVisitDate.getDate())
+            
+            // If anniversary has passed this year, calculate for next year
+            if (isBefore(nextAnniversary, today)) {
+              nextAnniversary = addYears(nextAnniversary, 1)
+            }
+            
+            const daysUntil = differenceInDays(nextAnniversary, today)
+            
+            // Show anniversaries in the next 30 days (and must be at least 1 year)
+            const anniversaryYears = nextAnniversary.getFullYear() - firstVisitDate.getFullYear()
+            if (daysUntil <= 30 && daysUntil >= 0 && anniversaryYears >= 1) {
+              firstVisitAnniversaries.push({
+                id: customer.id,
+                name: customer.profile?.full_name || customer.guest_name || 'Guest',
+                firstVisit: customer.first_visit,
+                yearsWithUs: anniversaryYears,
+                daysUntil,
+                totalSpent: customer.total_spent || 0,
+                totalVisits: customer.total_bookings || 0,
+                isVip: customer.vip_status || false,
+                email: customer.profile?.email || customer.guest_email || undefined,
+                phone: customer.profile?.phone_number || customer.guest_phone || undefined,
+                avatarUrl: customer.profile?.avatar_url || undefined
+              })
+            }
+          } catch (e) {
+            // Skip invalid dates
+          }
+        }
+      })
+      firstVisitAnniversaries.sort((a, b) => a.daysUntil - b.daysUntil)
+
+      // 2. Top Spenders - Highest value customers
+      const topSpenders: InsightData['topSpenders'] = customers
+        ?.filter(c => (c.total_spent || 0) > 0)
+        .map(customer => ({
+          id: customer.id,
+          name: customer.profile?.full_name || customer.guest_name || 'Guest',
+          totalSpent: customer.total_spent || 0,
+          averageSpendPerVisit: customer.average_spend_per_visit || 0,
+          visits: customer.total_bookings || 0,
+          lastVisit: customer.last_visit || undefined,
+          isVip: customer.vip_status || false,
+          email: customer.profile?.email || customer.guest_email || undefined,
+          phone: customer.profile?.phone_number || customer.guest_phone || undefined,
+          avatarUrl: customer.profile?.avatar_url || undefined
+        }))
+        .sort((a, b) => b.totalSpent - a.totalSpent)
+        .slice(0, 10) || []
+
+      // 3. VIP Candidates - Non-VIP customers who deserve consideration
+      const vipCandidates: InsightData['vipCandidates'] = []
+      customers?.forEach(customer => {
+        if (customer.vip_status) return // Skip existing VIPs
+        
+        const reasons: string[] = []
+        const visits = customer.total_bookings || 0
+        const totalSpent = customer.total_spent || 0
+        const lastVisitDate = customer.last_visit ? new Date(customer.last_visit) : null
+        
+        // Criteria for VIP consideration
+        if (visits >= 10) reasons.push(`${visits} visits`)
+        if (totalSpent >= 500) reasons.push(`$${totalSpent.toFixed(0)} spent`)
+        if (visits >= 5 && lastVisitDate && lastVisitDate > thirtyDaysAgo) {
+          reasons.push('Active regular')
+        }
+        
+        // Only add if they meet at least one strong criteria
+        if (reasons.length > 0 && (visits >= 8 || totalSpent >= 400)) {
+          vipCandidates.push({
+            id: customer.id,
+            name: customer.profile?.full_name || customer.guest_name || 'Guest',
+            visits,
+            totalSpent,
+            lastVisit: customer.last_visit || undefined,
+            reasons,
+            email: customer.profile?.email || customer.guest_email || undefined,
+            phone: customer.profile?.phone_number || customer.guest_phone || undefined,
+            avatarUrl: customer.profile?.avatar_url || undefined
+          })
+        }
+      })
+      vipCandidates.sort((a, b) => (b.visits + b.totalSpent / 50) - (a.visits + a.totalSpent / 50))
+
+      // 4. Visit Milestones - Customers approaching visit milestones
+      const milestones = [10, 25, 50, 100, 250, 500]
+      const visitMilestones: InsightData['visitMilestones'] = []
+      customers?.forEach(customer => {
+        const visits = customer.total_bookings || 0
+        if (visits === 0) return
+        
+        // Find the next milestone
+        const nextMilestone = milestones.find(m => m > visits)
+        if (nextMilestone) {
+          const visitsToMilestone = nextMilestone - visits
+          // Show if within 5 visits of milestone (or 20% for higher milestones)
+          const threshold = Math.min(5, Math.ceil(nextMilestone * 0.2))
+          if (visitsToMilestone <= threshold) {
+            visitMilestones.push({
+              id: customer.id,
+              name: customer.profile?.full_name || customer.guest_name || 'Guest',
+              visits,
+              nextMilestone,
+              visitsToMilestone,
+              isVip: customer.vip_status || false,
+              email: customer.profile?.email || customer.guest_email || undefined,
+              phone: customer.profile?.phone_number || customer.guest_phone || undefined,
+              avatarUrl: customer.profile?.avatar_url || undefined
+            })
+          }
+        }
+      })
+      visitMilestones.sort((a, b) => a.visitsToMilestone - b.visitsToMilestone)
+
+      // 5. Win-Back Opportunities - Lost customers worth re-engaging
+      const winBackOpportunities: InsightData['winBackOpportunities'] = []
+      customers?.forEach(customer => {
+        const lastVisitDate = customer.last_visit ? new Date(customer.last_visit) : null
+        if (!lastVisitDate) return
+        
+        const daysSinceLastVisit = differenceInDays(today, lastVisitDate)
+        const visits = customer.total_bookings || 0
+        const totalSpent = customer.total_spent || 0
+        
+        // Win-back: 60+ days inactive, but was a good customer (3+ visits or $100+ spent)
+        if (daysSinceLastVisit >= 60 && (visits >= 3 || totalSpent >= 100)) {
+          winBackOpportunities.push({
+            id: customer.id,
+            name: customer.profile?.full_name || customer.guest_name || 'Guest',
+            daysSinceLastVisit,
+            previousVisitCount: visits,
+            totalSpent,
+            lastVisit: customer.last_visit || undefined,
+            email: customer.profile?.email || customer.guest_email || undefined,
+            phone: customer.profile?.phone_number || customer.guest_phone || undefined,
+            avatarUrl: customer.profile?.avatar_url || undefined
+          })
+        }
+      })
+      winBackOpportunities.sort((a, b) => (b.previousVisitCount + b.totalSpent / 50) - (a.previousVisitCount + a.totalSpent / 50))
+
+      // 6. Booking Time Distribution - When do customers typically book?
+      const bookingTimeDistribution: InsightData['bookingTimeDistribution'] = {
+        morning: 0,
+        lunch: 0,
+        afternoon: 0,
+        dinner: 0,
+        lateNight: 0
+      }
+      
+      // Get booking times for analysis
+      const { data: bookingsData } = await supabase
+        .from('bookings')
+        .select('booking_time')
+        .eq('restaurant_id', restaurantId)
+        .gte('booking_time', ninetyDaysAgo.toISOString())
+      
+      bookingsData?.forEach(booking => {
+        try {
+          const bookingTime = parseISO(booking.booking_time)
+          const hour = getHours(bookingTime)
+          
+          if (hour < 12) bookingTimeDistribution.morning++
+          else if (hour < 15) bookingTimeDistribution.lunch++
+          else if (hour < 17) bookingTimeDistribution.afternoon++
+          else if (hour < 21) bookingTimeDistribution.dinner++
+          else bookingTimeDistribution.lateNight++
+        } catch (e) {
+          // Skip invalid dates
+        }
+      })
+
+      // 7. Loyalty Stats - Overall loyalty metrics
+      const customersWithMultipleVisits = customers?.filter(c => (c.total_bookings || 0) > 1).length || 0
+      const activeCustomers = customers?.filter(c => {
+        const lastVisit = c.last_visit ? new Date(c.last_visit) : null
+        return lastVisit && lastVisit > ninetyDaysAgo
+      }).length || 0
+      
+      const totalSpentAll = customers?.reduce((sum, c) => sum + (c.total_spent || 0), 0) || 0
+      const avgLifetimeValue = customers && customers.length > 0 
+        ? totalSpentAll / customers.length 
+        : 0
+
+      // ==========================================
+      // NEW: Additional Analytics Metrics
+      // ==========================================
+
+      // 8. Party Size Analytics - Fetch detailed booking data
+      const { data: detailedBookings } = await supabase
+        .from('bookings')
+        .select('id, party_size, booking_time, created_at, user_id, guest_email, guest_name, status')
+        .eq('restaurant_id', restaurantId)
+        .gte('booking_time', ninetyDaysAgo.toISOString())
+
+      const partySizeDistribution = {
+        solo: 0,
+        couple: 0,
+        small: 0,
+        medium: 0,
+        large: 0
+      }
+      let totalPartySize = 0
+      let partySizeCount = 0
+      const customerPartySizes: Map<string, { total: number, count: number, name: string, email?: string, phone?: string }> = new Map()
+
+      detailedBookings?.forEach(booking => {
+        const size = booking.party_size || 2
+        totalPartySize += size
+        partySizeCount++
+
+        if (size === 1) partySizeDistribution.solo++
+        else if (size === 2) partySizeDistribution.couple++
+        else if (size <= 4) partySizeDistribution.small++
+        else if (size <= 6) partySizeDistribution.medium++
+        else partySizeDistribution.large++
+
+        // Track per customer
+        const customerId = booking.user_id || booking.guest_email || booking.guest_name
+        if (customerId) {
+          const existing = customerPartySizes.get(customerId)
+          if (existing) {
+            existing.total += size
+            existing.count++
+          } else {
+            const customer = customers?.find(c => 
+              c.user_id === booking.user_id || 
+              c.guest_email === booking.guest_email ||
+              c.guest_name === booking.guest_name
+            )
+            customerPartySizes.set(customerId, {
+              total: size,
+              count: 1,
+              name: customer?.profile?.full_name || customer?.guest_name || booking.guest_name || 'Guest',
+              email: customer?.profile?.email || customer?.guest_email || booking.guest_email,
+              phone: customer?.profile?.phone_number || customer?.guest_phone
+            })
+          }
+        }
+      })
+
+      const largePartyCustomers = Array.from(customerPartySizes.entries())
+        .map(([id, data]) => ({
+          id,
+          name: data.name,
+          averagePartySize: data.total / data.count,
+          bookings: data.count,
+          email: data.email,
+          phone: data.phone
+        }))
+        .filter(c => c.averagePartySize >= 5)
+        .sort((a, b) => b.averagePartySize - a.averagePartySize)
+        .slice(0, 8)
+
+      // 9. Day of Week Patterns
+      const dayDistribution = {
+        monday: 0,
+        tuesday: 0,
+        wednesday: 0,
+        thursday: 0,
+        friday: 0,
+        saturday: 0,
+        sunday: 0
+      }
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
+
+      detailedBookings?.forEach(booking => {
+        try {
+          const bookingDate = parseISO(booking.booking_time)
+          const dayIndex = getDay(bookingDate)
+          const dayName = dayNames[dayIndex]
+          dayDistribution[dayName]++
+        } catch (e) {
+          // Skip invalid dates
+        }
+      })
+
+      const dayEntries = Object.entries(dayDistribution)
+      const busiestDay = dayEntries.reduce((a, b) => a[1] > b[1] ? a : b)[0]
+      const slowestDay = dayEntries.reduce((a, b) => a[1] < b[1] ? a : b)[0]
+
+      // 10. Booking Lead Time Analysis
+      const leadTimeDistribution = {
+        sameDay: 0,
+        nextDay: 0,
+        thisWeek: 0,
+        nextWeek: 0,
+        further: 0
+      }
+      let totalLeadTime = 0
+      let leadTimeCount = 0
+      const customerLeadTimes: Map<string, { sameDay: number, total: number, name: string, email?: string, phone?: string }> = new Map()
+
+      detailedBookings?.forEach(booking => {
+        try {
+          const bookingTime = parseISO(booking.booking_time)
+          const createdAt = parseISO(booking.created_at)
+          const leadDays = differenceInDays(bookingTime, createdAt)
+          
+          if (leadDays >= 0) {
+            totalLeadTime += leadDays
+            leadTimeCount++
+
+            if (leadDays === 0) leadTimeDistribution.sameDay++
+            else if (leadDays === 1) leadTimeDistribution.nextDay++
+            else if (leadDays <= 7) leadTimeDistribution.thisWeek++
+            else if (leadDays <= 14) leadTimeDistribution.nextWeek++
+            else leadTimeDistribution.further++
+
+            // Track same-day bookers
+            const customerId = booking.user_id || booking.guest_email || booking.guest_name
+            if (customerId && leadDays === 0) {
+              const existing = customerLeadTimes.get(customerId)
+              if (existing) {
+                existing.sameDay++
+                existing.total++
+              } else {
+                const customer = customers?.find(c => 
+                  c.user_id === booking.user_id || 
+                  c.guest_email === booking.guest_email ||
+                  c.guest_name === booking.guest_name
+                )
+                customerLeadTimes.set(customerId, {
+                  sameDay: 1,
+                  total: 1,
+                  name: customer?.profile?.full_name || customer?.guest_name || booking.guest_name || 'Guest',
+                  email: customer?.profile?.email || customer?.guest_email || booking.guest_email,
+                  phone: customer?.profile?.phone_number || customer?.guest_phone
+                })
+              }
+            } else if (customerId) {
+              const existing = customerLeadTimes.get(customerId)
+              if (existing) {
+                existing.total++
+              }
+            }
+          }
+        } catch (e) {
+          // Skip invalid dates
+        }
+      })
+
+      const lastMinuteBookers = Array.from(customerLeadTimes.entries())
+        .map(([id, data]) => ({
+          id,
+          name: data.name,
+          sameDayBookings: data.sameDay,
+          totalBookings: data.total,
+          email: data.email,
+          phone: data.phone
+        }))
+        .filter(c => c.sameDayBookings >= 2)
+        .sort((a, b) => b.sameDayBookings - a.sameDayBookings)
+        .slice(0, 8)
+
+      // 11. Customer Preferences Analysis
+      const dietaryBreakdown = {
+        vegetarian: 0,
+        vegan: 0,
+        glutenFree: 0,
+        dairyFree: 0,
+        halal: 0,
+        kosher: 0,
+        none: 0
+      }
+      const allergyCount: Map<string, number> = new Map()
+      let customersWithSpecialNeeds = 0
+
+      customers?.forEach(customer => {
+        const dietary = customer.profile?.dietary_restrictions
+        const allergies = customer.profile?.allergies
+        let hasSpecialNeeds = false
+
+        if (dietary && Array.isArray(dietary)) {
+          dietary.forEach((d: string) => {
+            const lower = d.toLowerCase()
+            if (lower.includes('vegetarian')) { dietaryBreakdown.vegetarian++; hasSpecialNeeds = true }
+            if (lower.includes('vegan')) { dietaryBreakdown.vegan++; hasSpecialNeeds = true }
+            if (lower.includes('gluten')) { dietaryBreakdown.glutenFree++; hasSpecialNeeds = true }
+            if (lower.includes('dairy')) { dietaryBreakdown.dairyFree++; hasSpecialNeeds = true }
+            if (lower.includes('halal')) { dietaryBreakdown.halal++; hasSpecialNeeds = true }
+            if (lower.includes('kosher')) { dietaryBreakdown.kosher++; hasSpecialNeeds = true }
+          })
+        }
+        if (!hasSpecialNeeds && dietary && dietary.length === 0) {
+          dietaryBreakdown.none++
+        }
+
+        if (allergies && Array.isArray(allergies)) {
+          allergies.forEach((a: string) => {
+            const normalized = a.toLowerCase().trim()
+            if (normalized) {
+              allergyCount.set(normalized, (allergyCount.get(normalized) || 0) + 1)
+              hasSpecialNeeds = true
+            }
+          })
+        }
+
+        if (hasSpecialNeeds) customersWithSpecialNeeds++
+      })
+
+      const topAllergies = Array.from(allergyCount.entries())
+        .map(([allergy, count]) => ({ allergy, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 8)
+
+      // 12. Monthly Growth (Last 6 months)
+      const monthlyGrowth: InsightData['monthlyGrowth'] = []
+      for (let i = 5; i >= 0; i--) {
+        const monthStart = startOfMonth(subMonths(today, i))
+        const monthEnd = endOfMonth(subMonths(today, i))
+
+        const newInMonth = customers?.filter(c => {
+          const firstVisit = c.first_visit ? new Date(c.first_visit) : null
+          return firstVisit && firstVisit >= monthStart && firstVisit <= monthEnd
+        }).length || 0
+
+        const returningInMonth = customers?.filter(c => {
+          const lastVisit = c.last_visit ? new Date(c.last_visit) : null
+          const firstVisit = c.first_visit ? new Date(c.first_visit) : null
+          return lastVisit && lastVisit >= monthStart && lastVisit <= monthEnd &&
+                 firstVisit && firstVisit < monthStart
+        }).length || 0
+
+        const bookingsInMonth = detailedBookings?.filter(b => {
+          try {
+            const bookingDate = parseISO(b.booking_time)
+            return bookingDate >= monthStart && bookingDate <= monthEnd
+          } catch {
+            return false
+          }
+        }).length || 0
+
+        monthlyGrowth.push({
+          month: format(monthStart, 'MMM yyyy'),
+          newCustomers: newInMonth,
+          returningCustomers: returningInMonth,
+          totalBookings: bookingsInMonth
+        })
+      }
+
+      // 13. Visit Frequency Analysis
+      const visitFrequency = {
+        weekly: 0,
+        biweekly: 0,
+        monthly: 0,
+        quarterly: 0,
+        occasional: 0
+      }
+
+      customers?.forEach(customer => {
+        const visits = customer.total_bookings || 0
+        const firstVisitDate = customer.first_visit ? new Date(customer.first_visit) : null
+        if (!firstVisitDate || visits < 2) return
+
+        const daysAsCustomer = differenceInDays(today, firstVisitDate)
+        if (daysAsCustomer < 30) return // Need at least 30 days of history
+
+        const avgDaysBetweenVisits = daysAsCustomer / visits
+
+        if (avgDaysBetweenVisits <= 7) visitFrequency.weekly++
+        else if (avgDaysBetweenVisits <= 14) visitFrequency.biweekly++
+        else if (avgDaysBetweenVisits <= 30) visitFrequency.monthly++
+        else if (avgDaysBetweenVisits <= 90) visitFrequency.quarterly++
+        else visitFrequency.occasional++
+      })
+
+      // 14. Recent Activity (Last 7 days)
+      const sevenDaysAgo = subDays(today, 7)
+      const fourteenDaysAgo = subDays(today, 14)
+
+      const last7DaysBookings = detailedBookings?.filter(b => {
+        try {
+          return parseISO(b.booking_time) >= sevenDaysAgo
+        } catch {
+          return false
+        }
+      }).length || 0
+
+      const prev7DaysBookings = detailedBookings?.filter(b => {
+        try {
+          const date = parseISO(b.booking_time)
+          return date >= fourteenDaysAgo && date < sevenDaysAgo
+        } catch {
+          return false
+        }
+      }).length || 0
+
+      const last7DaysNewCustomers = customers?.filter(c => {
+        const firstVisit = c.first_visit ? new Date(c.first_visit) : null
+        return firstVisit && firstVisit >= sevenDaysAgo
+      }).length || 0
+
+      const last7DaysReturning = customers?.filter(c => {
+        const lastVisit = c.last_visit ? new Date(c.last_visit) : null
+        const firstVisit = c.first_visit ? new Date(c.first_visit) : null
+        return lastVisit && lastVisit >= sevenDaysAgo && firstVisit && firstVisit < sevenDaysAgo
+      }).length || 0
+
+      const todayBookings = detailedBookings?.filter(b => {
+        try {
+          const bookingDate = parseISO(b.booking_time)
+          return bookingDate >= today
+        } catch {
+          return false
+        }
+      }).length || 0
+
+      const comparedToLastWeek = prev7DaysBookings > 0 
+        ? ((last7DaysBookings - prev7DaysBookings) / prev7DaysBookings) * 100 
+        : last7DaysBookings > 0 ? 100 : 0
+
+      // 15. No-Show Risk Customers
+      const noShowRiskCustomers: InsightData['noShowRiskCustomers'] = []
+      customers?.forEach(customer => {
+        const totalBookings = customer.total_bookings || 0
+        const noShows = customer.profile?.no_show_bookings || 0
+        
+        if (totalBookings >= 2 && noShows >= 1) {
+          const noShowRate = (noShows / totalBookings) * 100
+          if (noShowRate >= 20) {
+            noShowRiskCustomers.push({
+              id: customer.id,
+              name: customer.profile?.full_name || customer.guest_name || 'Guest',
+              noShowRate,
+              totalBookings,
+              email: customer.profile?.email || customer.guest_email || undefined,
+              phone: customer.profile?.phone_number || customer.guest_phone || undefined
+            })
+          }
+        }
+      })
+      noShowRiskCustomers.sort((a, b) => b.noShowRate - a.noShowRate)
 
       setInsights({
         customerSegments: segments,
@@ -333,15 +1033,57 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
           mostFrequentCustomers: frequentCustomers
             .sort((a, b) => b.visits - a.visits)
             .slice(0, 5),
-          highestSpenders: spenders
-            .sort((a, b) => b.totalSpent - a.totalSpent)
-            .slice(0, 5)
+          upcomingBirthdays: upcomingBirthdays.slice(0, 10)
         },
         riskMetrics: {
           highCancellationCustomers: highCancellation,
           highNoShowCustomers: highNoShow,
           blacklistedCustomers: customers?.filter(c => c.blacklisted).length || 0
-        }
+        },
+        // NEW: Enhanced metrics
+        firstVisitAnniversaries: firstVisitAnniversaries.slice(0, 10),
+        topSpenders,
+        vipCandidates: vipCandidates.slice(0, 8),
+        visitMilestones: visitMilestones.slice(0, 8),
+        winBackOpportunities: winBackOpportunities.slice(0, 10),
+        bookingTimeDistribution,
+        loyaltyStats: {
+          averageCustomerLifetimeValue: avgLifetimeValue,
+          totalActiveCustomers: activeCustomers,
+          customersWithMultipleVisits,
+          averageTimeBetweenVisits: 0 // Would need more complex calculation
+        },
+        // NEW: Additional analytics
+        partySizeAnalytics: {
+          averagePartySize: partySizeCount > 0 ? totalPartySize / partySizeCount : 0,
+          distribution: partySizeDistribution,
+          largePartyCustomers
+        },
+        dayOfWeekPatterns: {
+          distribution: dayDistribution,
+          busiestDay: busiestDay.charAt(0).toUpperCase() + busiestDay.slice(1),
+          slowestDay: slowestDay.charAt(0).toUpperCase() + slowestDay.slice(1)
+        },
+        bookingLeadTime: {
+          averageDays: leadTimeCount > 0 ? totalLeadTime / leadTimeCount : 0,
+          distribution: leadTimeDistribution,
+          lastMinuteBookers
+        },
+        customerPreferences: {
+          dietaryBreakdown,
+          topAllergies,
+          customersWithSpecialNeeds
+        },
+        monthlyGrowth,
+        visitFrequency,
+        recentActivity: {
+          last7DaysBookings,
+          last7DaysNewCustomers,
+          last7DaysReturning,
+          todayBookings,
+          comparedToLastWeek
+        },
+        noShowRiskCustomers: noShowRiskCustomers.slice(0, 8)
       })
 
     } catch (error) {
@@ -380,97 +1122,131 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
   }
 
   return (
+    <TooltipProvider>
     <div className="space-y-6">
       {/* Customer Segments */}
       <div>
         <h3 className="text-lg font-semibold mb-4">Customer Segments</h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">VIP Customers</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{insights.customerSegments.vip}</div>
-              <Star className="h-4 w-4 text-yellow-500 mt-2" />
-            </CardContent>
-          </Card>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card className="cursor-help hover:bg-muted/30 transition-colors">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-1">
+                    VIP Customers
+                    <Info className="h-3 w-3 text-muted-foreground" />
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{insights.customerSegments.vip}</div>
+                  <Star className="h-4 w-4 text-yellow-500 mt-2" />
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[250px]">
+              <p className="font-medium">👑 VIP Customers</p>
+              <p className="text-xs text-muted-foreground">
+                Your most valued guests marked as VIP. They deserve priority service, the best tables, and personalized attention!
+              </p>
+            </TooltipContent>
+          </Tooltip>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Regular</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{insights.customerSegments.regular}</div>
-              <Users className="h-4 w-4 text-blue-500 mt-2" />
-            </CardContent>
-          </Card>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card className="cursor-help hover:bg-muted/30 transition-colors">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-1">
+                    Regular
+                    <Info className="h-3 w-3 text-muted-foreground" />
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{insights.customerSegments.regular}</div>
+                  <Users className="h-4 w-4 text-blue-500 mt-2" />
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[250px]">
+              <p className="font-medium">🔵 Regular Customers</p>
+              <p className="text-xs text-muted-foreground">
+                Customers with 5+ visits who came back within the last 30 days. These are your reliable, returning guests!
+              </p>
+            </TooltipContent>
+          </Tooltip>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">At Risk</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{insights.customerSegments.atRisk}</div>
-              <AlertCircle className="h-4 w-4 text-orange-500 mt-2" />
-            </CardContent>
-          </Card>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card className="cursor-help hover:bg-muted/30 transition-colors">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-1">
+                    At Risk
+                    <Info className="h-3 w-3 text-muted-foreground" />
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{insights.customerSegments.atRisk}</div>
+                  <AlertCircle className="h-4 w-4 text-orange-500 mt-2" />
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[250px]">
+              <p className="font-medium">⚠️ At Risk Customers</p>
+              <p className="text-xs text-muted-foreground">
+                Customers who haven&apos;t visited in 30-90 days. They might be drifting away - consider reaching out with a special offer!
+              </p>
+            </TooltipContent>
+          </Tooltip>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">New</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{insights.customerSegments.new}</div>
-              <Calendar className="h-4 w-4 text-green-500 mt-2" />
-            </CardContent>
-          </Card>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card className="cursor-help hover:bg-muted/30 transition-colors">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-1">
+                    New
+                    <Info className="h-3 w-3 text-muted-foreground" />
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{insights.customerSegments.new}</div>
+                  <Calendar className="h-4 w-4 text-green-500 mt-2" />
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[250px]">
+              <p className="font-medium">🆕 New Customers</p>
+              <p className="text-xs text-muted-foreground">
+                First-time guests who visited within the last 30 days. Make a great impression to turn them into regulars!
+              </p>
+            </TooltipContent>
+          </Tooltip>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Lost</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{insights.customerSegments.lost}</div>
-              <Clock className="h-4 w-4 text-gray-500 mt-2" />
-            </CardContent>
-          </Card>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card className="cursor-help hover:bg-muted/30 transition-colors">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-1">
+                    Lost
+                    <Info className="h-3 w-3 text-muted-foreground" />
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{insights.customerSegments.lost}</div>
+                  <Clock className="h-4 w-4 text-gray-500 mt-2" />
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[250px]">
+              <p className="font-medium">💤 Lost Customers</p>
+              <p className="text-xs text-muted-foreground">
+                Customers who haven&apos;t visited in over 90 days. These are win-back opportunities - a personal call or special offer might bring them back!
+              </p>
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
 
-      {/* Trends */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>New Customer Acquisition</CardTitle>
-            <CardDescription>Month over month comparison</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm">This Month</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl font-bold">{insights.trends.newCustomersThisMonth}</span>
-                  {getGrowthIcon(
-                    insights.trends.newCustomersThisMonth, 
-                    insights.trends.newCustomersLastMonth
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center justify-between text-gray-600">
-                <span className="text-sm">Last Month</span>
-                <span className="text-lg">{insights.trends.newCustomersLastMonth}</span>
-              </div>
-              <div className="text-sm text-gray-600">
-                {getGrowthPercentage(
-                  insights.trends.newCustomersThisMonth,
-                  insights.trends.newCustomersLastMonth
-                ).toFixed(0)}% change
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
+      {/* Customer Retention */}
+      <Card>
           <CardHeader>
             <CardTitle>Customer Retention</CardTitle>
             <CardDescription>Key retention metrics</CardDescription>
@@ -495,29 +1271,294 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
             </div>
           </CardContent>
         </Card>
-      </div>
 
       {/* Top Customers */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Most Frequent Visitors</CardTitle>
-            <CardDescription>Your most loyal customers</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {insights.topMetrics.mostFrequentCustomers.map((customer, index) => (
-                <div key={customer.id} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-500">#{index + 1}</span>
-                    <span className="text-sm font-medium">{customer.name}</span>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-blue-600" />
+            Most Frequent Visitors
+          </CardTitle>
+          <CardDescription>Your most loyal customers</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {insights.topMetrics.mostFrequentCustomers.length > 0 ? (
+              insights.topMetrics.mostFrequentCustomers.map((customer, index) => (
+                <div key={customer.id} className="flex items-center justify-between p-3 bg-muted/30 hover:bg-muted/50 rounded-lg transition-colors">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold text-muted-foreground w-5">#{index + 1}</span>
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={customer.avatarUrl} />
+                      <AvatarFallback className="text-xs">
+                        {customer.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-medium">{customer.name}</p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {customer.phone && (
+                          <a href={`tel:${customer.phone}`} className="flex items-center gap-1 hover:text-primary">
+                            <Phone className="h-3 w-3" />
+                          </a>
+                        )}
+                        {customer.email && (
+                          <a href={`mailto:${customer.email}`} className="flex items-center gap-1 hover:text-primary">
+                            <Mail className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-medium">{customer.visits} visits</div>
+                    <div className="text-sm font-bold">{customer.visits} visits</div>
                     {customer.lastVisit && (
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-muted-foreground">
                         Last: {format(new Date(customer.lastVisit), 'MMM d')}
                       </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4 col-span-full">No frequent visitors yet</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Upcoming Birthdays */}
+      {insights.topMetrics.upcomingBirthdays.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Cake className="h-5 w-5 text-pink-500" />
+              Upcoming Birthdays
+            </CardTitle>
+            <CardDescription>Customers celebrating in the next 30 days - great opportunity to personalize their experience!</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {insights.topMetrics.upcomingBirthdays.map((customer) => (
+                <div 
+                  key={customer.id} 
+                  className={`flex items-center gap-3 p-3 rounded-lg border ${
+                    customer.daysUntil === 0 
+                      ? 'bg-pink-50 border-pink-200' 
+                      : customer.daysUntil <= 7 
+                        ? 'bg-yellow-50 border-yellow-200'
+                        : 'bg-muted/30'
+                  }`}
+                >
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={customer.avatarUrl} />
+                    <AvatarFallback className="text-sm">
+                      {customer.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate">{customer.name}</p>
+                      {customer.isVip && (
+                        <Badge variant="secondary" className="text-xs">
+                          <Star className="h-3 w-3 mr-1" />
+                          VIP
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {customer.daysUntil === 0 ? (
+                        <span className="text-pink-600 font-medium flex items-center gap-1">
+                          <Gift className="h-3 w-3" /> Today! Turning {customer.age}
+                        </span>
+                      ) : customer.daysUntil === 1 ? (
+                        <span className="text-yellow-600 font-medium">Tomorrow! Turning {customer.age}</span>
+                      ) : (
+                        <span>In {customer.daysUntil} days • Turning {customer.age}</span>
+                      )}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      {customer.phone && (
+                        <a href={`tel:${customer.phone}`} className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1">
+                          <Phone className="h-3 w-3" />
+                        </a>
+                      )}
+                      {customer.email && (
+                        <a href={`mailto:${customer.email}`} className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1">
+                          <Mail className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ==========================================
+          NEW: ENHANCED PERSONALIZATION SECTIONS
+          ========================================== */}
+
+      {/* First Visit Anniversaries */}
+      {insights.firstVisitAnniversaries.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <PartyPopper className="h-5 w-5 text-purple-500" />
+              Loyalty Anniversaries
+            </CardTitle>
+            <CardDescription>Customers celebrating their journey with you - perfect time to show appreciation!</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {insights.firstVisitAnniversaries.map((customer) => (
+                <div 
+                  key={customer.id} 
+                  className={`flex items-center gap-3 p-3 rounded-lg border ${
+                    customer.daysUntil === 0 
+                      ? 'bg-purple-50 border-purple-200' 
+                      : customer.daysUntil <= 7 
+                        ? 'bg-indigo-50 border-indigo-200'
+                        : 'bg-muted/30'
+                  }`}
+                >
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={customer.avatarUrl} />
+                    <AvatarFallback className="text-sm">
+                      {customer.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate">{customer.name}</p>
+                      {customer.isVip && (
+                        <Badge variant="secondary" className="text-xs">
+                          <Star className="h-3 w-3 mr-1" />
+                          VIP
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {customer.daysUntil === 0 ? (
+                        <span className="text-purple-600 font-medium flex items-center gap-1">
+                          <Sparkles className="h-3 w-3" /> {customer.yearsWithUs} year{customer.yearsWithUs > 1 ? 's' : ''} today!
+                        </span>
+                      ) : customer.daysUntil === 1 ? (
+                        <span className="text-indigo-600 font-medium">{customer.yearsWithUs} year{customer.yearsWithUs > 1 ? 's' : ''} tomorrow!</span>
+                      ) : (
+                        <span>{customer.yearsWithUs} year{customer.yearsWithUs > 1 ? 's' : ''} in {customer.daysUntil} days</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {customer.totalVisits} visits • ${customer.totalSpent.toFixed(0)} total
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      {customer.phone && (
+                        <a href={`tel:${customer.phone}`} className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1">
+                          <Phone className="h-3 w-3" />
+                        </a>
+                      )}
+                      {customer.email && (
+                        <a href={`mailto:${customer.email}`} className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1">
+                          <Mail className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Top Spenders */}
+      {insights.topSpenders.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-green-600" />
+              Top Spenders
+            </CardTitle>
+            <CardDescription>Your highest value customers - treat them like royalty!</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {insights.topSpenders.slice(0, 6).map((customer, index) => (
+                <div key={customer.id} className="flex items-center justify-between p-3 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 rounded-lg border border-green-200 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold text-green-600 w-5">#{index + 1}</span>
+                    <Avatar className="h-8 w-8 ring-2 ring-green-200">
+                      <AvatarImage src={customer.avatarUrl} />
+                      <AvatarFallback className="text-xs bg-green-100">
+                        {customer.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <div className="flex items-center gap-1">
+                        <p className="text-sm font-medium">{customer.name}</p>
+                        {customer.isVip && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {customer.visits} visits • ${customer.averageSpendPerVisit.toFixed(0)}/visit
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-bold text-green-700">${customer.totalSpent.toFixed(0)}</div>
+                    <div className="text-xs text-muted-foreground">lifetime</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* VIP Candidates */}
+      {insights.vipCandidates.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Crown className="h-5 w-5 text-amber-500" />
+              VIP Candidates
+            </CardTitle>
+            <CardDescription>Loyal customers who deserve VIP recognition - consider upgrading them!</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {insights.vipCandidates.slice(0, 6).map((customer) => (
+                <div key={customer.id} className="flex items-center justify-between p-3 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-lg border border-amber-200">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10 ring-2 ring-amber-300">
+                      <AvatarImage src={customer.avatarUrl} />
+                      <AvatarFallback className="text-sm bg-amber-100">
+                        {customer.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-medium">{customer.name}</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {customer.reasons.map((reason, i) => (
+                          <Badge key={i} variant="secondary" className="text-xs bg-amber-100 text-amber-800">
+                            {reason}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {customer.phone && (
+                      <a href={`tel:${customer.phone}`} className="text-muted-foreground hover:text-primary">
+                        <Phone className="h-4 w-4" />
+                      </a>
+                    )}
+                    {customer.email && (
+                      <a href={`mailto:${customer.email}`} className="text-muted-foreground hover:text-primary">
+                        <Mail className="h-4 w-4" />
+                      </a>
                     )}
                   </div>
                 </div>
@@ -525,9 +1566,144 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
             </div>
           </CardContent>
         </Card>
+      )}
 
-    
-      </div>
+      {/* Visit Milestones */}
+      {insights.visitMilestones.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-orange-500" />
+              Approaching Milestones
+            </CardTitle>
+            <CardDescription>Customers close to visit milestones - celebrate their loyalty!</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+              {insights.visitMilestones.slice(0, 8).map((customer) => (
+                <div key={customer.id} className="p-3 bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg border border-orange-200 text-center">
+                  <Avatar className="h-12 w-12 mx-auto mb-2 ring-2 ring-orange-300">
+                    <AvatarImage src={customer.avatarUrl} />
+                    <AvatarFallback className="text-sm bg-orange-100">
+                      {customer.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <p className="text-sm font-medium truncate">{customer.name}</p>
+                  <div className="mt-2">
+                    <div className="flex items-center justify-center gap-1 text-orange-600">
+                      <Target className="h-4 w-4" />
+                      <span className="font-bold">{customer.nextMilestone}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {customer.visitsToMilestone} more visit{customer.visitsToMilestone > 1 ? 's' : ''} to go!
+                    </p>
+                    <div className="w-full bg-orange-200 rounded-full h-1.5 mt-2">
+                      <div 
+                        className="bg-orange-500 h-1.5 rounded-full transition-all" 
+                        style={{ width: `${(customer.visits / customer.nextMilestone) * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">{customer.visits}/{customer.nextMilestone} visits</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Win-Back Opportunities */}
+      {insights.winBackOpportunities.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-blue-500" />
+              Win-Back Opportunities
+            </CardTitle>
+            <CardDescription>Former regulars who haven&apos;t visited recently - reach out and bring them back!</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {insights.winBackOpportunities.slice(0, 8).map((customer) => (
+                <div key={customer.id} className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-sky-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={customer.avatarUrl} />
+                      <AvatarFallback className="text-sm bg-blue-100">
+                        {customer.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-medium">{customer.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {customer.previousVisitCount} past visits • ${customer.totalSpent.toFixed(0)} spent
+                      </p>
+                      <p className="text-xs text-blue-600 font-medium">
+                        <Timer className="h-3 w-3 inline mr-1" />
+                        {customer.daysSinceLastVisit} days since last visit
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {customer.phone && (
+                      <a href={`tel:${customer.phone}`} className="p-2 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors">
+                        <Phone className="h-4 w-4" />
+                      </a>
+                    )}
+                    {customer.email && (
+                      <a href={`mailto:${customer.email}`} className="p-2 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors">
+                        <Mail className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Booking Time Distribution */}
+      {Object.values(insights.bookingTimeDistribution).some(v => v > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-indigo-500" />
+              Popular Booking Times
+            </CardTitle>
+            <CardDescription>When your customers prefer to dine - use this for staffing and marketing</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              {[
+                { key: 'morning', label: 'Morning', icon: <Sun className="h-5 w-5 text-yellow-500" />, time: 'Before 12pm', value: insights.bookingTimeDistribution.morning },
+                { key: 'lunch', label: 'Lunch', icon: <Sun className="h-5 w-5 text-orange-500" />, time: '12pm - 3pm', value: insights.bookingTimeDistribution.lunch },
+                { key: 'afternoon', label: 'Afternoon', icon: <Sunset className="h-5 w-5 text-amber-500" />, time: '3pm - 5pm', value: insights.bookingTimeDistribution.afternoon },
+                { key: 'dinner', label: 'Dinner', icon: <Sunset className="h-5 w-5 text-red-500" />, time: '5pm - 9pm', value: insights.bookingTimeDistribution.dinner },
+                { key: 'lateNight', label: 'Late Night', icon: <Moon className="h-5 w-5 text-indigo-500" />, time: 'After 9pm', value: insights.bookingTimeDistribution.lateNight }
+              ].map((slot) => {
+                const total = Object.values(insights.bookingTimeDistribution).reduce((a, b) => a + b, 0)
+                const percentage = total > 0 ? (slot.value / total) * 100 : 0
+                return (
+                  <div key={slot.key} className="p-3 rounded-lg bg-muted/30 text-center">
+                    {slot.icon}
+                    <p className="text-sm font-medium mt-1">{slot.label}</p>
+                    <p className="text-xs text-muted-foreground">{slot.time}</p>
+                    <p className="text-lg font-bold mt-1">{slot.value}</p>
+                    <p className="text-xs text-muted-foreground">{percentage.toFixed(0)}%</p>
+                    <div className="w-full bg-muted rounded-full h-1.5 mt-2">
+                      <div 
+                        className="bg-indigo-500 h-1.5 rounded-full transition-all" 
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Risk Metrics */}
       <Card>
@@ -569,6 +1745,351 @@ export function CustomerInsights({ restaurantId }: CustomerInsightsProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* ==========================================
+          NEW: ADDITIONAL ANALYTICS SECTIONS
+          ========================================== */}
+
+      {/* Recent Activity Summary */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-cyan-500" />
+            Recent Activity
+          </CardTitle>
+          <CardDescription>Last 7 days performance at a glance</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="p-4 rounded-lg bg-gradient-to-br from-cyan-50 to-sky-50 border border-cyan-100 text-center">
+              <p className="text-sm text-muted-foreground">Today&apos;s Bookings</p>
+              <p className="text-2xl font-bold text-cyan-600">{insights.recentActivity.todayBookings}</p>
+            </div>
+            <div className="p-4 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 text-center">
+              <p className="text-sm text-muted-foreground">Last 7 Days</p>
+              <p className="text-2xl font-bold text-blue-600">{insights.recentActivity.last7DaysBookings}</p>
+            </div>
+            <div className="p-4 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 border border-green-100 text-center">
+              <p className="text-sm text-muted-foreground">New Guests</p>
+              <p className="text-2xl font-bold text-green-600">{insights.recentActivity.last7DaysNewCustomers}</p>
+            </div>
+            <div className="p-4 rounded-lg bg-gradient-to-br from-purple-50 to-violet-50 border border-purple-100 text-center">
+              <p className="text-sm text-muted-foreground">Returning</p>
+              <p className="text-2xl font-bold text-purple-600">{insights.recentActivity.last7DaysReturning}</p>
+            </div>
+            <div className={`p-4 rounded-lg text-center ${insights.recentActivity.comparedToLastWeek >= 0 ? 'bg-gradient-to-br from-green-50 to-emerald-50 border border-green-100' : 'bg-gradient-to-br from-red-50 to-pink-50 border border-red-100'}`}>
+              <p className="text-sm text-muted-foreground">vs Last Week</p>
+              <div className="flex items-center justify-center gap-1">
+                {insights.recentActivity.comparedToLastWeek >= 0 ? (
+                  <ChevronUp className="h-5 w-5 text-green-600" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-red-600" />
+                )}
+                <p className={`text-2xl font-bold ${insights.recentActivity.comparedToLastWeek >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {Math.abs(insights.recentActivity.comparedToLastWeek).toFixed(0)}%
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Monthly Growth Chart */}
+      {insights.monthlyGrowth.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-indigo-500" />
+              Monthly Growth Trend
+            </CardTitle>
+            <CardDescription>Customer acquisition over the last 6 months</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {insights.monthlyGrowth.map((month, index) => {
+                const maxBookings = Math.max(...insights.monthlyGrowth.map(m => m.totalBookings))
+                const percentage = maxBookings > 0 ? (month.totalBookings / maxBookings) * 100 : 0
+                return (
+                  <div key={month.month} className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium">{month.month}</span>
+                      <div className="flex items-center gap-4 text-muted-foreground">
+                        <span className="text-green-600">{month.newCustomers} new</span>
+                        <span className="text-blue-600">{month.returningCustomers} returning</span>
+                        <span className="font-medium text-foreground">{month.totalBookings} bookings</span>
+                      </div>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div 
+                        className="bg-gradient-to-r from-indigo-500 to-purple-500 h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Day of Week Patterns */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarDays className="h-5 w-5 text-teal-500" />
+            Day of Week Patterns
+          </CardTitle>
+          <CardDescription>
+            <span className="text-green-600 font-medium">{insights.dayOfWeekPatterns.busiestDay}</span> is your busiest day, 
+            <span className="text-orange-600 font-medium"> {insights.dayOfWeekPatterns.slowestDay}</span> is slowest
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-7 gap-2">
+            {Object.entries(insights.dayOfWeekPatterns.distribution).map(([day, count]) => {
+              const total = Object.values(insights.dayOfWeekPatterns.distribution).reduce((a, b) => a + b, 0)
+              const percentage = total > 0 ? (count / total) * 100 : 0
+              const isBusiest = day === insights.dayOfWeekPatterns.busiestDay.toLowerCase()
+              const isSlowest = day === insights.dayOfWeekPatterns.slowestDay.toLowerCase()
+              return (
+                <div 
+                  key={day} 
+                  className={`p-3 rounded-lg text-center ${
+                    isBusiest ? 'bg-green-100 border-2 border-green-300' :
+                    isSlowest ? 'bg-orange-100 border-2 border-orange-300' :
+                    'bg-muted/30'
+                  }`}
+                >
+                  <p className="text-xs font-medium uppercase text-muted-foreground">{day.slice(0, 3)}</p>
+                  <p className="text-lg font-bold mt-1">{count}</p>
+                  <p className="text-xs text-muted-foreground">{percentage.toFixed(0)}%</p>
+                </div>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Party Size Analytics */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UsersRound className="h-5 w-5 text-violet-500" />
+            Party Size Analytics
+          </CardTitle>
+          <CardDescription>
+            Average party size: <span className="font-bold text-foreground">{insights.partySizeAnalytics.averagePartySize.toFixed(1)} guests</span>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="grid grid-cols-5 gap-2">
+              {[
+                { key: 'solo', label: 'Solo', count: insights.partySizeAnalytics.distribution.solo, size: '1' },
+                { key: 'couple', label: 'Couple', count: insights.partySizeAnalytics.distribution.couple, size: '2' },
+                { key: 'small', label: 'Small', count: insights.partySizeAnalytics.distribution.small, size: '3-4' },
+                { key: 'medium', label: 'Medium', count: insights.partySizeAnalytics.distribution.medium, size: '5-6' },
+                { key: 'large', label: 'Large', count: insights.partySizeAnalytics.distribution.large, size: '7+' }
+              ].map((size) => {
+                const total = Object.values(insights.partySizeAnalytics.distribution).reduce((a, b) => a + b, 0)
+                const percentage = total > 0 ? (size.count / total) * 100 : 0
+                return (
+                  <div key={size.key} className="p-3 rounded-lg bg-violet-50 border border-violet-100 text-center">
+                    <p className="text-xs text-muted-foreground">{size.label}</p>
+                    <p className="text-xs text-violet-600">({size.size})</p>
+                    <p className="text-lg font-bold text-violet-700 mt-1">{size.count}</p>
+                    <p className="text-xs text-muted-foreground">{percentage.toFixed(0)}%</p>
+                  </div>
+                )
+              })}
+            </div>
+
+            {insights.partySizeAnalytics.largePartyCustomers.length > 0 && (
+              <div className="mt-4">
+                <p className="text-sm font-medium mb-2">Large Party Regulars (avg 5+ guests)</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {insights.partySizeAnalytics.largePartyCustomers.slice(0, 4).map((customer) => (
+                    <div key={customer.id} className="flex items-center justify-between p-2 bg-violet-50 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium">{customer.name}</p>
+                        <p className="text-xs text-muted-foreground">{customer.bookings} bookings</p>
+                      </div>
+                      <Badge variant="secondary" className="bg-violet-100">
+                        ~{customer.averagePartySize.toFixed(1)} guests
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Booking Lead Time */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Hourglass className="h-5 w-5 text-amber-500" />
+            Booking Lead Time
+          </CardTitle>
+          <CardDescription>
+            Average booking lead time: <span className="font-bold text-foreground">{insights.bookingLeadTime.averageDays.toFixed(1)} days</span>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="grid grid-cols-5 gap-2">
+              {[
+                { key: 'sameDay', label: 'Same Day', count: insights.bookingLeadTime.distribution.sameDay },
+                { key: 'nextDay', label: 'Next Day', count: insights.bookingLeadTime.distribution.nextDay },
+                { key: 'thisWeek', label: '2-7 Days', count: insights.bookingLeadTime.distribution.thisWeek },
+                { key: 'nextWeek', label: '8-14 Days', count: insights.bookingLeadTime.distribution.nextWeek },
+                { key: 'further', label: '15+ Days', count: insights.bookingLeadTime.distribution.further }
+              ].map((lead) => {
+                const total = Object.values(insights.bookingLeadTime.distribution).reduce((a, b) => a + b, 0)
+                const percentage = total > 0 ? (lead.count / total) * 100 : 0
+                return (
+                  <div key={lead.key} className="p-3 rounded-lg bg-amber-50 border border-amber-100 text-center">
+                    <p className="text-xs text-muted-foreground">{lead.label}</p>
+                    <p className="text-lg font-bold text-amber-700 mt-1">{lead.count}</p>
+                    <p className="text-xs text-muted-foreground">{percentage.toFixed(0)}%</p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Visit Frequency */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <RefreshCw className="h-5 w-5 text-emerald-500" />
+            Visit Frequency Distribution
+          </CardTitle>
+          <CardDescription>How often your customers return</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-5 gap-3">
+            {[
+              { key: 'weekly', label: 'Weekly', desc: 'Every week', count: insights.visitFrequency.weekly, color: 'emerald' },
+              { key: 'biweekly', label: 'Bi-Weekly', desc: 'Every 2 weeks', count: insights.visitFrequency.biweekly, color: 'green' },
+              { key: 'monthly', label: 'Monthly', desc: 'Once a month', count: insights.visitFrequency.monthly, color: 'blue' },
+              { key: 'quarterly', label: 'Quarterly', desc: 'Every 3 months', count: insights.visitFrequency.quarterly, color: 'purple' },
+              { key: 'occasional', label: 'Occasional', desc: 'Less frequent', count: insights.visitFrequency.occasional, color: 'gray' }
+            ].map((freq) => {
+              const total = Object.values(insights.visitFrequency).reduce((a, b) => a + b, 0)
+              const percentage = total > 0 ? (freq.count / total) * 100 : 0
+              return (
+                <div key={freq.key} className={`p-3 rounded-lg bg-${freq.color}-50 border border-${freq.color}-100 text-center`}>
+                  <p className="text-sm font-medium">{freq.label}</p>
+                  <p className="text-xs text-muted-foreground">{freq.desc}</p>
+                  <p className={`text-xl font-bold text-${freq.color}-700 mt-2`}>{freq.count}</p>
+                  <p className="text-xs text-muted-foreground">{percentage.toFixed(0)}%</p>
+                </div>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Customer Preferences */}
+      {insights.customerPreferences.customersWithSpecialNeeds > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Leaf className="h-5 w-5 text-lime-500" />
+              Customer Dietary Preferences
+            </CardTitle>
+            <CardDescription>
+              {insights.customerPreferences.customersWithSpecialNeeds} customers with special dietary needs or allergies
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <p className="text-sm font-medium mb-3">Dietary Requirements</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: 'vegetarian', label: 'Vegetarian', count: insights.customerPreferences.dietaryBreakdown.vegetarian, emoji: '🥗' },
+                    { key: 'vegan', label: 'Vegan', count: insights.customerPreferences.dietaryBreakdown.vegan, emoji: '🌱' },
+                    { key: 'glutenFree', label: 'Gluten-Free', count: insights.customerPreferences.dietaryBreakdown.glutenFree, emoji: '🌾' },
+                    { key: 'dairyFree', label: 'Dairy-Free', count: insights.customerPreferences.dietaryBreakdown.dairyFree, emoji: '🥛' },
+                    { key: 'halal', label: 'Halal', count: insights.customerPreferences.dietaryBreakdown.halal, emoji: '☪️' },
+                    { key: 'kosher', label: 'Kosher', count: insights.customerPreferences.dietaryBreakdown.kosher, emoji: '✡️' }
+                  ].filter(d => d.count > 0).map((diet) => (
+                    <div key={diet.key} className="flex items-center justify-between p-2 bg-lime-50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <span>{diet.emoji}</span>
+                        <span className="text-sm">{diet.label}</span>
+                      </div>
+                      <Badge variant="secondary">{diet.count}</Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {insights.customerPreferences.topAllergies.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium mb-3">Common Allergies</p>
+                  <div className="space-y-2">
+                    {insights.customerPreferences.topAllergies.map((allergy) => (
+                      <div key={allergy.allergy} className="flex items-center justify-between p-2 bg-red-50 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-red-500" />
+                          <span className="text-sm capitalize">{allergy.allergy}</span>
+                        </div>
+                        <Badge variant="destructive">{allergy.count}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* No-Show Risk Customers */}
+      {insights.noShowRiskCustomers.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-500" />
+              No-Show Risk Customers
+            </CardTitle>
+            <CardDescription>Customers with history of no-shows - consider requiring deposits or confirmations</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {insights.noShowRiskCustomers.map((customer) => (
+                <div key={customer.id} className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium">{customer.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {customer.totalBookings} total bookings
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Badge variant="destructive">
+                      {customer.noShowRate.toFixed(0)}% no-show
+                    </Badge>
+                    {customer.phone && (
+                      <a href={`tel:${customer.phone}`} className="text-muted-foreground hover:text-primary">
+                        <Phone className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
+    </TooltipProvider>
   )
 }

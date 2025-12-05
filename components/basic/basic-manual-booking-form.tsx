@@ -1,7 +1,7 @@
 // components/basic/basic-manual-booking-form.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useForm, SubmitHandler } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -25,7 +25,17 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { 
   CalendarIcon, 
@@ -33,10 +43,26 @@ import {
   AlertCircle, 
   Users,
   UserCheck,
+  UserPlus,
   MapPin,
-  Gift
+  Gift,
+  Search,
+  Star,
+  Crown,
+  X,
+  Loader2,
+  CheckCircle,
+  Phone,
+  Mail,
+  Cake,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  History,
+  DollarSign,
 } from "lucide-react"
 import { toast } from "react-hot-toast"
+import { useDebounce } from "@/hooks/use-debounce"
 
 // Simplified form schema for basic restaurants (no tables, no existing customers)
 const formSchema = z.object({
@@ -62,6 +88,102 @@ interface BasicManualBookingFormProps {
   onSubmit: (data: any) => void
   onCancel: () => void
   isLoading: boolean
+  hasGuestCRM?: boolean // Whether restaurant has Guest CRM addon
+}
+
+// Customer type from restaurant_customers table (matches search_customers_fuzzy RPC return type)
+interface RestaurantCustomer {
+  id: string
+  user_id: string | null
+  guest_name: string | null
+  guest_email: string | null
+  guest_phone: string | null
+  total_bookings: number
+  total_spent: number
+  vip_status: boolean
+  blacklisted: boolean
+  preferred_table_types: string[] | null
+  preferred_time_slots: string[] | null
+  last_visit: string | null
+  first_visit: string | null
+  no_show_count: number
+  cancelled_count: number
+  average_party_size?: number | null
+  notes?: string | null
+  similarity_score?: number
+  date_of_birth?: string | null
+  dietary_restrictions?: string[] | null
+  allergies?: string[] | null
+  // Legacy profile field for backward compatibility
+  profile?: {
+    dietary_restrictions?: string[] | null
+    allergies?: string[] | null
+    date_of_birth?: string | null
+  } | null
+}
+
+// Helper: Check if birthday is within N days from today
+function isBirthdaySoon(dateOfBirth: string | null | undefined, withinDays: number = 7): boolean {
+  if (!dateOfBirth) return false
+  
+  const today = new Date()
+  const dob = new Date(dateOfBirth)
+  
+  // Create this year's birthday
+  const thisYearBirthday = new Date(
+    today.getFullYear(),
+    dob.getMonth(),
+    dob.getDate()
+  )
+  
+  // If birthday already passed this year, check next year
+  if (thisYearBirthday < today) {
+    thisYearBirthday.setFullYear(today.getFullYear() + 1)
+  }
+  
+  // Calculate days until birthday
+  const diffTime = thisYearBirthday.getTime() - today.getTime()
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  
+  return diffDays >= 0 && diffDays <= withinDays
+}
+
+// Helper: Get days until birthday
+function getDaysUntilBirthday(dateOfBirth: string | null | undefined): number | null {
+  if (!dateOfBirth) return null
+  
+  const today = new Date()
+  const dob = new Date(dateOfBirth)
+  
+  const thisYearBirthday = new Date(
+    today.getFullYear(),
+    dob.getMonth(),
+    dob.getDate()
+  )
+  
+  if (thisYearBirthday < today) {
+    thisYearBirthday.setFullYear(today.getFullYear() + 1)
+  }
+  
+  const diffTime = thisYearBirthday.getTime() - today.getTime()
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+}
+
+// Helper: Format date for display
+function formatRelativeDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'Never'
+  
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffTime = now.getTime() - date.getTime()
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+  
+  if (diffDays === 0) return 'Today'
+  if (diffDays === 1) return 'Yesterday'
+  if (diffDays < 7) return `${diffDays} days ago`
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`
+  return `${Math.floor(diffDays / 365)} years ago`
 }
 
 export function BasicManualBookingForm({
@@ -69,8 +191,22 @@ export function BasicManualBookingForm({
   onSubmit,
   onCancel,
   isLoading,
+  hasGuestCRM = false,
 }: BasicManualBookingFormProps) {
   const supabase = createClient()
+  
+  // Customer search state (for Guest CRM addon)
+  const [customerSearch, setCustomerSearch] = useState("")
+  const [showCustomerResults, setShowCustomerResults] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState<RestaurantCustomer | null>(null)
+  const debouncedSearch = useDebounce(customerSearch, 300)
+  
+  // Matching customer dialog state (for prompting to use existing or add new)
+  const [showMatchingDialog, setShowMatchingDialog] = useState(false)
+  const [matchingCustomers, setMatchingCustomers] = useState<RestaurantCustomer[]>([])
+  const [pendingBookingData, setPendingBookingData] = useState<any>(null)
+  const [isCheckingMatches, setIsCheckingMatches] = useState(false)
+  const [showAddToGuestPrompt, setShowAddToGuestPrompt] = useState(false)
 
   const {
     register,
@@ -213,6 +349,92 @@ export function BasicManualBookingForm({
     enabled: !!restaurantId && !!bookingDate,
   })
 
+  // Search customers when Guest CRM addon is enabled - using fuzzy search RPC
+  const { data: searchResults, isLoading: isSearchingCustomers } = useQuery({
+    queryKey: ["customer-search-fuzzy", restaurantId, debouncedSearch],
+    queryFn: async () => {
+      if (!debouncedSearch || debouncedSearch.length < 2) return []
+      
+      // Use fuzzy search RPC for better matching (handles typos and similar names)
+      const { data, error } = await supabase.rpc('search_customers_fuzzy', {
+        p_restaurant_id: restaurantId,
+        p_search_term: debouncedSearch,
+        p_limit: 10
+      })
+      
+      if (error) {
+        console.error('Fuzzy customer search error:', error)
+        // Fallback to basic search if RPC fails
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from("restaurant_customers")
+          .select(`
+            id, user_id, guest_name, guest_email, guest_phone,
+            total_bookings, total_spent, vip_status, blacklisted,
+            preferred_table_types, preferred_time_slots,
+            last_visit, first_visit, no_show_count, cancelled_count,
+            average_party_size, notes
+          `)
+          .eq("restaurant_id", restaurantId)
+          .eq("blacklisted", false)
+          .or(`guest_name.ilike.%${debouncedSearch}%,guest_email.ilike.%${debouncedSearch}%,guest_phone.ilike.%${debouncedSearch}%`)
+          .order("total_bookings", { ascending: false })
+          .limit(10)
+        
+        if (fallbackError) {
+          console.error('Fallback search error:', fallbackError)
+          return []
+        }
+        return (fallbackData || []) as RestaurantCustomer[]
+      }
+      
+      return (data || []) as RestaurantCustomer[]
+    },
+    enabled: hasGuestCRM && !!restaurantId && debouncedSearch.length >= 2,
+  })
+
+  // Handle customer selection from search results
+  const handleSelectCustomer = useCallback((customer: RestaurantCustomer) => {
+    setSelectedCustomer(customer)
+    setShowCustomerResults(false)
+    setCustomerSearch("")
+    
+    // Auto-fill form fields with customer data
+    setValue("guest_name", customer.guest_name || "")
+    setValue("guest_email", customer.guest_email || "")
+    
+    // Handle phone: strip +961 prefix if present for the form field
+    if (customer.guest_phone) {
+      const phoneWithoutPrefix = customer.guest_phone.replace(/^\+961/, "")
+      setValue("guest_phone", phoneWithoutPrefix)
+    }
+    
+    // Auto-fill dietary notes from either new flat fields or legacy profile
+    const dietaryPrefs: string[] = []
+    const dietaryRestrictions = customer.dietary_restrictions || customer.profile?.dietary_restrictions
+    const allergies = customer.allergies || customer.profile?.allergies
+    
+    if (dietaryRestrictions?.length) {
+      dietaryPrefs.push(...dietaryRestrictions)
+    }
+    if (allergies?.length) {
+      dietaryPrefs.push(...allergies.map(a => `Allergy: ${a}`))
+    }
+    if (dietaryPrefs.length > 0) {
+      setValue("dietary_notes", dietaryPrefs.join(", "))
+    }
+    
+    toast.success(`Selected ${customer.guest_name}${customer.vip_status ? ' (VIP)' : ''}`)
+  }, [setValue])
+
+  // Clear selected customer
+  const handleClearCustomer = useCallback(() => {
+    setSelectedCustomer(null)
+    setValue("guest_name", "")
+    setValue("guest_email", "")
+    setValue("guest_phone", "")
+    setValue("dietary_notes", "")
+  }, [setValue])
+
   // Get the selected event details
   const selectedEvent = upcomingEvents?.find(e => e.id === selectedEventId)
 
@@ -228,6 +450,84 @@ export function BasicManualBookingForm({
     }
   }, [selectedEvent, setValue])
 
+  // Check for matching customers in the database
+  const checkForMatchingCustomers = async (name: string, email: string | null, phone: string | null) => {
+    if (!hasGuestCRM) return []
+    
+    const conditions: string[] = []
+    
+    // Build search conditions
+    if (name) {
+      conditions.push(`guest_name.ilike.%${name}%`)
+    }
+    if (email) {
+      conditions.push(`guest_email.eq.${email}`)
+    }
+    if (phone) {
+      conditions.push(`guest_phone.eq.${phone}`)
+    }
+    
+    if (conditions.length === 0) return []
+    
+    const { data, error } = await supabase
+      .from("restaurant_customers")
+      .select(`
+        id,
+        user_id,
+        guest_name,
+        guest_email,
+        guest_phone,
+        total_bookings,
+        total_spent,
+        vip_status,
+        blacklisted,
+        preferred_table_types,
+        preferred_time_slots,
+        last_visit,
+        first_visit,
+        no_show_count,
+        cancelled_count
+      `)
+      .eq("restaurant_id", restaurantId)
+      .eq("blacklisted", false)
+      .or(conditions.join(','))
+      .limit(5)
+    
+    if (error) {
+      console.error('Error checking for matching customers:', error)
+      return []
+    }
+    
+    return (data || []) as RestaurantCustomer[]
+  }
+
+  // Add new customer to restaurant_customers
+  const addNewCustomer = async (name: string, email: string | null, phone: string | null) => {
+    const { data, error } = await supabase
+      .from("restaurant_customers")
+      .insert({
+        restaurant_id: restaurantId,
+        guest_name: name,
+        guest_email: email,
+        guest_phone: phone,
+        total_bookings: 0,
+        total_spent: 0,
+        vip_status: false,
+        blacklisted: false,
+      })
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('Error adding new customer:', error)
+      toast.error('Failed to add customer to database')
+      return null
+    }
+    
+    toast.success(`Added ${name} to your guest database!`)
+    return data as RestaurantCustomer
+  }
+
   const handleFormSubmit: SubmitHandler<FormData> = async (data: FormData): Promise<void> => {
     // Validate required fields
     if (!data.guest_name?.trim()) {
@@ -240,11 +540,13 @@ export function BasicManualBookingForm({
     const bookingDateTime = new Date(data.booking_date)
     bookingDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0)
 
+    const guestPhone = data.guest_phone?.trim() ? `+961${data.guest_phone.trim()}` : null
+
     // Prepare booking data
     const processedData = {
       guest_name: data.guest_name.trim(),
       guest_email: data.guest_email?.trim() || null,
-      guest_phone: data.guest_phone?.trim() ? `+961${data.guest_phone.trim()}` : null,
+      guest_phone: guestPhone,
       booking_time: bookingDateTime.toISOString(),
       party_size: data.party_size,
       status: data.status,
@@ -256,23 +558,418 @@ export function BasicManualBookingForm({
       event_occurrence_id: data.event_occurrence_id || null,
       is_event_booking: !!data.event_occurrence_id,
       turn_time_minutes: 120, // Default 2 hours
+      // Include selected customer info if using Guest CRM
+      customer_id: selectedCustomer?.id || null,
+      user_id: selectedCustomer?.user_id || null,
     }
 
+    // If a customer is already selected from CRM, just submit
+    if (selectedCustomer) {
+      onSubmit(processedData)
+      return
+    }
+
+    // For Guest CRM users, check for matching customers before creating
+    if (hasGuestCRM) {
+      setIsCheckingMatches(true)
+      const matches = await checkForMatchingCustomers(
+        data.guest_name.trim(),
+        data.guest_email?.trim() || null,
+        guestPhone
+      )
+      setIsCheckingMatches(false)
+
+      if (matches.length > 0) {
+        // Show dialog to select existing customer or create new
+        setMatchingCustomers(matches)
+        setPendingBookingData(processedData)
+        setShowMatchingDialog(true)
+        return
+      } else {
+        // No matches found - ask if they want to add as new guest
+        setPendingBookingData(processedData)
+        setShowAddToGuestPrompt(true)
+        return
+      }
+    }
+
+    // Non-CRM users just submit directly
     onSubmit(processedData)
+  }
+
+  // Handle selecting an existing customer from matches
+  const handleSelectExistingCustomer = (customer: RestaurantCustomer) => {
+    if (!pendingBookingData) return
+    
+    const updatedData = {
+      ...pendingBookingData,
+      customer_id: customer.id,
+      user_id: customer.user_id,
+    }
+    
+    setShowMatchingDialog(false)
+    setMatchingCustomers([])
+    setPendingBookingData(null)
+    onSubmit(updatedData)
+  }
+
+  // Handle creating booking without linking to existing customer
+  const handleCreateWithoutLinking = () => {
+    if (!pendingBookingData) return
+    
+    setShowMatchingDialog(false)
+    setMatchingCustomers([])
+    // Show prompt to add as new guest
+    setShowAddToGuestPrompt(true)
+  }
+
+  // Handle adding new guest and creating booking
+  const handleAddNewGuestAndSubmit = async () => {
+    if (!pendingBookingData) return
+    
+    setIsCheckingMatches(true)
+    const newCustomer = await addNewCustomer(
+      pendingBookingData.guest_name,
+      pendingBookingData.guest_email,
+      pendingBookingData.guest_phone
+    )
+    setIsCheckingMatches(false)
+    
+    const updatedData = {
+      ...pendingBookingData,
+      customer_id: newCustomer?.id || null,
+      user_id: newCustomer?.user_id || null,
+    }
+    
+    setShowAddToGuestPrompt(false)
+    setPendingBookingData(null)
+    onSubmit(updatedData)
+  }
+
+  // Handle skipping adding to guest database
+  const handleSkipAddGuest = () => {
+    if (!pendingBookingData) return
+    
+    setShowAddToGuestPrompt(false)
+    setPendingBookingData(null)
+    onSubmit(pendingBookingData)
   }
 
   return (
     <div className="basic-manual-booking-form max-w-full overflow-x-hidden">
       <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6 max-w-full overflow-x-hidden pb-24">
         
+        {/* Guest CRM Search Section - Only shown when addon is enabled */}
+        {hasGuestCRM && (
+          <div className="space-y-4 rounded-xl border border-amber-200 dark:border-amber-700 p-6 bg-amber-50 dark:bg-amber-950/30 shadow-sm">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+              <Crown className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              Search Existing Guest
+              <Badge variant="outline" className="ml-2 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 border-amber-300">
+                Guest CRM
+              </Badge>
+            </h3>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Search your customer database to auto-fill guest details
+            </p>
+            
+            {selectedCustomer ? (
+              // Show selected customer card with stats
+              <div className="space-y-4">
+                {/* Customer Header Card */}
+                <div className="flex items-center justify-between gap-4 p-4 rounded-lg bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-700">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
+                      {selectedCustomer.vip_status ? (
+                        <Crown className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                      ) : (
+                        <UserCheck className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-slate-900 dark:text-slate-100">
+                          {selectedCustomer.guest_name}
+                        </span>
+                        {selectedCustomer.vip_status && (
+                          <Badge className="bg-amber-500 text-white">
+                            VIP
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+                        <span>{selectedCustomer.total_bookings} visits</span>
+                        {selectedCustomer.guest_email && <span>• {selectedCustomer.guest_email}</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearCustomer}
+                    className="text-slate-500 hover:text-red-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {/* Birthday Alert - if birthday is within 7 days */}
+                {(() => {
+                  const dob = selectedCustomer.date_of_birth || selectedCustomer.profile?.date_of_birth
+                  if (isBirthdaySoon(dob, 7)) {
+                    const daysUntil = getDaysUntilBirthday(dob)
+                    const birthdayDate = dob ? new Date(dob) : null
+                    return (
+                      <Alert className="bg-pink-50 dark:bg-pink-950/30 border-pink-200 dark:border-pink-800">
+                        <Cake className="h-4 w-4 text-pink-600 dark:text-pink-400" />
+                        <AlertDescription className="text-pink-900 dark:text-pink-100">
+                          <strong>🎂 Birthday {daysUntil === 0 ? 'Today!' : `in ${daysUntil} day${daysUntil === 1 ? '' : 's'}!`}</strong>
+                          {birthdayDate && ` (${format(birthdayDate, 'MMMM d')})`}
+                          {' - Consider adding a special touch to their booking!'}
+                        </AlertDescription>
+                      </Alert>
+                    )
+                  }
+                  return null
+                })()}
+
+                {/* Customer Stats Card */}
+                <Card className="bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
+                  <CardContent className="p-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      {/* Total Visits */}
+                      <div className="text-center p-2 rounded-lg bg-white dark:bg-slate-800">
+                        <div className="flex items-center justify-center gap-1 text-blue-600 dark:text-blue-400 mb-1">
+                          <History className="h-4 w-4" />
+                        </div>
+                        <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                          {selectedCustomer.total_bookings}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Total Visits</p>
+                      </div>
+
+                      {/* Last Visit */}
+                      <div className="text-center p-2 rounded-lg bg-white dark:bg-slate-800">
+                        <div className="flex items-center justify-center gap-1 text-green-600 dark:text-green-400 mb-1">
+                          <CalendarIcon className="h-4 w-4" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {formatRelativeDate(selectedCustomer.last_visit)}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Last Visit</p>
+                      </div>
+
+                      {/* Avg Party Size */}
+                      <div className="text-center p-2 rounded-lg bg-white dark:bg-slate-800">
+                        <div className="flex items-center justify-center gap-1 text-purple-600 dark:text-purple-400 mb-1">
+                          <Users className="h-4 w-4" />
+                        </div>
+                        <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                          {selectedCustomer.average_party_size 
+                            ? Number(selectedCustomer.average_party_size).toFixed(1) 
+                            : '-'}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Avg Party</p>
+                      </div>
+
+                      {/* No-Show Rate */}
+                      {(() => {
+                        const total = selectedCustomer.total_bookings || 0
+                        const noShows = selectedCustomer.no_show_count || 0
+                        const rate = total > 0 ? Math.round((noShows / total) * 100) : 0
+                        const isWarning = rate > 20
+                        return (
+                          <div className="text-center p-2 rounded-lg bg-white dark:bg-slate-800">
+                            <div className={cn(
+                              "flex items-center justify-center gap-1 mb-1",
+                              isWarning ? "text-red-600 dark:text-red-400" : "text-slate-600 dark:text-slate-400"
+                            )}>
+                              {isWarning ? <AlertTriangle className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                            </div>
+                            <p className={cn(
+                              "text-lg font-semibold",
+                              isWarning ? "text-red-600 dark:text-red-400" : "text-slate-900 dark:text-slate-100"
+                            )}>
+                              {rate}%
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">No-Shows</p>
+                          </div>
+                        )
+                      })()}
+                    </div>
+
+                    {/* Additional Stats Row */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                      {/* Total Spent */}
+                      {selectedCustomer.total_spent > 0 && (
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
+                          <div>
+                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                              ${Number(selectedCustomer.total_spent).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Total Spent</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* First Visit */}
+                      {selectedCustomer.first_visit && (
+                        <div className="flex items-center gap-2">
+                          <Star className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                          <div>
+                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                              {format(new Date(selectedCustomer.first_visit), 'MMM d, yyyy')}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">First Visit</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Cancellation Count */}
+                      {selectedCustomer.cancelled_count > 0 && (
+                        <div className="flex items-center gap-2">
+                          <X className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                          <div>
+                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                              {selectedCustomer.cancelled_count}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Cancellations</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Preferred Times/Tables */}
+                    {(selectedCustomer.preferred_time_slots?.length || selectedCustomer.preferred_table_types?.length) && (
+                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">Preferences</p>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedCustomer.preferred_time_slots?.map((slot, idx) => (
+                            <Badge key={`time-${idx}`} variant="outline" className="text-xs">
+                              <Clock className="h-3 w-3 mr-1" />
+                              {slot}
+                            </Badge>
+                          ))}
+                          {selectedCustomer.preferred_table_types?.map((type, idx) => (
+                            <Badge key={`table-${idx}`} variant="outline" className="text-xs">
+                              <MapPin className="h-3 w-3 mr-1" />
+                              {type}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Customer Notes */}
+                    {selectedCustomer.notes && (
+                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">Staff Notes</p>
+                        <p className="text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-2 rounded">
+                          {selectedCustomer.notes}
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              // Show search input
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name, email, or phone..."
+                  value={customerSearch}
+                  onChange={(e) => {
+                    setCustomerSearch(e.target.value)
+                    setShowCustomerResults(true)
+                  }}
+                  onFocus={() => setShowCustomerResults(true)}
+                  className="pl-10"
+                  disabled={isLoading}
+                />
+                {isSearchingCustomers && (
+                  <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-amber-600" />
+                )}
+                
+                {/* Search Results Dropdown */}
+                {showCustomerResults && searchResults && searchResults.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                    {searchResults.map((customer) => {
+                      const customerDob = customer.date_of_birth || customer.profile?.date_of_birth
+                      const hasBirthdaySoon = isBirthdaySoon(customerDob, 7)
+                      
+                      return (
+                        <button
+                          key={customer.id}
+                          type="button"
+                          onClick={() => handleSelectCustomer(customer)}
+                          className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left"
+                        >
+                          <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-600 flex items-center justify-center">
+                            {customer.vip_status ? (
+                              <Crown className="h-4 w-4 text-amber-500" />
+                            ) : (
+                              <UserCheck className="h-4 w-4 text-slate-500" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-slate-900 dark:text-slate-100 truncate">
+                                {customer.guest_name}
+                              </span>
+                              {customer.vip_status && (
+                                <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-300">
+                                  VIP
+                                </Badge>
+                              )}
+                              {hasBirthdaySoon && (
+                                <Badge variant="outline" className="text-xs bg-pink-50 text-pink-700 border-pink-300 dark:bg-pink-950 dark:text-pink-300 dark:border-pink-700">
+                                  <Cake className="h-3 w-3 mr-1" />
+                                  {getDaysUntilBirthday(customerDob) === 0 ? 'Today!' : `${getDaysUntilBirthday(customerDob)}d`}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                              <span>{customer.total_bookings} visits</span>
+                              {customer.guest_email && <span>• {customer.guest_email}</span>}
+                              {customer.guest_phone && <span>• {customer.guest_phone}</span>}
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                
+                {/* No Results Message */}
+                {showCustomerResults && debouncedSearch.length >= 2 && searchResults?.length === 0 && !isSearchingCustomers && (
+                  <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg p-4 text-center text-sm text-slate-500">
+                    No customers found. You can enter details manually below.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Guest Information */}
         <div className="space-y-4 rounded-xl border border-slate-200 dark:border-slate-700 p-6 bg-white dark:bg-accent shadow-sm">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-50 flex items-center gap-2">
             <UserCheck className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             Guest Information
+            {selectedCustomer && (
+              <Badge variant="secondary" className="ml-2">
+                Auto-filled from CRM
+              </Badge>
+            )}
           </h3>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Enter the guest's contact details for this booking
+            {hasGuestCRM && !selectedCustomer 
+              ? "Enter guest details manually or search above to auto-fill"
+              : "Enter the guest's contact details for this booking"
+            }
           </p>
         
           <div>
@@ -576,20 +1273,182 @@ export function BasicManualBookingForm({
             type="button"
             variant="outline"
             onClick={onCancel}
-            disabled={isLoading}
+            disabled={isLoading || isCheckingMatches}
             className="px-6 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-accent"
           >
             Cancel
           </Button>
           <Button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || isCheckingMatches}
             className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white shadow-md px-8 font-semibold"
           >
-            {isLoading ? "Creating..." : "Create Booking"}
+            {isLoading || isCheckingMatches ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                {isCheckingMatches ? "Checking..." : "Creating..."}
+              </>
+            ) : (
+              "Create Booking"
+            )}
           </Button>
         </div>
       </form>
+
+      {/* Matching Customers Dialog */}
+      <Dialog open={showMatchingDialog} onOpenChange={setShowMatchingDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-amber-600" />
+              Similar Guests Found
+            </DialogTitle>
+            <DialogDescription>
+              We found existing guests that match the information you entered. Would you like to link this booking to one of them?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-4 max-h-64 overflow-y-auto">
+            {matchingCustomers.map((customer) => (
+              <Card 
+                key={customer.id}
+                className="cursor-pointer hover:border-amber-400 transition-colors"
+                onClick={() => handleSelectExistingCustomer(customer)}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
+                        {customer.vip_status ? (
+                          <Crown className="h-5 w-5 text-amber-600" />
+                        ) : (
+                          <UserCheck className="h-5 w-5 text-slate-500" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{customer.guest_name}</span>
+                          {customer.vip_status && (
+                            <Badge className="bg-amber-500 text-white text-xs">VIP</Badge>
+                          )}
+                        </div>
+                        <div className="text-sm text-muted-foreground space-y-0.5">
+                          {customer.guest_email && (
+                            <div className="flex items-center gap-1">
+                              <Mail className="h-3 w-3" />
+                              <span>{customer.guest_email}</span>
+                            </div>
+                          )}
+                          {customer.guest_phone && (
+                            <div className="flex items-center gap-1">
+                              <Phone className="h-3 w-3" />
+                              <span>{customer.guest_phone}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-semibold text-amber-600">{customer.total_bookings}</p>
+                      <p className="text-xs text-muted-foreground">bookings</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={handleCreateWithoutLinking}
+              className="w-full sm:w-auto"
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              Create as New Guest
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setShowMatchingDialog(false)
+                setMatchingCustomers([])
+                setPendingBookingData(null)
+              }}
+              className="w-full sm:w-auto"
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add to Guest Database Prompt */}
+      <Dialog open={showAddToGuestPrompt} onOpenChange={setShowAddToGuestPrompt}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-blue-600" />
+              Add to Guest Database?
+            </DialogTitle>
+            <DialogDescription>
+              Would you like to save this guest's information to your customer database? This will help you track their visit history and preferences.
+            </DialogDescription>
+          </DialogHeader>
+
+          {pendingBookingData && (
+            <Card className="bg-slate-50 dark:bg-slate-800">
+              <CardContent className="p-4">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="h-4 w-4 text-slate-500" />
+                    <span className="font-medium">{pendingBookingData.guest_name}</span>
+                  </div>
+                  {pendingBookingData.guest_email && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Mail className="h-3 w-3" />
+                      <span>{pendingBookingData.guest_email}</span>
+                    </div>
+                  )}
+                  {pendingBookingData.guest_phone && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Phone className="h-3 w-3" />
+                      <span>{pendingBookingData.guest_phone}</span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              onClick={handleAddNewGuestAndSubmit}
+              disabled={isCheckingMatches}
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
+            >
+              {isCheckingMatches ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Yes, Add to Database
+                </>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleSkipAddGuest}
+              disabled={isCheckingMatches}
+              className="w-full sm:w-auto"
+            >
+              Skip, Just Book
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
